@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import Peer from 'peerjs';
+import { applyRemotePickups, addRemoteProjectile, handleProjectileHit, hostHandlePickupClaim, hostBroadcastPickups } from './battle/weapons.js';
 
 // Module state
 const state = {
@@ -15,7 +16,21 @@ const state = {
 };
 
 let connectionRetryCount = 0;
-const MAX_RETRIES = 15;
+const MAX_RETRIES = 30;
+
+// Explicit PeerJS cloud server options for more reliable local testing
+const peerOptions = {
+  host: '0.peerjs.com',
+  port: 443,
+  secure: true,
+  path: '/',
+  debug: 2,
+  config: {
+    iceServers: [
+      { urls: ['stun:stun.l.google.com:19302', 'stun:global.stun.twilio.com:3478'] }
+    ]
+  }
+};
 
 // Initialize multiplayer from game config
 export function initMultiplayer(gameState) {
@@ -33,6 +48,28 @@ export function initMultiplayer(gameState) {
       
       // Store player list
       state.allPlayers = state.gameConfig.players;
+
+      // Defensive: ensure each browser uses the correct assigned ID from gameConfig
+      // If both browsers accidentally share the same localStorage ID, force assignment here.
+      try {
+        const hostPlayer = state.gameConfig.players.find(p => p.isHost);
+        const guestCandidates = state.gameConfig.players.filter(p => !p.isHost);
+        let assignedId = myPlayerId;
+        if (state.isHost) {
+          if (hostPlayer && myPlayerId !== hostPlayer.id) assignedId = hostPlayer.id;
+        } else {
+          if (guestCandidates.length > 0) {
+            // Prefer the first non-host ID if current ID is missing or equals host ID
+            if (!myPlayerId || (hostPlayer && myPlayerId === hostPlayer.id)) {
+              assignedId = guestCandidates[0].id;
+            }
+          }
+        }
+        if (assignedId && assignedId !== myPlayerId) {
+          console.warn('Adjusting myPlayerId to match gameConfig assignment:', assignedId);
+          localStorage.setItem('myPlayerId', assignedId);
+        }
+      } catch (e) { console.error('Failed to reconcile myPlayerId with gameConfig', e); }
     }
   } catch (e) {
     console.error('Error loading game config:', e);
@@ -46,6 +83,11 @@ export function initMultiplayer(gameState) {
   state.checkAllPlayersConnected = checkAllPlayersConnected;
   state.broadcastRaceStart = broadcastRaceStart;
   state.broadcastCountdownStart = broadcastCountdownStart; 
+  state.broadcastDamageEvent = broadcastDamageEvent;
+  state.onDamageEvent = onDamageEvent;
+  state.onWeaponPickups = onWeaponPickups;
+  state.onProjectileSpawn = onProjectileSpawn;
+  state.onProjectileHit = onProjectileHit;
   
   return state;
 }
@@ -65,7 +107,7 @@ function initPeerConnection(gameState) {
     
     // Create a new peer with the ORIGINAL ID, but with a slight delay
     setTimeout(() => {
-      state.peer = new Peer(myPlayerId);
+      state.peer = new Peer(myPlayerId, peerOptions);
       
       state.peer.on('open', (id) => {
         console.log('Game peer connection established with ID:', id);
@@ -81,6 +123,21 @@ function initPeerConnection(gameState) {
               console.log('Connection to player fully established:', conn.peer);
               state.playerConnections.push(conn);
               setupMessageHandlers(conn, gameState);
+              // Send current pickup list to newly connected player
+              try { hostBroadcastPickups(); } catch (e) { /* weapons may not be ready yet */ }
+              // If all expected players connected, broadcast spawn indices
+              if (state.playerConnections.length === (state.gameConfig.players.length - 1)) {
+                const spawnMap = {};
+                state.gameConfig.players.forEach((p, idx) => {
+                  spawnMap[p.id] = idx; // index-based spawn
+                });
+                state.playerConnections.forEach(pc => {
+                  try {
+                    pc.send({ type: 'battleSpawn', spawnMap });
+                  } catch (e) { console.error('Failed to send spawn map to', pc.peer, e); }
+                });
+                console.log('Broadcasted battle spawn map:', spawnMap);
+              }
             });
           });
           
@@ -115,7 +172,7 @@ function initPeerConnection(gameState) {
                     console.error(`Failed to connect after ${MAX_RETRIES} attempts`);
                   }
                 }
-              }, 5000); // Wait 5 seconds for connection to complete
+              }, 8000); // Wait 8 seconds for connection to complete
               
               conn.on('open', () => {
                 console.log('Connected to host!');
@@ -125,6 +182,8 @@ function initPeerConnection(gameState) {
                 state.playerConnections.push(conn);
                 setupMessageHandlers(conn, gameState);
                 loadOpponentCarModels(gameState.scene);
+                // Request pickup sync in case we missed broadcasts
+                try { conn.send({ type: 'pickupSyncRequest' }); } catch (e) { /* ignore */ }
               });
               
               conn.on('error', (err) => {
@@ -144,10 +203,28 @@ function initPeerConnection(gameState) {
       state.peer.on('error', (err) => {
         console.error('Peer connection error:', err);
         if (err.type === 'unavailable-id') {
-          console.log('ID is taken, waiting 2 seconds before retrying...');
-          // Try again with a longer delay
+          console.log('ID is taken, attempting to switch to alternate ID and retry...');
+          try {
+            const hostPlayer = state.gameConfig?.players?.find(p => p.isHost);
+            const guestCandidates = state.gameConfig?.players?.filter(p => !p.isHost) || [];
+            const current = localStorage.getItem('myPlayerId');
+            if (state.isHost && hostPlayer && current !== hostPlayer.id) {
+              localStorage.setItem('myPlayerId', hostPlayer.id);
+            } else if (!state.isHost && guestCandidates.length > 0) {
+              // pick first non-host candidate that's not current
+              const alt = guestCandidates.find(g => g.id !== current) || guestCandidates[0];
+              if (alt && alt.id) localStorage.setItem('myPlayerId', alt.id);
+            }
+          } catch(e) { /* ignore */ }
           setTimeout(() => initPeerConnection(gameState), 2000);
         }
+      });
+      state.peer.on('disconnected', () => {
+        console.warn('Peer disconnected, attempting reconnect...');
+        try { state.peer.reconnect(); } catch (e) { console.error('Peer reconnect failed:', e); }
+      });
+      state.peer.on('close', () => {
+        console.warn('Peer connection closed');
       });
     }, 1000); 
   } else {
@@ -217,6 +294,54 @@ function setupMessageHandlers(conn, gameState) {
         console.log("RACE START RECEIVED - force starting race!");
         // Force race to start if countdown was started but race hasn't started yet
         window.raceState.raceStarted = true;
+      } else if (data.type === 'battleSpawn') {
+        if (!state.isHost && data.spawnMap) {
+          const myId = state.peer?.id;
+          const mySpawnIdx = data.spawnMap[myId];
+          console.log('Received battle spawn assignment:', mySpawnIdx);
+          if (typeof window.setBattleSpawnIndex === 'function') {
+            window.setBattleSpawnIndex(mySpawnIdx);
+          } else {
+            // store pending
+            window.pendingSpawnIndex = mySpawnIdx;
+          }
+        }
+      } else if (data.type === 'damageEvent') {
+        // Apply damage visual feedback and adjust health
+        onDamageEvent(data);
+      } else if (data.type === 'weaponPickups') {
+        onWeaponPickups(data.pickups, gameState.scene);
+      } else if (data.type === 'projectileSpawn') {
+        onProjectileSpawn(data.proj, gameState.scene);
+      } else if (data.type === 'projectileHit') {
+        onProjectileHit(data.id);
+      } else if (data.type === 'weaponFireRequest') {
+        // Host spawns projectile from this player's ghost position
+        if (state.isHost) {
+          try {
+            if (typeof window.onWeaponFireRequestFrom === 'function') {
+              window.onWeaponFireRequestFrom(conn.peer);
+            }
+          } catch(e) { console.error('Failed handling weaponFireRequest', e); }
+        }
+      } else if (data.type === 'pickupClaim') {
+        // Guest claims a pickup; host validates and grants
+        if (state.isHost && data.id) {
+          try {
+            const type = hostHandlePickupClaim(data.id, conn.peer);
+            if (type) {
+              conn.send({ type: 'weaponGrant', weaponId: type });
+            }
+          } catch(e) { console.error('Failed handling pickupClaim', e); }
+        }
+      } else if (data.type === 'weaponGrant') {
+        if (typeof window.receiveWeaponGrant === 'function') {
+          window.receiveWeaponGrant(data.weaponId);
+        }
+      } else if (data.type === 'pickupSyncRequest') {
+        if (state.isHost) {
+          try { hostBroadcastPickups(); } catch (e) { console.error('Failed responding to pickupSyncRequest', e); }
+        }
       }
     } catch (err) {
       console.error('Error processing message:', err);
@@ -420,18 +545,26 @@ export function updateOpponentCarPosition(playerId, data) {
   opponent.model.visible = true;
   
   // Update position and rotation
-  opponent.model.position.set(
-    data.position.x, 
-    data.position.y, 
-    data.position.z
-  );
-  
-  opponent.model.quaternion.set(
-    data.quaternion.x,
-    data.quaternion.y,
-    data.quaternion.z,
-    data.quaternion.w
-  );
+  // Store target for interpolation instead of snapping
+  opponent.targetPosition = {
+    x: data.position.x,
+    y: data.position.y,
+    z: data.position.z
+  };
+  opponent.targetQuaternion = {
+    x: data.quaternion.x,
+    y: data.quaternion.y,
+    z: data.quaternion.z,
+    w: data.quaternion.w
+  };
+
+  // Initialize current values if first update
+  if (!opponent.currentPosition) {
+    opponent.currentPosition = { ...opponent.targetPosition };
+  }
+  if (!opponent.currentQuaternion) {
+    opponent.currentQuaternion = { ...opponent.targetQuaternion };
+  }
   
   // Store race progress data with detailed logging
   if (data.raceProgress) {
@@ -575,7 +708,7 @@ export function sendCarData(gameState) {
   };
   
   // Include finish time if the player has finished the race
-  if (window.raceState.raceFinished && window.playerFinishTimes) {
+  if (typeof window !== 'undefined' && window.raceState && window.raceState.raceFinished && window.playerFinishTimes) {
     // Get the finish time from our permanent store
     const myFinishTime = window.playerFinishTimes[myPlayerId];
     if (myFinishTime) {
@@ -693,4 +826,123 @@ function broadcastAllCarsData() {
   
   // Update the last broadcast time
   state.lastBroadcastTime = Date.now();
+}
+
+// Interpolate opponent cars each frame (delta in seconds)
+export function interpolateOpponents(delta) {
+  const POSITION_LERP_SPEED = 8; // higher = faster catch-up
+  const ROTATION_SLERP_SPEED = 6;
+  const STALE_THRESHOLD_MS = 800; // fade if no update for this duration
+  const FADE_SPEED = 4; // opacity lerp speed
+
+  Object.values(state.opponentCars).forEach(opponent => {
+    if (!opponent.model || !opponent.targetPosition || !opponent.targetQuaternion) return;
+
+    const age = Date.now() - opponent.lastUpdate;
+    const isStale = age > STALE_THRESHOLD_MS;
+
+    // Position interpolation
+    opponent.currentPosition.x += (opponent.targetPosition.x - opponent.currentPosition.x) * Math.min(1, delta * POSITION_LERP_SPEED);
+    opponent.currentPosition.y += (opponent.targetPosition.y - opponent.currentPosition.y) * Math.min(1, delta * POSITION_LERP_SPEED);
+    opponent.currentPosition.z += (opponent.targetPosition.z - opponent.currentPosition.z) * Math.min(1, delta * POSITION_LERP_SPEED);
+
+    opponent.model.position.set(
+      opponent.currentPosition.x,
+      opponent.currentPosition.y,
+      opponent.currentPosition.z
+    );
+
+    // Rotation interpolation (convert to quaternions)
+    const currentQ = new THREE.Quaternion(
+      opponent.currentQuaternion.x,
+      opponent.currentQuaternion.y,
+      opponent.currentQuaternion.z,
+      opponent.currentQuaternion.w
+    );
+    const targetQ = new THREE.Quaternion(
+      opponent.targetQuaternion.x,
+      opponent.targetQuaternion.y,
+      opponent.targetQuaternion.z,
+      opponent.targetQuaternion.w
+    );
+
+    // Slerp
+    currentQ.slerp(targetQ, Math.min(1, delta * ROTATION_SLERP_SPEED));
+
+    opponent.model.quaternion.copy(currentQ);
+    opponent.currentQuaternion = {
+      x: currentQ.x,
+      y: currentQ.y,
+      z: currentQ.z,
+      w: currentQ.w
+    };
+
+    // Fade out when stale, fade in when fresh
+    opponent.model.traverse(node => {
+      if (node.isMesh) {
+        const targetOpacity = isStale ? 0.15 : 0.5;
+        node.material.opacity += (targetOpacity - node.material.opacity) * Math.min(1, delta * FADE_SPEED);
+      }
+    });
+  });
+}
+
+// Broadcast a damage event (host only)
+function broadcastDamageEvent(victimIds, amount, source) {
+  if (!state.isHost || state.playerConnections.length === 0) return;
+  const packet = {
+    type: 'damageEvent',
+    victimIds,
+    amount,
+    source,
+    timestamp: Date.now()
+  };
+  state.playerConnections.forEach(conn => {
+    try { if (conn && conn.open) conn.send(packet); } catch (e) { console.error('Failed sending damageEvent', e); }
+  });
+  // Host also applies locally
+  onDamageEvent(packet);
+}
+
+// Handle an incoming damage event
+function onDamageEvent(evt) {
+  if (!evt || !Array.isArray(evt.victimIds)) return;
+  const myId = state.peer?.id;
+  if (!myId) return;
+  if (evt.victimIds.includes(myId)) {
+    // Apply local damage if battle-main exposed handler
+    if (typeof window.applyExternalDamage === 'function') {
+      window.applyExternalDamage(evt.amount);
+    }
+    // Visual flash
+    if (typeof window.flashDamageVisual === 'function') {
+      window.flashDamageVisual();
+    }
+    // Blink car emissive pulse
+    if (typeof window.blinkCarOnDamage === 'function') {
+      window.blinkCarOnDamage();
+    }
+    // Floating damage number
+    if (typeof window.spawnLocalDamageNumber === 'function') {
+      window.spawnLocalDamageNumber(evt.amount);
+    }
+  }
+}
+
+// Weapon-related handlers (guests mainly)
+function onWeaponPickups(list, scene) {
+  if (state.isHost) return; // host already authoritative
+  if (!Array.isArray(list)) return;
+  applyRemotePickups(list, scene);
+}
+
+function onProjectileSpawn(projData, scene) {
+  if (!projData) return;
+  // Add remote projectile (guests only if host spawned)
+  if (state.isHost) return; // host already has its own copy
+  addRemoteProjectile(projData, scene);
+}
+
+function onProjectileHit(id) {
+  handleProjectileHit(id);
 }

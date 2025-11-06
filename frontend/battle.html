@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Twisted Kart - Battle Mode</title>
+    <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
+    <script src="https://kit.fontawesome.com/1ab8f48e0a.js" crossorigin="anonymous"></script>
+    <script type="module" src="/src/battle-main.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Funnel+Sans:ital,wght@0,300..800;1,300..800&family=Poppins:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900&display=swap" rel="stylesheet">
+  </head>
+  <body>
+    <!-- Rotate Message -->
+    <div id="rotate-message">
+      <div class="rotate-content">
+        <i class="fas fa-sync-alt rotate-icon"></i>
+        <p>Please Rotate to Landscape</p>
+      </div>
+    </div>
+
+    <!-- Loading Screen -->
+    <div id="loading-screen">
+      <h1 class="loading-title">Twisted Kart</h1>
+      <p class="loading-subtitle">BATTLE MODE</p>
+      <div class="loader-container">
+        <div class="loader">
+          <div class="bar"></div>
+          <div class="bar"></div>
+          <div class="bar"></div>
+          <div class="bar"></div>
+          <div class="bar"></div>
+        </div>
+        <div class="loading-text">Loading Arena...</div>
+      </div>
+    </div>
+    
+    <div id="app"></div>
+    
+    <!-- Battle UI -->
+    <div id="battle-ui">
+      <!-- Health Bar -->
+      <div id="health-container">
+        <div class="health-label">HEALTH</div>
+        <div class="health-bar-outer">
+          <div class="health-bar-inner" id="health-bar" style="width: 100%"></div>
+          <div class="health-value" id="health-value">100</div>
+        </div>
+      </div>
+
+      <!-- Weapon Display -->
+      <div id="weapon-container">
+        <div class="weapon-label">WEAPON</div>
+        <div class="weapon-display" id="weapon-display">
+          <span class="weapon-icon">🚫</span>
+          <span class="weapon-name">NONE</span>
+        </div>
+      </div>
+
+      <!-- Score Display -->
+      <div id="score-container">
+        <div class="score-label">SCORE</div>
+        <div class="score-value" id="score-value">0</div>
+      </div>
+    </div>
+
+    <!-- Debug HUD (development aid) -->
+    <div id="debug-hud" aria-hidden="true">
+      <div><strong>Speed:</strong> <span id="debug-speed">0</span> km/h</div>
+      <div><strong>Started:</strong> <span id="debug-started">no</span></div>
+      <div><strong>Keys:</strong> <span id="debug-keys">W:0 A:0 S:0 D:0 SPACE:0</span></div>
+    </div>
+
+    <a href="index.html" class="exit-game-btn" aria-label="Return to lobby">
+      <i class="fas fa-door-open"></i>
+    </a>
+    
+    <!-- Vercel analytics: load only when deployed on a Vercel domain to avoid local 404 -->
+    <script type="module">
+      const onVercel = /\.vercel\.app$/i.test(location.hostname);
+      if (onVercel) {
+        import('https://esm.sh/@vercel/analytics').then(({ inject }) => inject()).catch(e => console.warn('Vercel analytics failed', e));
+      } else {
+        // Skip analytics locally
+      }
+    </script>
+  </body>
+</html>

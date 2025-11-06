@@ -93,6 +93,21 @@
             </div>
           </div>
           
+          <!-- Game Mode Selector -->
+          <div class="mode-selector-container">
+            <h3 class="mode-selector-title">GAME MODE</h3>
+            <div class="mode-buttons">
+              <button class="mode-btn active" data-mode="race">
+                <i class="fas fa-flag-checkered"></i>
+                <span>RACE</span>
+              </button>
+              <button class="mode-btn" data-mode="battle">
+                <i class="fas fa-crosshairs"></i>
+                <span>BATTLE</span>
+              </button>
+            </div>
+          </div>
+          
           <div class="map-selector-container">
             <div class="map-dropdown">
               <button class="dropdown-button">
@@ -104,6 +119,34 @@
                 <div class="dropdown-option" data-map-id="map2">Snowy Speedway</div>
               </div>
             </div>
+          </div>
+          <!-- Battle Settings Panel (hidden unless battle mode) -->
+          <div id="battle-settings" class="battle-settings hidden">
+            <h3 class="battle-settings-title">BATTLE SETTINGS</h3>
+            <div class="battle-setting-group">
+              <label for="battle-arena-select">Arena</label>
+              <select id="battle-arena-select">
+                <option value="box" selected>Box Arena</option>
+                <option value="ramps">Ramps Prototype</option>
+              </select>
+            </div>
+            <div class="battle-setting-group">
+              <label class="toggle-label">
+                <input type="checkbox" id="battle-weapons-enabled" checked>
+                <span>Enable Weapons</span>
+              </label>
+            </div>
+            <div class="battle-setting-group">
+              <label class="toggle-label">
+                <input type="checkbox" id="battle-collision-damage" checked>
+                <span>Collision Damage</span>
+              </label>
+            </div>
+            <div class="battle-setting-group">
+              <label for="battle-score-limit">Score / KOs to Win</label>
+              <input type="number" id="battle-score-limit" value="5" min="1" max="50" />
+            </div>
+            <p class="battle-hint">Players Ready Up. Host starts countdown.</p>
           </div>
         </div>
       </section>
@@ -135,6 +178,7 @@
         
         <!-- Always-visible Play Button -->
         <button id="play-btn" class="game-btn play-btn">PLAY GAME</button>
+        <button id="battle-start-btn" class="game-btn play-btn hidden">START BATTLE</button>
       </section>
       
       <!-- Right Side - Players List and Join -->
@@ -145,13 +189,14 @@
             <ul id="player-list" class="player-list">
               <li class="no-players">No racers have joined yet</li>
             </ul>
+            <div id="ready-states" class="ready-states hidden"></div>
           </div>
           
           <!-- Join Lobby Section -->
           <div class="join-section">
             <div id="code-input">
               <div class="code-input">
-                <input type="text" id="join-code-input" placeholder="Enter party code" maxlength="6">
+                <input type="text" id="join-code-input" placeholder="Enter party code or full Peer ID" maxlength="64">
                 <button id="join-party-btn" class="icon-btn join-btn">Join</button>
               </div>
               <p id="join-status" class="status-message"></p>
@@ -198,9 +243,25 @@
     </div>
   </div>
 
+  <!-- Inline style additions for battle lobby UI (can be moved to CSS later) -->
+  <style>
+    .battle-settings { margin-top: 16px; padding: 12px; background: rgba(0,0,0,0.35); border: 1px solid rgba(255,255,255,0.15); border-radius: 10px; }
+    .battle-settings.hidden { display:none; }
+    .battle-settings-title { margin:0 0 8px; font-size:14px; letter-spacing:1px; color:#fff; }
+    .battle-setting-group { display:flex; flex-direction:column; margin-bottom:10px; gap:4px; }
+    .battle-setting-group label { font-size:12px; font-weight:600; color:#fff; }
+    .toggle-label { display:flex; align-items:center; gap:8px; font-size:12px; color:#fff; }
+    #battle-start-btn.hidden { display:none; }
+    #ready-states { margin-top:8px; font-size:12px; line-height:1.4; color:#fff; text-align:left; }
+    .battle-hint { font-size:11px; color:#ddd; margin:4px 0 0; }
+  </style>
+
+  <!-- Conditional Vercel analytics to prevent local 404 errors -->
   <script type="module">
-    import { inject } from 'https://esm.sh/@vercel/analytics';
-    inject();
+    const onVercel = /\.vercel\.app$/i.test(location.hostname);
+    if (onVercel) {
+      import('https://esm.sh/@vercel/analytics').then(({ inject }) => inject()).catch(e => console.warn('Vercel analytics failed', e));
+    }
   </script>
 </body>
 </html>

@@ -286,6 +286,46 @@ body {
   -webkit-text-stroke: 2px #b30059;
 }
 
+/* Long Peer ID overflow handling */
+.code-box {
+  position: relative;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+#party-code {
+  display: inline-block;
+  white-space: nowrap;
+  overflow-x: auto;
+  overflow-y: hidden;
+  max-width: 260px; /* Constrain visual width */
+  padding-bottom: 4px;
+  scrollbar-width: thin;
+}
+
+/* Webkit scrollbar styling for smoother horizontal scroll */
+#party-code::-webkit-scrollbar {
+  height: 6px;
+}
+#party-code::-webkit-scrollbar-track {
+  background: rgba(0,0,0,0.2);
+  border-radius: 4px;
+}
+#party-code::-webkit-scrollbar-thumb {
+  background: #ff0080;
+  border-radius: 4px;
+}
+
+/* Subtle gradient mask to hint scrollability */
+.code-box:after {
+  content: '';
+  position: absolute;
+  right: 0; top: 0; bottom: 0;
+  width: 38px;
+  pointer-events: none;
+  background: linear-gradient(to right, rgba(255,0,128,0), rgba(255,0,128,0.35));
+}
+
 #join-code-input {
   margin-top: 10px;
 }
@@ -615,6 +655,81 @@ input::placeholder {
 #close-info-btn {
   display: block;
   margin: 20px auto 0;
+}
+
+/* Game Mode Selector Styles */
+.mode-selector-container {
+  margin-top: 15px;
+  margin-bottom: 20px;
+  text-align: center;
+}
+
+.mode-selector-title {
+  color: #ffffff;
+  font-family: 'Poppins', sans-serif;
+  font-size: 1rem;
+  font-weight: 700;
+  margin-bottom: 10px;
+  letter-spacing: 2px;
+  text-shadow: 0px 2px 0px rgba(0, 0, 0, 0.7);
+}
+
+.mode-buttons {
+  display: flex;
+  gap: 10px;
+  width: 100%;
+}
+
+.mode-btn {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 12px 8px;
+  background-color: rgba(255, 255, 255, 0.1);
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-radius: 8px;
+  cursor: pointer;
+  font-family: 'Poppins', sans-serif;
+  font-weight: 700;
+  font-size: 0.9rem;
+  color: #ffffff;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.3);
+}
+
+.mode-btn i {
+  font-size: 1.8rem;
+  transition: transform 0.3s ease;
+}
+
+.mode-btn:hover {
+  background-color: rgba(255, 255, 255, 0.2);
+  border-color: rgba(255, 255, 255, 0.5);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 0 rgba(0, 0, 0, 0.3);
+}
+
+.mode-btn:hover i {
+  transform: scale(1.1);
+}
+
+.mode-btn.active {
+  background-color: #ff0080;
+  border-color: #b30059;
+  box-shadow: 0 3px 0 #b30059;
+}
+
+.mode-btn.active:hover {
+  background-color: #f5007c;
+  transform: translateY(0);
+}
+
+.mode-btn span {
+  display: block;
+  letter-spacing: 1px;
 }
 
 /* Map Dropdown Styles */

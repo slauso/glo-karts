@@ -419,3 +419,181 @@ html, body {
   }
 }
 
+/* ========================================
+   BATTLE MODE STYLES
+   ======================================== */
+
+#battle-ui {
+  position: absolute;
+  top: 20px;
+  left: 20px;
+  z-index: 100;
+  pointer-events: none;
+  user-select: none;
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+/* Health Bar */
+#health-container {
+  background: rgba(0, 0, 0, 0.7);
+  padding: 10px 15px;
+  border-radius: 10px;
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  min-width: 250px;
+}
+
+.health-label {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #fff;
+  margin-bottom: 5px;
+  letter-spacing: 2px;
+}
+
+.health-bar-outer {
+  position: relative;
+  width: 100%;
+  height: 30px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 5px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.health-bar-inner {
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 100%;
+  background: linear-gradient(90deg, #4ade80, #22c55e);
+  transition: width 0.3s ease, background-color 0.3s ease;
+  border-radius: 5px;
+}
+
+.health-value {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: #fff;
+  text-shadow: 0 0 10px rgba(0, 0, 0, 0.8);
+}
+
+/* Weapon Display */
+#weapon-container {
+  background: rgba(0, 0, 0, 0.7);
+  padding: 10px 15px;
+  border-radius: 10px;
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  min-width: 250px;
+}
+
+.weapon-label {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #fff;
+  margin-bottom: 5px;
+  letter-spacing: 2px;
+}
+
+.weapon-display {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 1.2rem;
+  color: #fff;
+}
+
+.weapon-icon {
+  font-size: 2rem;
+  filter: drop-shadow(0 0 5px rgba(255, 255, 255, 0.5));
+}
+
+.weapon-name {
+  font-weight: 700;
+  letter-spacing: 1px;
+}
+
+/* Score Display */
+#score-container {
+  background: rgba(0, 0, 0, 0.7);
+  padding: 10px 15px;
+  border-radius: 10px;
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  min-width: 250px;
+}
+
+.score-label {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #fff;
+  margin-bottom: 5px;
+  letter-spacing: 2px;
+}
+
+.score-value {
+  font-size: 2rem;
+  font-weight: 700;
+  color: #fbbf24;
+  text-shadow: 0 0 10px rgba(251, 191, 36, 0.5);
+}
+
+/* Responsive Battle UI */
+@media (max-width: 768px) {
+  #battle-ui {
+    top: 10px;
+    left: 10px;
+    gap: 10px;
+  }
+  
+  #health-container,
+  #weapon-container,
+  #score-container {
+    min-width: 200px;
+    padding: 8px 12px;
+  }
+  
+  .health-label,
+  .weapon-label,
+  .score-label {
+    font-size: 0.7rem;
+  }
+  
+  .health-bar-outer {
+    height: 25px;
+  }
+  
+  .health-value {
+    font-size: 1rem;
+  }
+  
+  .weapon-icon {
+    font-size: 1.5rem;
+  }
+  
+  .score-value {
+    font-size: 1.5rem;
+  }
+}
+
+/* Debug HUD */
+#debug-hud {
+  position: fixed;
+  bottom: 20px;
+  left: 80px; /* leave space for exit button on far left */
+  z-index: 1000;
+  background: rgba(0, 0, 0, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  padding: 8px 10px;
+  color: #fff;
+  font-size: 12px;
+  line-height: 1.4;
+  pointer-events: none;
+  user-select: none;
+}
+

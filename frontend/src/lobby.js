@@ -31,12 +31,16 @@ class RacingLobby {
       this.connectionCheckInterval = null; // Store the interval for checking connections
       this.selectedMap = 'map1'; // Default map selection
       this.isReady = false; // Add this line to track player's ready status
+      this.selectedMode = 'race'; // Default game mode (race or battle)
+  this.offlineMode = false; // If backend unreachable, enable direct peer fallback
       
       // Initialize UI elements
       this.initUIElements();
       this.attachEventListeners();
       this.initCarColorCarousel();
       this.initMapSelector(); // Add this line to initialize the map selector
+      this.initModeSelector(); // Initialize game mode selector
+  this.readyStatesEl = document.getElementById('ready-states');
       
       // Initialize PeerJS
       this.initPeerJS();
@@ -127,11 +131,12 @@ class RacingLobby {
       
       // Join party button
       this.joinPartyBtn.addEventListener('click', () => {
-        const code = this.joinCodeInput.value.trim().toUpperCase();
-        if (code) {
-          this.joinParty(code);
+        const inputVal = this.joinCodeInput.value.trim();
+        if (inputVal) {
+          // Do not force uppercase here; full Peer IDs are case-sensitive
+          this.joinParty(inputVal);
         } else {
-          this.joinStatus.textContent = 'Please enter a party code';
+          this.joinStatus.textContent = 'Please enter a party code or Peer ID';
         }
       });
       
@@ -180,10 +185,14 @@ class RacingLobby {
           this.playerName = this.playerNameInput.value.trim();
         }
         
-        if (this.isHost) {
-          // Host starts a multiplayer game without checking ready status
-          console.log("Starting multiplayer game as host");
-          this.startMultiplayerGame();
+        if (this.selectedMode === 'battle') {
+          // In battle mode, Play acts as Ready toggle for both host and guest
+          if (!this.hostId && !this.isHost) {
+            // Not in a party -> create or join required
+            alert('Create or join a Battle lobby first.');
+            return;
+          }
+          this.toggleReadyStatus();
         } else if (this.hostId) {
           // Toggle ready status when not host
           this.toggleReadyStatus();
@@ -195,7 +204,7 @@ class RacingLobby {
       });
 
       // Enable map selection for single player games
-      if (!this.isHost && !this.hostId) {
+      if (!this.isHost && !this.hostId && this.selectedMode !== 'battle') {
         this.mapSelectorContainer.classList.remove('disabled');
       }
     }
@@ -269,10 +278,12 @@ class RacingLobby {
         this.players = [{
           id: this.playerId,
           name: this.playerName,
-          isHost: true
+          isHost: true,
+          isReady: false
         }];
         
         this.updatePlayerList();
+        this.updateReadyStates();
         
         // Start heartbeat monitoring
         this.startHeartbeatMonitoring();
@@ -282,25 +293,52 @@ class RacingLobby {
       })
       .catch(error => {
         console.error('Error creating party:', error);
-        
-        // Reset the button
-        this.createPartyBtn.textContent = "Create Party";
-        this.createPartyBtn.disabled = false;
-        this.isHost = false;
-        
-        // Show join section again
-        this.joinSection.classList.remove('hidden');
-        
-        // Show error message
-        alert("Error creating party. Please try again.");
+        // Backend unreachable: fall back to offline direct-peer lobby
+        this.enableOfflineHostFallback();
       });
+    }
+
+    enableOfflineHostFallback() {
+      console.warn('Enabling offline host fallback: using direct peer ID for joins');
+      this.offlineMode = true;
+      // Treat current player as host still
+      this.isHost = true;
+      // Display full Peer ID so guests can join directly
+      this.partyCodeDisplay.textContent = this.playerId || 'OFFLINE';
+      // Update instructions text if present
+      const instr = document.querySelector('.code-instructions');
+      if (instr) {
+        instr.textContent = 'Backend offline: share FULL Peer ID above. Guest: paste it into Join.';
+      }
+      this.hostInfo.classList.remove('hidden');
+      this.createPartyBtn.classList.add('hidden');
+      this.racersTitle.classList.remove('hidden');
+      this.playersContainer.classList.remove('hidden');
+      this.mapSelectorContainer.classList.remove('disabled');
+  // Add host
+  this.players = [{ id: this.playerId, name: this.playerName, isHost: true, isReady: false }];
+  this.updatePlayerList();
+  this.updateReadyStates();
+      this.playBtn.classList.remove('disabled');
+      // Heartbeats still useful locally
+      this.startHeartbeatMonitoring();
+      // Surface a passive UI message
+      this.joinStatus.textContent = 'Offline lobby: friends enter code as peer ID if lookup fails.';
     }
     
     joinParty(code) {
+      const raw = (code || '').trim();
+      // If the input looks like a 6-char party code, attempt backend lookup first
+      const looksLikePartyCode = raw.length === 6 && /^[A-Za-z0-9]+$/.test(raw);
+      if (!looksLikePartyCode) {
+        // Try direct peer connection using provided value as Peer ID
+        return this.joinDirectPeer(raw);
+      }
+
+      const partyCode = raw.toUpperCase();
       this.joinStatus.textContent = 'Looking up party...';
-      
       // Look up the peer ID from the short code
-  fetch(`${PARTY_CODES_ENDPOINT}/lookup/${code}/`)
+  fetch(`${PARTY_CODES_ENDPOINT}/lookup/${partyCode}/`)
         .then(response => {
           if (!response.ok) {
             throw new Error('Party not found');
@@ -375,8 +413,48 @@ class RacingLobby {
         })
         .catch(error => {
           console.error('Error looking up party:', error);
-          this.joinStatus.textContent = 'Could not find that party. Check the code and try again.';
+          // In offline scenarios, the 6-char code cannot be used; require full Peer ID
+          this.joinStatus.textContent = 'Party lookup failed. Ask host for FULL Peer ID and paste it here.';
         });
+    }
+
+    joinDirectPeer(peerId) {
+      if (!peerId || peerId.length < 8) {
+        this.joinStatus.textContent = 'Please paste a valid Peer ID from the host.';
+        return;
+      }
+      this.joinStatus.textContent = 'Connecting directly to host...';
+      try {
+        const conn = this.peer.connect(peerId);
+        conn.on('open', () => {
+          this.hostId = peerId;
+          this.racersTitle.classList.remove('hidden');
+          this.playersContainer.classList.remove('hidden');
+          this.joinSection.classList.add('hidden');
+          this.mapSelectorContainer.classList.add('disabled');
+          this.playBtn.textContent = 'Ready Up';
+          this.playBtn.classList.add('ready-button');
+          conn.send({
+            type: 'joinRequest',
+            playerId: this.playerId,
+            playerName: this.playerName,
+            playerColor: sessionStorage.getItem('carColor') || 'red'
+          });
+          this.connections.push({ peerId: peerId, connection: conn });
+          conn.on('data', (data) => this.handleMessage(conn, data));
+          conn.on('close', () => this.handleHostDisconnection());
+          conn.on('error', (err) => { console.error('Direct connection error:', err); this.handleHostDisconnection(); });
+          this.startHeartbeatMonitoring();
+          this.joinStatus.textContent = 'Connected to host';
+        });
+        conn.on('error', (err) => {
+          console.error('Direct peer connect failed:', err);
+          this.joinStatus.textContent = 'Direct connection failed. Verify Peer ID with host.';
+        });
+      } catch (e) {
+        console.error('Direct peer connect threw:', e);
+        this.joinStatus.textContent = 'Unable to connect directly.';
+      }
     }
     
     handleHostDisconnection() {
@@ -492,6 +570,35 @@ class RacingLobby {
         case 'heartbeat':
           // Just update the timestamp, no further processing needed
           break;
+        case 'modeUpdate':
+          // Host informed us of current game mode
+          this.selectedMode = data.gameMode;
+          // Reflect UI state for mode buttons
+          const modeButtons = document.querySelectorAll('.mode-btn');
+          modeButtons.forEach(btn => {
+            if (btn.getAttribute('data-mode') === this.selectedMode) {
+              btn.classList.add('active');
+            } else {
+              btn.classList.remove('active');
+            }
+          });
+          // Toggle battle-specific panels based on mode
+          const battleSettings = document.getElementById('battle-settings');
+          const readyStatesBox = document.getElementById('ready-states');
+          const battleStartBtnEl = document.getElementById('battle-start-btn');
+          const playBtn = document.getElementById('play-btn');
+          if (this.selectedMode === 'battle') {
+            battleSettings?.classList.remove('hidden');
+            readyStatesBox?.classList.remove('hidden');
+            battleStartBtnEl?.classList.add('hidden'); // Guests never see start button
+            playBtn.textContent = this.isReady ? 'Cancel Ready' : 'Ready Up';
+          } else {
+            battleSettings?.classList.add('hidden');
+            readyStatesBox?.classList.add('hidden');
+            battleStartBtnEl?.classList.add('hidden');
+            playBtn.textContent = 'PLAY GAME';
+          }
+          break;
           
         case 'joinRequest':
           if (this.isHost) {
@@ -529,6 +636,7 @@ class RacingLobby {
           // Update our local player list
           this.players = data.players;
           this.updatePlayerList();
+          this.updateReadyStates();
           
           // Check if client should update its own ready status
           if (!this.isHost) {
@@ -576,12 +684,50 @@ class RacingLobby {
           // Add new player to our list
           this.players.push(data.player);
           this.updatePlayerList();
+          this.updateReadyStates();
           break;
           
         case 'startGame':
-          // Host has started the game - save config and navigate to game
+          // Host has started the game - save config and navigate to appropriate game page
           sessionStorage.setItem('gameConfig', JSON.stringify(data));
-          window.location.href = 'game.html';
+          // Route to correct game mode
+          const gamePage = data.gameMode === 'battle' ? 'battle.html' : 'game.html';
+          window.location.href = gamePage;
+          break;
+        case 'battleCountdown':
+          // Display countdown overlay in lobby (optional)
+          const readyBox = document.getElementById('ready-states');
+          if (readyBox) {
+            readyBox.innerHTML = `<strong>Battle Countdown:</strong> ${data.t}`;
+          }
+          break;
+        case 'battleStart':
+          // Guests start battle when receiving gameConfig regardless of their current local selectedMode
+          if (!this.isHost) {
+            let gameConfig = data.gameConfig;
+            if (!gameConfig) {
+              // Fallback: build config locally (legacy path)
+              const arenaId = (document.getElementById('battle-arena-select')?.value) || 'box';
+              const weaponsEnabled = !!document.getElementById('battle-weapons-enabled')?.checked;
+              const collisionDamage = !!document.getElementById('battle-collision-damage')?.checked;
+              const scoreLimit = parseInt(document.getElementById('battle-score-limit')?.value || '5', 10) || 5;
+              const spawnMap = {}; this.players.forEach((p, idx) => { spawnMap[p.id] = idx; });
+              gameConfig = {
+                type: 'startGame',
+                gameMode: 'battle',
+                arenaId,
+                weaponsEnabled,
+                collisionDamage,
+                scoreLimit,
+                spawnMap,
+                hostId: this.hostId || (this.players.find(p=>p.isHost)?.id),
+                players: this.players.map(p => ({ id: p.id, name: p.name, isHost: p.isHost, playerColor: p.playerColor })),
+                multiplayer: true
+              };
+            }
+            sessionStorage.setItem('gameConfig', JSON.stringify(gameConfig));
+            window.location.href = 'battle.html';
+          }
           break;
           
         case 'partyEnded':
@@ -668,6 +814,7 @@ class RacingLobby {
               
               // Update UI
               this.updatePlayerList();
+              this.updateReadyStates();
               
               // Broadcast the updated player list to all players
               this.broadcastToAll({
@@ -720,14 +867,28 @@ class RacingLobby {
         this.playBtn.classList.remove('ready-active');
       }
       
-      // Send ready status to host
-      const message = {
-        type: 'playerReady',
-        playerId: this.playerId,
-        isReady: this.isReady
-      };
-      console.log('Sending ready status to host:', message);
-      this.sendToHost(message);
+      if (this.isHost) {
+        // Update host entry locally and broadcast
+        const idx = this.players.findIndex(p => p.id === this.playerId);
+        if (idx !== -1) {
+          this.players[idx].isReady = this.isReady;
+        } else {
+          // Ensure host is present in list
+          this.players.push({ id: this.playerId, name: this.playerName, isHost: true, isReady: this.isReady });
+        }
+        this.updatePlayerList();
+        this.updateReadyStates();
+        this.broadcastToAll({ type: 'partyState', players: this.players, trackId: this.selectedMap });
+      } else {
+        // Send ready status to host
+        const message = {
+          type: 'playerReady',
+          playerId: this.playerId,
+          isReady: this.isReady
+        };
+        console.log('Sending ready status to host:', message);
+        this.sendToHost(message);
+      }
     }
     
     broadcastToAll(message, excludePeerId = null) {
@@ -758,8 +919,8 @@ class RacingLobby {
           li.style.alignItems = 'center';
           li.style.gap = '8px';
           
-          // Add ready status indicator for non-hosts
-          if (!player.isHost) {
+          // Add ready status indicator for all players
+          {
             const readyStatus = document.createElement('span');
             if (player.isReady) {
               readyStatus.innerHTML = '●'; // White filled circle for ready
@@ -770,11 +931,6 @@ class RacingLobby {
             }
             readyStatus.style.fontSize = '18px';
             li.appendChild(readyStatus);
-          } else {
-            // Add a spacer for host alignment
-            const spacer = document.createElement('span');
-            spacer.style.width = '12px';
-            li.appendChild(spacer);
           }
           
           // Player name
@@ -807,6 +963,26 @@ class RacingLobby {
           
           this.playerList.appendChild(li);
         });
+      }
+    }
+
+    updateReadyStates() {
+      if (!this.readyStatesEl) return;
+      const total = this.players.length;
+      const readyCount = this.players.filter(p => p.isReady).length;
+      const allReady = total > 0 && readyCount === total;
+      const listItems = this.players.map(p => {
+        const dot = p.isReady ? '●' : '○';
+        const color = p.isReady ? '#7CFC00' : '#888';
+        const host = p.isHost ? ' (HOST)' : '';
+        return `<div style="display:flex;gap:6px;align-items:center;"><span style="color:${color};font-size:16px;">${dot}</span><span>${p.name}${host}</span></div>`;
+      }).join('');
+      this.readyStatesEl.innerHTML = `<div style="margin-bottom:6px;"><strong>Ready:</strong> ${readyCount}/${total}</div>${listItems}`;
+      // Enable/disable Start Battle button for host
+      const battleStartBtn = document.getElementById('battle-start-btn');
+      if (battleStartBtn) {
+        battleStartBtn.disabled = !allReady;
+        battleStartBtn.title = allReady ? '' : 'All players must be ready';
       }
     }
     
@@ -887,6 +1063,7 @@ class RacingLobby {
       const gameConfig = {
         type: 'startGame',
         trackId: this.selectedMap, // Use selected map instead of hardcoding map1
+        gameMode: this.selectedMode, // Add game mode to config
         players: this.players,
         multiplayer: true
       };
@@ -895,6 +1072,7 @@ class RacingLobby {
       this.broadcastToAll({
         type: 'startGame',
         trackId: this.selectedMap, // Use selected map
+        gameMode: this.selectedMode, // Add game mode
         players: this.players,
         multiplayer: true
       });
@@ -903,8 +1081,11 @@ class RacingLobby {
       sessionStorage.setItem('gameConfig', JSON.stringify(gameConfig));
       console.log("Game config saved:", gameConfig);
       
+      // Determine which page to navigate to
+      const gamePage = this.selectedMode === 'battle' ? 'battle.html' : 'game.html';
+      
       // Navigate to game page
-      console.log("Navigating to game.html");
+      console.log(`Navigating to ${gamePage}`);
       setTimeout(() => {
         // Close all connections after notifying other players
         this.connections.forEach(conn => {
@@ -918,7 +1099,7 @@ class RacingLobby {
         if (this.peer) {
           this.peer.disconnect();
         }
-        window.location.href = 'game.html';
+        window.location.href = gamePage;
       }, 200);
     }
     
@@ -927,6 +1108,7 @@ class RacingLobby {
       const gameConfig = {
         type: 'startGame',
         trackId: this.selectedMap, // Use selected map instead of hardcoding map1
+        gameMode: this.selectedMode, // Add game mode
         players: [{
           id: this.playerId || 'solo-player',
           name: this.playerName,
@@ -939,8 +1121,11 @@ class RacingLobby {
       // Save game config to session storage
       sessionStorage.setItem('gameConfig', JSON.stringify(gameConfig));
       
+      // Determine which page to navigate to
+      const gamePage = this.selectedMode === 'battle' ? 'battle.html' : 'game.html';
+      
       // Navigate to game page
-      window.location.href = 'game.html';
+      window.location.href = gamePage;
     }
     
     stopHosting() {
@@ -1206,6 +1391,136 @@ class RacingLobby {
           }
         });
       });
+    }
+    
+    initModeSelector() {
+      const modeButtons = document.querySelectorAll('.mode-btn');
+      const battleSettings = document.getElementById('battle-settings');
+      const playBtn = document.getElementById('play-btn');
+  const battleStartBtnEl = document.getElementById('battle-start-btn');
+      const readyStatesBox = document.getElementById('ready-states');
+      
+      modeButtons.forEach(button => {
+        button.addEventListener('click', () => {
+          // Remove active class from all buttons
+          modeButtons.forEach(btn => btn.classList.remove('active'));
+          
+          // Add active class to clicked button
+          button.classList.add('active');
+          
+          // Store selected mode
+          this.selectedMode = button.getAttribute('data-mode');
+          
+          console.log(`Game mode selected: ${this.selectedMode}`);
+
+          // UI toggles for battle vs race
+          if (this.selectedMode === 'battle') {
+            battleSettings?.classList.remove('hidden');
+            readyStatesBox?.classList.remove('hidden');
+            // For host in battle mode we use ready flow + START BATTLE button
+            if (this.isHost) {
+              playBtn.textContent = 'READY';
+              battleStartBtnEl?.classList.remove('hidden');
+            } else {
+              battleStartBtnEl?.classList.add('hidden');
+              playBtn.textContent = 'READY';
+            }
+          } else {
+            battleSettings?.classList.add('hidden');
+            readyStatesBox?.classList.add('hidden');
+            battleStartBtnEl?.classList.add('hidden');
+            playBtn.textContent = 'PLAY GAME';
+          }
+          
+          // If host, broadcast to all players
+          if (this.isHost) {
+            this.broadcastToAll({
+              type: 'modeUpdate',
+              gameMode: this.selectedMode
+            });
+          }
+        });
+      });
+
+      // Battle start button logic (host only)
+      const battleStartBtn = document.getElementById('battle-start-btn');
+      if (battleStartBtn) {
+        battleStartBtn.addEventListener('click', () => {
+          if (this.selectedMode !== 'battle' || !this.isHost) return;
+          // Ensure all players ready
+          const unready = this.players.filter(p => !p.isReady);
+          if (unready.length > 0) {
+            alert('All players must be ready before starting battle.');
+            return;
+          }
+          this.startBattleCountdown(3);
+        });
+      }
+    }
+
+    // Unified countdown supporting manual (3s) and auto (10s) starts
+    startBattleCountdown(seconds = 3) {
+      // If a countdown already active, do nothing
+      if (this.battleAutoCountdownTimer) return;
+      const arenaId = (document.getElementById('battle-arena-select')?.value) || 'box';
+      const weaponsEnabled = !!document.getElementById('battle-weapons-enabled')?.checked;
+      const collisionDamage = !!document.getElementById('battle-collision-damage')?.checked;
+      const scoreLimit = parseInt(document.getElementById('battle-score-limit')?.value || '5', 10) || 5;
+      const spawnMap = {}; this.players.forEach((p, idx) => { spawnMap[p.id] = idx; });
+      const gameConfig = {
+        type: 'startGame',
+        gameMode: 'battle',
+        arenaId,
+        weaponsEnabled,
+        collisionDamage,
+        scoreLimit,
+        spawnMap,
+        hostId: this.playerId,
+        players: this.players.map(p => ({ id: p.id, name: p.name, isHost: p.isHost, playerColor: p.playerColor })),
+        multiplayer: true
+      };
+      this.battleAutoCountdownSeconds = seconds;
+      this.broadcastToAll({ type: 'battleCountdown', t: seconds, gameConfig });
+      const interval = setInterval(() => {
+        this.battleAutoCountdownSeconds -= 1;
+        if (this.battleAutoCountdownSeconds > 0) {
+          this.broadcastToAll({ type: 'battleCountdown', t: this.battleAutoCountdownSeconds, gameConfig });
+        } else {
+          clearInterval(interval);
+          this.battleAutoCountdownTimer = null;
+          this.broadcastToAll({ type: 'battleStart', gameConfig });
+          sessionStorage.setItem('gameConfig', JSON.stringify(gameConfig));
+          window.location.href = 'battle.html';
+        }
+      }, 1000);
+      this.battleAutoCountdownTimer = interval;
+    }
+
+    launchBattleGame() {
+      // Build battle-specific gameConfig
+      const arenaId = (document.getElementById('battle-arena-select')?.value) || 'box';
+      const weaponsEnabled = !!document.getElementById('battle-weapons-enabled')?.checked;
+      const collisionDamage = !!document.getElementById('battle-collision-damage')?.checked;
+      const scoreLimit = parseInt(document.getElementById('battle-score-limit')?.value || '5', 10) || 5;
+      // Assign spawn indices deterministically by current order
+      const spawnMap = {};
+      this.players.forEach((p, idx) => { spawnMap[p.id] = idx; });
+      const gameConfig = {
+        type: 'startGame',
+        gameMode: 'battle',
+        arenaId,
+        weaponsEnabled,
+        collisionDamage,
+        scoreLimit,
+        spawnMap,
+        hostId: this.playerId,
+        players: this.players.map(p => ({ id: p.id, name: p.name, isHost: p.isHost, playerColor: p.playerColor })),
+        multiplayer: true
+      };
+      sessionStorage.setItem('gameConfig', JSON.stringify(gameConfig));
+      // Broadcast explicit battleStart with config (in case launchBattleGame used directly without countdown)
+      this.broadcastToAll({ type: 'battleStart', gameConfig });
+      window.location.href = 'battle.html';
     }
   }
   
