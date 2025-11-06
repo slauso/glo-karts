@@ -28,3 +28,7 @@ frontend/coverage/
 # Python artifacts
 __pycache__/
 *.py[cod]
+backend/venv/
+backend/env/
+*.sqlite3
+db.sqlite3
