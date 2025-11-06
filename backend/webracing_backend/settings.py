@@ -28,9 +28,12 @@ SECRET_KEY = os.environ.get('SECRET_KEY', 'your-default-development-key')
 DEBUG = os.environ.get('DEBUG', 'False') == 'True'
 
 # For ALLOWED_HOSTS
-ALLOWED_HOSTS = os.environ.get("ALLOWED_HOSTS", "").split(",")
-if ALLOWED_HOSTS and ALLOWED_HOSTS[0] == "*":
-    ALLOWED_HOSTS = ["*"]  # Allow any host
+ALLOWED_HOSTS_STR = os.environ.get("ALLOWED_HOSTS", "")
+if ALLOWED_HOSTS_STR:
+    ALLOWED_HOSTS = [host.strip() for host in ALLOWED_HOSTS_STR.split(",") if host.strip()]
+else:
+    # Default to Koyeb domain if no env var is set
+    ALLOWED_HOSTS = [".koyeb.app", "localhost", "127.0.0.1"]
 
 
 # Application definition
