@@ -17,8 +17,25 @@ Including another URLconf
 
 from django.contrib import admin
 from django.urls import path, include
+from django.http import JsonResponse
+
+def api_root(request):
+    """Root endpoint showing API information"""
+    return JsonResponse({
+        'message': 'Twisted Kart Racing Backend API',
+        'version': '1.0',
+        'endpoints': {
+            'admin': '/admin/',
+            'party_codes': {
+                'create': '/api/party-codes/create/',
+                'lookup': '/api/party-codes/lookup/<code>/'
+            }
+        },
+        'status': 'running'
+    })
 
 urlpatterns = [
+    path("", api_root, name="api_root"),
     path("admin/", admin.site.urls),
     path("api/party-codes/", include("party_codes.urls")),
 ]
