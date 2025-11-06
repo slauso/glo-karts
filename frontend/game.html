@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Twisted Kart</title>
+    <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
+    <script src="https://kit.fontawesome.com/1ab8f48e0a.js" crossorigin="anonymous"></script>
+    <script type="module" src="/src/main.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Funnel+Sans:ital,wght@0,300..800;1,300..800&family=Poppins:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900&display=swap" rel="stylesheet">
+  </head>
+  <body>
+    <!-- Rotate Message -->
+    <div id="rotate-message">
+      <div class="rotate-content">
+        <i class="fas fa-sync-alt rotate-icon"></i>
+        <p>Please Rotate to Landscape</p>
+      </div>
+    </div>
+
+    <!-- Loading Screen - Add this at the top of body -->
+    <div id="loading-screen">
+  <h1 class="loading-title">Twisted Kart</h1>
+  <p class="loading-subtitle">GLO EDITION</p>
+      <div class="loader-container">
+        <div class="loader">
+          <div class="bar"></div>
+          <div class="bar"></div>
+          <div class="bar"></div>
+          <div class="bar"></div>
+          <div class="bar"></div>
+        </div>
+        <div class="loading-text">Loading...</div>
+      </div>
+    </div>
+    
+    <div id="app"></div>
+    <div id="racing-ui">
+      <div id="speedometer">
+        <div class="gauge">
+          <div class="gauge-body">
+            <div class="gauge-fill"></div>
+            <div class="gauge-cover"></div>
+            <div class="gauge-needle"></div>
+          </div>
+          <div class="speed-value">0</div>
+          <div class="speed-unit">KPH</div>
+        </div>
+      </div>
+    </div>
+    <a href="index.html" class="exit-game-btn" aria-label="Return to lobby">
+      <i class="fas fa-door-open"></i>
+    </a>
+    <script type="module">
+      import { inject } from 'https://esm.sh/@vercel/analytics';
+      inject();
+    </script>
+  </body>
+</html>

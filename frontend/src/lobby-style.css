@@ -1,0 +1,1051 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+/* Update body with diagonal stripes that scroll right */
+body {
+  font-family: 'Poppins', sans-serif;
+  color: black;
+  height: 100vh;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+#background-canvas {
+  filter: brightness(0.5);
+}
+/* Game Container */
+.game-container {
+  width: 95%;
+  height: 95vh;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+/* Header */
+.game-header {
+  text-align: center;
+  padding: 20px 0;
+  z-index: 10;
+}
+
+/* Game title updates */
+.game-title {
+  font-family: 'Poppins', sans-serif;
+  font-weight: 900;
+  font-size: 4rem;
+  text-transform: uppercase;
+  color: #ffffff;
+  -webkit-text-stroke: 3px #000;
+  letter-spacing: 4px;
+  margin: 0;
+  text-shadow: 0px 5px 0px rgb(0, 0, 0);
+}
+
+.game-subtitle {
+  font-family: 'Poppins', sans-serif;
+  font-weight: 700;
+  font-size: 1.5rem;
+  text-transform: uppercase;
+  letter-spacing: 6px;
+  color: #ffdae6;
+  margin-top: 8px;
+  margin-bottom: 0;
+  text-shadow: 0px 3px 0px rgba(0, 0, 0, 0.7);
+}
+
+/* Main Content Area - Make it position relative to contain absolute children */
+.game-content {
+  display: block; /* Changed from flex */
+  flex: 1;
+  position: relative;
+  background: transparent;
+  height: 100%;
+}
+
+/* Left Panel (Host Race) absolute positioning */
+.left-panel {
+  position: fixed;
+  text-align: left;
+  top: 20px;
+  left: 20px;
+  width: 22%;
+  height: auto;
+  max-height: 450px; /* Slightly reduced height */
+  border-radius: 10px;
+  z-index: 10;
+  overflow:visible;
+}
+
+/* Right Panel (Racers) absolute positioning */
+.right-panel {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  width: 22%;
+  height: auto;
+  max-height: 450px; /* Slightly reduced height */
+  border-radius: 10px;
+  overflow: hidden;
+  z-index: 10;
+  text-align: center;
+}
+
+/* Center Panel stays centered but fixed size instead of flex */
+.center-panel {
+  position: relative;
+  width: 40%;
+  margin: 0 auto;
+  height: 80vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  overflow: hidden;
+  border-radius: 10px;
+}
+.panel-content {
+  padding: 25px;
+  height: auto;
+  display: flex;
+  flex-direction: column;
+  overflow-y: visible; /* Allow scrolling if content overflows */
+  
+}
+/* Panel title updates to match game title */
+.panel-title {
+  font-family:'Poppins', sans-serif;
+  font-weight: 900;
+  margin-bottom: 20px;
+  color: #ffffff;
+  text-align: center;
+  font-size: 2rem;
+}
+
+/* Slightly smaller text for side panels */
+.left-panel .panel-title,
+.right-panel .panel-title {
+  font-size: 1.8rem;
+  margin-bottom: 5px;
+}
+
+/* Car model container takes up less space */
+#car-model-container {
+  width: 100%;
+  height: 150px; /* Adjust height to fit within the new container */
+  position: relative;
+  margin-bottom: 0; /* Removed margin since we're using gap */
+}
+
+/* Player name input styling */
+.player-name-container {
+  width: 100%;
+  max-width: 400px;
+  text-align: center;
+}
+
+.player-name-container h3 {
+  font-family:'Poppins', sans-serif;
+  font-weight: 900;
+  margin-bottom: 15px;
+  font-size: 2rem;
+  color: #ffffff;
+  text-align: center;
+}
+
+/* Play button in center panel */
+.center-panel .play-btn {
+  margin-top: 15px;
+  margin-bottom: 15px;
+}
+
+/* Game Buttons - Base styles for all buttons */
+.play-btn, game-btn, #host-start-btn {
+  font-family:'Poppins', sans-serif;
+  font-weight: 800;
+  font-size: 1.2rem; /* Larger text size */
+  width: 100%; /* Full width for all buttons */
+  max-width: 250px; /* Maximum width */
+  height: 60px;
+  border: 3px solid #b30059; /* Darker outline */
+  background-color: #ff0080; /* Solid pink background */
+  border-radius: 5px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-transform: uppercase;
+  position: relative;
+  color: #ffffff; /* White text */
+  text-align: center;
+  margin-bottom: 15px;
+  box-shadow: 0 6px 0 #b30059;
+}
+
+.stop-btn {
+  margin-top: 20px;
+}
+
+/* Button hover effect */
+.game-btn:hover, .create-btn:hover, .join-btn:hover, 
+#host-start-btn:hover, #play-btn:hover, .stop-btn:hover {
+  background-color: #f5007c;
+  transform: translateY(2px);
+  box-shadow: 0 4px 0 #b30059;
+}
+
+
+/* Button active effect */
+.game-btn:active, .create-btn:active, .join-btn:active,
+#host-start-btn:active, #play-btn:active, .stop-btn:active {
+  transform: translateY(6px);
+  box-shadow: 0 0 0 #b30059;
+}
+
+.icon-btn {
+  background-color: #ff0080;
+  border: 2px solid #b30059;
+  color: white;
+  border-radius: 3px;
+  padding: 8px 12px;
+  cursor: pointer;
+  font-family: 'Poppins', sans-serif;
+  font-weight: 700;
+  font-size: 1rem;
+  box-shadow: 0 3px 0 #b30059;
+}
+
+.icon-btn:hover {
+  background-color: #f5007c;
+  transform: translateY(1px);
+  box-shadow: 0 2px 0 #b30059;
+}
+
+.icon-btn:active {
+  transform: translateY(3px);
+  box-shadow: 0 0 0 #b30059;
+}
+
+/* Party Code Section */
+#code-display {
+  width: 100%;
+  max-width: 400px;
+}
+
+.code-display {
+  background: transparent;
+  border-radius: 10px;
+  text-align: center;
+}
+
+/* Other heading updates to match game title */
+.code-display h3, 
+.code-input h3,
+.join-section h3,
+.game-info h3,
+.player-name-container h3,
+.color-carousel h3 {
+  font-family:'Poppins', sans-serif;
+  font-weight: 900;
+  margin-bottom: 15px;
+  font-size: 28px;
+  color: #ffffff;
+  text-align: center;
+}
+
+.code-input {
+  position: fixed;
+  top: 50px;
+  right: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.code-box {
+  border-radius: 5px;
+  padding: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.code {
+  font-family: 'Poppins', sans-serif;
+  font-size: 2rem;
+  font-weight: 900;
+  letter-spacing: 5px;
+  color: #ff0080;
+  flex: 1;
+  -webkit-text-stroke: 2px #b30059;
+}
+
+#join-code-input {
+  margin-top: 10px;
+}
+
+.code-instructions {
+  color: white;
+  font-size: 0.9rem;
+  opacity: 0.8;
+  margin-top: 10px;
+}
+
+/* Input Fields */
+input {
+  width: 100%;
+  max-width: 250px;
+  padding: 12px;
+  border-radius: 5px;
+  background-color: white;
+  border: 2px solid #000000;
+  color: #000000;
+  font-family: 'Poppins', sans-serif;
+  font-weight: bold;
+  font-size: 1.2rem;
+  text-align: center;
+  margin-bottom: 10px;
+  box-shadow: 0px 5px 0px rgba(0, 0, 0, 1);
+}
+
+input::placeholder {
+  color: rgb(125, 125, 125);
+  font-size: 0.9rem;
+}
+
+/* Game Info Section */
+.game-info {
+  margin-bottom: 20px;
+}
+
+.game-info h3 {
+  font-family:'Poppins', sans-serif;
+  font-weight: 900;
+  margin-bottom: 15px;
+  color: #ffffff;
+  text-align: center;
+}
+
+.info-container {
+  background: transparent;
+  border-radius: 10px;
+  padding: 20px;
+  border: 1px solid rgba(77, 201, 255, 0.3);
+  text-align: center;
+  box-shadow: 2px 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+/* Map Info */
+.map-info {
+  font-family:'Poppins', sans-serif;
+  font-weight: bold;
+  color: #fff;
+  margin-bottom: 15px;
+}
+
+/* Ready Text - just updating to be consistent */
+.ready-text {
+  color: #ff0080;
+  font-weight: bold;
+  font-size: 1rem;
+  margin-top: 10px;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.6);
+}
+
+/* Player List */
+.players-container {
+  flex: 1;
+  overflow-y: auto;
+  background: transparent;
+  border-radius: 10px;
+  margin-bottom: 20px;
+  max-height: 200px; /* Make the player list smaller in height */
+}
+
+.player-list {
+  list-style: none;
+  max-height: 100%;
+}
+
+.player-list li {
+  padding: 15px;
+  margin-bottom: 10px;
+  border-radius: 8px;
+  color: white;
+  display: flex;
+  align-items: center;
+  transition: all 0.2s ease;
+  font-family:'Poppins', sans-serif;
+  font-weight: bold;
+}
+
+/* Host Badge */
+.host-badge {
+  background-color: #ff0080;
+  color: white;
+  font-family: 'Poppins', sans-serif;
+  font-weight: bold;
+  font-size: 0.8rem;
+  padding: 5px 10px;
+  border-radius: 5px;
+  margin-left: auto;
+}
+
+/* Exit Button */
+.exit-button {
+  background-color: #ff0080;
+  color: white;
+  font-family: 'Poppins', sans-serif;
+  font-weight: bold;
+  font-size: 0.8rem;
+  padding: 5px 10px;
+  border: none;
+  border-radius: 5px;
+  margin-left: auto;
+  cursor: pointer;
+  box-shadow: 0 3px 0 #b30059;
+  transition: all 0.2s ease;
+}
+
+.exit-button:hover {
+  background-color: #f5007c;
+  transform: translateY(1px);
+  box-shadow: 0 2px 0 #b30059;
+}
+
+.exit-button:active {
+  transform: translateY(3px);
+  box-shadow: 0 0 0 #b30059;
+}
+
+.no-players {
+  text-align: center;
+}
+
+/* Join Section */
+.join-section {
+  margin-top: 20px;
+}
+
+.status-message {
+  color: #ff0080;
+  font-size: 0.9rem;
+  position: fixed;
+  top: 30px;
+  right: 20px;
+  left: calc(100vw - 480px)
+}
+
+/* Car Color Carousel */
+.color-carousel {
+  text-align: center;
+  margin: 00px 0;
+  width: 100%;
+  max-width: 400px;
+}
+
+.color-options {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin: 10px 0;
+}
+
+.color-option {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: 2px solid transparent;
+}
+
+.color-option:hover {
+  transform: scale(1.1);
+}
+
+.color-option.active {
+  border: 2px solid white;
+  outline: 2px solid black;
+}
+
+/* Utilities */
+.hidden {
+  display: none !important;
+}
+
+/* Personal website link button */
+.website-link-btn {
+  position: fixed;
+  bottom: 20px;
+  left: 20px;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background-color: #ff0080;
+  border: 2px solid #b30059;
+  box-shadow: 0 3px 0 #b30059;
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 1000;
+  transition: all 0.2s ease;
+}
+
+.website-link-btn:hover {
+  transform: translateY(2px);
+  box-shadow: 0 1px 0 #b30059;
+}
+
+.website-link-btn:active {
+  transform: translateY(3px);
+  box-shadow: 0 0 0 #b30059;
+}
+
+/* Info button styling (similar to website link button) */
+.info-btn {
+  position: fixed;
+  bottom: 20px;
+  left: 70px; /* Position next to website link button */
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  font-size: 16px; 
+  background-color: #ff0080;
+  border: 2px solid #b30059;
+  box-shadow: 0 3px 0 #b30059;
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 1000;
+  transition: all 0.2s ease;
+}
+
+.info-btn:hover {
+  transform: translateY(2px);
+  box-shadow: 0 1px 0 #b30059;
+}
+
+.info-btn:active {
+  transform: translateY(3px);
+  box-shadow: 0 0 0 #b30059;
+}
+
+/* Info popup styling */
+.info-popup {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.info-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.8);
+}
+
+.info-content {
+  position: relative;
+  width: 90%;
+  max-width: 600px;
+  max-height: 80vh;
+  overflow-y: auto;
+  background-color: #121212;
+  border: 3px solid #ff0080;
+  border-radius: 10px;
+  padding: 30px;
+  color: white;
+  z-index: 2001;
+}
+
+.info-content h2 {
+  font-family: 'Poppins', sans-serif;
+  font-weight: 900;
+  font-size: 2.2rem;
+  color: #ffffff;
+  text-align: center;
+  margin-bottom: 20px;
+  -webkit-text-stroke: 1px #000;
+  text-shadow: 0px 3px 0px rgb(0, 0, 0);
+}
+
+.info-section {
+  margin-bottom: 25px;
+}
+
+.info-section h3 {
+  font-family: 'Poppins', sans-serif;
+  font-weight: 800;
+  font-size: 1.5rem;
+  color: #ff0080;
+  margin-bottom: 10px;
+}
+
+.info-section p, .info-section li {
+  font-family: 'Poppins', sans-serif;
+  font-size: 1rem;
+  line-height: 1.5;
+  margin-bottom: 8px;
+}
+
+.info-section ul {
+  padding-left: 20px;
+  margin-bottom: 10px;
+}
+
+#close-info-btn {
+  display: block;
+  margin: 20px auto 0;
+}
+
+/* Map Dropdown Styles */
+.map-selector-container {
+  margin-top: 20px;
+  margin-bottom: 20px;
+}
+
+.map-selector-container{
+  text-align: center;
+  margin-bottom: 15px;
+  color: #ffffff;
+  font-family: 'Poppins', sans-serif;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.map-dropdown {
+  position: relative;
+  width: 100%;
+}
+
+.dropdown-button {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: 8px 12px;
+  background-color: #ff0080;
+  border: 2px solid #b30059;
+  border-radius: 3px;
+  cursor: pointer;
+  font-family: 'Poppins', sans-serif;
+  font-weight: 700;
+  font-size: 1rem;
+  color: #ffffff;
+  -webkit-text-stroke: none;
+  text-align: left;
+  transition: all 0.2s ease; 
+  box-shadow: 0 3px 0 #b30059;
+}
+
+.dropdown-button:hover {
+  background-color: #f5007c;
+}
+
+.dropdown-arrow {
+  font-size: 0.8rem;
+  margin-right: 10px;
+  color: #ffffff;
+}
+
+.dropdown-content {
+  display: none;
+  position: absolute;
+  top: 100%;
+  left: 0;
+  width: 100%;
+  background-color: #ff0080;
+  border: 3px solid #b30059;
+  border-top: none;
+  border-radius: 0 0 5px 5px;
+  z-index: 100;
+  overflow: hidden;
+}
+
+.map-dropdown.open .dropdown-content {
+  display: block;
+}
+
+.dropdown-option {
+  padding: 8px 12px;
+  text-align: left;
+  cursor: pointer;
+  font-family: 'Poppins', sans-serif;
+  font-weight: 700;
+  font-size: 1rem;
+  color: #ffffff;
+  -webkit-text-stroke: none;
+  transition: background-color 0.2s ease;
+}
+
+.dropdown-option:hover {
+  background-color: #f5007c;
+}
+
+.dropdown-option.selected {
+  background-color: #d3006b;
+}
+
+/* Add these styles to your existing map dropdown CSS */
+
+.map-selector-container.disabled {
+  display: none;
+}
+
+/* Loading Screen */
+#loading-screen {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: #000000;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  z-index: 9999;
+  transition: opacity 0.5s ease-in-out;
+}
+
+.loading-title {
+  font-family: 'Poppins', sans-serif;
+  font-weight: 900;
+  font-size: 5rem;
+  text-transform: uppercase;
+  color: #ffffff;
+  letter-spacing: 4px;
+  margin-bottom: 10px;
+  text-shadow: 0px 5px 0px rgb(0, 0, 0);
+}
+
+.loading-subtitle {
+  font-family: 'Poppins', sans-serif;
+  font-weight: 700;
+  font-size: 1.8rem;
+  text-transform: uppercase;
+  letter-spacing: 10px;
+  color: #ffdae6;
+  margin-bottom: 40px;
+  text-shadow: 0px 3px 0px rgba(0, 0, 0, 0.7);
+}
+
+.loader-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.loader {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 15px;
+}
+
+.bar {
+  width: 12px;
+  height: 50px;
+  background-color: #ff0080;
+  border-radius: 3px;
+  animation: barLoad 1.5s infinite ease-in-out;
+  transform: scaleY(0.1);
+  box-shadow: 0 2px 0 #b30059;
+}
+
+.bar:nth-child(1) {
+  animation-delay: 0s;
+}
+
+.bar:nth-child(2) {
+  animation-delay: 0.1s;
+}
+
+.bar:nth-child(3) {
+  animation-delay: 0.2s;
+}
+
+.bar:nth-child(4) {
+  animation-delay: 0.3s;
+}
+
+.bar:nth-child(5) {
+  animation-delay: 0.4s;
+}
+
+@keyframes barLoad {
+  0%, 100% {
+    transform: scaleY(0.1);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
+
+.loading-text {
+  color: #ffffff;
+  font-family: 'Poppins', sans-serif;
+  font-weight: 700;
+  font-size: 1.2rem;
+}
+
+/* Portrait orientation message */
+#rotate-message {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: #000000;
+  z-index: 10000;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+}
+
+.rotate-content {
+  color: white;
+  font-family: 'Poppins', sans-serif;
+  font-weight: 600;
+}
+
+.rotate-icon {
+  font-size: 4rem;
+  margin-bottom: 20px;
+  animation: rotate 2s infinite linear;
+  display: block;
+}
+
+@keyframes rotate {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.rotate-content p {
+  font-size: 1.8rem;
+  margin: 0;
+}
+
+@media (max-width: 1000px) {
+  input {
+    padding: 8px;
+    max-width: 180px;
+    margin-bottom: 0px;
+    box-shadow: 0px 3px 0px rgba(0, 0, 0, 1);
+    height: 40px;
+    font-size: 0.8rem;
+  }
+
+  input::placeholder {
+    font-size: 0.8rem;
+  }
+
+  #play-btn {
+    margin: 0px;
+    width: 180px;
+    font-size: 0.8rem;
+    min-height: 40px;
+  }
+
+  .center-panel h3 {
+    margin: 0;
+  }
+
+  .game-container {
+    width: 98%;
+    height: 98vh;
+  }
+  #car-model-container {
+    display: none;
+  }
+  .game-title {
+    font-size: 2.2rem;
+    position: fixed;
+    left: 50%;
+    transform: translateX(-50%);
+    top: 10px;
+    -webkit-text-stroke: 2px #000;
+    text-shadow: 0px 3px 0px rgb(0, 0, 0);
+  }
+  
+  .panel-title {
+    font-size: 1.3rem;
+    margin-bottom: 15px;
+  }
+  
+  .left-panel, .right-panel {
+    width: 28%;
+    top: 0px;
+  }
+
+  .right-panel {
+    width: 280px;
+  }
+
+  .code-input {
+    top: 10px;
+  }
+  
+  #join-code-input {
+    width: 100%;
+    max-width: 150px;
+    max-height: 40px;
+    font-size: 0.8rem;
+  }
+
+  #join-code-input::placeholder {
+    font-size: 0.8rem;
+  }
+
+  .left-panel {
+    left: 10px;
+  }
+  
+  .right-panel {
+    right: 10px;
+  }
+
+  .center-panel {
+    width: 40%;
+    position: fixed;
+    top: 80px;
+    left: 50%;
+    transform: translateX(-50%);
+    height: calc(100vh - 200px);
+    overflow: visible;
+  }
+  
+  .color-carousel h3, 
+  .player-name-container h3,
+  .code-display h3, 
+  .code-input h3,
+  .join-section h3,
+  .game-info h3 {
+    font-size: 1.2rem;
+    margin-bottom: 8px;
+  }
+  
+
+  
+  .play-btn, .game-btn, #host-start-btn {
+    height: 45px;
+    font-size: 0.9rem;
+    max-width: 200px;
+    margin-bottom: 10px;
+    box-shadow: 0 4px 0 #b30059;
+  }
+  
+  .color-options {
+    gap: 5px;
+  }
+  
+  .color-option {
+    width: 24px;
+    height: 24px;
+  }
+  
+  .code {
+    font-size: 1.5rem;
+    letter-spacing: 3px;
+  }
+
+  .code-box {
+    padding: 0px;
+    margin-bottom: 5px;
+  }
+
+  .code-instructions {
+    display: none;
+  }
+  
+  .player-list li {
+    font-size: 0.7rem;
+  }
+
+  .icon-btn {
+    padding: 6px 10px;
+    font-size: 0.7rem;
+  }
+  .dropdown-button, .dropdown-option {
+    font-size: 0.7rem;
+    padding: 8px 10px;
+  }
+  
+  .player-list li {
+    padding: 10px;
+    margin-bottom: 8px;
+    font-size: 0.9rem;
+  }
+  
+  .exit-button, .host-badge {
+    font-size: 0.7rem;
+    padding: 4px 8px;
+  }
+
+  .loading-text {
+    display: none;
+  }
+
+  .game-subtitle {
+    font-size: 1.1rem;
+    letter-spacing: 4px;
+    margin-top: 6px;
+  }
+
+  .loading-title {
+    font-size: 3rem;
+    text-shadow: 0px 3px 0px rgb(0, 0, 0);
+    margin-bottom: 8px;
+  }
+
+  .loading-subtitle {
+    font-size: 1.2rem;
+    letter-spacing: 6px;
+    margin-bottom: 28px;
+  }
+}
+
+@media (max-width: 750px) {
+  .code-input {
+    right: 5px;
+  }
+  .right-panel {
+    right: 5px;
+    width: 180px;
+  }
+
+  .panel-content {
+    padding: 25px 5px;
+  }
+
+  .left-panel {
+    left: 5px;
+  }
+}
+
+@media (max-height: 400px) {
+  .center-panel {
+    position: fixed;
+    top: 120px;
+  }
+}
