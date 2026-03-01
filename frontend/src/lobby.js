@@ -1,1584 +1,818 @@
-// Class to manage the lobby system
-const API_BASE_URL = (() => {
-  const envUrl = import.meta.env.VITE_API_URL;
-  if (envUrl) {
-    return envUrl.replace(/\/$/, '');
+import { Client } from 'colyseus.js';
+import { getColyseusEndpoint } from './modules/realtime/feature-flag.js';
+
+const STK_TRACKS = [
+  { id: 'cocoa_temple', name: 'Pompeii Ruins' },
+  { id: 'hacienda', name: 'Tuscan Villa' },
+  { id: 'minigolf', name: 'Portofino Green' },
+  { id: 'sandtrack', name: 'Sardinia Dunes' },
+  { id: 'snowtuxpeak', name: 'Monte Cervino' },
+  { id: 'zengarden', name: 'Giardini di Boboli' },
+  { id: 'lighthouse', name: 'Faro di Capri' },
+  { id: 'olivermath', name: 'Piazza Navona' },
+  { id: 'black_forest', name: 'Val di Non' },
+  { id: 'xr591', name: 'Circuito di Monza' },
+  { id: 'oasis', name: 'Oasi di Vendicari' },
+  { id: 'gran_paradiso_island', name: 'Gran Paradiso' },
+  { id: 'mines', name: 'Miniere di Carrara' },
+  { id: 'snowmountain', name: 'Monte Bianco' },
+  { id: 'abyss', name: 'Grotta Azzurra' },
+  { id: 'cornfield_crossing', name: 'Campagna Toscana' },
+  { id: 'volcano_island', name: 'Isola di Stromboli' },
+  { id: 'ravenbridge_mansion', name: 'Villa Borghese' },
+];
+
+const STK_ARENAS = [
+  { id: 'battleisland', name: 'Isola di Murano' },
+  { id: 'lasdunasarena', name: 'Arena di Verona' },
+  { id: 'cave', name: 'Grotta di Castellana' },
+  { id: 'pumpkin_park', name: 'Parco dei Mostri' },
+  { id: 'arena_candela_city', name: 'Piazza San Marco' },
+  { id: 'ancient_colosseum_labyrinth', name: 'Colosseo' },
+  { id: 'stadium', name: 'San Siro' },
+  { id: 'alien_signal', name: 'Matera' },
+  { id: 'temple', name: 'Tempio di Agrigento' },
+];
+
+const DEFAULTS = {
+  mode: 'race',
+  battleType: 'deathmatch',
+  maxPlayers: 12,
+  botCount: 6,
+  loadoutId: 'random-all',
+  scoreLimit: 5,
+  arenaId: 'battleisland',
+  trackId: STK_TRACKS[0].id,
+};
+
+function normalizeLobbyCode(raw) {
+  return String(raw || '').trim().replace(/\s+/g, '-').toUpperCase();
+}
+
+function randomCodePart(len = 3) {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let out = '';
+  for (let i = 0; i < len; i += 1) {
+    out += chars[Math.floor(Math.random() * chars.length)];
   }
+  return out;
+}
 
-  if (typeof window !== 'undefined') {
-    if (window.location.hostname === 'localhost') {
-      return 'http://localhost:8000';
-    }
-    return window.location.origin.replace(/\/$/, '');
-  }
+function generateLobbyCode() {
+  return `${randomCodePart(3)}-${randomCodePart(3)}-${randomCodePart(3)}`;
+}
 
-  return 'http://localhost:8000';
-})();
-
-const PARTY_CODES_ENDPOINT = `${API_BASE_URL}/api/party-codes`;
+function getStoredGlo() {
+  return {
+    gloEffect: sessionStorage.getItem('gloEffect') || 'solid',
+    gloColor: sessionStorage.getItem('gloColor') || '#ff0080',
+    gloColor2: sessionStorage.getItem('gloColor2') || '#00e5ff',
+  };
+}
 
 class RacingLobby {
-    constructor() {
-      this.peer = null;
-      this.connections = [];
-      this.isHost = false;
-      this.hostId = null;
-      this.playerId = null;
-      this.playerName = `Player_${Math.floor(Math.random() * 10000)}`;
-      this.players = [];
-      this.lastHeartbeat = {}; // Track when we last received a heartbeat from each player
-      this.heartbeatInterval = null; // Store the interval for sending heartbeats
-      this.connectionCheckInterval = null; // Store the interval for checking connections
-      this.selectedMap = 'map1'; // Default map selection
-      this.isReady = false; // Add this line to track player's ready status
-      this.selectedMode = 'race'; // Default game mode (race or battle)
-  this.offlineMode = false; // If backend unreachable, enable direct peer fallback
-      
-      // Initialize UI elements
-      this.initUIElements();
-      this.attachEventListeners();
-      this.initCarColorCarousel();
-      this.initMapSelector(); // Add this line to initialize the map selector
-      this.initModeSelector(); // Initialize game mode selector
-  this.readyStatesEl = document.getElementById('ready-states');
-      
-      // Initialize PeerJS
-      this.initPeerJS();
-    }
-    
-    initUIElements() {
-      // Host elements
-      this.createPartyBtn = document.getElementById('create-party-btn');
-      this.hostInfo = document.getElementById('host-info');
-      this.partyCodeDisplay = document.getElementById('party-code');
-      this.copyCodeBtn = document.getElementById('copy-code-btn');
-      this.hostStopBtn = document.getElementById('host-stop-btn');
-      
-      // Add this line to reference the map selector container
-      this.mapSelectorContainer = document.querySelector('.map-selector-container');
-      
-      // Initially disable the map selector for everyone
-      this.mapSelectorContainer.classList.add('disabled');
-      
-      // Center elements
-      this.playerNameInput = document.getElementById('player-name-input');
-      this.playBtn = document.getElementById('play-btn');
-      
-      // Join elements
-      this.joinCodeInput = document.getElementById('join-code-input');
-      this.joinPartyBtn = document.getElementById('join-party-btn');
-      this.joinStatus = document.getElementById('join-status');
-      this.joinSection = document.querySelector('.join-section');
-      
-      // Player list
-      this.playerList = document.getElementById('player-list');
-      
-      // Racers panel
-      this.racersTitle = document.querySelector('.right-panel .panel-title');
-      this.playersContainer = document.querySelector('.players-container');
-      
-      // Initially hide just the racers title and player list, not the join section
-      this.racersTitle.classList.add('hidden');
-      this.playersContainer.classList.add('hidden');
-      
-      // Initialize player name with random name
-      this.playerNameInput.value = this.playerName;
-    }
-    
-    initPeerJS() {
-      // Create a new Peer with a random ID
-      this.peer = new Peer();
-      
-      this.peer.on('open', (id) => {
-        this.playerId = id;
-        // Store playerId in localStorage so it persists between pages
-        localStorage.setItem('myPlayerId', id);
-        console.log('My peer ID is: ' + id);
-      });
-      
-      this.peer.on('connection', (conn) => {
-        this.handleIncomingConnection(conn);
-      });
-      
-      this.peer.on('error', (err) => {
-        console.error('Peer connection error:', err);
-        
-        if (err.type === 'peer-unavailable') {
-          this.joinStatus.textContent = 'Could not find that party. Check the code and try again.';
-        } else {
-          this.joinStatus.textContent = `Connection error: ${err.type}`;
-        }
-      });
-    }
-    
-    attachEventListeners() {
-      // Create party button
-      this.createPartyBtn.addEventListener('click', () => {
-        this.createParty();
-      });
-      
-      // Copy code button
-      this.copyCodeBtn.addEventListener('click', () => {
-        navigator.clipboard.writeText(this.partyCodeDisplay.textContent)
-          .then(() => {
-            this.copyCodeBtn.textContent = 'Copied!';
-            setTimeout(() => this.copyCodeBtn.textContent = 'Copy', 2000);
-          })
-          .catch(err => {
-            console.error('Failed to copy: ', err);
-          });
-      });
-      
-      // Join party button
-      this.joinPartyBtn.addEventListener('click', () => {
-        const inputVal = this.joinCodeInput.value.trim();
-        if (inputVal) {
-          // Do not force uppercase here; full Peer IDs are case-sensitive
-          this.joinParty(inputVal);
-        } else {
-          this.joinStatus.textContent = 'Please enter a party code or Peer ID';
-        }
-      });
-      
-      // Player name input - update player name when changed
-      this.playerNameInput.addEventListener('input', () => {
-        this.playerName = this.playerNameInput.value.trim() || `Player_${Math.floor(Math.random() * 10000)}`;
-        
-        // Update name in player list if we're in a party
-        if (this.players.length > 0) {
-          const currentPlayer = this.players.find(p => p.id === this.playerId);
-          if (currentPlayer) {
-            currentPlayer.name = this.playerName;
-            
-            // If host, broadcast to all players
-            if (this.isHost) {
-              this.broadcastToAll({
-                type: 'partyState',
-                players: this.players,
-                trackId: this.selectedMap
-              });
-            } else if (this.hostId) {
-              // If guest, send update to host
-              this.sendToHost({
-                type: 'playerUpdate',
-                playerId: this.playerId,
-                playerName: this.playerName,
-                playerColor: sessionStorage.getItem('carColor') || 'red'
-              });
-            }
-          }
-          this.updatePlayerList();
-        }
-      });
-      
-      // Stop hosting button
-      this.hostStopBtn.addEventListener('click', () => {
-        if (this.isHost) {
-          this.stopHosting();
-        }
-      });
-      
-      // Play button - modify logic to start multiplayer game without checking ready status
-      this.playBtn.addEventListener('click', () => {
-        // If player has entered a name, use it
-        if (this.playerNameInput.value.trim()) {
-          this.playerName = this.playerNameInput.value.trim();
-        }
-        
-        if (this.selectedMode === 'battle') {
-          // In battle mode, Play acts as Ready toggle for both host and guest
-          if (!this.hostId && !this.isHost) {
-            // Not in a party -> create or join required
-            alert('Create or join a Battle lobby first.');
-            return;
-          }
-          this.toggleReadyStatus();
-        } else if (this.hostId) {
-          // Toggle ready status when not host
-          this.toggleReadyStatus();
-        } else {
-          // Not in a party - start single player game
-          console.log("Starting single player game");
-          this.startSinglePlayerGame();
-        }
-      });
+  constructor() {
+    this.realtimeEndpoint = getColyseusEndpoint();
+    this.client = new Client(this.realtimeEndpoint);
+    this.room = null;
 
-      // Enable map selection for single player games
-      if (!this.isHost && !this.hostId && this.selectedMode !== 'battle') {
-        this.mapSelectorContainer.classList.remove('disabled');
-      }
-    }
-    
-    createParty() {
-      // Disable button and show loading state immediately
-      this.createPartyBtn.textContent = "Creating party...";
-      this.createPartyBtn.disabled = true;
-      
-      this.isHost = true;
-      
-      // Hide join section when hosting
-      this.joinSection.classList.add('hidden');
-      
-      // Wait for peer ID to be assigned before creating party
-      if (!this.playerId) {
-        this.createPartyBtn.textContent = "Initializing...";
-        
-        // Check every 100ms if peer ID is available
-        const checkPeerId = setInterval(() => {
-          if (this.playerId) {
-            clearInterval(checkPeerId);
-            this.createPartyWithPeerId();
-          }
-        }, 100);
-        
-        return;
-      }
-      
-      this.createPartyWithPeerId();
-    }
-    
-    createPartyWithPeerId() {
-      // Update button to show we're communicating with server
-      this.createPartyBtn.textContent = "Connecting to server...";
-      
-      // Register with backend to get a short code
-  fetch(`${PARTY_CODES_ENDPOINT}/create/`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          peer_id: this.playerId
-        })
-      })
-      .then(response => {
-        if (!response.ok) {
-          throw new Error('Failed to create party code');
-        }
-        return response.json();
-      })
-      .then(data => {
-        console.log('Party created with code:', data.code);
-        
-        // Display the short code
-        this.partyCodeDisplay.textContent = data.code;
-        
-        // Show host info
-        this.hostInfo.classList.remove('hidden');
-        this.createPartyBtn.classList.add('hidden');
-        
-        // Show racers panel when hosting (title and player list only)
-        this.racersTitle.classList.remove('hidden');
-        this.playersContainer.classList.remove('hidden');
-        
-        // Enable the map selector for host
-        this.mapSelectorContainer.classList.remove('disabled');
-        
-        // Add host to player list
-        this.players = [{
-          id: this.playerId,
-          name: this.playerName,
-          isHost: true,
-          isReady: false
-        }];
-        
-        this.updatePlayerList();
-        this.updateReadyStates();
-        
-        // Start heartbeat monitoring
-        this.startHeartbeatMonitoring();
-        
-        // Enable the play button
-        this.playBtn.classList.remove('disabled');
-      })
-      .catch(error => {
-        console.error('Error creating party:', error);
-        // Backend unreachable: fall back to offline direct-peer lobby
-        this.enableOfflineHostFallback();
+    this.playerId = null;
+    this.playerName = `Player_${Math.floor(Math.random() * 10000)}`;
+    this.players = [];
+    this.isHost = false;
+    this.isReady = false;
+
+    this.selectedMode = DEFAULTS.mode;
+    this.selectedMap = DEFAULTS.trackId;
+    this.selectedBattleType = DEFAULTS.battleType;
+    this.selectedMaxPlayers = DEFAULTS.maxPlayers;
+    this.selectedBotCount = DEFAULTS.botCount;
+    this.selectedLoadout = DEFAULTS.loadoutId;
+
+    this.currentLobbyCode = '';
+    this.currentLobbyPrivacy = 'private';
+
+    this.initUIElements();
+    this.attachEventListeners();
+    this.initMapSelector();
+    this.initModeSelector();
+    this.initWeaponLoadout();
+    this.populateArenaSelector();
+    this.refreshBattleControls();
+  }
+
+  initUIElements() {
+    this.createPartyBtn = document.getElementById('create-party-btn');
+    this.quickMatchBtn = document.getElementById('quick-match-btn');
+    this.hostInfo = document.getElementById('host-info');
+    this.partyCodeDisplay = document.getElementById('party-code');
+    this.copyCodeBtn = document.getElementById('copy-code-btn');
+    this.hostStopBtn = document.getElementById('host-stop-btn');
+    this.privacySelect = document.getElementById('lobby-privacy-select');
+
+    this.mapSelectorContainer = document.querySelector('.map-selector-container');
+    this.playerNameInput = document.getElementById('player-name-input');
+    this.playBtn = document.getElementById('play-btn');
+    this.battleStartBtn = document.getElementById('battle-start-btn');
+
+    this.joinCodeInput = document.getElementById('join-code-input');
+    this.joinPartyBtn = document.getElementById('join-party-btn');
+    this.joinStatus = document.getElementById('join-status');
+    this.joinSection = document.querySelector('.join-section');
+
+    this.playerList = document.getElementById('player-list');
+    this.readyStatesEl = document.getElementById('ready-states');
+    this.racersTitle = document.querySelector('.right-panel .panel-title');
+    this.playersContainer = document.querySelector('.players-container');
+
+    this.playerNameInput.value = this.playerName;
+    this.racersTitle.classList.add('hidden');
+    this.playersContainer.classList.add('hidden');
+  }
+
+  attachEventListeners() {
+    this.createPartyBtn?.addEventListener('click', () => this.createLobby());
+    this.quickMatchBtn?.addEventListener('click', () => this.quickMatch());
+    this.joinPartyBtn?.addEventListener('click', () => this.joinLobbyByCode());
+    this.copyCodeBtn?.addEventListener('click', () => this.copyCode());
+    this.hostStopBtn?.addEventListener('click', () => this.leaveLobby(true));
+
+    this.joinCodeInput?.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') this.joinLobbyByCode();
+    });
+
+    this.playerNameInput?.addEventListener('input', () => {
+      this.playerName = this.playerNameInput.value.trim() || this.playerName;
+      this.sendPlayerUpdate();
+    });
+
+    this.playBtn?.addEventListener('click', () => this.onPlayClicked());
+    this.battleStartBtn?.addEventListener('click', () => this.startMatch());
+
+    document.addEventListener('kartChanged', (event) => {
+      if (!event.detail?.kartId) return;
+      sessionStorage.setItem('selectedKart', event.detail.kartId);
+      this.sendPlayerUpdate();
+    });
+
+    document.querySelectorAll('.color-option').forEach((option) => {
+      option.addEventListener('click', () => {
+        const color = option.getAttribute('data-color') || 'red';
+        document.querySelectorAll('.color-option').forEach((opt) => opt.classList.remove('active'));
+        option.classList.add('active');
+        sessionStorage.setItem('carColor', color);
+        this.sendPlayerUpdate();
       });
-    }
+    });
 
-    enableOfflineHostFallback() {
-      console.warn('Enabling offline host fallback: using direct peer ID for joins');
-      this.offlineMode = true;
-      // Treat current player as host still
-      this.isHost = true;
-      // Display full Peer ID so guests can join directly
-      this.partyCodeDisplay.textContent = this.playerId || 'OFFLINE';
-      // Update instructions text if present
-      const instr = document.querySelector('.code-instructions');
-      if (instr) {
-        instr.textContent = 'Backend offline: share FULL Peer ID above. Guest: paste it into Join.';
-      }
-      this.hostInfo.classList.remove('hidden');
-      this.createPartyBtn.classList.add('hidden');
-      this.racersTitle.classList.remove('hidden');
-      this.playersContainer.classList.remove('hidden');
-      this.mapSelectorContainer.classList.remove('disabled');
-  // Add host
-  this.players = [{ id: this.playerId, name: this.playerName, isHost: true, isReady: false }];
-  this.updatePlayerList();
-  this.updateReadyStates();
-      this.playBtn.classList.remove('disabled');
-      // Heartbeats still useful locally
-      this.startHeartbeatMonitoring();
-      // Surface a passive UI message
-      this.joinStatus.textContent = 'Offline lobby: friends enter code as peer ID if lookup fails.';
-    }
-    
-    joinParty(code) {
-      const raw = (code || '').trim();
-      // If the input looks like a 6-char party code, attempt backend lookup first
-      const looksLikePartyCode = raw.length === 6 && /^[A-Za-z0-9]+$/.test(raw);
-      if (!looksLikePartyCode) {
-        // Try direct peer connection using provided value as Peer ID
-        return this.joinDirectPeer(raw);
-      }
+    const observer = new MutationObserver(() => this.sendPlayerUpdate());
+    const gloPicker = document.getElementById('glo-picker-container');
+    if (gloPicker) observer.observe(gloPicker, { attributes: true, subtree: true, childList: true });
+  }
 
-      const partyCode = raw.toUpperCase();
-      this.joinStatus.textContent = 'Looking up party...';
-      // Look up the peer ID from the short code
-  fetch(`${PARTY_CODES_ENDPOINT}/lookup/${partyCode}/`)
-        .then(response => {
-          if (!response.ok) {
-            throw new Error('Party not found');
-          }
-          return response.json();
-        })
-        .then(data => {
-          const hostPeerId = data.peer_id;
-          this.joinStatus.textContent = 'Connecting to party...';
-          
-          // Connect to the host using the real peer ID
-          const conn = this.peer.connect(hostPeerId);
-          
-          conn.on('open', () => {
-            this.hostId = hostPeerId;
-            
-            // Show racers panel when joining a party
-            this.racersTitle.classList.remove('hidden');
-            this.playersContainer.classList.remove('hidden');
-            
-            // Hide the join party controls
-            this.joinSection.classList.add('hidden');
-            
-            // Ensure map selector remains disabled for non-hosts
-            this.mapSelectorContainer.classList.add('disabled');
-            
-            // Change Play button to Ready button when joining a party
-            this.playBtn.textContent = 'Ready Up';
-            this.playBtn.classList.add('ready-button');
-            
-            // Send player info to host with color
-            conn.send({
-              type: 'joinRequest',
-              playerId: this.playerId,
-              playerName: this.playerName,
-              playerColor: sessionStorage.getItem('carColor') || 'red'
-            });
-            
-            // Store the connection
-            this.connections.push({
-              peerId: hostPeerId,
-              connection: conn
-            });
-            
-            // Handle incoming messages
-            conn.on('data', (data) => {
-              this.handleMessage(conn, data);
-            });
-            
-            // Handle connection closed - IMPORTANT: Add this handler
-            conn.on('close', () => {
-              console.log('Connection to host was closed');
-              this.handleHostDisconnection();
-            });
-            
-            // Add error handler to also catch disconnections
-            conn.on('error', (err) => {
-              console.error('Connection to host error:', err);
-              this.handleHostDisconnection();
-            });
-            
-            // Start heartbeat monitoring
-            this.startHeartbeatMonitoring();
-            
-            this.joinStatus.textContent = 'Connected to party!';
-          });
-          
-          conn.on('error', (err) => {
-            console.error('Connection error:', err);
-            this.joinStatus.textContent = 'Error connecting to host.';
-          });
-        })
-        .catch(error => {
-          console.error('Error looking up party:', error);
-          // In offline scenarios, the 6-char code cannot be used; require full Peer ID
-          this.joinStatus.textContent = 'Party lookup failed. Ask host for FULL Peer ID and paste it here.';
-        });
-    }
-
-    joinDirectPeer(peerId) {
-      if (!peerId || peerId.length < 8) {
-        this.joinStatus.textContent = 'Please paste a valid Peer ID from the host.';
-        return;
-      }
-      this.joinStatus.textContent = 'Connecting directly to host...';
-      try {
-        const conn = this.peer.connect(peerId);
-        conn.on('open', () => {
-          this.hostId = peerId;
-          this.racersTitle.classList.remove('hidden');
-          this.playersContainer.classList.remove('hidden');
-          this.joinSection.classList.add('hidden');
-          this.mapSelectorContainer.classList.add('disabled');
-          this.playBtn.textContent = 'Ready Up';
-          this.playBtn.classList.add('ready-button');
-          conn.send({
-            type: 'joinRequest',
-            playerId: this.playerId,
-            playerName: this.playerName,
-            playerColor: sessionStorage.getItem('carColor') || 'red'
-          });
-          this.connections.push({ peerId: peerId, connection: conn });
-          conn.on('data', (data) => this.handleMessage(conn, data));
-          conn.on('close', () => this.handleHostDisconnection());
-          conn.on('error', (err) => { console.error('Direct connection error:', err); this.handleHostDisconnection(); });
-          this.startHeartbeatMonitoring();
-          this.joinStatus.textContent = 'Connected to host';
-        });
-        conn.on('error', (err) => {
-          console.error('Direct peer connect failed:', err);
-          this.joinStatus.textContent = 'Direct connection failed. Verify Peer ID with host.';
-        });
-      } catch (e) {
-        console.error('Direct peer connect threw:', e);
-        this.joinStatus.textContent = 'Unable to connect directly.';
-      }
-    }
-    
-    handleHostDisconnection() {
-      // Only process if we're actually in a party
-      if (!this.hostId) return;
-      
-      console.log('Host has disconnected - leaving party');
-      
-      // Clear heartbeat intervals
-      if (this.heartbeatInterval) {
-        clearInterval(this.heartbeatInterval);
-        this.heartbeatInterval = null;
-      }
-      
-      // Reset state
-      this.hostId = null;
-      this.connections = [];
-      this.players = [];
-      
-      // Update UI
-      this.racersTitle.classList.add('hidden');
-      this.playersContainer.classList.add('hidden');
-      this.joinSection.classList.remove('hidden');
-      this.joinStatus.textContent = 'Host disconnected. Party ended.';
-      this.joinCodeInput.value = '';
-      
-      // Re-enable map selection for single-player mode
-      this.mapSelectorContainer.classList.remove('disabled');
-      
-      // Update player list to show no players
-      this.updatePlayerList();
-    }
-    
-    leaveParty() {
-      // Clear heartbeat intervals
-      if (this.heartbeatInterval) {
-        clearInterval(this.heartbeatInterval);
-        this.heartbeatInterval = null;
-      }
-      
-      if (!this.hostId) return;
-      
-      // Find the host connection
-      const hostConnection = this.connections.find(conn => conn.peerId === this.hostId);
-      if (hostConnection && hostConnection.connection) {
-        // Notify host that we're leaving
-        hostConnection.connection.send({
-          type: 'playerLeft',
-          playerId: this.playerId
-        });
-        
-        // Close the connection
-        try {
-          hostConnection.connection.close();
-        } catch (e) {
-          console.log('Error closing connection:', e);
-        }
-      }
-      
-      // Reset state
-      this.hostId = null;
-      this.connections = [];
-      this.players = [];
-      
-      // Update UI
-      this.racersTitle.classList.add('hidden');
-      this.playersContainer.classList.add('hidden');
-      this.joinSection.classList.remove('hidden');
-      this.joinStatus.textContent = '';
-      this.joinCodeInput.value = '';
-      
-      // Re-enable map selection for single-player mode
-      this.mapSelectorContainer.classList.remove('disabled');
-      
-      // Update player list to show no players
-      this.updatePlayerList();
-    }
-    
-    handleIncomingConnection(conn) {
-      console.log('Incoming connection from:', conn.peer);
-      
-      // Store the connection
-      this.connections.push({
-        peerId: conn.peer,
-        connection: conn
+  async createLobby() {
+    const privacy = this.privacySelect?.value === 'open' ? 'open' : 'private';
+    const code = generateLobbyCode();
+    try {
+      await this.connectLobby('joinOrCreate', {
+        lobbyCode: code,
+        privacy,
+        gameMode: this.selectedMode,
+        ...this.buildSettingsPayload(),
+        ...this.buildPlayerPayload(),
       });
-      
-      // Initialize heartbeat for this connection
-      this.lastHeartbeat[conn.peer] = Date.now();
-      
-      // Handle incoming messages
-      conn.on('data', (data) => {
-        this.handleMessage(conn, data);
-      });
-      
-      conn.on('close', () => {
-        // Remove player when they disconnect
-        this.removePlayer(conn.peer);
-      });
-    }
-    
-    handleMessage(conn, data) {
-      console.log('Received message:', data.type);
-      
-      // Update last heartbeat time for this connection
-      if (data.playerId) {
-        this.lastHeartbeat[data.playerId] = Date.now();
-      } else if (conn.peer) {
-        this.lastHeartbeat[conn.peer] = Date.now();
-      }
-      
-      switch(data.type) {
-        case 'heartbeat':
-          // Just update the timestamp, no further processing needed
-          break;
-        case 'modeUpdate':
-          // Host informed us of current game mode
-          this.selectedMode = data.gameMode;
-          // Reflect UI state for mode buttons
-          const modeButtons = document.querySelectorAll('.mode-btn');
-          modeButtons.forEach(btn => {
-            if (btn.getAttribute('data-mode') === this.selectedMode) {
-              btn.classList.add('active');
-            } else {
-              btn.classList.remove('active');
-            }
-          });
-          // Toggle battle-specific panels based on mode
-          const battleSettings = document.getElementById('battle-settings');
-          const readyStatesBox = document.getElementById('ready-states');
-          const battleStartBtnEl = document.getElementById('battle-start-btn');
-          const playBtn = document.getElementById('play-btn');
-          if (this.selectedMode === 'battle') {
-            battleSettings?.classList.remove('hidden');
-            readyStatesBox?.classList.remove('hidden');
-            battleStartBtnEl?.classList.add('hidden'); // Guests never see start button
-            playBtn.textContent = this.isReady ? 'Cancel Ready' : 'Ready Up';
-          } else {
-            battleSettings?.classList.add('hidden');
-            readyStatesBox?.classList.add('hidden');
-            battleStartBtnEl?.classList.add('hidden');
-            playBtn.textContent = 'PLAY GAME';
-          }
-          break;
-          
-        case 'joinRequest':
-          if (this.isHost) {
-            // Add new player to the party
-            const newPlayer = {
-              id: data.playerId,
-              name: data.playerName,
-              isHost: false,
-              isReady: false, // Initialize as not ready
-              playerColor: data.playerColor || 'red'
-            };
-            
-            // Initialize heartbeat timestamp for this player
-            this.lastHeartbeat[data.playerId] = Date.now();
-            
-            this.players.push(newPlayer);
-            this.updatePlayerList();
-            
-            // Send current party state to the new player
-            conn.send({
-              type: 'partyState',
-              players: this.players,
-              trackId: this.selectedMap
-            });
-            
-            // Notify other players about the new player
-            this.broadcastToAll({
-              type: 'playerJoined',
-              player: newPlayer
-            }, conn.peer);
-          }
-          break;
-          
-        case 'partyState':
-          // Update our local player list
-          this.players = data.players;
-          this.updatePlayerList();
-          this.updateReadyStates();
-          
-          // Check if client should update its own ready status
-          if (!this.isHost) {
-            const myPlayerInfo = this.players.find(p => p.id === this.playerId);
-            if (myPlayerInfo) {
-              this.isReady = myPlayerInfo.isReady;
-              
-              // Update ready button appearance
-              if (this.isReady) {
-                this.playBtn.textContent = 'Cancel Ready';
-                this.playBtn.classList.add('ready-active');
-              } else {
-                this.playBtn.textContent = 'Ready Up';
-                this.playBtn.classList.remove('ready-active');
-              }
-            }
-          }
-          
-          // Add these lines to update the map when receiving party state
-          if (data.trackId && data.trackId !== this.selectedMap) {
-            this.selectedMap = data.trackId;
-            
-            // Update the UI to show the selected map
-            const partyStateDropdownOptions = document.querySelectorAll('.dropdown-option');
-            const partyStateSelectedMapName = document.querySelector('.selected-map-name');
-            
-            partyStateDropdownOptions.forEach(opt => {
-              const mapId = opt.getAttribute('data-map-id');
-              if (mapId === data.trackId) {
-                opt.classList.add('selected');
-                partyStateSelectedMapName.textContent = opt.textContent;
-              } else {
-                opt.classList.remove('selected');
-              }
-            });
-            
-            // Dispatch an event to update the background
-            document.dispatchEvent(new CustomEvent('mapChanged', {
-              detail: { mapId: data.trackId }
-            }));
-          }
-          break;
-          
-        case 'playerJoined':
-          // Add new player to our list
-          this.players.push(data.player);
-          this.updatePlayerList();
-          this.updateReadyStates();
-          break;
-          
-        case 'startGame':
-          // Host has started the game - save config and navigate to appropriate game page
-          sessionStorage.setItem('gameConfig', JSON.stringify(data));
-          // Route to correct game mode
-          const gamePage = data.gameMode === 'battle' ? 'battle.html' : 'game.html';
-          window.location.href = gamePage;
-          break;
-        case 'battleCountdown':
-          // Display countdown overlay in lobby (optional)
-          const readyBox = document.getElementById('ready-states');
-          if (readyBox) {
-            readyBox.innerHTML = `<strong>Battle Countdown:</strong> ${data.t}`;
-          }
-          break;
-        case 'battleStart':
-          // Guests start battle when receiving gameConfig regardless of their current local selectedMode
-          if (!this.isHost) {
-            let gameConfig = data.gameConfig;
-            if (!gameConfig) {
-              // Fallback: build config locally (legacy path)
-              const arenaId = (document.getElementById('battle-arena-select')?.value) || 'box';
-              const weaponsEnabled = !!document.getElementById('battle-weapons-enabled')?.checked;
-              const collisionDamage = !!document.getElementById('battle-collision-damage')?.checked;
-              const scoreLimit = parseInt(document.getElementById('battle-score-limit')?.value || '5', 10) || 5;
-              const spawnMap = {}; this.players.forEach((p, idx) => { spawnMap[p.id] = idx; });
-              gameConfig = {
-                type: 'startGame',
-                gameMode: 'battle',
-                arenaId,
-                weaponsEnabled,
-                collisionDamage,
-                scoreLimit,
-                spawnMap,
-                hostId: this.hostId || (this.players.find(p=>p.isHost)?.id),
-                players: this.players.map(p => ({ id: p.id, name: p.name, isHost: p.isHost, playerColor: p.playerColor })),
-                multiplayer: true
-              };
-            }
-            sessionStorage.setItem('gameConfig', JSON.stringify(gameConfig));
-            window.location.href = 'battle.html';
-          }
-          break;
-          
-        case 'partyEnded':
-          alert('The host has ended the party.');
-          // Hide only the racers title and player list
-          this.racersTitle.classList.add('hidden');
-          this.playersContainer.classList.add('hidden');
-          window.location.reload(); // Reload the page to reset everything
-          break;
-
-        case 'playerUpdate':
-          if (this.isHost) {
-            // Find the player in the list
-            const playerIndex = this.players.findIndex(p => p.id === data.playerId);
-            if (playerIndex !== -1) {
-              // Update player info
-              this.players[playerIndex].name = data.playerName;
-              this.players[playerIndex].playerColor = data.playerColor;
-              
-              // Also update ready status if provided in the message
-              if (typeof data.isReady !== 'undefined') {
-                this.players[playerIndex].isReady = data.isReady;
-                console.log(`Updated player ${data.playerName} ready status: ${data.isReady}`);
-              }
-              
-              // Update UI
-              this.updatePlayerList();
-              
-              // Broadcast the updated player list to all players
-              this.broadcastToAll({
-                type: 'partyState',
-                players: this.players,
-                trackId: this.selectedMap
-              });
-            }
-          }
-          break;
-
-        case 'playerLeft':
-          if (this.isHost) {
-            // Remove the player from the list
-            this.removePlayer(data.playerId);
-            
-            // Broadcast updated player list
-            this.broadcastToAll({
-              type: 'partyState',
-              players: this.players,
-              trackId: this.selectedMap
-            });
-          }
-          break;
-
-        case 'mapUpdate':
-          // Update our selected map
-          this.selectedMap = data.trackId;
-          
-          // Update the UI to show the selected map
-          const dropdownOptions = document.querySelectorAll('.dropdown-option');
-          const selectedMapName = document.querySelector('.selected-map-name');
-          
-          dropdownOptions.forEach(opt => {
-            const mapId = opt.getAttribute('data-map-id');
-            if (mapId === data.trackId) {
-              opt.classList.add('selected');
-              selectedMapName.textContent = opt.textContent;
-            } else {
-              opt.classList.remove('selected');
-            }
-          });
-          
-          // Dispatch an event to update the background
-          document.dispatchEvent(new CustomEvent('mapChanged', {
-            detail: { mapId: data.trackId }
-          }));
-          break;
-
-        case 'playerReady':
-          if (this.isHost) {
-            // Find the player in the list
-            const playerIndex = this.players.findIndex(p => p.id === data.playerId);
-            if (playerIndex !== -1) {
-              // Update player ready status
-              this.players[playerIndex].isReady = data.isReady;
-              
-              // Update UI
-              this.updatePlayerList();
-              this.updateReadyStates();
-              
-              // Broadcast the updated player list to all players
-              this.broadcastToAll({
-                type: 'partyState',
-                players: this.players,
-                trackId: this.selectedMap
-              });
-            }
-          }
-          break;
-
-        case 'kicked':
-          // Reset state and UI
-          this.hostId = null;
-          this.connections = [];
-          this.players = [];
-          
-          // Update UI
-          this.racersTitle.classList.add('hidden');
-          this.playersContainer.classList.add('hidden');
-          this.joinSection.classList.remove('hidden');
-          this.joinStatus.textContent = 'You were kicked from the party.';
-          this.joinCodeInput.value = '';
-          
-          // Remove ready button styling
-          this.playBtn.textContent = 'PLAY GAME';
-          this.playBtn.classList.remove('ready-button');
-          this.playBtn.classList.remove('ready-active');
-          
-          // Re-enable map selection for single-player mode
-          this.mapSelectorContainer.classList.remove('disabled');
-          
-          // Update player list to show no players
-          this.updatePlayerList();
-          break;
-      }
-    }
-
-    toggleReadyStatus() {
-      console.log(`Toggling ready status. Current status: ${this.isReady}`);
-      this.isReady = !this.isReady;
-      console.log(`New ready status: ${this.isReady}`);
-      
-      // Update button text
-      if (this.isReady) {
-        this.playBtn.textContent = 'Cancel Ready';
-        this.playBtn.classList.add('ready-active');
-      } else {
-        this.playBtn.textContent = 'Ready Up';
-        this.playBtn.classList.remove('ready-active');
-      }
-      
-      if (this.isHost) {
-        // Update host entry locally and broadcast
-        const idx = this.players.findIndex(p => p.id === this.playerId);
-        if (idx !== -1) {
-          this.players[idx].isReady = this.isReady;
-        } else {
-          // Ensure host is present in list
-          this.players.push({ id: this.playerId, name: this.playerName, isHost: true, isReady: this.isReady });
-        }
-        this.updatePlayerList();
-        this.updateReadyStates();
-        this.broadcastToAll({ type: 'partyState', players: this.players, trackId: this.selectedMap });
-      } else {
-        // Send ready status to host
-        const message = {
-          type: 'playerReady',
-          playerId: this.playerId,
-          isReady: this.isReady
-        };
-        console.log('Sending ready status to host:', message);
-        this.sendToHost(message);
-      }
-    }
-    
-    broadcastToAll(message, excludePeerId = null) {
-      console.log('Broadcasting message:', message);
-      this.connections.forEach(conn => {
-        if (conn.peerId !== excludePeerId) {
-          console.log('Broadcasting message to:', conn.peerId);
-          conn.connection.send(message);
-        }
-      });
-    }
-    
-    updatePlayerList() {
-      // Clear existing list
-      this.playerList.innerHTML = '';
-      
-      if (this.players.length === 0) {
-        const li = document.createElement('li');
-        li.textContent = 'No players in party yet';
-        li.classList.add('no-players');
-        this.playerList.appendChild(li);
-      } else {
-        this.players.forEach(player => {
-          const li = document.createElement('li');
-          
-          // Create flex container for player info
-          li.style.display = 'flex';
-          li.style.alignItems = 'center';
-          li.style.gap = '8px';
-          
-          // Add ready status indicator for all players
-          {
-            const readyStatus = document.createElement('span');
-            if (player.isReady) {
-              readyStatus.innerHTML = '●'; // White filled circle for ready
-              readyStatus.style.color = '#ffffff';
-            } else {
-              readyStatus.innerHTML = '○'; // Hollow circle for not ready
-              readyStatus.style.color = '#888';
-            }
-            readyStatus.style.fontSize = '18px';
-            li.appendChild(readyStatus);
-          }
-          
-          // Player name
-          const nameSpan = document.createElement('span');
-          nameSpan.textContent = player.name;
-          li.appendChild(nameSpan);
-          
-          if (player.isHost) {
-            const hostBadge = document.createElement('span');
-            hostBadge.textContent = 'HOST';
-            hostBadge.classList.add('host-badge');
-            li.appendChild(hostBadge);
-          } 
-          // Add kick button for the host to remove other players
-          else if (this.isHost && player.id !== this.playerId) {
-            const kickButton = document.createElement('button');
-            kickButton.textContent = 'KICK';
-            kickButton.classList.add('exit-button'); // Reuse the exit button style
-            kickButton.addEventListener('click', () => this.kickPlayer(player.id));
-            li.appendChild(kickButton);
-          }
-          // Add exit button for current player if not host
-          else if (player.id === this.playerId && !this.isHost) {
-            const exitButton = document.createElement('button');
-            exitButton.textContent = 'EXIT';
-            exitButton.classList.add('exit-button');
-            exitButton.addEventListener('click', () => this.leaveParty());
-            li.appendChild(exitButton);
-          }
-          
-          this.playerList.appendChild(li);
-        });
-      }
-    }
-
-    updateReadyStates() {
-      if (!this.readyStatesEl) return;
-      const total = this.players.length;
-      const readyCount = this.players.filter(p => p.isReady).length;
-      const allReady = total > 0 && readyCount === total;
-      const listItems = this.players.map(p => {
-        const dot = p.isReady ? '●' : '○';
-        const color = p.isReady ? '#7CFC00' : '#888';
-        const host = p.isHost ? ' (HOST)' : '';
-        return `<div style="display:flex;gap:6px;align-items:center;"><span style="color:${color};font-size:16px;">${dot}</span><span>${p.name}${host}</span></div>`;
-      }).join('');
-      this.readyStatesEl.innerHTML = `<div style="margin-bottom:6px;"><strong>Ready:</strong> ${readyCount}/${total}</div>${listItems}`;
-      // Enable/disable Start Battle button for host
-      const battleStartBtn = document.getElementById('battle-start-btn');
-      if (battleStartBtn) {
-        battleStartBtn.disabled = !allReady;
-        battleStartBtn.title = allReady ? '' : 'All players must be ready';
-      }
-    }
-    
-    removePlayer(peerId) {
-      // Remove player from list
-      this.players = this.players.filter(player => player.id !== peerId);
-      this.updatePlayerList();
-      
-      // Remove connection
-      this.connections = this.connections.filter(conn => conn.peerId !== peerId);
-      
-      // If host, notify others
-      if (this.isHost) {
-        this.broadcastToAll({
-          type: 'partyState',
-          players: this.players,
-          trackId: this.selectedMap
-        });
-      }
-    }
-
-    kickPlayer(playerId) {
-      // Find the player to kick
-      const playerToKick = this.players.find(player => player.id === playerId);
-      if (!playerToKick) return;
-      
-      console.log(`Kicking player: ${playerToKick.name} (${playerId})`);
-      
-      // Find the connection to this player
-      const connectionToKick = this.connections.find(conn => conn.peerId === playerId);
-      
-      // Notify the player they've been kicked
-      if (connectionToKick && connectionToKick.connection) {
-        connectionToKick.connection.send({
-          type: 'kicked',
-          message: 'You have been kicked from the party by the host'
-        });
-        setTimeout(() => {
-          // Close the connection
-          try {
-            connectionToKick.connection.close();
-          } catch (e) {
-            console.log('Error closing connection:', e);
-          }
-        }, 200);
-      }
-      
-      // Remove the player from the list
-      this.removePlayer(playerId);
-      
-      // Broadcast updated player list to all remaining players
-      this.broadcastToAll({
-        type: 'partyState',
-        players: this.players,
-        trackId: this.selectedMap
-      });
-    }
-    
-    startMultiplayerGame() {
-      console.log("Creating multiplayer game with players:", this.players);
-      
-      // Ensure there's at least the host in the players list
-      if (this.players.length === 0) {
-        this.players = [{
-          id: this.playerId,
-          name: this.playerName,
-          isHost: true,
-          playerColor: sessionStorage.getItem('carColor') || 'red'
-        }];
-      } else {
-        // Update the host's color in the players array
-        const hostIndex = this.players.findIndex(p => p.id === this.playerId);
-        if (hostIndex !== -1) {
-          this.players[hostIndex].playerColor = sessionStorage.getItem('carColor') || 'red';
-        }
-      }
-      
-      const gameConfig = {
-        type: 'startGame',
-        trackId: this.selectedMap, // Use selected map instead of hardcoding map1
-        gameMode: this.selectedMode, // Add game mode to config
-        players: this.players,
-        multiplayer: true
-      };
-      
-      // Broadcast to all connected players
-      this.broadcastToAll({
-        type: 'startGame',
-        trackId: this.selectedMap, // Use selected map
-        gameMode: this.selectedMode, // Add game mode
-        players: this.players,
-        multiplayer: true
-      });
-      
-      // Save game config to session storage
-      sessionStorage.setItem('gameConfig', JSON.stringify(gameConfig));
-      console.log("Game config saved:", gameConfig);
-      
-      // Determine which page to navigate to
-      const gamePage = this.selectedMode === 'battle' ? 'battle.html' : 'game.html';
-      
-      // Navigate to game page
-      console.log(`Navigating to ${gamePage}`);
-      setTimeout(() => {
-        // Close all connections after notifying other players
-        this.connections.forEach(conn => {
-          try {
-            conn.connection.close();
-          } catch (e) {
-            console.log('Error closing connection:', e);
-          }
-        });
-        // Close the peer connection
-        if (this.peer) {
-          this.peer.disconnect();
-        }
-        window.location.href = gamePage;
-      }, 200);
-    }
-    
-    startSinglePlayerGame() {
-      // Create a single player game config
-      const gameConfig = {
-        type: 'startGame',
-        trackId: this.selectedMap, // Use selected map instead of hardcoding map1
-        gameMode: this.selectedMode, // Add game mode
-        players: [{
-          id: this.playerId || 'solo-player',
-          name: this.playerName,
-          isHost: true,
-          playerColor: sessionStorage.getItem('carColor') || 'red' // Add player color
-        }],
-        isSinglePlayer: true
-      };
-      
-      // Save game config to session storage
-      sessionStorage.setItem('gameConfig', JSON.stringify(gameConfig));
-      
-      // Determine which page to navigate to
-      const gamePage = this.selectedMode === 'battle' ? 'battle.html' : 'game.html';
-      
-      // Navigate to game page
-      window.location.href = gamePage;
-    }
-    
-    stopHosting() {
-      // Clear heartbeat intervals
-      if (this.heartbeatInterval) {
-        clearInterval(this.heartbeatInterval);
-        this.heartbeatInterval = null;
-      }
-      
-      if (this.connectionCheckInterval) {
-        clearInterval(this.connectionCheckInterval);
-        this.connectionCheckInterval = null;
-      }
-      
-      // Notify all connected players that the party is ending
-      this.broadcastToAll({
-        type: 'partyEnded',
-        message: 'Host has ended the party'
-      });
-      
-      // Close all connections
-      this.connections.forEach(conn => {
-        try {
-          conn.connection.close();
-        } catch (e) {
-          console.log('Error closing connection:', e);
-        }
-      });
-      
-      // Reset party state
-      this.connections = [];
-      this.players = [];
-      this.isHost = false;
-      
-      // Reset UI
-      this.hostInfo.classList.add('hidden');
-      this.createPartyBtn.classList.remove('hidden');
-      this.createPartyBtn.disabled = false;
-      this.createPartyBtn.textContent = "Create Party";
-      this.joinSection.classList.remove('hidden');
-      
-      // Hide racers title and player list when no longer hosting
-      this.racersTitle.classList.add('hidden');
-      this.playersContainer.classList.add('hidden');
-      
-      // Disable map selector when no longer host
-      this.mapSelectorContainer.classList.add('disabled');
-      
-      // Update player list to show no players
-      this.updatePlayerList();
-      
-      // Disconnect and reinitialize peer connection
-      if (this.peer) {
-        this.peer.disconnect();
-        this.initPeerJS();
-      }
-    }
-
-    initCarColorCarousel() {
-      const colorOptions = document.querySelectorAll('.color-option');
-      
-      // Get the stored color (if any)
-      const storedColor = sessionStorage.getItem('carColor') || 'red';
-      let foundStoredColor = false;
-      
-      // Update UI to match stored color
-      colorOptions.forEach(option => {
-        const optionColor = option.getAttribute('data-color');
-        
-        // If this is the stored color, mark it as active
-        if (optionColor === storedColor) {
-          // Remove active class from all options first
-          colorOptions.forEach(opt => opt.classList.remove('active'));
-          
-          // Add active class to this option
-          option.classList.add('active');
-          foundStoredColor = true;
-        }
-        
-        // Add click event listener
-        option.addEventListener('click', () => {
-          // Remove active class from all options
-          colorOptions.forEach(opt => opt.classList.remove('active'));
-          
-          // Add active class to clicked option
-          option.classList.add('active');
-          
-          // Get selected color name
-          const color = option.getAttribute('data-color');
-          
-          // Store selected color in session storage
-          sessionStorage.setItem('carColor', color);
-          
-          // If we're in a party as a guest, notify the host
-          if (this.hostId && !this.isHost) {
-            this.sendToHost({
-              type: 'playerUpdate',
-              playerId: this.playerId,
-              playerName: this.playerName,
-              playerColor: color
-            });
-          }
-        });
-      });
-      
-      // If stored color wasn't found in options, default to red
-      if (!foundStoredColor) {
-        sessionStorage.setItem('carColor', 'red');
-        colorOptions[0].classList.add('active');
-      }
-    }
-
-    setupColorChangeListener() {
-      const colorOptions = document.querySelectorAll('.color-option');
-      
-      colorOptions.forEach(option => {
-        option.addEventListener('click', () => {
-          // Remove active class from all options
-          colorOptions.forEach(opt => opt.classList.remove('active'));
-          
-          // Add active class to clicked option
-          option.classList.add('active');
-          
-          // Get selected color name
-          const color = option.getAttribute('data-color');
-          
-          // Store selected color in session storage
-          sessionStorage.setItem('carColor', color);
-          
-          // If we're in a party as a guest, notify the host
-          if (this.hostId && !this.isHost) {
-            this.sendToHost({
-              type: 'playerUpdate',
-              playerId: this.playerId,
-              playerName: this.playerName,
-              playerColor: color
-            });
-          }
-        });
-      });
-    }
-
-    sendToHost(message) {
-      const hostConnection = this.connections.find(conn => conn.peerId === this.hostId);
-      if (hostConnection && hostConnection.connection) {
-        console.log('Sending update to host:', message);
-        hostConnection.connection.send(message);
-      } else {
-        console.error('No host connection found');
-      }
-    }
-
-    startHeartbeatMonitoring() {
-      // Only the host needs to check connections
-      if (this.isHost) {
-        // Host checks if players are still connected every 5 seconds
-        this.connectionCheckInterval = setInterval(() => {
-          this.checkPlayerConnections();
-        }, 5000);
-      }
-      
-      // Everyone sends heartbeats every 3 seconds
-      this.heartbeatInterval = setInterval(() => {
-        this.sendHeartbeat();
-      }, 3000);
-    }
-
-    sendHeartbeat() {
-      if (this.isHost) {
-        // Host broadcasts heartbeat to all clients
-        this.broadcastToAll({
-          type: 'heartbeat',
-          timestamp: Date.now()
-        });
-      } else if (this.hostId) {
-        // Clients only need to send heartbeat to host
-        this.sendToHost({
-          type: 'heartbeat',
-          playerId: this.playerId,
-          timestamp: Date.now()
-        });
-      }
-    }
-
-    checkPlayerConnections() {
-      if (!this.isHost) return;
-      
-      const now = Date.now();
-      const timeoutThreshold = 5000;
-      
-      // Get list of disconnected players
-      const disconnectedPlayers = this.players.filter(player => {
-        // Skip ourselves (the host)
-        if (player.id === this.playerId) return false;
-        
-        // Check if this player has sent a heartbeat recently
-        const lastBeat = this.lastHeartbeat[player.id] || 0;
-        return (now - lastBeat) > timeoutThreshold;
-      });
-      
-      // Remove any disconnected players
-      disconnectedPlayers.forEach(player => {
-        console.log(`Player ${player.name} (${player.id}) timed out - removing from party`);
-        this.removePlayer(player.id);
-      });
-    }
-
-    initMapSelector() {
-      const mapDropdown = document.querySelector('.map-dropdown');
-      const dropdownButton = document.querySelector('.dropdown-button');
-      const selectedMapName = document.querySelector('.selected-map-name');
-      const dropdownOptions = document.querySelectorAll('.dropdown-option');
-      
-      // Initialize selected map from the HTML structure
-      dropdownOptions.forEach(option => {
-        if (option.classList.contains('selected')) {
-          this.selectedMap = option.getAttribute('data-map-id');
-          selectedMapName.textContent = option.textContent;
-        }
-      });
-      
-      // Toggle dropdown open/close when button is clicked
-      dropdownButton.addEventListener('click', (event) => {
-        event.stopPropagation();
-        mapDropdown.classList.toggle('open');
-      });
-      
-      // Close dropdown when clicking outside
-      document.addEventListener('click', () => {
-        mapDropdown.classList.remove('open');
-      });
-      
-      // Handle option selection
-      dropdownOptions.forEach(option => {
-        option.addEventListener('click', (event) => {
-          event.stopPropagation();
-          const mapId = option.getAttribute('data-map-id');
-          
-          // Update selected option
-          dropdownOptions.forEach(opt => opt.classList.remove('selected'));
-          option.classList.add('selected');
-          
-          // Update button text
-          selectedMapName.textContent = option.textContent;
-          
-          // Store selected map
-          this.selectedMap = mapId;
-          
-          // Close dropdown
-          mapDropdown.classList.remove('open');
-          
-          // Dispatch an event to update the background
-          document.dispatchEvent(new CustomEvent('mapChanged', {
-            detail: { mapId: mapId }
-          }));
-          
-          // If host, broadcast to all players
-          if (this.isHost) {
-            this.broadcastToAll({
-              type: 'mapUpdate',
-              trackId: mapId
-            });
-          }
-        });
-      });
-    }
-    
-    initModeSelector() {
-      const modeButtons = document.querySelectorAll('.mode-btn');
-      const battleSettings = document.getElementById('battle-settings');
-      const playBtn = document.getElementById('play-btn');
-  const battleStartBtnEl = document.getElementById('battle-start-btn');
-      const readyStatesBox = document.getElementById('ready-states');
-      
-      modeButtons.forEach(button => {
-        button.addEventListener('click', () => {
-          // Remove active class from all buttons
-          modeButtons.forEach(btn => btn.classList.remove('active'));
-          
-          // Add active class to clicked button
-          button.classList.add('active');
-          
-          // Store selected mode
-          this.selectedMode = button.getAttribute('data-mode');
-          
-          console.log(`Game mode selected: ${this.selectedMode}`);
-
-          // UI toggles for battle vs race
-          if (this.selectedMode === 'battle') {
-            battleSettings?.classList.remove('hidden');
-            readyStatesBox?.classList.remove('hidden');
-            // For host in battle mode we use ready flow + START BATTLE button
-            if (this.isHost) {
-              playBtn.textContent = 'READY';
-              battleStartBtnEl?.classList.remove('hidden');
-            } else {
-              battleStartBtnEl?.classList.add('hidden');
-              playBtn.textContent = 'READY';
-            }
-          } else {
-            battleSettings?.classList.add('hidden');
-            readyStatesBox?.classList.add('hidden');
-            battleStartBtnEl?.classList.add('hidden');
-            playBtn.textContent = 'PLAY GAME';
-          }
-          
-          // If host, broadcast to all players
-          if (this.isHost) {
-            this.broadcastToAll({
-              type: 'modeUpdate',
-              gameMode: this.selectedMode
-            });
-          }
-        });
-      });
-
-      // Battle start button logic (host only)
-      const battleStartBtn = document.getElementById('battle-start-btn');
-      if (battleStartBtn) {
-        battleStartBtn.addEventListener('click', () => {
-          if (this.selectedMode !== 'battle' || !this.isHost) return;
-          // Ensure all players ready
-          const unready = this.players.filter(p => !p.isReady);
-          if (unready.length > 0) {
-            alert('All players must be ready before starting battle.');
-            return;
-          }
-          this.startBattleCountdown(3);
-        });
-      }
-    }
-
-    // Unified countdown supporting manual (3s) and auto (10s) starts
-    startBattleCountdown(seconds = 3) {
-      // If a countdown already active, do nothing
-      if (this.battleAutoCountdownTimer) return;
-      const arenaId = (document.getElementById('battle-arena-select')?.value) || 'box';
-      const weaponsEnabled = !!document.getElementById('battle-weapons-enabled')?.checked;
-      const collisionDamage = !!document.getElementById('battle-collision-damage')?.checked;
-      const scoreLimit = parseInt(document.getElementById('battle-score-limit')?.value || '5', 10) || 5;
-      const spawnMap = {}; this.players.forEach((p, idx) => { spawnMap[p.id] = idx; });
-      const gameConfig = {
-        type: 'startGame',
-        gameMode: 'battle',
-        arenaId,
-        weaponsEnabled,
-        collisionDamage,
-        scoreLimit,
-        spawnMap,
-        hostId: this.playerId,
-        players: this.players.map(p => ({ id: p.id, name: p.name, isHost: p.isHost, playerColor: p.playerColor })),
-        multiplayer: true
-      };
-      this.battleAutoCountdownSeconds = seconds;
-      this.broadcastToAll({ type: 'battleCountdown', t: seconds, gameConfig });
-      const interval = setInterval(() => {
-        this.battleAutoCountdownSeconds -= 1;
-        if (this.battleAutoCountdownSeconds > 0) {
-          this.broadcastToAll({ type: 'battleCountdown', t: this.battleAutoCountdownSeconds, gameConfig });
-        } else {
-          clearInterval(interval);
-          this.battleAutoCountdownTimer = null;
-          this.broadcastToAll({ type: 'battleStart', gameConfig });
-          sessionStorage.setItem('gameConfig', JSON.stringify(gameConfig));
-          window.location.href = 'battle.html';
-        }
-      }, 1000);
-      this.battleAutoCountdownTimer = interval;
-    }
-
-    launchBattleGame() {
-      // Build battle-specific gameConfig
-      const arenaId = (document.getElementById('battle-arena-select')?.value) || 'box';
-      const weaponsEnabled = !!document.getElementById('battle-weapons-enabled')?.checked;
-      const collisionDamage = !!document.getElementById('battle-collision-damage')?.checked;
-      const scoreLimit = parseInt(document.getElementById('battle-score-limit')?.value || '5', 10) || 5;
-      // Assign spawn indices deterministically by current order
-      const spawnMap = {};
-      this.players.forEach((p, idx) => { spawnMap[p.id] = idx; });
-      const gameConfig = {
-        type: 'startGame',
-        gameMode: 'battle',
-        arenaId,
-        weaponsEnabled,
-        collisionDamage,
-        scoreLimit,
-        spawnMap,
-        hostId: this.playerId,
-        players: this.players.map(p => ({ id: p.id, name: p.name, isHost: p.isHost, playerColor: p.playerColor })),
-        multiplayer: true
-      };
-      sessionStorage.setItem('gameConfig', JSON.stringify(gameConfig));
-      // Broadcast explicit battleStart with config (in case launchBattleGame used directly without countdown)
-      this.broadcastToAll({ type: 'battleStart', gameConfig });
-      window.location.href = 'battle.html';
+    } catch (error) {
+      this.setJoinStatus(await this.getLobbyErrorMessage(error, 'Create failed'));
     }
   }
-  
-  // Initialize the lobby when the page loads
-  document.addEventListener('DOMContentLoaded', () => {
-    const lobby = new RacingLobby();
-    
-    // Check for orientation changes
-    window.addEventListener('orientationchange', handleOrientationChange);
-    window.addEventListener('resize', handleOrientationChange);
-    
-    // Initial check
-    handleOrientationChange();
-    
-    // Info popup functionality
-    const infoBtn = document.getElementById('info-btn');
-    const infoPopup = document.getElementById('info-popup');
-    const closeInfoBtn = document.getElementById('close-info-btn');
-    
-    if (infoBtn && infoPopup && closeInfoBtn) {
-      // Open popup when info button is clicked
-      infoBtn.addEventListener('click', () => {
-        infoPopup.classList.remove('hidden');
+
+  async quickMatch() {
+    try {
+      await this.connectLobby('joinOrCreate', {
+        lobbyCode: '',
+        privacy: 'open',
+        gameMode: this.selectedMode,
+        ...this.buildSettingsPayload(),
+        ...this.buildPlayerPayload(),
       });
-      
-      // Close popup when close button is clicked
-      closeInfoBtn.addEventListener('click', () => {
-        infoPopup.classList.add('hidden');
+    } catch (error) {
+      this.setJoinStatus(await this.getLobbyErrorMessage(error, 'Quick match failed'));
+    }
+  }
+
+  async joinLobbyByCode() {
+    const code = normalizeLobbyCode(this.joinCodeInput?.value || '');
+    if (!code) {
+      this.setJoinStatus('Enter a lobby code.');
+      return;
+    }
+
+    this.setJoinStatus('Joining lobby...');
+    const attempts = [
+      { privacy: 'private', gameMode: 'race' },
+      { privacy: 'private', gameMode: 'battle' },
+      { privacy: 'open', gameMode: 'race' },
+      { privacy: 'open', gameMode: 'battle' },
+    ];
+    let lastError = null;
+
+    for (const attempt of attempts) {
+      try {
+        await this.connectLobby('join', {
+          lobbyCode: code,
+          ...attempt,
+          ...this.buildPlayerPayload(),
+        }, false);
+        return;
+      } catch (error) {
+        lastError = error;
+        // try next variant
+      }
+    }
+
+    const connectionMessage = await this.getLobbyErrorMessage(lastError, 'Join failed');
+    if (/offline|unreachable|refused|not defined/i.test(connectionMessage)) {
+      this.setJoinStatus(connectionMessage);
+      return;
+    }
+    this.setJoinStatus('Lobby not found. Check the code and retry.');
+  }
+
+  getRealtimeHealthUrl() {
+    try {
+      const ws = new URL(this.realtimeEndpoint);
+      const protocol = ws.protocol === 'wss:' ? 'https:' : 'http:';
+      return `${protocol}//${ws.host}/health`;
+    } catch {
+      return 'http://localhost:2567/health';
+    }
+  }
+
+  async probeRealtimeHealth() {
+    const healthUrl = this.getRealtimeHealthUrl();
+    try {
+      const response = await fetch(healthUrl, { method: 'GET' });
+      if (!response.ok) {
+        return { ok: false, healthUrl, reason: `HTTP ${response.status}` };
+      }
+      return { ok: true, healthUrl };
+    } catch (error) {
+      return { ok: false, healthUrl, reason: String(error?.message || error || 'unreachable') };
+    }
+  }
+
+  async getLobbyErrorMessage(error, prefix = 'Connection failed') {
+    const raw = String(error?.message || '').trim();
+    const isUsefulRaw = raw && raw !== '[object Event]' && !/unknown error/i.test(raw);
+
+    if (isUsefulRaw && /provided room name "lobby_room" not defined/i.test(raw)) {
+      return `${prefix}: realtime server is running outdated code. Restart it from realtime/: npm run start`;
+    }
+
+    if (isUsefulRaw && /refused|networkerror|failed to fetch|timeout/i.test(raw.toLowerCase())) {
+      return `${prefix}: realtime server unreachable at ${this.realtimeEndpoint}. Start it with: cd realtime && npm run start`;
+    }
+
+    if (isUsefulRaw) {
+      return `${prefix}: ${raw}`;
+    }
+
+    const probe = await this.probeRealtimeHealth();
+    if (!probe.ok) {
+      return `${prefix}: realtime server offline at ${probe.healthUrl}. Start it with: cd realtime && npm run start`;
+    }
+
+    return `${prefix}: unexpected networking error. Check browser console and retry.`;
+  }
+
+  async connectLobby(method, options, setConnectingStatus = true) {
+    if (this.room) {
+      await this.leaveLobby(false);
+    }
+
+    if (setConnectingStatus) this.setJoinStatus('Connecting to lobby...');
+
+    let room;
+    try {
+      if (method === 'join') {
+        room = await this.client.join('lobby_room', options);
+      } else {
+        room = await this.client.joinOrCreate('lobby_room', options);
+      }
+    } catch (error) {
+      this.resetLobbyState('');
+      throw error;
+    }
+
+    this.room = room;
+    this.playerId = room.sessionId;
+    sessionStorage.setItem('myPlayerId', room.sessionId);
+    localStorage.setItem('myPlayerId', room.sessionId);
+
+    room.onStateChange((state) => {
+      this.currentLobbyCode = state.lobbyCode || this.currentLobbyCode;
+      this.currentLobbyPrivacy = state.privacy || this.currentLobbyPrivacy;
+      this.selectedMode = state.gameMode || this.selectedMode;
+      this.selectedMap = state.trackId || this.selectedMap;
+      this.selectedBattleType = state.battleType || this.selectedBattleType;
+      this.selectedMaxPlayers = Number(state.maxPlayers || this.selectedMaxPlayers || 12);
+
+      this.players = [];
+      state.players.forEach((player, id) => {
+        this.players.push({
+          id,
+          name: player.name,
+          isHost: !!player.isHost,
+          isReady: !!player.isReady,
+          playerColor: player.playerColor,
+          playerKart: player.playerKart,
+        });
       });
-      
-      // Also close popup when clicking on the overlay
-      infoPopup.addEventListener('click', (event) => {
-        if (event.target === infoPopup || event.target.classList.contains('info-overlay')) {
-          infoPopup.classList.add('hidden');
-        }
-      });
-      
-      // Close popup with Escape key
-      document.addEventListener('keydown', (event) => {
-        if (event.key === 'Escape' && !infoPopup.classList.contains('hidden')) {
-          infoPopup.classList.add('hidden');
-        }
+
+      const me = this.players.find((p) => p.id === this.playerId);
+      this.isHost = !!me?.isHost;
+      this.isReady = !!me?.isReady;
+
+      this.applyStateToUI(state);
+      this.updatePlayerList();
+      this.updateReadyStates();
+      this.refreshBattleControls();
+    });
+
+    room.onMessage('joined', (payload) => {
+      this.currentLobbyCode = payload?.lobbyCode || this.currentLobbyCode;
+      this.currentLobbyPrivacy = payload?.privacy || this.currentLobbyPrivacy;
+      this.setJoinStatus(`Connected (${this.currentLobbyPrivacy}).`);
+      this.showPartyPanels();
+      if (this.partyCodeDisplay) this.partyCodeDisplay.textContent = this.currentLobbyCode || '------';
+    });
+
+    room.onMessage('countdown', ({ t }) => {
+      if (this.readyStatesEl) {
+        this.readyStatesEl.classList.remove('hidden');
+        this.readyStatesEl.innerHTML = `<div><strong>Match starts in:</strong> ${t}</div>`;
+      }
+    });
+
+    room.onMessage('matchError', ({ message }) => {
+      if (message) alert(message);
+    });
+
+    room.onMessage('matchStart', ({ gameConfig }) => {
+      sessionStorage.setItem('gameConfig', JSON.stringify(gameConfig));
+      window.location.href = this.getGamePage({ multiplayer: true });
+    });
+
+    room.onLeave(() => {
+      this.resetLobbyState('Lobby closed.');
+    });
+
+    this.sendPlayerUpdate();
+  }
+
+  async leaveLobby(showMessage = true) {
+    if (!this.room) return;
+    try {
+      await this.room.leave();
+    } catch {
+      // ignore
+    }
+    this.resetLobbyState(showMessage ? 'Left lobby.' : '');
+  }
+
+  resetLobbyState(statusText = '') {
+    this.room = null;
+    this.isHost = false;
+    this.isReady = false;
+    this.players = [];
+    this.currentLobbyCode = '';
+
+    this.hostInfo?.classList.add('hidden');
+    this.createPartyBtn?.classList.remove('hidden');
+    this.quickMatchBtn?.classList.remove('hidden');
+    this.joinSection?.classList.remove('hidden');
+    this.racersTitle?.classList.add('hidden');
+    this.playersContainer?.classList.add('hidden');
+
+    this.updatePlayerList();
+    this.updateReadyStates();
+    this.refreshBattleControls();
+    this.setJoinStatus(statusText);
+  }
+
+  showPartyPanels() {
+    this.hostInfo?.classList.remove('hidden');
+    this.createPartyBtn?.classList.add('hidden');
+    this.quickMatchBtn?.classList.add('hidden');
+    this.joinSection?.classList.add('hidden');
+    this.racersTitle?.classList.remove('hidden');
+    this.playersContainer?.classList.remove('hidden');
+  }
+
+  setJoinStatus(text) {
+    if (this.joinStatus) this.joinStatus.textContent = text || '';
+  }
+
+  buildPlayerPayload() {
+    const glo = getStoredGlo();
+    return {
+      playerName: this.playerName,
+      playerColor: sessionStorage.getItem('carColor') || 'red',
+      playerKart: sessionStorage.getItem('selectedKart') || 'tux',
+      gloEffect: glo.gloEffect,
+      gloColor: glo.gloColor,
+      gloColor2: glo.gloColor2,
+    };
+  }
+
+  buildSettingsPayload() {
+    return {
+      trackId: this.selectedMap,
+      arenaId: document.getElementById('battle-arena-select')?.value || DEFAULTS.arenaId,
+      battleType: this.selectedBattleType,
+      maxPlayers: this.selectedMaxPlayers,
+      scoreLimit: parseInt(document.getElementById('battle-score-limit')?.value || '5', 10) || 5,
+      loadoutId: this.selectedLoadout,
+      collisionDamage: !!document.getElementById('battle-collision-damage')?.checked,
+      botCount: this.selectedBotCount,
+    };
+  }
+
+  sendPlayerUpdate() {
+    if (!this.room) return;
+    this.room.send('playerUpdate', this.buildPlayerPayload());
+  }
+
+  sendSettingsUpdate() {
+    if (!this.room || !this.isHost) return;
+    this.room.send('settingsUpdate', {
+      gameMode: this.selectedMode,
+      ...this.buildSettingsPayload(),
+    });
+  }
+
+  toggleReady() {
+    if (!this.room) return;
+    this.isReady = !this.isReady;
+    this.room.send('setReady', { isReady: this.isReady });
+  }
+
+  startMatch() {
+    if (!this.room || !this.isHost) return;
+    this.sendSettingsUpdate();
+    this.room.send('startMatch', {});
+  }
+
+  onPlayClicked() {
+    if (!this.room) {
+      this.startSinglePlayerGame();
+      return;
+    }
+
+    if (this.selectedMode === 'race' && this.isHost) {
+      this.startMatch();
+      return;
+    }
+
+    this.toggleReady();
+  }
+
+  getGamePage({ multiplayer = false } = {}) {
+    if (multiplayer) return 'realtime.html';
+    return this.selectedMode === 'battle' ? 'battle.html' : 'game.html';
+  }
+
+  startSinglePlayerGame() {
+    const isBattle = this.selectedMode === 'battle';
+    const gameConfig = {
+      type: 'startGame',
+      trackId: this.selectedMap,
+      gameMode: this.selectedMode,
+      selectedKart: sessionStorage.getItem('selectedKart') || 'tux',
+      arenaId: isBattle ? (document.getElementById('battle-arena-select')?.value || DEFAULTS.arenaId) : undefined,
+      battleType: isBattle ? this.selectedBattleType : undefined,
+      maxPlayers: isBattle ? this.selectedMaxPlayers : undefined,
+      botCount: isBattle ? this.selectedBotCount : undefined,
+      loadoutId: isBattle ? this.selectedLoadout : undefined,
+      collisionDamage: isBattle ? !!document.getElementById('battle-collision-damage')?.checked : undefined,
+      scoreLimit: isBattle ? (parseInt(document.getElementById('battle-score-limit')?.value || '5', 10) || 5) : undefined,
+      players: [{
+        id: this.playerId || 'solo-player',
+        name: this.playerName,
+        isHost: true,
+        playerColor: sessionStorage.getItem('carColor') || 'red',
+        playerKart: sessionStorage.getItem('selectedKart') || 'tux',
+      }],
+      isSinglePlayer: true,
+      multiplayerProvider: 'colyseus',
+    };
+
+    sessionStorage.setItem('gameConfig', JSON.stringify(gameConfig));
+    window.location.href = this.getGamePage({ multiplayer: false });
+  }
+
+  copyCode() {
+    const code = this.currentLobbyCode || this.partyCodeDisplay?.textContent || '';
+    if (!code) return;
+    navigator.clipboard.writeText(code).then(() => {
+      this.copyCodeBtn.textContent = 'Copied!';
+      setTimeout(() => { this.copyCodeBtn.textContent = 'Copy'; }, 1500);
+    }).catch(() => {
+      this.setJoinStatus('Copy failed.');
+    });
+  }
+
+  updatePlayerList() {
+    if (!this.playerList) return;
+    this.playerList.innerHTML = '';
+
+    if (!this.players.length) {
+      const li = document.createElement('li');
+      li.className = 'no-players';
+      li.textContent = 'No players in lobby';
+      this.playerList.appendChild(li);
+      return;
+    }
+
+    this.players.forEach((player) => {
+      const li = document.createElement('li');
+      li.style.display = 'flex';
+      li.style.alignItems = 'center';
+      li.style.gap = '8px';
+
+      const readyDot = document.createElement('span');
+      readyDot.textContent = player.isReady ? '●' : '○';
+      readyDot.style.color = player.isReady ? '#7CFC00' : '#888';
+      readyDot.style.fontSize = '18px';
+      li.appendChild(readyDot);
+
+      const name = document.createElement('span');
+      name.textContent = player.name;
+      li.appendChild(name);
+
+      if (player.isHost) {
+        const badge = document.createElement('span');
+        badge.textContent = 'HOST';
+        badge.className = 'host-badge';
+        li.appendChild(badge);
+      }
+
+      this.playerList.appendChild(li);
+    });
+  }
+
+  updateReadyStates() {
+    if (!this.readyStatesEl) return;
+
+    if (this.selectedMode !== 'battle') {
+      this.readyStatesEl.classList.add('hidden');
+      this.readyStatesEl.innerHTML = '';
+      return;
+    }
+
+    this.readyStatesEl.classList.remove('hidden');
+    const total = this.players.length;
+    const ready = this.players.filter((p) => p.isReady).length;
+    const rows = this.players.map((p) => `<div>${p.isReady ? '●' : '○'} ${p.name}${p.isHost ? ' (HOST)' : ''}</div>`).join('');
+    this.readyStatesEl.innerHTML = `<div><strong>Ready:</strong> ${ready}/${total}</div>${rows}`;
+  }
+
+  refreshBattleControls() {
+    const battleSettings = document.getElementById('battle-settings');
+    const inLobby = !!this.room;
+    const isBattleMode = this.selectedMode === 'battle';
+
+    battleSettings?.classList.toggle('hidden', !isBattleMode);
+
+    if (!isBattleMode) {
+      this.battleStartBtn?.classList.add('hidden');
+      if (this.playBtn) this.playBtn.textContent = inLobby && this.isHost ? 'START RACE' : (inLobby ? 'READY UP' : 'PLAY GAME');
+      return;
+    }
+
+    if (this.playBtn) this.playBtn.textContent = inLobby ? (this.isReady ? 'CANCEL READY' : 'READY UP') : 'PLAY GAME';
+
+    const everyoneReady = this.players.length > 0 && this.players.every((p) => p.isReady);
+    if (this.battleStartBtn) {
+      this.battleStartBtn.classList.toggle('hidden', !(inLobby && this.isHost));
+      this.battleStartBtn.disabled = !everyoneReady;
+    }
+  }
+
+  applyStateToUI(state) {
+    const modeButtons = document.querySelectorAll('.mode-btn');
+    modeButtons.forEach((button) => {
+      button.classList.toggle('active', button.getAttribute('data-mode') === this.selectedMode);
+    });
+
+    const mapName = document.querySelector('.selected-map-name');
+    const selectedTrack = STK_TRACKS.find((t) => t.id === this.selectedMap);
+    if (mapName && selectedTrack) mapName.textContent = selectedTrack.name;
+
+    document.querySelectorAll('.dropdown-option').forEach((option) => {
+      option.classList.toggle('selected', option.getAttribute('data-map-id') === this.selectedMap);
+    });
+
+    const battleTypeEl = document.getElementById('battle-type-select');
+    if (battleTypeEl && battleTypeEl.value !== this.selectedBattleType) battleTypeEl.value = this.selectedBattleType;
+
+    const maxPlayersEl = document.getElementById('battle-max-players');
+    if (maxPlayersEl) maxPlayersEl.value = String(this.selectedMaxPlayers);
+
+    if (this.partyCodeDisplay) {
+      this.partyCodeDisplay.textContent = state.lobbyCode || this.currentLobbyCode || '------';
+    }
+  }
+
+  initMapSelector() {
+    const mapDropdown = document.querySelector('.map-dropdown');
+    const dropdownButton = document.querySelector('.dropdown-button');
+    const selectedMapName = document.querySelector('.selected-map-name');
+    const dropdownContent = document.getElementById('track-dropdown-options');
+
+    if (dropdownContent) {
+      dropdownContent.innerHTML = '';
+      STK_TRACKS.forEach((track, index) => {
+        const option = document.createElement('div');
+        option.className = `dropdown-option${index === 0 ? ' selected' : ''}`;
+        option.setAttribute('data-map-id', track.id);
+        option.textContent = track.name;
+        dropdownContent.appendChild(option);
       });
     }
+
+    this.selectedMap = STK_TRACKS[0].id;
+    if (selectedMapName) selectedMapName.textContent = STK_TRACKS[0].name;
+
+    dropdownButton?.addEventListener('click', (event) => {
+      event.stopPropagation();
+      mapDropdown?.classList.toggle('open');
+    });
+
+    document.addEventListener('click', () => mapDropdown?.classList.remove('open'));
+
+    dropdownContent?.addEventListener('click', (event) => {
+      const option = event.target.closest('.dropdown-option');
+      if (!option) return;
+
+      const mapId = option.getAttribute('data-map-id');
+      this.selectedMap = mapId;
+      document.querySelectorAll('.dropdown-option').forEach((opt) => opt.classList.toggle('selected', opt === option));
+      if (selectedMapName) selectedMapName.textContent = option.textContent;
+      mapDropdown?.classList.remove('open');
+
+      document.dispatchEvent(new CustomEvent('mapChanged', { detail: { mapId } }));
+      this.sendSettingsUpdate();
+    });
+  }
+
+  initModeSelector() {
+    const modeButtons = document.querySelectorAll('.mode-btn');
+    const battleTypeEl = document.getElementById('battle-type-select');
+    const maxPlayersEl = document.getElementById('battle-max-players');
+    const botCountEl = document.getElementById('battle-bot-count');
+
+    modeButtons.forEach((button) => {
+      button.addEventListener('click', () => {
+        this.selectedMode = button.getAttribute('data-mode') === 'battle' ? 'battle' : 'race';
+        this.refreshBattleControls();
+        this.sendSettingsUpdate();
+      });
+    });
+
+    battleTypeEl?.addEventListener('change', () => {
+      this.selectedBattleType = battleTypeEl.value === 'ctf' ? 'ctf' : 'deathmatch';
+      this.sendSettingsUpdate();
+    });
+
+    maxPlayersEl?.addEventListener('change', () => {
+      const parsed = parseInt(maxPlayersEl.value || '12', 10);
+      this.selectedMaxPlayers = Number.isFinite(parsed) ? Math.max(2, Math.min(12, parsed)) : 12;
+      maxPlayersEl.value = String(this.selectedMaxPlayers);
+      this.sendSettingsUpdate();
+    });
+
+    botCountEl?.addEventListener('change', () => {
+      const parsed = parseInt(botCountEl.value || '0', 10);
+      this.selectedBotCount = Number.isFinite(parsed) ? Math.max(0, Math.min(11, parsed)) : 0;
+      botCountEl.value = String(this.selectedBotCount);
+    });
+  }
+
+  populateArenaSelector() {
+    const arenaSelectEl = document.getElementById('battle-arena-select');
+    if (!arenaSelectEl) return;
+
+    arenaSelectEl.innerHTML = '';
+    STK_ARENAS.forEach((arena, index) => {
+      const option = document.createElement('option');
+      option.value = arena.id;
+      option.textContent = arena.name;
+      if (index === 0) option.selected = true;
+      arenaSelectEl.appendChild(option);
+    });
+
+    arenaSelectEl.addEventListener('change', () => this.sendSettingsUpdate());
+  }
+
+  initWeaponLoadout() {
+    const LOADOUTS = [
+      { id: 'random-all', label: 'All Weapons', icon: '🎲' },
+      { id: 'combat', label: 'Combat', icon: '💥' },
+      { id: 'chaos', label: 'Chaos', icon: '🌀' },
+      { id: 'sneaky', label: 'Sneaky', icon: '👻' },
+      { id: 'none', label: 'No Weapons', icon: '🚫' },
+    ];
+
+    const row = document.getElementById('weapon-loadout-row');
+    if (!row) return;
+
+    row.innerHTML = '';
+    LOADOUTS.forEach((loadout) => {
+      const btn = document.createElement('button');
+      btn.className = `weapon-loadout-btn${loadout.id === this.selectedLoadout ? ' active' : ''}`;
+      btn.setAttribute('data-loadout', loadout.id);
+      btn.innerHTML = `<span class="loadout-icon">${loadout.icon}</span><span class="loadout-label">${loadout.label}</span>`;
+      btn.addEventListener('click', () => {
+        row.querySelectorAll('.weapon-loadout-btn').forEach((node) => node.classList.remove('active'));
+        btn.classList.add('active');
+        this.selectedLoadout = loadout.id;
+        this.sendSettingsUpdate();
+      });
+      row.appendChild(btn);
+    });
+  }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  const lobby = new RacingLobby();
+
+  const menuMusic = document.getElementById('menu-music');
+  const muteBtn = document.getElementById('mute-btn');
+  const muteIcon = document.getElementById('mute-icon');
+  let musicStarted = false;
+
+  const tryPlayMusic = () => {
+    if (!menuMusic || musicStarted) return;
+    menuMusic.volume = 0.42;
+    menuMusic.play().then(() => { musicStarted = true; }).catch(() => {});
+  };
+
+  tryPlayMusic();
+  document.addEventListener('click', tryPlayMusic, { once: true });
+  document.addEventListener('keydown', tryPlayMusic, { once: true });
+
+  muteBtn?.addEventListener('click', () => {
+    if (!menuMusic) return;
+    menuMusic.muted = !menuMusic.muted;
+    if (muteIcon) muteIcon.className = menuMusic.muted ? 'fas fa-volume-mute' : 'fas fa-music';
   });
 
-  // Function to handle orientation changes
-  function handleOrientationChange() {
-    const rotateMessage = document.getElementById('rotate-message');
-    const gameContainer = document.querySelector('.game-container');
-    
-    if (window.innerHeight > window.innerWidth) {
-      // Portrait mode
-      if (rotateMessage) rotateMessage.style.display = 'flex';
-      if (gameContainer) gameContainer.style.display = 'none';
-    } else {
-      // Landscape mode
-      if (rotateMessage) rotateMessage.style.display = 'none';
-      if (gameContainer) gameContainer.style.display = 'flex';
-    }
+  const clickSfx = new Audio('/audio/sfx/grab_collectable.ogg');
+  clickSfx.volume = 0.5;
+  document.querySelectorAll('button').forEach((button) => {
+    button.addEventListener('click', () => {
+      const sfx = clickSfx.cloneNode();
+      sfx.volume = 0.45;
+      sfx.play().catch(() => {});
+    }, { passive: true });
+  });
+
+  window.addEventListener('orientationchange', handleOrientationChange);
+  window.addEventListener('resize', handleOrientationChange);
+  handleOrientationChange();
+
+  const infoBtn = document.getElementById('info-btn');
+  const infoPopup = document.getElementById('info-popup');
+  const closeInfoBtn = document.getElementById('close-info-btn');
+
+  if (infoBtn && infoPopup && closeInfoBtn) {
+    infoBtn.addEventListener('click', () => infoPopup.classList.remove('hidden'));
+    closeInfoBtn.addEventListener('click', () => infoPopup.classList.add('hidden'));
+    infoPopup.addEventListener('click', (event) => {
+      if (event.target === infoPopup || event.target.classList.contains('info-overlay')) {
+        infoPopup.classList.add('hidden');
+      }
+    });
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && !infoPopup.classList.contains('hidden')) {
+        infoPopup.classList.add('hidden');
+      }
+    });
   }
+
+  window.__lobby = lobby;
+});
+
+function handleOrientationChange() {
+  const rotateMessage = document.getElementById('rotate-message');
+  const gameContainer = document.querySelector('.game-container');
+
+  if (window.innerHeight > window.innerWidth) {
+    if (rotateMessage) rotateMessage.style.display = 'flex';
+    if (gameContainer) gameContainer.style.display = 'none';
+  } else {
+    if (rotateMessage) rotateMessage.style.display = 'none';
+    if (gameContainer) gameContainer.style.display = 'flex';
+  }
+}

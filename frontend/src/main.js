@@ -41,6 +41,13 @@ try {
   console.error('Error loading game config:', e);
 }
 
+const useColyseusRealtime = Boolean(gameConfig?.multiplayer)
+  && String(gameConfig?.multiplayerProvider || '').toLowerCase() === 'colyseus';
+
+if (useColyseusRealtime) {
+  window.location.replace('realtime.html');
+}
+
 // Global variables
 let camera, scene, renderer, controls;
 let physicsWorld, tmpTrans;
@@ -1629,4 +1636,6 @@ function createMobileControls() {
 }
 
 // Start initialization
-init();
+if (!useColyseusRealtime) {
+  init();
+}

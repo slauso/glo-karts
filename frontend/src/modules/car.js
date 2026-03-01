@@ -130,7 +130,7 @@ function loadCarModel(ammo, scene, carComponents, wheelPositions, onModelLoaded)
   const loader = new GLTFLoader();
   
   // Get the player ID
-  const myPlayerId = localStorage.getItem('myPlayerId');
+  const myPlayerId = sessionStorage.getItem('myPlayerId') || localStorage.getItem('myPlayerId');
   
   // Determine car color with proper priority:
   let carColor = 'red';

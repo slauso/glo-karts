@@ -47,7 +47,6 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "rest_framework",  # Add Django REST Framework
     "corsheaders",     # Add CORS headers
-    "party_codes",     # Your app
 ]
 
 MIDDLEWARE = [
@@ -142,9 +141,29 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 if os.environ.get("CORS_ALLOW_ALL_ORIGINS", "False").lower() == "true":
     CORS_ALLOW_ALL_ORIGINS = True
 else:
-    CORS_ALLOWED_ORIGINS = os.environ.get("CORS_ALLOWED_ORIGINS", "").split(",")
-    # Filter empty strings
-    CORS_ALLOWED_ORIGINS = [origin for origin in CORS_ALLOWED_ORIGINS if origin]
+    configured_origins = os.environ.get("CORS_ALLOWED_ORIGINS", "").split(",")
+    configured_origins = [origin.strip() for origin in configured_origins if origin.strip()]
+    if configured_origins:
+        CORS_ALLOWED_ORIGINS = configured_origins
+    else:
+        # Safe local-dev defaults to prevent false "backend offline" in Vite/browser testing.
+        CORS_ALLOWED_ORIGINS = [
+            "http://localhost:5173",
+            "http://127.0.0.1:5173",
+            "http://localhost:5174",
+            "http://127.0.0.1:5174",
+            "http://localhost:3000",
+            "http://127.0.0.1:3000",
+        ]
+
+# Permit common local/LAN dev origins (e.g. phone/tablet testing over Wi‑Fi)
+CORS_ALLOWED_ORIGIN_REGEXES = [
+    r"^https?://localhost(?::\d+)?$",
+    r"^https?://127\.0\.0\.1(?::\d+)?$",
+    r"^https?://10\.\d+\.\d+\.\d+(?::\d+)?$",
+    r"^https?://192\.168\.\d+\.\d+(?::\d+)?$",
+    r"^https?://172\.(1[6-9]|2\d|3[0-1])\.\d+\.\d+(?::\d+)?$",
+]
 
 CORS_ALLOW_CREDENTIALS = True
 

@@ -11,12 +11,12 @@ A real-time multiplayer 3D racing game built with JavaScript and modern web tech
 
 ## Features
 
-- **Multiplayer Racing**: Race against friends in real-time using WebRTC peer-to-peer connections
+- **Multiplayer Racing**: Race against friends in real-time using an authoritative Colyseus backend
 - **Physics-Based Driving**: Realistic car physics with speed-dependent steering, suspension, and collision detection
 - **Multiple Tracks**: Different race tracks with unique layouts and obstacles
 - **Checkpoint System**: Race through gates to progress and track your lap time
 - **Leaderboard**: Compete for the best times and see rankings
-- **Party System**: Create or join racing parties with simple code sharing
+- **Lobby Matchmaking**: Create open/private lobbies, share join codes, or quick-match into open queues
 - **Mobile Support**: Optimized for desktop and mobile with touch controls
 - **Car Customization**: Choose from various car colors
 
@@ -27,8 +27,8 @@ A real-time multiplayer 3D racing game built with JavaScript and modern web tech
 1. Visit the Twisted Kart website
 2. Enter your name
 3. Choose your car color
-4. Click "Create Party"
-5. Share the generated party code with friends
+4. Click "Create Party" or "Quick Match"
+5. For private games, share the generated lobby code with friends
 6. Select a track from the dropdown menu
 7. Click "Start Race" when everyone is ready
 
@@ -37,8 +37,8 @@ A real-time multiplayer 3D racing game built with JavaScript and modern web tech
 1. Visit the Twisted Kart website
 2. Enter your name
 3. Choose your car color
-4. Enter the party code provided by the host
-5. Click "Join Party"
+4. Enter the lobby code provided by the host
+5. Click "Join"
 6. Wait for the host to start the race
 
 ## Controls
@@ -60,16 +60,63 @@ A real-time multiplayer 3D racing game built with JavaScript and modern web tech
 
 - **Three.js**: 3D rendering engine
 - **Ammo.js**: Physics engine (WebAssembly port of Bullet Physics)
-- **PeerJS**: WebRTC peer-to-peer connections
+- **Colyseus**: Authoritative realtime multiplayer rooms (`race_room`, `battle_room`)
 - **JavaScript**: Core programming language
 - **HTML5/CSS3**: Frontend structure and styling
-- **Python/Django**: Backend server for matchmaking and party code management
+- **Python/Django**: Optional backend/admin services
+
+## Realtime Migration (Colyseus + Babylon.js)
+
+The default multiplayer path now uses authoritative Colyseus rooms.
+
+- **Authoritative server**: `realtime/` (Node.js + Colyseus)
+- **Room types**: `race_room`, `battle_room`
+- **Lobby room**: `lobby_room` for open/private party signaling and pre-match settings
+- **Schema sync**: position, velocity, rotation, health/score, and input acknowledgements (`lastProcessedInput`)
+- **Prediction/reconciliation client**: `frontend/src/modules/realtime/colyseus-babylon-client.js`
+- **Customization sync**: `kartId`, `playerColor`, `gloEffect`, `gloColor`, `gloColor2`
+
+The matchmaking flow supports race and battle modes with open/public quick-match queues and private code-based lobbies. Room isolation uses `partyCode` filters so multiple lobbies can run concurrently (targeting 100+ concurrent users across rooms, with per-match caps configured in lobby settings).
+
+### Run realtime server
+
+```powershell
+./start-realtime.ps1
+```
+
+or manually:
+
+```powershell
+cd realtime
+npm install
+npm run dev
+```
+
+### Colyseus frontend configuration
+
+Set the following in your active Vite env file:
+
+- `VITE_USE_COLYSEUS=true`
+- `VITE_COLYSEUS_URL=ws://localhost:2567`
+
+`VITE_USE_COLYSEUS` now defaults to `true` if unset.
+
+### Lobby UX regression (Playwright)
+
+Run the focused lobby flow regression (private race, private battle, open quick-match):
+
+```powershell
+cd frontend
+npm run test:lobby:regression
+```
+
+The script validates create/join/start routing to `realtime.html`, race/battle mode settings propagation, and core customization selections across host/guest clients.
 
 ## 🚀 Deployment Guide
 
 ### 1. Prepare Environment Variables
 
-- Frontend (Vite): copy `frontend/.env.example` to `.env.development` and `.env.production`. Set `VITE_API_URL=https://api.twistedkart.com` (replace with your backend URL). The lobby now reads this value automatically and falls back to `window.location.origin` during local dev.
+- Frontend (Vite): set `VITE_COLYSEUS_URL=wss://realtime.your-domain.com` in your production env (or `ws://localhost:2567` for local).
 - Backend (Django): configure `DJANGO_SECRET_KEY`, `ALLOWED_HOSTS`, and `CORS_ALLOWED_ORIGINS`. Example for Render: `ALLOWED_HOSTS=twistedkart-backend.onrender.com` and `CORS_ALLOWED_ORIGINS=https://play.twistedkart.com`.
 
 ### 2. Deploy the Backend (Render Free Tier)
@@ -88,7 +135,7 @@ A real-time multiplayer 3D racing game built with JavaScript and modern web tech
 5. **Persistent storage**: add a disk (1 GB free) at path `/opt/render/project/src/backend/db.sqlite3` to keep SQLite data.
 6. **Migrations**: open Render shell → `python manage.py migrate`; add an admin user if desired with `python manage.py createsuperuser`.
 7. **Static files**: run `python manage.py collectstatic --noinput` if you enable DJANGO static hosting later (WhiteNoise already configured).
-8. **Test endpoint**: `curl https://twistedkart-backend.onrender.com/api/party-codes/health/` (create a simple view) or hit the create/lookup endpoints from the lobby.
+8. **Test endpoint**: `curl https://twistedkart-backend.onrender.com/` should return API metadata.
 
 ### 3. Deploy the Frontend (Netlify or Vercel)
 
@@ -97,28 +144,21 @@ A real-time multiplayer 3D racing game built with JavaScript and modern web tech
 	- Import Git repo or use `netlify deploy --prod` with root `frontend`.
 	- Build command: `npm run build`
 	- Publish directory: `frontend/dist`
-	- Environment → add `VITE_API_URL=https://twistedkart-backend.onrender.com`
+	- Environment → add `VITE_COLYSEUS_URL=wss://realtime.your-domain.com`
 	- Hit _Deploy site_ and verify at the Netlify preview URL.
 3. **Vercel alternative**:
 	- Vercel dashboard → **Add New Project**, select repo, set Framework = Vite.
 	- Root directory: `frontend`
 	- Build command: `npm run build`
 	- Output directory: `dist`
-	- Environment variable: `VITE_API_URL=https://twistedkart-backend.onrender.com`
+	- Environment variable: `VITE_COLYSEUS_URL=wss://realtime.your-domain.com`
 	- Deploy and check preview at `https://twistedkart.vercel.app` (example).
 4. **Custom domain**: point `play.twistedkart.com` (A/ALIAS or CNAME) at Netlify/Vercel; add the domain in hosting dashboard to enable managed TLS.
 
 ### 4. Configure Networking
 
-- Keep the default PeerJS Cloud signalling server or host your own for more control.
-- Ensure HTTPS on both frontend and backend (required for WebRTC).
-- Add a DNS record (e.g., `play.twistedkart.com`) pointing to your hosting provider and connect it via Netlify/Vercel dashboard.
-- If launching at scale, provision a TURN server (e.g., [coturn](https://github.com/coturn/coturn) or a managed provider) and pass its credentials through PeerJS options.
-
-### 4. Configure Networking
-
-- Keep the default PeerJS Cloud signalling server or host your own for more control.
-- Ensure HTTPS on both frontend and backend (required for WebRTC).
+- Ensure HTTPS/WSS on frontend, API backend, and realtime backend.
+- Configure `VITE_COLYSEUS_URL` to your realtime endpoint (for example `wss://realtime.twistedkart.com`).
 - Add a DNS record (e.g., `play.twistedkart.com`) pointing to your hosting provider and connect it via Netlify/Vercel dashboard.
 
 With these steps the lobby will create and join parties using your own Twisted Kart infrastructure.
