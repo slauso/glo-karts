@@ -41,7 +41,7 @@ Click **"Add Environment Variable"** and add:
 
 | Name | Value |
 |------|-------|
-| `VITE_API_URL` | `https://twistedkart.koyeb.app` |
+| `VITE_COLYSEUS_URL` | `wss://realtime.your-domain.com` |
 
 ### Step 3: Deploy
 
@@ -53,7 +53,7 @@ Click **"Add Environment Variable"** and add:
 
 1. Visit your Vercel URL
 2. You should see the Twisted Kart lobby
-3. Test party code creation/joining to verify backend connection
+3. Test private/open lobby create/join and quick-match
 
 ---
 
@@ -92,7 +92,7 @@ New-Item -Path .env.production -ItemType File
 Add this content to `.env.production`:
 
 ```
-VITE_API_URL=https://twistedkart.koyeb.app
+VITE_COLYSEUS_URL=wss://realtime.your-domain.com
 ```
 
 ### Step 5: Deploy to Vercel
@@ -139,7 +139,7 @@ Add this to your main README.md:
 ```markdown
 ## Deploy Frontend
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/slauso1/twistedkart&root-directory=frontend&env=VITE_API_URL&envDescription=Backend%20API%20URL&envLink=https://twistedkart.koyeb.app)
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/slauso1/twistedkart&root-directory=frontend&env=VITE_COLYSEUS_URL&envDescription=Colyseus%20Realtime%20WebSocket%20URL)
 ```
 
 ---
@@ -182,25 +182,20 @@ VITE_API_URL=https://twistedkart.koyeb.app
 
 ## Environment Variables Explained
 
-### VITE_API_URL
+### VITE_COLYSEUS_URL
 
-- **Purpose**: Tells your frontend where the backend API is hosted
-- **Production Value**: `https://twistedkart.koyeb.app`
-- **Local Development**: `http://localhost:8000`
+- **Purpose**: Tells your frontend where the realtime Colyseus server is hosted
+- **Production Value**: `wss://realtime.your-domain.com`
+- **Local Development**: `ws://localhost:2567`
 
 ### How It Works
 
-Your `frontend/src/lobby.js` already checks for this variable:
+Your frontend realtime flow checks for this variable:
 
 ```javascript
-const API_BASE_URL = (() => {
-  const envUrl = import.meta.env.VITE_API_URL;
-  if (envUrl) {
-    return envUrl.replace(/\/$/, '');
-  }
-  // Falls back to localhost for development
-  return 'http://localhost:8000';
-})();
+const env = import.meta.env.VITE_COLYSEUS_URL;
+if (env) return env;
+return `ws://${window.location.hostname}:2567`;
 ```
 
 ---
@@ -228,9 +223,10 @@ Or replace with your actual Vercel URL. You can also use:
 Visit your Vercel URL and test:
 
 1. ✅ Lobby loads
-2. ✅ Create party code button works
-3. ✅ Party code is generated and displayed
-4. ✅ Join party code works
+2. ✅ Create private lobby works
+3. ✅ Lobby code is generated and displayed
+4. ✅ Join lobby by code works
+5. ✅ Open quick match joins a public lobby
 5. ✅ Game page loads when starting race
 
 ### 3. Configure Custom Domain (Optional)
@@ -278,9 +274,9 @@ git push
 ### Game Loads but Multiplayer Doesn't Work
 
 **Check**:
-1. Backend is running: https://twistedkart.koyeb.app/ should return JSON
-2. Party code endpoints work: Try creating a code manually
-3. PeerJS connection (check browser console for WebRTC errors)
+1. Realtime server is running: open your Colyseus health endpoint (for local, `http://localhost:2567/health`)
+2. Frontend env has `VITE_COLYSEUS_URL` pointing to the realtime host (`ws://` local, `wss://` production)
+3. Browser can reach WebSocket endpoint (check network tab for `ws` handshake failures)
 
 ### Pages Not Found (404 on Refresh)
 
@@ -300,10 +296,10 @@ npm run dev
 
 Visit `http://localhost:5173`
 
-To test with production backend:
+To test with production realtime server:
 
 ```powershell
-$env:VITE_API_URL="https://twistedkart.koyeb.app"
+$env:VITE_COLYSEUS_URL="wss://realtime.your-domain.com"
 npm run dev
 ```
 
@@ -340,12 +336,11 @@ dir dist
 - [ ] Vercel account created
 - [ ] GitHub repository connected to Vercel
 - [ ] Root directory set to `frontend`
-- [ ] `VITE_API_URL` environment variable added
+- [ ] `VITE_COLYSEUS_URL` environment variable added
 - [ ] Project deployed successfully
 - [ ] Vercel URL opens and shows lobby
-- [ ] Backend CORS updated with Vercel URL
-- [ ] Party code creation tested
-- [ ] Party code joining tested
+- [ ] Private lobby create/join tested
+- [ ] Open quick-match tested
 - [ ] Game page loads successfully
 - [ ] Multiplayer functionality tested
 
@@ -355,7 +350,7 @@ dir dist
 
 - **Vercel Documentation**: https://vercel.com/docs
 - **Vite Documentation**: https://vitejs.dev/guide/
-- **Your Backend API**: https://twistedkart.koyeb.app/
+- **Realtime Health (local)**: http://localhost:2567/health
 - **GitHub Repository**: https://github.com/slauso1/twistedkart
 
 ---

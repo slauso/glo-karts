@@ -23,22 +23,16 @@ Output Directory: dist
 Click "Environment Variables" and add:
 
 ```
-Name:  VITE_API_URL
-Value: https://twistedkart.koyeb.app
+Name:  VITE_COLYSEUS_URL
+Value: wss://realtime.your-domain.com
 ```
 
 ### 5. Deploy
 Click **"Deploy"** button and wait ~2 minutes
 
-### 6. Update Backend CORS
+### 6. Verify Realtime Health
 
-Go to Koyeb → Your backend service → Environment variables
-
-Add:
-```
-Name:  CORS_ALLOW_ALL_ORIGINS
-Value: True
-```
+Check your realtime service health endpoint and confirm frontend `VITE_COLYSEUS_URL` points at it.
 
 **Done!** Your game is live at `https://[your-project].vercel.app`
 
@@ -73,7 +67,7 @@ vercel --prod
 ## URLs After Deployment
 
 - **Frontend (Vercel)**: `https://[your-project].vercel.app`
-- **Backend (Koyeb)**: `https://twistedkart.koyeb.app`
+- **Realtime (Colyseus)**: `wss://realtime.your-domain.com`
 
 Both work together to power your racing game!
 
@@ -84,8 +78,8 @@ Both work together to power your racing game!
 **"Cannot find module 'three'"**
 - Solution: Vercel will auto-install from package.json
 
-**CORS Error**
-- Solution: Add `CORS_ALLOW_ALL_ORIGINS=True` to backend environment variables
+**WebSocket Connect Error**
+- Solution: Verify `VITE_COLYSEUS_URL` and realtime server availability
 
 **404 on page refresh**
 - Solution: Already fixed in vercel.json

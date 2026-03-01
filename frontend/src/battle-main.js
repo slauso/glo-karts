@@ -21,6 +21,10 @@ import { initWeapons, attemptFire, getWeaponDef, hostBroadcastPickups } from './
 
 console.log('🎮 BATTLE MODE LOADING...');
 
+function getCurrentPlayerId() {
+  return sessionStorage.getItem('myPlayerId') || localStorage.getItem('myPlayerId');
+}
+
 // Check for game config from lobby
 let gameConfig = null;
 let isHost = false;
@@ -32,7 +36,7 @@ try {
     gameConfig = JSON.parse(savedConfig);
     
     // Check if we're the host
-    const myPlayerId = localStorage.getItem('myPlayerId');
+    const myPlayerId = getCurrentPlayerId();
     isHost = gameConfig.players.some(player => player.id === myPlayerId && player.isHost);
     
     console.log('Battle config loaded:', gameConfig);
@@ -43,6 +47,13 @@ try {
   }
 } catch (e) {
   console.error('Error loading battle config:', e);
+}
+
+const useColyseusRealtime = Boolean(gameConfig?.multiplayer)
+  && String(gameConfig?.multiplayerProvider || '').toLowerCase() === 'colyseus';
+
+if (useColyseusRealtime) {
+  window.location.replace('realtime.html');
 }
 
 // Global variables
@@ -85,13 +96,19 @@ let battleState = {
   maxHealth: 100,
   score: 0,
   currentWeapon: null,
-  invulnerable: false
+  invulnerable: false,
+  battleType: (gameConfig && gameConfig.battleType) ? gameConfig.battleType : 'deathmatch'
 };
 
 let healthSystem = null;
 let arenaInfo = null; // populated after loadArena
 let playerSpawnIndex = 0; // index into arena spawn points
 let weaponsSystem = null; // weapons module interface
+let ctfState = null;
+let ctfSyncClock = 0;
+
+const CTF_CAPTURE_RADIUS = 4;
+const CTF_FLAG_PICKUP_RADIUS = 3.4;
 
 // Multiplayer variables
 let multiplayerState;
@@ -170,7 +187,7 @@ async function init() {
     // Determine spawn index based on player list ordering
     if (gameConfig && gameConfig.spawnMap && gameConfig.players) {
       // Use explicit spawnMap from lobby if present
-      const myId = localStorage.getItem('myPlayerId');
+      const myId = getCurrentPlayerId();
       if (myId && typeof gameConfig.spawnMap[myId] === 'number') {
         playerSpawnIndex = gameConfig.spawnMap[myId] % arenaInfo.spawnPoints.length;
       } else {
@@ -178,7 +195,7 @@ async function init() {
         playerSpawnIndex = idx >= 0 ? idx % arenaInfo.spawnPoints.length : 0;
       }
     } else if (gameConfig && gameConfig.players) {
-      const myId = localStorage.getItem('myPlayerId');
+      const myId = getCurrentPlayerId();
       const idx = gameConfig.players.findIndex(p => p.id === myId);
       playerSpawnIndex = idx >= 0 ? idx % arenaInfo.spawnPoints.length : 0;
     } else {
@@ -218,11 +235,15 @@ async function init() {
       arenaInfo
     });
 
+    if (battleState.battleType === 'ctf') {
+      initCtfMode();
+    }
+
     // Setup controls
     setupControls();
 
     // Initialize multiplayer if needed
-    if (gameConfig && gameConfig.players.length > 1) {
+    if (gameConfig && gameConfig.multiplayer && gameConfig.players.length > 1) {
       battleState.isMultiplayer = true;
       console.log('Initializing multiplayer...');
       multiplayerState = initMultiplayer({
@@ -560,7 +581,11 @@ function updateBattleUI() {
   // Update score
   const scoreValue = document.getElementById('score-value');
   if (scoreValue) {
-    scoreValue.textContent = battleState.score;
+    if (battleState.battleType === 'ctf' && ctfState) {
+      scoreValue.textContent = `R ${ctfState.scores.red} : ${ctfState.scores.blue} B`;
+    } else {
+      scoreValue.textContent = battleState.score;
+    }
   }
   
   // Update weapon display
@@ -579,6 +604,173 @@ function updateBattleUI() {
     }
   }
 }
+
+function getLocalPlayerId() {
+  return localStorage.getItem('myPlayerId') || gameConfig?.players?.[0]?.id || 'solo-player';
+}
+
+function getTeamForPlayer(playerId) {
+  if (!gameConfig?.players?.length) return 'red';
+  const idx = gameConfig.players.findIndex(p => p.id === playerId);
+  if (idx < 0) return 'red';
+  return idx % 2 === 0 ? 'red' : 'blue';
+}
+
+function initCtfMode() {
+  if (!scene || !arenaInfo) return;
+
+  const width = arenaInfo?.bounds?.width || 100;
+  const baseOffset = Math.max(16, Math.floor(width * 0.32));
+
+  const redBase = new THREE.Vector3(-baseOffset, 0.4, 0);
+  const blueBase = new THREE.Vector3(baseOffset, 0.4, 0);
+
+  const makeBase = (pos, color) => {
+    const mesh = new THREE.Mesh(
+      new THREE.CylinderGeometry(3.2, 3.2, 0.35, 24),
+      new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.2 })
+    );
+    mesh.position.copy(pos);
+    mesh.receiveShadow = true;
+    scene.add(mesh);
+  };
+
+  const makeFlag = (pos, color) => {
+    const pole = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.08, 0.08, 2.2, 10),
+      new THREE.MeshStandardMaterial({ color: 0xd0d0d0 })
+    );
+    pole.position.copy(pos).add(new THREE.Vector3(0, 1.1, 0));
+    scene.add(pole);
+
+    const cloth = new THREE.Mesh(
+      new THREE.BoxGeometry(1.0, 0.55, 0.05),
+      new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.25 })
+    );
+    cloth.position.copy(pos).add(new THREE.Vector3(0.55, 1.75, 0));
+    scene.add(cloth);
+
+    return { pole, cloth };
+  };
+
+  makeBase(redBase, 0xaa2a2a);
+  makeBase(blueBase, 0x2a4aaa);
+  const redFlagMesh = makeFlag(redBase, 0xff3b3b);
+  const blueFlagMesh = makeFlag(blueBase, 0x3b7dff);
+
+  const myId = getLocalPlayerId();
+  const myTeam = getTeamForPlayer(myId);
+  const scoreLimit = Number.isFinite(Number(gameConfig?.scoreLimit)) ? Number(gameConfig.scoreLimit) : 5;
+
+  ctfState = {
+    myId,
+    myTeam,
+    scoreLimit,
+    scores: { red: 0, blue: 0 },
+    red: {
+      home: redBase.clone(),
+      current: redBase.clone(),
+      carrierId: null,
+      mesh: redFlagMesh,
+    },
+    blue: {
+      home: blueBase.clone(),
+      current: blueBase.clone(),
+      carrierId: null,
+      mesh: blueFlagMesh,
+    },
+  };
+
+  console.log(`[CTF] Initialized. Team=${myTeam} Limit=${scoreLimit}`);
+}
+
+function placeFlag(flagData) {
+  if (!flagData?.mesh) return;
+  flagData.mesh.pole.position.copy(flagData.current).add(new THREE.Vector3(0, 1.1, 0));
+  flagData.mesh.cloth.position.copy(flagData.current).add(new THREE.Vector3(0.55, 1.75, 0));
+}
+
+function resetFlag(flagData) {
+  flagData.carrierId = null;
+  flagData.current.copy(flagData.home);
+}
+
+function maybeBroadcastCtfState(deltaTime) {
+  if (!battleState.isMultiplayer || !multiplayerState?.isHost || !ctfState) return;
+  ctfSyncClock += deltaTime;
+  if (ctfSyncClock < 0.2) return;
+  ctfSyncClock = 0;
+
+  const payload = {
+    type: 'ctfStateUpdate',
+    scores: ctfState.scores,
+    red: { x: ctfState.red.current.x, y: ctfState.red.current.y, z: ctfState.red.current.z, carrierId: ctfState.red.carrierId },
+    blue: { x: ctfState.blue.current.x, y: ctfState.blue.current.y, z: ctfState.blue.current.z, carrierId: ctfState.blue.carrierId },
+  };
+  (multiplayerState.playerConnections || []).forEach(conn => {
+    try { if (conn?.open) conn.send(payload); } catch (e) { /* ignore */ }
+  });
+}
+
+function checkCtfWin() {
+  if (!ctfState) return;
+  if (ctfState.scores.red >= ctfState.scoreLimit || ctfState.scores.blue >= ctfState.scoreLimit) {
+    battleState.battleFinished = true;
+    const winner = ctfState.scores.red > ctfState.scores.blue ? 'RED' : 'BLUE';
+    setTimeout(() => alert(`CTF Match Over: ${winner} team wins!`), 50);
+  }
+}
+
+function updateCtfMode(deltaTime) {
+  if (!ctfState || !carModel || !battleState.battleStarted || battleState.battleFinished) return;
+
+  const myPos = carModel.position;
+  const myId = ctfState.myId;
+  const myTeam = ctfState.myTeam;
+  const ownFlag = myTeam === 'red' ? ctfState.red : ctfState.blue;
+  const enemyFlag = myTeam === 'red' ? ctfState.blue : ctfState.red;
+  const ownBase = ownFlag.home;
+
+  if (!enemyFlag.carrierId && myPos.distanceTo(enemyFlag.current) <= CTF_FLAG_PICKUP_RADIUS) {
+    enemyFlag.carrierId = myId;
+  }
+
+  if (enemyFlag.carrierId === myId) {
+    enemyFlag.current.copy(myPos).add(new THREE.Vector3(0, 1.9, 0));
+  }
+
+  const ownFlagAtHome = ownFlag.current.distanceTo(ownFlag.home) < 0.1 && !ownFlag.carrierId;
+  const atOwnBase = myPos.distanceTo(ownBase) <= CTF_CAPTURE_RADIUS;
+
+  if (enemyFlag.carrierId === myId && ownFlagAtHome && atOwnBase) {
+    ctfState.scores[myTeam] += 1;
+    battleState.score = ctfState.scores[myTeam];
+    resetFlag(enemyFlag);
+    checkCtfWin();
+  }
+
+  placeFlag(ctfState.red);
+  placeFlag(ctfState.blue);
+  maybeBroadcastCtfState(deltaTime);
+}
+
+window.receiveCtfState = function(payload) {
+  if (!ctfState || !payload) return;
+  if (payload.scores) {
+    ctfState.scores.red = Number(payload.scores.red || 0);
+    ctfState.scores.blue = Number(payload.scores.blue || 0);
+  }
+  if (payload.red) {
+    ctfState.red.current.set(Number(payload.red.x || 0), Number(payload.red.y || 0), Number(payload.red.z || 0));
+    ctfState.red.carrierId = payload.red.carrierId || null;
+  }
+  if (payload.blue) {
+    ctfState.blue.current.set(Number(payload.blue.x || 0), Number(payload.blue.y || 0), Number(payload.blue.z || 0));
+    ctfState.blue.carrierId = payload.blue.carrierId || null;
+  }
+  placeFlag(ctfState.red);
+  placeFlag(ctfState.blue);
+};
 
 function updateCamera() {
   // Prefer carModel (visual) for camera target; it reflects the final orientation used in rendering
@@ -683,6 +875,9 @@ function animate() {
 
   // Update UI
   updateBattleUI();
+  if (battleState.battleType === 'ctf') {
+    updateCtfMode(deltaTime);
+  }
   updateDebugHUD();
   // Update weapons (after core HUD so weapon changes appear next frame consistently)
   if (weaponsSystem && typeof weaponsSystem.update === 'function') {
@@ -1005,12 +1200,14 @@ setTimeout(() => {
   }
 }, 10000);
 
-init().catch(error => {
-  console.error('Failed to initialize battle mode:', error);
-  // Ensure loading screen is hidden
-  const loadingScreen = document.getElementById('loading-screen');
-  if (loadingScreen) {
-    loadingScreen.style.display = 'none';
-  }
-  alert('Failed to load battle mode. Please try again.');
-});
+if (!useColyseusRealtime) {
+  init().catch(error => {
+    console.error('Failed to initialize battle mode:', error);
+    // Ensure loading screen is hidden
+    const loadingScreen = document.getElementById('loading-screen');
+    if (loadingScreen) {
+      loadingScreen.style.display = 'none';
+    }
+    alert('Failed to load battle mode. Please try again.');
+  });
+}

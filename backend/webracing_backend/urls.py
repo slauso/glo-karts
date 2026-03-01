@@ -16,7 +16,7 @@ Including another URLconf
 """
 
 from django.contrib import admin
-from django.urls import path, include
+from django.urls import path
 from django.http import JsonResponse
 
 def api_root(request):
@@ -26,10 +26,7 @@ def api_root(request):
         'version': '1.0',
         'endpoints': {
             'admin': '/admin/',
-            'party_codes': {
-                'create': '/api/party-codes/create/',
-                'lookup': '/api/party-codes/lookup/<code>/'
-            }
+            'realtime_health': 'http://localhost:2567/health'
         },
         'status': 'running'
     })
@@ -37,5 +34,4 @@ def api_root(request):
 urlpatterns = [
     path("", api_root, name="api_root"),
     path("admin/", admin.site.urls),
-    path("api/party-codes/", include("party_codes.urls")),
 ]

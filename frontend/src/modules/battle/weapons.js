@@ -1,356 +1,398 @@
 import * as THREE from 'three';
 
 /*
- * Basic Weapons System (Phase 4 foundation)
- * Host authoritative:
- * - Host spawns pickups and broadcasts list periodically
- * - Host validates pickup claims and assigns weapon
- * - Host spawns and simulates projectiles; broadcasts spawn + hit events
+ * GLO Karts — Weapons System
+ * All 8 STK-derived weapon types + pickup / projectile / loadout logic
+ * Host is authoritative; guests receive sync packets.
  */
 
-const WEAPON_TYPES = {
-  rocket: {
-    id: 'rocket',
-    name: 'ROCKET',
-    icon: '🚀',
-    damage: 35,
-    speed: 50, // m/s forward
-    lifetime: 4.0 // seconds
-  }
+// ── Weapon catalogue ────────────────────────────────────────────────────────
+export const WEAPON_TYPES = {
+  bowling: {
+    id: 'bowling', name: 'BOWLING BALL', icon: '/textures/items/bowling-icon.png',
+    color: 0xaaddff, damage: 40, speed: 28, radius: 0.55, lifetime: 6, bounces: 3,
+    desc: 'Rolls forward and bounces off walls',
+  },
+  bubblegum: {
+    id: 'bubblegum', name: 'BUBBLE GUM', icon: '/textures/items/bubblegum-icon.png',
+    color: 0xff66cc, damage: 20, speed: 0, radius: 0.4, lifetime: 12, bounces: 0,
+    desc: 'Dropped behind — slows anyone who runs over it',
+  },
+  cake: {
+    id: 'cake', name: 'CAKE', icon: '/textures/items/cake-icon.png',
+    color: 0xffcc44, damage: 30, speed: 22, radius: 0.5, lifetime: 4, bounces: 0,
+    desc: 'Lobbed in an arc',
+  },
+  plunger: {
+    id: 'plunger', name: 'PLUNGER', icon: '/textures/items/plunger-icon.png',
+    color: 0xff3300, damage: 15, speed: 35, radius: 0.35, lifetime: 3.5, bounces: 0,
+    desc: 'Fast straight shot — sticks and blocks steering',
+  },
+  anchor: {
+    id: 'anchor', name: 'ANCHOR', icon: '/textures/items/anchor-icon.png',
+    color: 0x445566, damage: 50, speed: 0, radius: 0.6, lifetime: 0, bounces: 0,
+    desc: 'Drops on yourself — destroys whoever collides',
+  },
+  swatter: {
+    id: 'swatter', name: 'SWATTER', icon: '/textures/items/swatter-icon.png',
+    color: 0x88ff44, damage: 35, speed: 18, radius: 0.7, lifetime: 3, bounces: 0,
+    desc: 'Wide-arc close-range smash',
+  },
+  nitro: {
+    id: 'nitro', name: 'NITRO', icon: '/textures/items/nitro.png',
+    color: 0x00ffcc, damage: 25, speed: 20, radius: 0.4, lifetime: 5, bounces: 1,
+    desc: 'Exploding nitro bottle thrown forward',
+  },
+  parachute: {
+    id: 'parachute', name: 'PARACHUTE', icon: '/textures/items/parachute-icon.png',
+    color: 0xffaa22, damage: 0, speed: 0, radius: 0, lifetime: 0, bounces: 0,
+    desc: 'Deploys behind you — slows the chasing player',
+  },
 };
 
-// Configuration
-const PICKUP_RESPAWN_INTERVAL = 8000; // ms per spawn attempt
-const MAX_ACTIVE_PICKUPS = 5;
-const PICKUP_RADIUS = 2.5; // collection distance (horizontal)
-const PROJECTILE_RADIUS = 0.8; // projectile sphere radius
-const CAR_HIT_RADIUS = 2.6; // generous car hit radius for simple tests
+// ── Loadout presets ─────────────────────────────────────────────────────────
+export const WEAPON_LOADOUTS = {
+  'random-all': {
+    id: 'random-all', name: 'Random (All)',
+    desc: 'Any weapon can spawn',
+    pool: Object.keys(WEAPON_TYPES),
+  },
+  'combat': {
+    id: 'combat', name: 'Combat',
+    desc: 'High-damage weapons only',
+    pool: ['bowling', 'cake', 'anchor', 'swatter', 'nitro'],
+  },
+  'chaos': {
+    id: 'chaos', name: 'Chaos',
+    desc: 'Fast-spawn, every weapon, respawns quickly',
+    pool: Object.keys(WEAPON_TYPES),
+    spawnInterval: 4000,
+    maxPickups: 8,
+  },
+  'sneaky': {
+    id: 'sneaky', name: 'Sneaky',
+    desc: 'Traps only — bubblegum, plunger, parachute',
+    pool: ['bubblegum', 'plunger', 'parachute'],
+  },
+  'none': {
+    id: 'none', name: 'No Weapons',
+    desc: 'Pure collision damage',
+    pool: [],
+  },
+};
 
-// Internal state
+// ── Config ──────────────────────────────────────────────────────────────────
+const DEFAULT_SPAWN_INTERVAL = 7000;
+const DEFAULT_MAX_PICKUPS    = 5;
+const PICKUP_RADIUS          = 2.8;
+const CAR_HIT_RADIUS         = 2.6;
+
+// ── Internal state ──────────────────────────────────────────────────────────
 const state = {
   isHost: false,
   scene: null,
   multiplayerState: null,
   arenaInfo: null,
-  pickups: [], // { id, type, mesh }
-  lastSpawnAttempt: 0,
-  projectiles: [], // { id, type, mesh, velocity: THREE.Vector3, birth: ms }
-  tempVec: new THREE.Vector3(),
+  loadout: WEAPON_LOADOUTS['random-all'],
+  pickups: [],
+  lastSpawn: 0,
+  projectiles: [],
 };
 
-let idCounter = 0;
-function genId(prefix){ return prefix + '_' + (idCounter++); }
+let _idCtr = 0;
+function gid(p) { return p + '_' + (_idCtr++); }
 
+// ── Public API ─────────────────────────────────────────────────────────────
 export function initWeapons(opts) {
-  state.isHost = !!opts.isHost;
-  state.scene = opts.scene;
-  state.multiplayerState = opts.multiplayerState;
-  state.arenaInfo = opts.arenaInfo;
-  console.log('[Weapons] Initialized. Host:', state.isHost);
-  return { 
-    getState: () => state,
-    fireWeapon: (playerCar, battleState) => fireWeapon(playerCar, battleState),
-    update: (dt, playerCar, battleState) => update(dt, playerCar, battleState),
-    requestFire: () => requestFire(),
-    fireFromActor: (actorMesh, weaponId='rocket') => fireFromActor(actorMesh, weaponId),
+  state.isHost           = !!opts.isHost;
+  state.scene            = opts.scene;
+  state.multiplayerState = opts.multiplayerState || null;
+  state.arenaInfo        = opts.arenaInfo  || null;
+  // Accept loadout id from gameConfig
+  const loadoutId = opts.loadoutId || 'random-all';
+  state.loadout = WEAPON_LOADOUTS[loadoutId] || WEAPON_LOADOUTS['random-all'];
+  console.log('[Weapons] Init. host:', state.isHost, 'loadout:', state.loadout.name);
+  return {
+    getState: ()             => state,
+    update:   (dt, car, bs) => update(dt, car, bs),
+    attemptFire: (car, bs)  => attemptFire(car, bs),
+    fireFromActor: (mesh, id) => fireFromActor(mesh, id),
+    requestFire: ()          => requestFire(),
   };
 }
 
-function requestFire() {
-  // Guest requests host to fire (if host doesn't already handle locally)
-  if (!state.multiplayerState) return;
-  const ms = state.multiplayerState;
-  if (!ms.peer) return;
-  if (!ms.isHost && ms.playerConnections.length === 1) {
-    // We are guest; send fire request to host
-    try {
-      const conn = ms.playerConnections[0];
-      conn.send({ type: 'weaponFireRequest', timestamp: Date.now() });
-    } catch(e){ console.error('Failed to send weaponFireRequest', e); }
-  }
-}
-
-function spawnPickup(type) {
-  const weaponDef = WEAPON_TYPES[type];
-  if (!weaponDef) return;
-
-  // Pick a random spawn point from arena or random inside bounds
-  let pos;
-  if (state.arenaInfo && Array.isArray(state.arenaInfo.spawnPoints) && state.arenaInfo.spawnPoints.length) {
-    const sp = state.arenaInfo.spawnPoints[Math.floor(Math.random()*state.arenaInfo.spawnPoints.length)];
-    pos = new THREE.Vector3(sp.x + (Math.random()-0.5)*6, (sp.y ?? 0) + 0.6, sp.z + (Math.random()-0.5)*6);
-  } else {
-    pos = new THREE.Vector3((Math.random()-0.5)*40, 0.6, (Math.random()-0.5)*40);
-  }
-
-  // Visual: simple rotating ring or box
-  const geom = new THREE.TorusGeometry(0.7, 0.22, 12, 24);
-  const mat = new THREE.MeshBasicMaterial({ color: 0xff8800 });
-  const mesh = new THREE.Mesh(geom, mat);
-  mesh.position.copy(pos);
-  mesh.rotation.x = Math.PI/2;
-  mesh.userData.isPickup = true;
-  state.scene.add(mesh);
-
-  const pickup = { id: genId('pickup'), type, mesh };
-  state.pickups.push(pickup);
-  broadcastPickups();
-}
-
-function broadcastPickups() {
-  if (!state.isHost || !state.multiplayerState) return;
-  const ms = state.multiplayerState;
-  if (!ms.playerConnections.length) return;
-  const payload = state.pickups.map(p => ({ id: p.id, type: p.type, position: p.mesh.position.toArray() }));
-  ms.playerConnections.forEach(conn => {
-    try { if (conn.open) conn.send({ type: 'weaponPickups', pickups: payload }); } catch(e){ console.error('Broadcast pickups failed', e);} });
-}
-
-// Allow host to broadcast current pickups on demand (e.g., when players connect or request sync)
-export function hostBroadcastPickups() {
-  broadcastPickups();
-}
+export function hostBroadcastPickups() { broadcastPickups(); }
 
 export function applyRemotePickups(list, scene) {
-  // Remove existing remote copies (only for guests)
-  // We'll keep local authoritative list for host
-  // Simplistic sync: clear and re-add
-  state.pickups.forEach(p => { if (p.mesh && p.mesh.parent) p.mesh.parent.remove(p.mesh); });
+  state.pickups.forEach(p => p.mesh?.parent?.remove(p.mesh));
   state.pickups = [];
   list.forEach(item => {
-    const geom = new THREE.TorusGeometry(1, 0.3, 12, 32);
-    const mat = new THREE.MeshBasicMaterial({ color: 0xff8800 });
-    const mesh = new THREE.Mesh(geom, mat);
-    mesh.rotation.x = Math.PI/2;
+    const mesh = makePickupMesh(item.type || 'bowling');
     mesh.position.fromArray(item.position);
-    mesh.userData.isPickup = true;
     scene.add(mesh);
     state.pickups.push({ id: item.id, type: item.type, mesh });
   });
 }
 
-const claimCooldownByPickup = new Map();
-
-function collectPickups(playerCar, battleState) {
-  if (!playerCar) return;
-  const pos = playerCar.position;
-  for (let i=state.pickups.length-1;i>=0;i--) {
-    const p = state.pickups[i];
-    if (!p.mesh) continue;
-    // Horizontal distance only
-    const dx = p.mesh.position.x - pos.x;
-    const dz = p.mesh.position.z - pos.z;
-    const dist = Math.hypot(dx, dz);
-    if (dist <= PICKUP_RADIUS) {
-      if (state.isHost) {
-        // Assign weapon if empty slot
-        if (!battleState.currentWeapon) battleState.currentWeapon = WEAPON_TYPES[p.type];
-        // Remove pickup and broadcast
-        if (p.mesh.parent) p.mesh.parent.remove(p.mesh);
-        state.pickups.splice(i,1);
-        broadcastPickups();
-      } else {
-        // Guest: request claim from host, avoid spamming
-        const now = performance.now();
-        const last = claimCooldownByPickup.get(p.id) || 0;
-        if (now - last > 800) {
-          claimCooldownByPickup.set(p.id, now);
-          try {
-            const ms = state.multiplayerState;
-            if (ms && ms.playerConnections && ms.playerConnections[0]) {
-              ms.playerConnections[0].send({ type: 'pickupClaim', id: p.id, timestamp: Date.now() });
-            }
-          } catch(e){ console.error('Failed to send pickupClaim', e); }
-        }
-      }
-    }
-  }
-}
-
-function fireWeapon(playerCar, battleState) {
-  if (!battleState.currentWeapon) return;
-  const weapon = battleState.currentWeapon;
-  if (weapon.id === 'rocket') {
-    spawnProjectile(playerCar, weapon);
-    // Single-use for now
-    battleState.currentWeapon = null;
-  }
-}
-
-function spawnProjectile(playerCar, weapon) {
-  if (!playerCar) return;
-  const projGeom = new THREE.SphereGeometry(0.5, 16, 16);
-  const projMat = new THREE.MeshBasicMaterial({ color: 0xff3333 });
-  const mesh = new THREE.Mesh(projGeom, projMat);
-  // Start slightly ahead of car
-  const forward = new THREE.Vector3();
-  playerCar.getWorldDirection(forward);
-  const startPos = playerCar.position.clone().add(forward.clone().multiplyScalar(2)).add(new THREE.Vector3(0,1,0));
-  mesh.position.copy(startPos);
-  mesh.userData.isProjectile = true;
-  state.scene.add(mesh);
-  const velocity = forward.clone().multiplyScalar(weapon.speed);
-  const proj = { id: genId('proj'), type: weapon.id, mesh, velocity, birth: performance.now(), damage: weapon.damage };
-  state.projectiles.push(proj);
-  broadcastProjectileSpawn(proj);
-}
-
-function fireFromActor(actorMesh, weaponId='rocket') {
-  const weapon = WEAPON_TYPES[weaponId];
-  if (!weapon) return;
-  // Reuse spawn logic but with provided actor
-  const forward = new THREE.Vector3();
-  if (actorMesh.getWorldDirection) actorMesh.getWorldDirection(forward); else forward.set(0,0,1).applyQuaternion(actorMesh.quaternion).normalize();
-  const startPos = actorMesh.position.clone().add(forward.clone().multiplyScalar(2)).add(new THREE.Vector3(0,1,0));
-  const projGeom = new THREE.SphereGeometry(0.5, 16, 16);
-  const projMat = new THREE.MeshBasicMaterial({ color: 0xff3333 });
-  const mesh = new THREE.Mesh(projGeom, projMat);
-  mesh.position.copy(startPos);
-  mesh.userData.isProjectile = true;
-  state.scene.add(mesh);
-  const velocity = forward.clone().multiplyScalar(weapon.speed);
-  const proj = { id: genId('proj'), type: weapon.id, mesh, velocity, birth: performance.now(), damage: weapon.damage };
-  state.projectiles.push(proj);
-  broadcastProjectileSpawn(proj);
-}
-
-function broadcastProjectileSpawn(proj) {
-  if (!state.isHost || !state.multiplayerState) return;
-  const ms = state.multiplayerState;
-  ms.playerConnections.forEach(conn => {
-    try { if (conn.open) conn.send({ type: 'projectileSpawn', proj: serializeProjectile(proj) }); } catch(e){ console.error('Failed projectileSpawn', e);} });
-}
-
-function serializeProjectile(p) {
-  return {
-    id: p.id,
-    type: p.type,
-    position: p.mesh.position.toArray(),
-    velocity: p.velocity.toArray(),
-    birth: p.birth,
-    damage: p.damage
-  };
-}
-
 export function addRemoteProjectile(data, scene) {
-  const geom = new THREE.SphereGeometry(0.5, 16, 16);
-  const mat = new THREE.MeshBasicMaterial({ color: 0xff3333 });
-  const mesh = new THREE.Mesh(geom, mat);
+  const mesh = makeProjMesh(data.type);
   mesh.position.fromArray(data.position);
   scene.add(mesh);
-  const velocity = new THREE.Vector3().fromArray(data.velocity);
-  state.projectiles.push({ id: data.id, type: data.type, mesh, velocity, birth: data.birth, damage: data.damage, remote: true });
-}
-
-function updateProjectiles(dt, playerCar, battleState) {
-  const now = performance.now();
-  for (let i = state.projectiles.length - 1; i >= 0; i--) {
-    const p = state.projectiles[i];
-    // Move
-    p.mesh.position.addScaledVector(p.velocity, dt);
-    // Lifetime
-    if ((now - p.birth) / 1000 > WEAPON_TYPES[p.type].lifetime) {
-      destroyProjectileIndex(i);
-      continue;
-    }
-    // Host-only collision detection against opponents
-    if (state.isHost && !p.remote) {
-      checkProjectileHits(p);
-    }
-  }
-}
-
-function destroyProjectileIndex(i) {
-  const p = state.projectiles[i];
-  if (p.mesh && p.mesh.parent) p.mesh.parent.remove(p.mesh);
-  state.projectiles.splice(i,1);
-}
-
-function checkProjectileHits(proj) {
-  if (!state.multiplayerState) return;
-  const ms = state.multiplayerState;
-  const opponents = ms.opponentCars || {};
-  const projPos = proj.mesh.position;
-  const victims = [];
-  Object.entries(opponents).forEach(([playerId, opp]) => {
-    if (!opp.model || !opp.model.visible) return;
-    const d = opp.model.position.distanceTo(projPos);
-    if (d <= PROJECTILE_RADIUS + CAR_HIT_RADIUS) { // simple radius threshold
-      victims.push(playerId);
-    }
-  });
-  if (victims.length) {
-    // Damage event
-    if (typeof ms.broadcastDamageEvent === 'function') {
-      ms.broadcastDamageEvent(victims, proj.damage, 'weapon:'+proj.type);
-    }
-    broadcastProjectileHit(proj, victims);
-    // Destroy projectile
-    const idx = state.projectiles.findIndex(p => p.id === proj.id);
-    if (idx >= 0) destroyProjectileIndex(idx);
-  }
-}
-
-function broadcastProjectileHit(proj, victims) {
-  if (!state.isHost || !state.multiplayerState) return;
-  const ms = state.multiplayerState;
-  ms.playerConnections.forEach(conn => {
-    try { if (conn.open) conn.send({ type: 'projectileHit', id: proj.id, victims }); } catch(e){ console.error('Failed projectileHit', e);} });
+  const vel = new THREE.Vector3().fromArray(data.velocity);
+  state.projectiles.push({ id: data.id, type: data.type, mesh, velocity: vel, birth: data.birth, damage: data.damage, remote: true });
 }
 
 export function handleProjectileHit(id) {
   const idx = state.projectiles.findIndex(p => p.id === id);
-  if (idx >= 0) destroyProjectileIndex(idx);
+  if (idx >= 0) destroyProj(idx);
 }
 
-function maybeSpawnPickups() {
-  if (!state.isHost) return;
-  const now = performance.now();
-  if (state.pickups.length >= MAX_ACTIVE_PICKUPS) return;
-  if (now - state.lastSpawnAttempt < PICKUP_RESPAWN_INTERVAL) return;
-  state.lastSpawnAttempt = now;
-  spawnPickup('rocket');
+export function hostHandlePickupClaim(pickupId, playerId) {
+  if (!state.isHost) return null;
+  const ms  = state.multiplayerState;
+  const opp = ms?.opponentCars?.[playerId];
+  if (!opp?.model) return null;
+  const idx = state.pickups.findIndex(p => p.id === pickupId);
+  if (idx < 0) return null;
+  const p = state.pickups[idx];
+  const dx = p.mesh.position.x - opp.model.position.x;
+  const dz = p.mesh.position.z - opp.model.position.z;
+  if (Math.hypot(dx, dz) > PICKUP_RADIUS) return null;
+  p.mesh?.parent?.remove(p.mesh);
+  state.pickups.splice(idx, 1);
+  broadcastPickups();
+  return p.type;
 }
 
-function update(dt, playerCar, battleState) {
-  // Host spawns pickups
-  maybeSpawnPickups();
-  // Collect pickups (host and guest both run for local feedback; host authoritative removal)
-  collectPickups(playerCar, battleState);
-  // Update projectile movement
-  updateProjectiles(dt, playerCar, battleState);
-  // Rotate pickups for visual flair
-  state.pickups.forEach(p => { if (p.mesh) p.mesh.rotation.z += dt * 2; });
-}
+export function getWeaponDef(id) { return WEAPON_TYPES[id] || null; }
 
-// Utility to hook firing from battle-main
 export function attemptFire(playerCar, battleState) {
   if (!battleState.currentWeapon) return false;
   fireWeapon(playerCar, battleState);
   return true;
 }
 
-// Host validation for pickup claim
-export function hostHandlePickupClaim(pickupId, playerId) {
-  if (!state.isHost) return null;
-  const ms = state.multiplayerState;
-  const opp = ms?.opponentCars?.[playerId];
-  if (!opp || !opp.model) return null;
-  const oppPos = opp.model.position;
-  const idx = state.pickups.findIndex(p => p.id === pickupId);
-  if (idx < 0) return null;
-  const p = state.pickups[idx];
-  const dx = p.mesh.position.x - oppPos.x;
-  const dz = p.mesh.position.z - oppPos.z;
-  const dist = Math.hypot(dx, dz);
-  if (dist > PICKUP_RADIUS) return null;
-  // Valid: remove and broadcast; return weapon id
-  if (p.mesh.parent) p.mesh.parent.remove(p.mesh);
-  state.pickups.splice(idx,1);
-  broadcastPickups();
-  return p.type;
+// ── Pickup mesh factory ────────────────────────────────────────────────────
+function makePickupMesh(type) {
+  const def   = WEAPON_TYPES[type] || WEAPON_TYPES.bowling;
+  const outer = new THREE.TorusGeometry(0.72, 0.18, 12, 28);
+  const mat   = new THREE.MeshStandardMaterial({
+    color: def.color, emissive: def.color, emissiveIntensity: 0.6,
+    metalness: 0.4, roughness: 0.3,
+  });
+  const torus = new THREE.Mesh(outer, mat);
+  // Load item icon as sprite inside the ring
+  const texLoader = new THREE.TextureLoader();
+  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ transparent: true, depthWrite: false }));
+  sprite.scale.set(0.9, 0.9, 1);
+  texLoader.load(def.icon, tex => { sprite.material.map = tex; sprite.material.needsUpdate = true; });
+  const group = new THREE.Group();
+  group.add(torus);
+  group.add(sprite);
+  group.userData.isPickup = true;
+  return group;
 }
 
-export function getWeaponDef(id) {
-  return WEAPON_TYPES[id] || null;
+// ── Projectile mesh factory ────────────────────────────────────────────────
+function makeProjMesh(type) {
+  const def  = WEAPON_TYPES[type] || WEAPON_TYPES.bowling;
+  const geom = new THREE.SphereGeometry(def.radius || 0.5, 14, 14);
+  const mat  = new THREE.MeshStandardMaterial({
+    color: def.color, emissive: def.color, emissiveIntensity: 0.8,
+    metalness: 0.3, roughness: 0.4, transparent: true, opacity: 0.92,
+  });
+  return new THREE.Mesh(geom, mat);
+}
+
+// ── Spawn logic ─────────────────────────────────────────────────────────────
+function maybeSpawn() {
+  if (!state.isHost) return;
+  const lo = state.loadout;
+  if (!lo || lo.pool.length === 0) return;
+  const maxP = lo.maxPickups || DEFAULT_MAX_PICKUPS;
+  const interval = lo.spawnInterval || DEFAULT_SPAWN_INTERVAL;
+  if (state.pickups.length >= maxP) return;
+  const now = performance.now();
+  if (now - state.lastSpawn < interval) return;
+  state.lastSpawn = now;
+  const type = lo.pool[Math.floor(Math.random() * lo.pool.length)];
+  spawnPickup(type);
+}
+
+function spawnPickup(type) {
+  let pos;
+  if (state.arenaInfo?.spawnPoints?.length) {
+    const sp = state.arenaInfo.spawnPoints[Math.floor(Math.random() * state.arenaInfo.spawnPoints.length)];
+    pos = new THREE.Vector3(sp.x + (Math.random()-0.5)*8, (sp.y ?? 0)+0.8, sp.z + (Math.random()-0.5)*8);
+  } else {
+    pos = new THREE.Vector3((Math.random()-0.5)*40, 0.8, (Math.random()-0.5)*40);
+  }
+  const mesh = makePickupMesh(type);
+  mesh.position.copy(pos);
+  state.scene.add(mesh);
+  state.pickups.push({ id: gid('pu'), type, mesh });
+  broadcastPickups();
+}
+
+function broadcastPickups() {
+  if (!state.isHost || !state.multiplayerState) return;
+  const payload = state.pickups.map(p => ({ id: p.id, type: p.type, position: p.mesh.position.toArray() }));
+  state.multiplayerState.playerConnections?.forEach(conn => {
+    try { if (conn.open) conn.send({ type: 'weaponPickups', pickups: payload }); } catch(e) {}
+  });
+}
+
+// ── Collection ──────────────────────────────────────────────────────────────
+const claimCooldown = new Map();
+function collectPickups(playerCar, battleState) {
+  if (!playerCar) return;
+  const pos = playerCar.position;
+  for (let i = state.pickups.length - 1; i >= 0; i--) {
+    const p = state.pickups[i];
+    if (!p.mesh) continue;
+    const dx = p.mesh.position.x - pos.x;
+    const dz = p.mesh.position.z - pos.z;
+    if (Math.hypot(dx, dz) > PICKUP_RADIUS) continue;
+    if (state.isHost) {
+      if (!battleState.currentWeapon) {
+        battleState.currentWeapon = WEAPON_TYPES[p.type];
+        playSfx('/audio/sfx/grab_collectable.ogg');
+        updateWeaponHUD(battleState.currentWeapon);
+      }
+      p.mesh?.parent?.remove(p.mesh);
+      state.pickups.splice(i, 1);
+      broadcastPickups();
+    } else {
+      const now = performance.now();
+      if ((now - (claimCooldown.get(p.id)||0)) > 800) {
+        claimCooldown.set(p.id, now);
+        try { state.multiplayerState?.playerConnections?.[0]?.send({ type: 'pickupClaim', id: p.id }); } catch(e){}
+      }
+    }
+  }
+}
+
+// ── Firing ──────────────────────────────────────────────────────────────────
+function fireWeapon(playerCar, battleState) {
+  if (!battleState.currentWeapon) return;
+  const w = battleState.currentWeapon;
+  if (w.id === 'anchor') {
+    // Anchor: drop under player, max damage on overlap
+    spawnProjectileAt(playerCar.position.clone().add(new THREE.Vector3(0,-0.5,0)), new THREE.Vector3(0,-1,0), w);
+  } else if (w.id === 'bubblegum' || w.id === 'parachute') {
+    // Drop behind
+    const fwd = new THREE.Vector3(); playerCar.getWorldDirection(fwd);
+    spawnProjectileAt(playerCar.position.clone().add(fwd.clone().multiplyScalar(-2)), new THREE.Vector3(0,0,0), w);
+  } else {
+    spawnProjectile(playerCar, w);
+  }
+  playSfx('/audio/sfx/shoot.ogg');
+  battleState.currentWeapon = null;
+  updateWeaponHUD(null);
+}
+
+function fireFromActor(actorMesh, weaponId = 'bowling') {
+  const w = WEAPON_TYPES[weaponId];
+  if (!w) return;
+  spawnProjectile(actorMesh, w);
+}
+
+function requestFire() {
+  const ms = state.multiplayerState;
+  if (!ms) return;
+  try { ms.playerConnections?.[0]?.send({ type: 'weaponFireRequest', t: Date.now() }); } catch(e){}
+}
+
+function spawnProjectile(actorMesh, weapon) {
+  const fwd = new THREE.Vector3();
+  if (actorMesh.getWorldDirection) actorMesh.getWorldDirection(fwd);
+  else fwd.set(0,0,1).applyQuaternion(actorMesh.quaternion).normalize();
+  const start = actorMesh.position.clone().add(fwd.clone().multiplyScalar(2)).add(new THREE.Vector3(0,0.8,0));
+  const vel = fwd.clone().multiplyScalar(weapon.speed);
+  spawnProjectileAt(start, vel, weapon);
+}
+
+function spawnProjectileAt(pos, vel, weapon) {
+  const mesh = makeProjMesh(weapon.id);
+  mesh.position.copy(pos);
+  state.scene.add(mesh);
+  const proj = { id: gid('pr'), type: weapon.id, mesh, velocity: vel.clone(), birth: performance.now(), damage: weapon.damage, bounces: weapon.bounces || 0 };
+  state.projectiles.push(proj);
+  broadcastProjSpawn(proj);
+}
+
+function broadcastProjSpawn(proj) {
+  if (!state.isHost || !state.multiplayerState) return;
+  const data = { type: 'projectileSpawn', proj: { id: proj.id, type: proj.type, position: proj.mesh.position.toArray(), velocity: proj.velocity.toArray(), birth: proj.birth, damage: proj.damage }};
+  state.multiplayerState.playerConnections?.forEach(c => { try { if(c.open) c.send(data); } catch(e){} });
+}
+
+function broadcastProjHit(proj, victims) {
+  if (!state.isHost || !state.multiplayerState) return;
+  state.multiplayerState.playerConnections?.forEach(c => { try { if(c.open) c.send({ type: 'projectileHit', id: proj.id, victims }); } catch(e){} });
+}
+
+// ── Projectile update ───────────────────────────────────────────────────────
+function updateProjectiles(dt, playerCar, battleState) {
+  const now = performance.now();
+  for (let i = state.projectiles.length - 1; i >= 0; i--) {
+    const p = state.projectiles[i];
+    const def = WEAPON_TYPES[p.type] || {};
+    // Gravity for arced weapons
+    if (p.type === 'cake' || p.type === 'nitro') p.velocity.y -= 9.8 * dt;
+    p.mesh.position.addScaledVector(p.velocity, dt);
+    // Ground bounce
+    if (p.mesh.position.y < 0.3 && p.bounces > 0) {
+      p.mesh.position.y = 0.3; p.velocity.y = Math.abs(p.velocity.y) * 0.55; p.bounces--;
+    }
+    // Lifetime
+    if (def.lifetime && (now - p.birth) / 1000 > def.lifetime) { destroyProj(i); continue; }
+    // Hit detection (host only, non-remote)
+    if (state.isHost && !p.remote) checkHits(p, i);
+  }
+}
+
+function checkHits(proj, projIdx) {
+  const ms = state.multiplayerState;
+  const opps = ms?.opponentCars || {};
+  const pp = proj.mesh.position;
+  const victims = [];
+  Object.entries(opps).forEach(([pid, opp]) => {
+    if (!opp.model?.visible) return;
+    if (opp.model.position.distanceTo(pp) <= (WEAPON_TYPES[proj.type]?.radius||0.5) + CAR_HIT_RADIUS)
+      victims.push(pid);
+  });
+  if (victims.length) {
+    if (typeof ms.broadcastDamageEvent === 'function') ms.broadcastDamageEvent(victims, proj.damage, 'weapon:'+proj.type);
+    broadcastProjHit(proj, victims);
+    destroyProj(projIdx);
+  }
+}
+
+function destroyProj(i) {
+  const p = state.projectiles[i];
+  p.mesh?.parent?.remove(p.mesh);
+  state.projectiles.splice(i, 1);
+}
+
+// ── HUD helper ──────────────────────────────────────────────────────────────
+function updateWeaponHUD(weapon) {
+  const el = document.getElementById('weapon-hud');
+  if (!el) return;
+  if (!weapon) { el.textContent = ''; el.style.backgroundImage = ''; return; }
+  el.textContent = weapon.name;
+  el.style.backgroundImage = `url("${weapon.icon}")`;
+}
+
+// ── Sound helper ────────────────────────────────────────────────────────────
+function playSfx(src) {
+  try { const a = new Audio(src); a.volume = 0.55; a.play().catch(()=>{}); } catch(e){}
+}
+
+// ── Main update ─────────────────────────────────────────────────────────────
+function update(dt, playerCar, battleState) {
+  maybeSpawn();
+  collectPickups(playerCar, battleState);
+  updateProjectiles(dt, playerCar, battleState);
+  state.pickups.forEach(p => { if (p.mesh) { p.mesh.rotation.y += dt * 1.8; p.mesh.position.y = 0.8 + 0.18 * Math.sin(performance.now() * 0.002); } });
 }

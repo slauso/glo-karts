@@ -85,14 +85,18 @@ function createBoxArena(ammo, scene, physicsWorld) {
   gridHelper.material.transparent = true;
   scene.add(gridHelper);
 
-  // Spawn points (simple cross around center)
-  const spawnPoints = [
-    { x: 0, y: 3, z: 0 },
-    { x: 10, y: 3, z: 0 },
-    { x: -10, y: 3, z: 0 },
-    { x: 0, y: 3, z: 10 },
-    { x: 0, y: 3, z: -10 },
-  ];
+  // Spawn points: 12 evenly spaced points on a safe inner ring
+  const spawnPoints = [];
+  const spawnRadius = 28;
+  const spawnCount = 12;
+  for (let i = 0; i < spawnCount; i++) {
+    const angle = (i / spawnCount) * Math.PI * 2;
+    spawnPoints.push({
+      x: Math.cos(angle) * spawnRadius,
+      y: 3,
+      z: Math.sin(angle) * spawnRadius,
+    });
+  }
 
   return { spawnPoints, bounds: { width, depth } };
 }
