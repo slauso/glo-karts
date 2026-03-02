@@ -4,11 +4,14 @@ import {
   Scene,
   Vector3,
   Quaternion,
-  FreeCamera,
+  FollowCamera,
+  DirectionalLight,
   HemisphericLight,
   MeshBuilder,
   HavokPlugin,
-  SceneLoader
+  SceneLoader,
+  PhysicsAggregate,
+  PhysicsShapeType
 } from "@babylonjs/core";
 import "@babylonjs/loaders/glTF";
 import HavokPhysics from "@babylonjs/havok";
@@ -42,12 +45,29 @@ export class ColyseusBabylonClient {
   async initBabylon(canvas) {
     this.engine = new Engine(canvas, true);
     this.scene = new Scene(this.engine);
+    this.scene.useRightHandedSystem = true; // Phase 1: STK uses right-handed
 
-    this.camera = new FreeCamera("camera", new Vector3(0, 5, -15), this.scene);
-    this.camera.setTarget(Vector3.Zero());
+    // Setup PBR Environment lighting
+    this.scene.createDefaultEnvironment({
+      createSkybox: false,
+      createGround: false,
+      enableGroundShadow: true
+    });
+
+    // Setup FollowCamera
+    this.camera = new FollowCamera("camera", new Vector3(0, 5, -15), this.scene);
+    this.camera.radius = 10;
+    this.camera.heightOffset = 4;
+    this.camera.rotationOffset = 180;
+    this.camera.cameraAcceleration = 0.05;
+    this.camera.maxCameraSpeed = 20;
     this.camera.attachControl(canvas, true);
 
-    new HemisphericLight("light", new Vector3(0, 1, 0), this.scene);
+    const hemiLight = new HemisphericLight("hemiLight", new Vector3(0, 1, 0), this.scene);
+    hemiLight.intensity = 0.6;
+    const dirLight = new DirectionalLight("dirLight", new Vector3(-1, -2, -1), this.scene);
+    dirLight.intensity = 0.8;
+    dirLight.position = new Vector3(20, 40, 20);
 
     try {
       const hk = await HavokPhysics({
@@ -60,11 +80,6 @@ export class ColyseusBabylonClient {
     }
 
     this.engine.runRenderLoop(() => {
-      if (this.localMesh) {
-         // Follow camera behind local mesh loosely
-         const targetPos = this.localMesh.position.clone();
-         this.camera.setTarget(targetPos);
-      }
       this.scene.render();
     });
     window.addEventListener("resize", () => this.engine?.resize());
@@ -84,12 +99,26 @@ export class ColyseusBabylonClient {
       if (trackInfo.arenaPath) {
         pathParts = trackInfo.arenaPath.split('/');
         const filename = pathParts.pop();
-        await SceneLoader.ImportMeshAsync("", pathParts.join('/') + '/', filename, this.scene).catch(e => console.warn(`[realtime] Failed to load arena ${filename}:`, e));
+        const arenaResult = await SceneLoader.ImportMeshAsync("", pathParts.join('/') + '/', filename, this.scene).catch(e => console.warn(`[realtime] Failed to load arena ${filename}:`, e));
+        if (arenaResult && arenaResult.meshes) {
+           arenaResult.meshes.forEach(mesh => {
+              if (mesh.getTotalVertices() > 0) {
+                 new PhysicsAggregate(mesh, PhysicsShapeType.MESH, { mass: 0, friction: 0.5, restitution: 0.1 }, this.scene);
+              }
+           });
+        }
       } else if (trackInfo.trackPath) {
         pathParts = trackInfo.trackPath.split('/');
         const filename = pathParts.pop();
-        await SceneLoader.ImportMeshAsync("", pathParts.join('/') + '/', filename, this.scene).catch(e => console.warn(`[realtime] Failed to load track ${filename}:`, e));
-        
+        const trackResult = await SceneLoader.ImportMeshAsync("", pathParts.join('/') + '/', filename, this.scene).catch(e => console.warn(`[realtime] Failed to load track ${filename}:`, e));
+        if (trackResult && trackResult.meshes) {
+           trackResult.meshes.forEach(mesh => {
+              if (mesh.getTotalVertices() > 0) {
+                 new PhysicsAggregate(mesh, PhysicsShapeType.MESH, { mass: 0, friction: 0.5, restitution: 0.1 }, this.scene);
+              }
+           });
+        }
+
         if (trackInfo.decorationsPath) {
           const decParts = trackInfo.decorationsPath.split('/');
           const decFilename = decParts.pop();
@@ -98,7 +127,8 @@ export class ColyseusBabylonClient {
       }
     } catch (e) {
       console.error("[realtime] Map loading failed: ", e);
-      MeshBuilder.CreateGround("ground", { width: 240, height: 240 }, this.scene);
+      const fallbackGround = MeshBuilder.CreateGround("ground", { width: 240, height: 240 }, this.scene);
+      new PhysicsAggregate(fallbackGround, PhysicsShapeType.BOX, { mass: 0 }, this.scene);
     }
 
     const kartInfo = resolveKartAsset(options.kartId);
@@ -113,15 +143,24 @@ export class ColyseusBabylonClient {
       const result = await SceneLoader.ImportMeshAsync("", pathParts.join('/') + '/', filename, this.scene);
       this.localMesh = result.meshes[0];
       this.localMesh.name = "local-player";
-      this.localMesh.position = new Vector3(0, 1, 0);
+      this.localMesh.position = new Vector3(0, 5, 0); // Drop from slightly above ground
       
       if (kartInfo.scale && kartInfo.scale !== 1) {
          this.localMesh.scaling = new Vector3(kartInfo.scale, kartInfo.scale, kartInfo.scale);
       }
+
+      this.localKartAggregate = new PhysicsAggregate(this.localMesh, PhysicsShapeType.BOX, { mass: 800, friction: 0.8, restitution: 0.1 }, this.scene);
+      // Restrict unwanted tipping temporarily while mapping to primitive controls
+      this.localKartAggregate.body.setMassProperties({ inertia: new Vector3(0, 500, 0) });
+
+      this.camera.lockedTarget = this.localMesh;
+
     } catch (e) {
       console.error("[realtime] Kart loading failed: ", e);
       this.localMesh = MeshBuilder.CreateBox("localCar", { size: 1.8 }, this.scene);
-      this.localMesh.position = new Vector3(0, 1, 0);
+      this.localMesh.position = new Vector3(0, 5, 0);
+      this.localKartAggregate = new PhysicsAggregate(this.localMesh, PhysicsShapeType.BOX, { mass: 800, friction: 0.8, restitution: 0.1 }, this.scene);
+      this.camera.lockedTarget = this.localMesh;
     }
   }
 
@@ -185,10 +224,29 @@ export class ColyseusBabylonClient {
   }
 
   applyLocalPrediction(input) {
-    if (!this.localMesh) return;
+    if (!this.localMesh || !this.localKartAggregate) return;
+    
+    const body = this.localKartAggregate.body;
+    const transform = this.localMesh;
     const dt = 1 / 60;
-    this.localMesh.position.x += input.steer * 18 * dt;
-    this.localMesh.position.z += input.throttle * 18 * dt;
+    
+    // Physics-based steering
+    if (input.steer !== 0) {
+        transform.rotate(Vector3.Up(), input.steer * 2.5 * dt);
+    }
+    
+    // Physics-based acceleration
+    if (input.throttle !== 0) {
+        const forwardSpeed = 30; // Max speed
+        const force = transform.forward.scale(-input.throttle * forwardSpeed); // Babylon right-handling forward is -Z often, check STK models
+        let currentVel = body.getLinearVelocity();
+        // Simple manual friction/acceleration override for now
+        body.setLinearVelocity(new Vector3(force.x, currentVel.y, force.z));
+    } else {
+        // Natural deceleration
+        let currentVel = body.getLinearVelocity();
+        body.setLinearVelocity(new Vector3(currentVel.x * 0.95, currentVel.y, currentVel.z * 0.95));
+    }
   }
 
   reconcile(state) {
