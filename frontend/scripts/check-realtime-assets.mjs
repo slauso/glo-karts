@@ -42,12 +42,12 @@ async function createPlayer(playerName, playerColor) {
 console.log("[check] Starting host player...");
 const host = await createPlayer("HostPlayer", "red");
 await host.page.goto(TARGET, { waitUntil: "domcontentloaded", timeout: 30000 });
-await host.page.waitForTimeout(5000); // Give it time to load models
+await host.page.waitForTimeout(8000); // Give it time to load models
 
 console.log("[check] Starting second player...");
 const guest = await createPlayer("GuestPlayer", "blue");
 await guest.page.goto(TARGET, { waitUntil: "domcontentloaded", timeout: 30000 });
-await guest.page.waitForTimeout(5000); // Give it time to sync remote meshes
+await guest.page.waitForTimeout(8000); // Give it time to sync remote meshes
 
 // Let's analyze Host's perspective
 const hostTrackLoaded = host.logs.some(m => m.includes("Loading track models for map1"));
