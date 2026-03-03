@@ -40,6 +40,7 @@ export class ColyseusBabylonClient {
     this.pendingInputs = [];
     this.authoritativeState = null;
     this.started = false;
+    this.localInitializedFromServer = false;
   }
 
   async initBabylon(canvas) {
@@ -61,7 +62,7 @@ export class ColyseusBabylonClient {
     this.camera.rotationOffset = 180;
     this.camera.cameraAcceleration = 0.05;
     this.camera.maxCameraSpeed = 20;
-    this.camera.attachControl(canvas, true);
+    // this.camera.attachControl(canvas, true); // Removed to fix console warnings
 
     const hemiLight = new HemisphericLight("hemiLight", new Vector3(0, 1, 0), this.scene);
     hemiLight.intensity = 0.6;
@@ -145,11 +146,15 @@ export class ColyseusBabylonClient {
       this.localMesh.name = "local-player";
       this.localMesh.position = new Vector3(0, 5, 0); // Drop from slightly above ground
       
+      let extents = new Vector3(1.8, 0.5, 3.2); // Default kart size
       if (kartInfo.scale && kartInfo.scale !== 1) {
          this.localMesh.scaling = new Vector3(kartInfo.scale, kartInfo.scale, kartInfo.scale);
+         this.localMesh.computeWorldMatrix(true);
+         extents = extents.scale(kartInfo.scale);
       }
 
-      this.localKartAggregate = new PhysicsAggregate(this.localMesh, PhysicsShapeType.BOX, { mass: 800, friction: 0.8, restitution: 0.1 }, this.scene);
+      this._localKartExtents = extents;
+      this.localKartAggregate = new PhysicsAggregate(this.localMesh, PhysicsShapeType.BOX, { mass: 800, friction: 0.8, restitution: 0.1, extents: extents }, this.scene);
       // Restrict unwanted tipping temporarily while mapping to primitive controls
       this.localKartAggregate.body.setMassProperties({ inertia: new Vector3(0, 500, 0) });
 
@@ -159,6 +164,7 @@ export class ColyseusBabylonClient {
       console.error("[realtime] Kart loading failed: ", e);
       this.localMesh = MeshBuilder.CreateBox("localCar", { size: 1.8 }, this.scene);
       this.localMesh.position = new Vector3(0, 5, 0);
+      this._localKartExtents = new Vector3(1.8, 0.5, 3.2);
       this.localKartAggregate = new PhysicsAggregate(this.localMesh, PhysicsShapeType.BOX, { mass: 800, friction: 0.8, restitution: 0.1 }, this.scene);
       this.camera.lockedTarget = this.localMesh;
     }
@@ -186,13 +192,14 @@ export class ColyseusBabylonClient {
     this.room = await this.client.joinOrCreate(this.roomName, joinOptions);
 
     this.room.onStateChange((state) => {
+      this.started = !!state?.started;
       this.authoritativeState = state;
       this.reconcile(state);
       this.syncRemoteMeshes(state);
     });
 
     this.room.onMessage("joined", () => {
-      this.started = true;
+      this.localInitializedFromServer = false;
     });
 
     this.room.onMessage("matchEnd", (msg) => {
@@ -206,16 +213,33 @@ export class ColyseusBabylonClient {
     if (this.room) this.room.send("start", {});
   }
 
+  triggerStart() {
+    if (this.room) this.room.send("triggerStart", {});
+  }
+
   sendInput(input) {
     if (!this.room || !this.localMesh) return;
 
     const seq = ++this.inputSeq;
+    const { position, rotationQuaternion } = this.localMesh;
+    
+    if (!rotationQuaternion) {
+        this.localMesh.rotationQuaternion = new Quaternion();
+    }
+
     const payload = {
       seq,
       throttle: Number(input.throttle || 0),
       steer: Number(input.steer || 0),
       brake: Number(input.brake || 0),
       fire: !!input.fire,
+      x: position.x,
+      y: position.y,
+      z: position.z,
+      rx: this.localMesh.rotationQuaternion.x,
+      ry: this.localMesh.rotationQuaternion.y,
+      rz: this.localMesh.rotationQuaternion.z,
+      rw: this.localMesh.rotationQuaternion.w,
     };
 
     this.applyLocalPrediction(payload);
@@ -225,28 +249,92 @@ export class ColyseusBabylonClient {
 
   applyLocalPrediction(input) {
     if (!this.localMesh || !this.localKartAggregate) return;
-    
+
     const body = this.localKartAggregate.body;
     const transform = this.localMesh;
     const dt = 1 / 60;
-    
-    // Physics-based steering
-    if (input.steer !== 0) {
-        transform.rotate(Vector3.Up(), input.steer * 2.5 * dt);
+
+    let currentVel = body.getLinearVelocity();
+    let currentAngVel = body.getAngularVelocity();
+    if (
+      !Number.isFinite(currentVel.x) ||
+      !Number.isFinite(currentVel.y) ||
+      !Number.isFinite(currentVel.z) ||
+      !Number.isFinite(currentAngVel.x) ||
+      !Number.isFinite(currentAngVel.y) ||
+      !Number.isFinite(currentAngVel.z)
+    ) {
+      body.setLinearVelocity(new Vector3(0, 0, 0));
+      body.setAngularVelocity(new Vector3(0, 0, 0));
+      return;
     }
     
-    // Physics-based acceleration
-    if (input.throttle !== 0) {
-        const forwardSpeed = 30; // Max speed
-        const force = transform.forward.scale(-input.throttle * forwardSpeed); // Babylon right-handling forward is -Z often, check STK models
-        let currentVel = body.getLinearVelocity();
-        // Simple manual friction/acceleration override for now
-        body.setLinearVelocity(new Vector3(force.x, currentVel.y, force.z));
+    // Ensure body continues to process forces
+    body.disablePreStep = false;
+    
+    // Console-quality kart tuning
+    const MAX_SPEED = 40;
+    const ACCEL_RATE = 45;
+    const TURN_SPEED = 2.8; 
+    const DRIFT_GRIP = 0.5;
+
+    let speed = Math.sqrt(currentVel.x**2 + currentVel.z**2);
+
+    // 1. Steering (Physics Angular Velocity)
+    if (input.steer !== 0 && speed > 1.0) {
+        const forwardDir = transform.forward.scale(-1);
+        const isReversing = Vector3.Dot(currentVel, forwardDir) < -1;
+        const dir = isReversing ? -1 : 1;
+        const steerMult = input.brake ? 1.4 : 1.0; 
+        
+        let targetTurn = input.steer * TURN_SPEED * dir * steerMult;
+        body.setAngularVelocity(new Vector3(currentAngVel.x, targetTurn, currentAngVel.z));
     } else {
-        // Natural deceleration
-        let currentVel = body.getLinearVelocity();
-        body.setLinearVelocity(new Vector3(currentVel.x * 0.95, currentVel.y, currentVel.z * 0.95));
+        body.setAngularVelocity(new Vector3(currentAngVel.x, currentAngVel.y * 0.8, currentAngVel.z));
     }
+
+    let nextVel = new Vector3(currentVel.x, currentVel.y, currentVel.z);
+
+    // 2. Acceleration (Linear accumulation)
+    const forwardDir = transform.forward.scale(-1);
+    if (forwardDir.lengthSquared() > 0.00001) {
+      forwardDir.normalize();
+    } else {
+      forwardDir.copyFromFloats(0, 0, 1);
+    }
+    
+    if (input.throttle !== 0) {
+        if (speed < MAX_SPEED || (input.throttle < 0 && speed > 2)) {
+             nextVel.x += forwardDir.x * input.throttle * ACCEL_RATE * dt;
+             nextVel.z += forwardDir.z * input.throttle * ACCEL_RATE * dt;
+        }
+    }
+
+    // 3. Friction & Braking
+    if (input.brake) {
+        nextVel.x *= 0.90;
+        nextVel.z *= 0.90;
+    } else if (input.throttle === 0) {
+        nextVel.x *= 0.98;
+        nextVel.z *= 0.98;
+    }
+
+    // 4. Lateral grip (Anti-ice drifting)
+    let rightDir = transform.right;
+    if (rightDir.lengthSquared() > 0.00001) {
+      rightDir.normalize();
+    } else {
+      rightDir = new Vector3(1, 0, 0);
+    }
+    
+    let latSpeed = Vector3.Dot(nextVel, rightDir);
+    let grip = input.brake ? (DRIFT_GRIP * 0.4) : DRIFT_GRIP;
+    
+    nextVel.x -= rightDir.x * latSpeed * grip;
+    nextVel.z -= rightDir.z * latSpeed * grip;
+
+    // Apply entire computed velocity exactly ONCE
+    body.setLinearVelocity(nextVel);
   }
 
   reconcile(state) {
@@ -254,16 +342,44 @@ export class ColyseusBabylonClient {
     const self = state.players.get(this.room.sessionId);
     if (!self) return;
 
-    this.localMesh.position.x = self.x;
-    this.localMesh.position.y = self.y;
-    this.localMesh.position.z = self.z;
-    this.localMesh.rotationQuaternion = new Quaternion(self.rx, self.ry, self.rz, self.rw);
+    if (!this.localInitializedFromServer) {
+      const hasFinitePose =
+        Number.isFinite(self.x) && Number.isFinite(self.y) && Number.isFinite(self.z) &&
+        Number.isFinite(self.rx) && Number.isFinite(self.ry) && Number.isFinite(self.rz) && Number.isFinite(self.rw);
 
+      if (hasFinitePose) {
+        const spawnPos = new Vector3(self.x, self.y, self.z);
+        const spawnRot = new Quaternion(self.rx, self.ry, self.rz, self.rw);
+
+        this.localMesh.position.copyFrom(spawnPos);
+        this.localMesh.rotationQuaternion = spawnRot;
+
+        if (this.localKartAggregate) {
+          this.localKartAggregate.dispose();
+        }
+
+        this.localKartAggregate = new PhysicsAggregate(
+          this.localMesh,
+          PhysicsShapeType.BOX,
+          { mass: 800, friction: 0.8, restitution: 0.1, extents: this._localKartExtents || new Vector3(1.8, 0.5, 3.2) },
+          this.scene
+        );
+        if (this.localKartAggregate.body) {
+          this.localKartAggregate.body.setMassProperties({ inertia: new Vector3(0, 500, 0) });
+          this.localKartAggregate.body.setLinearVelocity(new Vector3(0, 0, 0));
+          this.localKartAggregate.body.setAngularVelocity(new Vector3(0, 0, 0));
+        }
+
+        this.localInitializedFromServer = true;
+      }
+    }
+
+    // Pure Client-Authoritative Physics:
+    // We DO NOT snap the local player to the server's echoed state.
+    // Instead we just keep sending our physics state, and clear old pending inputs.
+    // This prevents the visual and physical engine from rubber-banding locally.
     const ackSeq = self.lastProcessedInput || 0;
     this.pendingInputs = this.pendingInputs.filter((i) => i.seq > ackSeq);
-    for (const pending of this.pendingInputs) {
-      this.applyLocalPrediction(pending);
-    }
   }
 
   syncRemoteMeshes(state) {

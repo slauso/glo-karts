@@ -968,11 +968,13 @@ function init() {
   
   // Setup renderer
   renderer = new THREE.WebGLRenderer({ antialias: true });
-  renderer.outputEncoding = THREE.sRGBEncoding;  // or THREE.LinearSRGBEncoding in newer Three.js
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.setPixelRatio(window.devicePixelRatio);
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.0;
   document.body.appendChild(renderer.domElement);
   
   // Initialize UI
@@ -1389,10 +1391,22 @@ function setupEnhancedLighting() {
   
   // Primary directional light (sun)
   const directionalLight = new THREE.DirectionalLight(0xffffff, 3.5);
-  directionalLight.position.set(40, 250, 30);
-  
-  
-  scene.add(directionalLight);
+    directionalLight.position.set(40, 250, 30);
+    directionalLight.castShadow = true;
+    directionalLight.shadow.mapSize.width = 2048;
+    directionalLight.shadow.mapSize.height = 2048;
+    directionalLight.shadow.camera.near = 0.5;
+    directionalLight.shadow.camera.far = 1500;
+    directionalLight.shadow.camera.left = -300;
+    directionalLight.shadow.camera.right = 300;
+    directionalLight.shadow.camera.top = 300;
+    directionalLight.shadow.camera.bottom = -300;
+    directionalLight.shadow.bias = -0.001; // Reduce shadow acne
+    scene.add(directionalLight);
+    
+    // Also include a hemisphere light for better ambient color blending
+    const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444, 1.5);
+    scene.add(hemiLight);
 }
 
 // Function to initialize UI elements

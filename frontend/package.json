@@ -14,6 +14,7 @@
     "test:lobby:regression": "node scripts/lobby-ux-regression.mjs"
   },
   "devDependencies": {
+    "@playwright/test": "^1.58.2",
     "playwright": "^1.58.2",
     "vite": "^6.2.6"
   },

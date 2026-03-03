@@ -73,7 +73,7 @@ class LobbyBackground {
     });
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.physicallyCorrectLights = true;
-    this.renderer.outputEncoding = THREE.sRGBEncoding;
+    this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     

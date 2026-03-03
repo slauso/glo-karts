@@ -3,7 +3,7 @@
 ## Prerequisites
 
 1. **Vercel Account**: Sign up at https://vercel.com (free tier works perfectly)
-2. **GitHub Repository**: Your code is already at https://github.com/slauso1/twistedkart
+2. **GitHub Repository**: Your code is already at https://github.com/slauso1/GLOKarts
 3. **Node.js Installed**: Check with `node --version` (should be 16+ or 18+)
 
 ---
@@ -16,7 +16,7 @@
 2. Click **"Add New..."** → **"Project"**
 3. Click **"Import Git Repository"**
 4. Authorize Vercel to access your GitHub account
-5. Select the **`slauso1/twistedkart`** repository
+5. Select the **`slauso1/GLOKarts`** repository
 
 ### Step 2: Configure Build Settings
 
@@ -47,12 +47,12 @@ Click **"Add Environment Variable"** and add:
 
 1. Click **"Deploy"**
 2. Wait 2-3 minutes for build to complete
-3. Once deployed, Vercel will show your live URL (e.g., `twistedkart.vercel.app`)
+3. Once deployed, Vercel will show your live URL (e.g., `GLOKarts.vercel.app`)
 
 ### Step 4: Test Your Deployment
 
 1. Visit your Vercel URL
-2. You should see the Twisted Kart lobby
+2. You should see the GLO Karts lobby
 3. Test private/open lobby create/join and quick-match
 
 ---
@@ -78,7 +78,7 @@ Follow the email verification link.
 ### Step 3: Navigate to Frontend Directory
 
 ```powershell
-cd "c:\Users\computer\Desktop\Twisted Kart\frontend"
+cd "c:\Users\computer\Desktop\GLO Karts\frontend"
 ```
 
 ### Step 4: Create Environment File
@@ -105,7 +105,7 @@ Answer the prompts:
 - **Set up and deploy?**: Yes
 - **Which scope?**: Your account
 - **Link to existing project?**: No
-- **Project name**: twistedkart-frontend (or your choice)
+- **Project name**: GLOKarts-frontend (or your choice)
 - **Directory**: `.` (current directory)
 - **Override settings?**: No
 
@@ -139,7 +139,7 @@ Add this to your main README.md:
 ```markdown
 ## Deploy Frontend
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/slauso1/twistedkart&root-directory=frontend&env=VITE_COLYSEUS_URL&envDescription=Colyseus%20Realtime%20WebSocket%20URL)
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/slauso1/GLOKarts&root-directory=frontend&env=VITE_COLYSEUS_URL&envDescription=Colyseus%20Realtime%20WebSocket%20URL)
 ```
 
 ---
@@ -158,7 +158,7 @@ Add this to your main README.md:
 #### 1. `frontend/.env.production` (For CLI deployment)
 
 ```env
-VITE_API_URL=https://twistedkart.koyeb.app
+VITE_API_URL=https://GLOKarts.koyeb.app
 ```
 
 #### 2. `frontend/vercel.json` (For advanced config)
@@ -208,7 +208,7 @@ Your backend needs to allow requests from Vercel. In Koyeb, add these environmen
 
 | Variable | Value |
 |----------|-------|
-| `CORS_ALLOWED_ORIGINS` | `https://twistedkart.vercel.app` |
+| `CORS_ALLOWED_ORIGINS` | `https://GLOKarts.vercel.app` |
 
 Or replace with your actual Vercel URL. You can also use:
 
@@ -233,7 +233,7 @@ Visit your Vercel URL and test:
 
 1. In Vercel dashboard, go to your project
 2. Click **"Settings"** → **"Domains"**
-3. Add your custom domain (e.g., `play.twistedkart.com`)
+3. Add your custom domain (e.g., `play.GLOKarts.com`)
 4. Follow Vercel's DNS configuration instructions
 5. Update `CORS_ALLOWED_ORIGINS` in backend to include custom domain
 
@@ -260,7 +260,7 @@ git push
 
 ### CORS Error in Browser Console
 
-**Error**: `Access to fetch at 'https://twistedkart.koyeb.app' blocked by CORS`
+**Error**: `Access to fetch at 'https://GLOKarts.koyeb.app' blocked by CORS`
 
 **Solution**: Add Vercel URL to backend CORS settings (see Post-Deployment Steps above)
 
@@ -289,7 +289,7 @@ git push
 Before deploying, test locally:
 
 ```powershell
-cd "c:\Users\computer\Desktop\Twisted Kart\frontend"
+cd "c:\Users\computer\Desktop\GLO Karts\frontend"
 npm install
 npm run dev
 ```
@@ -309,7 +309,7 @@ npm run dev
 
 ### Deploy to Vercel (CLI)
 ```powershell
-cd "c:\Users\computer\Desktop\Twisted Kart\frontend"
+cd "c:\Users\computer\Desktop\GLO Karts\frontend"
 vercel --prod
 ```
 
@@ -351,7 +351,7 @@ dir dist
 - **Vercel Documentation**: https://vercel.com/docs
 - **Vite Documentation**: https://vitejs.dev/guide/
 - **Realtime Health (local)**: http://localhost:2567/health
-- **GitHub Repository**: https://github.com/slauso1/twistedkart
+- **GitHub Repository**: https://github.com/slauso1/GLOKarts
 
 ---
 

@@ -22,7 +22,7 @@ from django.http import JsonResponse
 def api_root(request):
     """Root endpoint showing API information"""
     return JsonResponse({
-        'message': 'Twisted Kart Racing Backend API',
+        'message': 'GLO Karts Racing Backend API',
         'version': '1.0',
         'endpoints': {
             'admin': '/admin/',

@@ -7,7 +7,7 @@ Visit: https://vercel.com/new
 
 ### 2. Import Your Repository
 - Click **"Import Git Repository"**
-- Select: **`slauso1/twistedkart`**
+- Select: **`slauso1/GLOKarts`**
 
 ### 3. Configure (IMPORTANT!)
 
@@ -48,7 +48,7 @@ npm install -g vercel
 vercel login
 
 # Navigate to frontend
-cd "c:\Users\computer\Desktop\Twisted Kart\frontend"
+cd "c:\Users\computer\Desktop\GLO Karts\frontend"
 
 # Deploy
 vercel --prod

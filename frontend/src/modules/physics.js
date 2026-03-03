@@ -52,29 +52,29 @@ export function updatePhysics(deltaTime, ammo, physicsState, carState, debugObje
   const dotForward = carForward.dot(velocityThree);
   const maxEngineForce = 1000;
   const maxBrakingForce = 50;
-  
+
   // Calculate car speed in km/h
   const speedKPH = velocityThree.length() * 3.6;
-  
+
   // Check if the race has started before allowing engine forces
   let engineForce = 0;
   let brakingForce = 0;
-  
+
   // Only allow movement if race has started and not finished
   if (raceState.raceStarted && !raceState.raceFinished) {
     // Handle key inputs with proper braking logic
     if (keyState.w) {
-      // Accelerate forward
-      engineForce = maxEngineForce;
+      // Accelerate forward (inverse because car mesh is oriented opposite to physics z)
+      engineForce = -maxEngineForce;
       brakingForce = 0;
     } else if (keyState.s) {
-      if (dotForward > 0.1) {
-        // Moving forward - apply brakes when S is pressed
+      if (dotForward < -0.1) {
+        // Moving forward (which yields negative dotForward) - apply brakes when S is pressed
         engineForce = 0;
         brakingForce = maxBrakingForce;
       } else {
-        // Stopped or moving backward - apply reverse
-        engineForce = -maxEngineForce / 2;
+        // Stopped or moving backward - apply reverse (positive force)
+        engineForce = maxEngineForce / 2;
         brakingForce = 0;
       }
     } else {

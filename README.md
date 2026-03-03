@@ -1,13 +1,13 @@
-# Twisted Kart
+# GLO Karts
 *GLO EDITION*
 
-![Twisted Kart](frontend/public/favicon.png)
+![GLO Karts](frontend/public/favicon.png)
 
 A real-time multiplayer 3D racing game built with JavaScript and modern web technologies. Race with friends through various tracks, compete for the best time, and enjoy physics-based driving mechanics.
 
 ## Play Now
 
-[Play Twisted Kart Online](https://racez.io)
+[Play GLO Karts Online](https://racez.io)
 
 ## Features
 
@@ -24,7 +24,7 @@ A real-time multiplayer 3D racing game built with JavaScript and modern web tech
 
 ### Creating a Game
 
-1. Visit the Twisted Kart website
+1. Visit the GLO Karts website
 2. Enter your name
 3. Choose your car color
 4. Click "Create Party" or "Quick Match"
@@ -34,7 +34,7 @@ A real-time multiplayer 3D racing game built with JavaScript and modern web tech
 
 ### Joining a Game
 
-1. Visit the Twisted Kart website
+1. Visit the GLO Karts website
 2. Enter your name
 3. Choose your car color
 4. Enter the lobby code provided by the host
@@ -117,7 +117,7 @@ The script validates create/join/start routing to `realtime.html`, race/battle m
 ### 1. Prepare Environment Variables
 
 - Frontend (Vite): set `VITE_COLYSEUS_URL=wss://realtime.your-domain.com` in your production env (or `ws://localhost:2567` for local).
-- Backend (Django): configure `DJANGO_SECRET_KEY`, `ALLOWED_HOSTS`, and `CORS_ALLOWED_ORIGINS`. Example for Render: `ALLOWED_HOSTS=twistedkart-backend.onrender.com` and `CORS_ALLOWED_ORIGINS=https://play.twistedkart.com`.
+- Backend (Django): configure `DJANGO_SECRET_KEY`, `ALLOWED_HOSTS`, and `CORS_ALLOWED_ORIGINS`. Example for Render: `ALLOWED_HOSTS=GLOKarts-backend.onrender.com` and `CORS_ALLOWED_ORIGINS=https://play.GLOKarts.com`.
 
 ### 2. Deploy the Backend (Render Free Tier)
 
@@ -129,13 +129,13 @@ The script validates create/join/start routing to `realtime.html`, race/battle m
 	- Start command: `gunicorn webracing_backend.wsgi`
 4. **Environment variables** (Render dashboard → Environment):
 	- `DJANGO_SECRET_KEY=generate-a-strong-secret`
-	- `ALLOWED_HOSTS=twistedkart-backend.onrender.com`
-	- `CORS_ALLOWED_ORIGINS=https://play.twistedkart.com`
+	- `ALLOWED_HOSTS=GLOKarts-backend.onrender.com`
+	- `CORS_ALLOWED_ORIGINS=https://play.GLOKarts.com`
 	- Optional: `CORS_ALLOW_ALL_ORIGINS=True` during early testing only.
 5. **Persistent storage**: add a disk (1 GB free) at path `/opt/render/project/src/backend/db.sqlite3` to keep SQLite data.
 6. **Migrations**: open Render shell → `python manage.py migrate`; add an admin user if desired with `python manage.py createsuperuser`.
 7. **Static files**: run `python manage.py collectstatic --noinput` if you enable DJANGO static hosting later (WhiteNoise already configured).
-8. **Test endpoint**: `curl https://twistedkart-backend.onrender.com/` should return API metadata.
+8. **Test endpoint**: `curl https://GLOKarts-backend.onrender.com/` should return API metadata.
 
 ### 3. Deploy the Frontend (Netlify or Vercel)
 
@@ -152,13 +152,13 @@ The script validates create/join/start routing to `realtime.html`, race/battle m
 	- Build command: `npm run build`
 	- Output directory: `dist`
 	- Environment variable: `VITE_COLYSEUS_URL=wss://realtime.your-domain.com`
-	- Deploy and check preview at `https://twistedkart.vercel.app` (example).
-4. **Custom domain**: point `play.twistedkart.com` (A/ALIAS or CNAME) at Netlify/Vercel; add the domain in hosting dashboard to enable managed TLS.
+	- Deploy and check preview at `https://GLOKarts.vercel.app` (example).
+4. **Custom domain**: point `play.GLOKarts.com` (A/ALIAS or CNAME) at Netlify/Vercel; add the domain in hosting dashboard to enable managed TLS.
 
 ### 4. Configure Networking
 
 - Ensure HTTPS/WSS on frontend, API backend, and realtime backend.
-- Configure `VITE_COLYSEUS_URL` to your realtime endpoint (for example `wss://realtime.twistedkart.com`).
-- Add a DNS record (e.g., `play.twistedkart.com`) pointing to your hosting provider and connect it via Netlify/Vercel dashboard.
+- Configure `VITE_COLYSEUS_URL` to your realtime endpoint (for example `wss://realtime.GLOKarts.com`).
+- Add a DNS record (e.g., `play.GLOKarts.com`) pointing to your hosting provider and connect it via Netlify/Vercel dashboard.
 
-With these steps the lobby will create and join parties using your own Twisted Kart infrastructure.
+With these steps the lobby will create and join parties using your own GLO Karts infrastructure.

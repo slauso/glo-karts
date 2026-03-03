@@ -1,4 +1,4 @@
-// Simple battle health system for Twisted Kart battle mode
+// Simple battle health system for GLO Karts battle mode
 // Keeps logic isolated from race code
 
 export function createHealthSystem({ ammo, getCarBody, onRespawn, maxHealth = 100, invulnMs = 2000 }) {

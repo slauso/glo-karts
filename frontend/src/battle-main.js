@@ -1,5 +1,5 @@
 /*
- * TWISTED KART - BATTLE MODE
+ * GLO Karts - BATTLE MODE
  * Main game loop for battle/combat mode
  * This is completely separate from race mode (main.js)
  */
@@ -150,6 +150,8 @@ async function init() {
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.0;
     const appEl = document.getElementById('app');
     appEl.appendChild(renderer.domElement);
     // Ensure canvas can receive keyboard focus

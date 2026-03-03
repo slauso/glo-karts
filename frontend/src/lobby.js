@@ -606,7 +606,7 @@ class RacingLobby {
     });
 
     const mapName = document.querySelector('.selected-map-name');
-    const selectedTrack = STK_TRACKS.find((t) => t.id === this.selectedMap);
+    const selectedTrack = ((this.selectedMode === 'battle') ? STK_ARENAS : STK_TRACKS).find((t) => t.id === this.selectedMap);
     if (mapName && selectedTrack) mapName.textContent = selectedTrack.name;
 
     document.querySelectorAll('.dropdown-option').forEach((option) => {
@@ -632,7 +632,7 @@ class RacingLobby {
 
     if (dropdownContent) {
       dropdownContent.innerHTML = '';
-      STK_TRACKS.forEach((track, index) => {
+      ((this.selectedMode === 'battle') ? STK_ARENAS : STK_TRACKS).forEach((track, index) => {
         const option = document.createElement('div');
         option.className = `dropdown-option${index === 0 ? ' selected' : ''}`;
         option.setAttribute('data-map-id', track.id);
@@ -641,8 +641,8 @@ class RacingLobby {
       });
     }
 
-    this.selectedMap = STK_TRACKS[0].id;
-    if (selectedMapName) selectedMapName.textContent = STK_TRACKS[0].name;
+    this.selectedMap = ((this.selectedMode === 'battle') ? STK_ARENAS[0].id : STK_TRACKS[0].id);
+    if (selectedMapName) selectedMapName.textContent = ((this.selectedMode === 'battle') ? STK_ARENAS[0].name : STK_TRACKS[0].name);
 
     dropdownButton?.addEventListener('click', (event) => {
       event.stopPropagation();
@@ -676,7 +676,8 @@ class RacingLobby {
       button.addEventListener('click', () => {
         this.selectedMode = button.getAttribute('data-mode') === 'battle' ? 'battle' : 'race';
         this.refreshBattleControls();
-        this.sendSettingsUpdate();
+this.initMapSelector();
+this.sendSettingsUpdate();
       });
     });
 

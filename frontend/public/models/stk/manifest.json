@@ -1,0 +1,351 @@
+{
+  "version": "1.5",
+  "generated": "2026-02-24T04:29:01.469974Z",
+  "karts": [
+    {
+      "id": "tux",
+      "name": "Tux",
+      "sizeBytes": 1340392
+    },
+    {
+      "id": "adiumy",
+      "name": "Adiumy",
+      "sizeBytes": 579288
+    },
+    {
+      "id": "nolok",
+      "name": "Nolok",
+      "sizeBytes": 1436136
+    },
+    {
+      "id": "wilber",
+      "name": "Wilber",
+      "sizeBytes": 631732
+    },
+    {
+      "id": "xue",
+      "name": "Xue",
+      "sizeBytes": 565632
+    },
+    {
+      "id": "hexley",
+      "name": "Hexley",
+      "sizeBytes": 516176
+    },
+    {
+      "id": "gavroche",
+      "name": "Gavroche",
+      "sizeBytes": 982672
+    },
+    {
+      "id": "emule",
+      "name": "Emule",
+      "sizeBytes": 1041224
+    },
+    {
+      "id": "kiki",
+      "name": "Kiki",
+      "sizeBytes": 1800560
+    },
+    {
+      "id": "beastie",
+      "name": "Godette",
+      "sizeBytes": 2625608
+    },
+    {
+      "id": "amanda",
+      "name": "Amanda",
+      "sizeBytes": 1162632
+    },
+    {
+      "id": "suzanne",
+      "name": "Suzanne",
+      "sizeBytes": 384164
+    },
+    {
+      "id": "gnu",
+      "name": "Gnu",
+      "sizeBytes": 1227708
+    },
+    {
+      "id": "konqi",
+      "name": "Konqi",
+      "sizeBytes": 1126608
+    },
+    {
+      "id": "sara_the_racer",
+      "name": "Pepper",
+      "sizeBytes": 1732480
+    },
+    {
+      "id": "sara_the_wizard",
+      "name": "Sara",
+      "sizeBytes": 743700
+    },
+    {
+      "id": "puffy",
+      "name": "Puffy",
+      "sizeBytes": 671628
+    },
+    {
+      "id": "pidgin",
+      "name": "Pidgin",
+      "sizeBytes": 1733172
+    }
+  ],
+  "tracks": [
+    {
+      "id": "cocoa_temple",
+      "name": "Pompeii Ruins",
+      "sizeBytes": 4136980
+    },
+    {
+      "id": "hacienda",
+      "name": "Tuscan Villa",
+      "sizeBytes": 3291208
+    },
+    {
+      "id": "minigolf",
+      "name": "Portofino Green",
+      "sizeBytes": 3989948
+    },
+    {
+      "id": "sandtrack",
+      "name": "Sardinia Dunes",
+      "sizeBytes": 2482720
+    },
+    {
+      "id": "snowtuxpeak",
+      "name": "Monte Cervino",
+      "sizeBytes": 1033964
+    },
+    {
+      "id": "zengarden",
+      "name": "Giardini di Boboli",
+      "sizeBytes": 7364708
+    },
+    {
+      "id": "lighthouse",
+      "name": "Faro di Capri",
+      "sizeBytes": 7711100
+    },
+    {
+      "id": "olivermath",
+      "name": "Piazza Navona",
+      "sizeBytes": 2350052
+    },
+    {
+      "id": "black_forest",
+      "name": "Val di Non",
+      "sizeBytes": 8255724
+    },
+    {
+      "id": "xr591",
+      "name": "Circuito di Monza",
+      "sizeBytes": 2207520
+    },
+    {
+      "id": "oasis",
+      "name": "Oasi di Vendicari",
+      "sizeBytes": 3263768
+    },
+    {
+      "id": "gran_paradiso_island",
+      "name": "Gran Paradiso",
+      "sizeBytes": 4853960
+    },
+    {
+      "id": "mines",
+      "name": "Miniere di Carrara",
+      "sizeBytes": 12322384
+    },
+    {
+      "id": "snowmountain",
+      "name": "Monte Bianco",
+      "sizeBytes": 892904
+    },
+    {
+      "id": "abyss",
+      "name": "Grotta Azzurra",
+      "sizeBytes": 5365204
+    },
+    {
+      "id": "cornfield_crossing",
+      "name": "Campagna Toscana",
+      "sizeBytes": 3718612
+    },
+    {
+      "id": "volcano_island",
+      "name": "Isola di Stromboli",
+      "sizeBytes": 12009992
+    },
+    {
+      "id": "ravenbridge_mansion",
+      "name": "Villa Borghese",
+      "sizeBytes": 5869848
+    }
+  ],
+  "arenas": [
+    {
+      "id": "battleisland",
+      "name": "Isola di Murano",
+      "sizeBytes": 1894888
+    },
+    {
+      "id": "lasdunasarena",
+      "name": "Arena di Verona",
+      "sizeBytes": 2807884
+    },
+    {
+      "id": "cave",
+      "name": "Grotta di Castellana",
+      "sizeBytes": 1940904
+    },
+    {
+      "id": "pumpkin_park",
+      "name": "Parco dei Mostri",
+      "sizeBytes": 3222384
+    },
+    {
+      "id": "arena_candela_city",
+      "name": "Piazza San Marco",
+      "sizeBytes": 2571120
+    },
+    {
+      "id": "ancient_colosseum_labyrinth",
+      "name": "Colosseo",
+      "sizeBytes": 8747908
+    },
+    {
+      "id": "stadium",
+      "name": "San Siro",
+      "sizeBytes": 438148
+    },
+    {
+      "id": "alien_signal",
+      "name": "Matera",
+      "sizeBytes": 2453176
+    },
+    {
+      "id": "temple",
+      "name": "Tempio di Agrigento",
+      "sizeBytes": 1469608
+    }
+  ],
+  "profiles": {
+    "lite": {
+      "karts": [
+        "tux",
+        "adiumy",
+        "nolok",
+        "wilber",
+        "xue",
+        "hexley"
+      ],
+      "tracks": [
+        "cocoa_temple",
+        "hacienda",
+        "minigolf",
+        "sandtrack",
+        "snowtuxpeak",
+        "zengarden"
+      ],
+      "arenas": [
+        "battleisland",
+        "lasdunasarena"
+      ],
+      "weaponSet": "stk-lite"
+    },
+    "balanced": {
+      "karts": [
+        "tux",
+        "adiumy",
+        "nolok",
+        "wilber",
+        "xue",
+        "hexley",
+        "gavroche",
+        "emule",
+        "kiki",
+        "beastie",
+        "amanda",
+        "suzanne"
+      ],
+      "tracks": [
+        "cocoa_temple",
+        "hacienda",
+        "minigolf",
+        "sandtrack",
+        "snowtuxpeak",
+        "zengarden",
+        "lighthouse",
+        "olivermath",
+        "black_forest",
+        "xr591",
+        "oasis",
+        "gran_paradiso_island"
+      ],
+      "arenas": [
+        "battleisland",
+        "lasdunasarena",
+        "cave",
+        "pumpkin_park"
+      ],
+      "weaponSet": "stk-classic"
+    },
+    "full": {
+      "karts": [
+        "tux",
+        "adiumy",
+        "nolok",
+        "wilber",
+        "xue",
+        "hexley",
+        "gavroche",
+        "emule",
+        "kiki",
+        "beastie",
+        "amanda",
+        "suzanne",
+        "gnu",
+        "konqi",
+        "sara_the_racer",
+        "sara_the_wizard",
+        "puffy",
+        "pidgin"
+      ],
+      "tracks": [
+        "cocoa_temple",
+        "hacienda",
+        "minigolf",
+        "sandtrack",
+        "snowtuxpeak",
+        "zengarden",
+        "lighthouse",
+        "olivermath",
+        "black_forest",
+        "xr591",
+        "oasis",
+        "gran_paradiso_island",
+        "mines",
+        "snowmountain",
+        "abyss",
+        "cornfield_crossing",
+        "volcano_island",
+        "ravenbridge_mansion"
+      ],
+      "arenas": [
+        "battleisland",
+        "lasdunasarena",
+        "cave",
+        "pumpkin_park",
+        "arena_candela_city",
+        "ancient_colosseum_labyrinth",
+        "stadium",
+        "alien_signal",
+        "temple"
+      ],
+      "weaponSet": "stk-classic"
+    }
+  }
+}

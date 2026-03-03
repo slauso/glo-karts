@@ -1,6 +1,6 @@
 import { chromium } from "playwright";
 
-const BASE_URL = process.env.BASE_URL || "http://127.0.0.1:5174"; // Dev server port usually 5174 or 5173
+const BASE_URL = process.env.BASE_URL || "http://localhost:5174"; // Dev server port usually 5174 or 5173
 const TARGET = `${BASE_URL}/realtime.html?smoke=AssetCheck`;
 
 const browser = await chromium.launch({ headless: true });

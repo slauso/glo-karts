@@ -1,0 +1,192 @@
+{
+  "generatedAt": "2026-02-25T12:02:52.551Z",
+  "totalTracks": 20,
+  "verifiedRaceTrackIds": [
+    "map1",
+    "map2"
+  ],
+  "missingCriticalCount": 0,
+  "missingDecorationCount": 18,
+  "tracks": [
+    {
+      "id": "map1",
+      "label": "Amalfi Coast",
+      "trackPath": "/models/maps/map1/track.glb",
+      "decorationsPath": "/models/maps/map1/decorations.glb",
+      "trackExists": true,
+      "decorationsExists": true,
+      "verifiedRaceTrack": true
+    },
+    {
+      "id": "map2",
+      "label": "Desert Dunes",
+      "trackPath": "/models/maps/map2/track.glb",
+      "decorationsPath": "/models/maps/map2/decorations.glb",
+      "trackExists": true,
+      "decorationsExists": true,
+      "verifiedRaceTrack": true
+    },
+    {
+      "id": "abyss",
+      "label": "Abyss",
+      "trackPath": "/models/stk/tracks/abyss/track.glb",
+      "decorationsPath": "/models/stk/tracks/abyss/decorations.glb",
+      "trackExists": true,
+      "decorationsExists": false,
+      "verifiedRaceTrack": false
+    },
+    {
+      "id": "black_forest",
+      "label": "Black Forest",
+      "trackPath": "/models/stk/tracks/black_forest/track.glb",
+      "decorationsPath": "/models/stk/tracks/black_forest/decorations.glb",
+      "trackExists": true,
+      "decorationsExists": false,
+      "verifiedRaceTrack": false
+    },
+    {
+      "id": "cocoa_temple",
+      "label": "Cocoa Temple",
+      "trackPath": "/models/stk/tracks/cocoa_temple/track.glb",
+      "decorationsPath": "/models/stk/tracks/cocoa_temple/decorations.glb",
+      "trackExists": true,
+      "decorationsExists": false,
+      "verifiedRaceTrack": false
+    },
+    {
+      "id": "cornfield_crossing",
+      "label": "Cornfield Crossing",
+      "trackPath": "/models/stk/tracks/cornfield_crossing/track.glb",
+      "decorationsPath": "/models/stk/tracks/cornfield_crossing/decorations.glb",
+      "trackExists": true,
+      "decorationsExists": false,
+      "verifiedRaceTrack": false
+    },
+    {
+      "id": "gran_paradiso_island",
+      "label": "Gran Paradiso Island",
+      "trackPath": "/models/stk/tracks/gran_paradiso_island/track.glb",
+      "decorationsPath": "/models/stk/tracks/gran_paradiso_island/decorations.glb",
+      "trackExists": true,
+      "decorationsExists": false,
+      "verifiedRaceTrack": false
+    },
+    {
+      "id": "hacienda",
+      "label": "Hacienda",
+      "trackPath": "/models/stk/tracks/hacienda/track.glb",
+      "decorationsPath": "/models/stk/tracks/hacienda/decorations.glb",
+      "trackExists": true,
+      "decorationsExists": false,
+      "verifiedRaceTrack": false
+    },
+    {
+      "id": "lighthouse",
+      "label": "Lighthouse",
+      "trackPath": "/models/stk/tracks/lighthouse/track.glb",
+      "decorationsPath": "/models/stk/tracks/lighthouse/decorations.glb",
+      "trackExists": true,
+      "decorationsExists": false,
+      "verifiedRaceTrack": false
+    },
+    {
+      "id": "mines",
+      "label": "Mines",
+      "trackPath": "/models/stk/tracks/mines/track.glb",
+      "decorationsPath": "/models/stk/tracks/mines/decorations.glb",
+      "trackExists": true,
+      "decorationsExists": false,
+      "verifiedRaceTrack": false
+    },
+    {
+      "id": "minigolf",
+      "label": "Minigolf",
+      "trackPath": "/models/stk/tracks/minigolf/track.glb",
+      "decorationsPath": "/models/stk/tracks/minigolf/decorations.glb",
+      "trackExists": true,
+      "decorationsExists": false,
+      "verifiedRaceTrack": false
+    },
+    {
+      "id": "oasis",
+      "label": "Oasis",
+      "trackPath": "/models/stk/tracks/oasis/track.glb",
+      "decorationsPath": "/models/stk/tracks/oasis/decorations.glb",
+      "trackExists": true,
+      "decorationsExists": false,
+      "verifiedRaceTrack": false
+    },
+    {
+      "id": "olivermath",
+      "label": "Oliver Math",
+      "trackPath": "/models/stk/tracks/olivermath/track.glb",
+      "decorationsPath": "/models/stk/tracks/olivermath/decorations.glb",
+      "trackExists": true,
+      "decorationsExists": false,
+      "verifiedRaceTrack": false
+    },
+    {
+      "id": "ravenbridge_mansion",
+      "label": "Ravenbridge Mansion",
+      "trackPath": "/models/stk/tracks/ravenbridge_mansion/track.glb",
+      "decorationsPath": "/models/stk/tracks/ravenbridge_mansion/decorations.glb",
+      "trackExists": true,
+      "decorationsExists": false,
+      "verifiedRaceTrack": false
+    },
+    {
+      "id": "sandtrack",
+      "label": "Sandtrack",
+      "trackPath": "/models/stk/tracks/sandtrack/track.glb",
+      "decorationsPath": "/models/stk/tracks/sandtrack/decorations.glb",
+      "trackExists": true,
+      "decorationsExists": false,
+      "verifiedRaceTrack": false
+    },
+    {
+      "id": "snowmountain",
+      "label": "Snowmountain",
+      "trackPath": "/models/stk/tracks/snowmountain/track.glb",
+      "decorationsPath": "/models/stk/tracks/snowmountain/decorations.glb",
+      "trackExists": true,
+      "decorationsExists": false,
+      "verifiedRaceTrack": false
+    },
+    {
+      "id": "snowtuxpeak",
+      "label": "Snowtuxpeak",
+      "trackPath": "/models/stk/tracks/snowtuxpeak/track.glb",
+      "decorationsPath": "/models/stk/tracks/snowtuxpeak/decorations.glb",
+      "trackExists": true,
+      "decorationsExists": false,
+      "verifiedRaceTrack": false
+    },
+    {
+      "id": "volcano_island",
+      "label": "Volcano Island",
+      "trackPath": "/models/stk/tracks/volcano_island/track.glb",
+      "decorationsPath": "/models/stk/tracks/volcano_island/decorations.glb",
+      "trackExists": true,
+      "decorationsExists": false,
+      "verifiedRaceTrack": false
+    },
+    {
+      "id": "xr591",
+      "label": "XR591",
+      "trackPath": "/models/stk/tracks/xr591/track.glb",
+      "decorationsPath": "/models/stk/tracks/xr591/decorations.glb",
+      "trackExists": true,
+      "decorationsExists": false,
+      "verifiedRaceTrack": false
+    },
+    {
+      "id": "zengarden",
+      "label": "Zen Garden",
+      "trackPath": "/models/stk/tracks/zengarden/track.glb",
+      "decorationsPath": "/models/stk/tracks/zengarden/decorations.glb",
+      "trackExists": true,
+      "decorationsExists": false,
+      "verifiedRaceTrack": false
+    }
+  ]
+}

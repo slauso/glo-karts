@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GLO KARTS · Garage</title>
+  <link rel="icon" type="image/png" href="/favicon.png" />
+  <link rel="stylesheet" href="src/lobby-style.css">
+  <script type="module" src="/src/garage.js"></script>
+  <script src="https://kit.fontawesome.com/1ab8f48e0a.js" crossorigin="anonymous"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="game-container garage-page">
+    <header class="game-header garage-header">
+      <h1 class="game-title">Garage</h1>
+      <p class="game-subtitle">Trophies · Cups · Rival Targets</p>
+      <nav class="title-nav" aria-label="Garage navigation">
+        <a href="index.html" class="title-nav-chip"><i class="fas fa-house"></i> Lobby</a>
+        <a href="garage.html" class="title-nav-chip active"><i class="fas fa-trophy"></i> Garage</a>
+      </nav>
+    </header>
+
+    <main class="garage-layout">
+      <section class="glass-panel garage-panel">
+        <h2 class="section-title"><i class="fas fa-chart-line"></i> Progress Overview</h2>
+        <div id="garage-summary" class="progress-summary-card garage-summary"></div>
+
+        <div class="garage-actions">
+          <a href="index.html" class="btn-primary garage-link"><i class="fas fa-chevron-left"></i> Back to Lobby</a>
+          <button id="reset-progress-btn" class="btn-danger" type="button"><i class="fas fa-trash"></i> Reset Progress</button>
+        </div>
+      </section>
+
+      <section class="glass-panel garage-panel">
+        <h2 class="section-title"><i class="fas fa-trophy"></i> Cup Cabinet</h2>
+        <div id="garage-cups" class="cup-cards-grid garage-cups"></div>
+      </section>
+
+      <section class="glass-panel garage-panel">
+        <h2 class="section-title"><i class="fas fa-stopwatch"></i> Ghost Targets</h2>
+        <div id="garage-time-attack" class="garage-records"></div>
+      </section>
+    </main>
+  </div>
+</body>
+</html>

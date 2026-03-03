@@ -19,7 +19,7 @@ SECRET_KEY=your-long-random-secret-key-here
 DEBUG=False
 
 # Allowed Hosts (optional - defaults to .koyeb.app)
-ALLOWED_HOSTS=twistedkart.koyeb.app,www.twistedkart.koyeb.app
+ALLOWED_HOSTS=GLOKarts.koyeb.app,www.GLOKarts.koyeb.app
 
 # CORS (if frontend is on different domain)
 CORS_ALLOWED_ORIGINS=https://your-frontend.com
