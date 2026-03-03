@@ -1,5 +1,6 @@
 import { Schema, MapSchema, type } from "@colyseus/schema";
 import { PlayerState } from "./PlayerState.js";
+import { EntityState } from "./EntityState.js";
 
 export class BattleState extends Schema {
   constructor() {
@@ -14,6 +15,7 @@ export class BattleState extends Schema {
     this.blueScore = 0;
 
     this.players = new MapSchema();
+    this.entities = new MapSchema();
   }
 }
 
@@ -25,3 +27,4 @@ type("number")(BattleState.prototype, "scoreLimit");
 type("number")(BattleState.prototype, "redScore");
 type("number")(BattleState.prototype, "blueScore");
 type({ map: PlayerState })(BattleState.prototype, "players");
+type({ map: EntityState })(BattleState.prototype, "entities");

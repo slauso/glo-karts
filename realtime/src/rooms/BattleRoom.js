@@ -1,6 +1,7 @@
 import { Room } from "@colyseus/core";
 import { BattleState } from "../schema/BattleState.js";
 import { PlayerState } from "../schema/PlayerState.js";
+import { EntityState } from "../schema/EntityState.js";
 
 const TICK_RATE = 1000 / 60;
 const ACCEL = 20;
@@ -98,8 +99,43 @@ export class BattleRoom extends Room {
       }
     });
 
+    this.onMessage("pickupItem", (client, data) => {
+        const entityId = data.entityId;
+        const e = this.state.entities.get(entityId);
+        
+        if (e && e.type === "item_box" && e.active) {
+            e.active = false;
+            e.respawnTimer = 10000; 
+            
+            const weapons = ["missile", "bowling_ball", "shield"];
+            const rolled = weapons[Math.floor(Math.random() * weapons.length)];
+            
+            client.send("itemReceived", { weapon: rolled });
+        }
+    });
+
     this.setSimulationInterval((deltaTime) => this.update(deltaTime), TICK_RATE);
     console.log(`[battle_room] created roomId=${this.roomId} gameType=${state.gameType} maxClients=${this.maxClients}`);
+    
+    this.spawnItemBoxes();
+  }
+  
+  spawnItemBoxes() {
+    for (let i = 0; i < 8; i++) {
+        const angle = (Math.PI * 2) * (i / 8);
+        const radius = 25; 
+        const id = `box_${i}`;
+        
+        const box = new EntityState();
+        box.id = id;
+        box.type = "item_box";
+        box.active = true;
+        box.x = Math.cos(angle) * radius;
+        box.y = 2.0; 
+        box.z = Math.sin(angle) * radius;
+
+        this.state.entities.set(id, box);
+    }
   }
 
   onJoin(client, options = {}) {
@@ -214,5 +250,15 @@ export class BattleRoom extends Room {
         this.countdownActive = false;
       }
     }
+
+    this.state.entities.forEach((e) => {
+        if (!e.active && e.respawnTimer > 0) {
+            e.respawnTimer -= deltaTime;
+            if (e.respawnTimer <= 0) {
+                e.respawnTimer = 0;
+                e.active = true;
+            }
+        }
+    });
   }
 }

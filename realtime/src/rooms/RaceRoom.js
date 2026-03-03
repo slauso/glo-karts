@@ -1,6 +1,7 @@
 import { Room } from "@colyseus/core";
 import { RaceState } from "../schema/RaceState.js";
 import { PlayerState } from "../schema/PlayerState.js";
+import { EntityState } from "../schema/EntityState.js";
 
 const TICK_RATE = 1000 / 60;
 const ACCEL = 22;
@@ -77,8 +78,49 @@ export class RaceRoom extends Room {
       });
     });
 
+    this.onMessage("pickupItem", (client, data) => {
+        const entityId = data.entityId;
+        const e = this.state.entities.get(entityId);
+        
+        if (e && e.type === "item_box" && e.active) {
+            // "Consume" the item box
+            e.active = false;
+            e.respawnTimer = 10000; // 10 seconds respawn
+            
+            // Randomly pick a weapon for now
+            const weapons = ["missile", "bowling_ball", "shield"];
+            const rolled = weapons[Math.floor(Math.random() * weapons.length)];
+            
+            // Tell the specific client what they got
+            client.send("itemReceived", { weapon: rolled });
+        }
+    });
+
     this.setSimulationInterval((deltaTime) => this.update(deltaTime), TICK_RATE);
     console.log(`[race_room] created roomId=${this.roomId} track=${state.trackId} maxClients=${this.maxClients}`);
+
+    this.spawnItemBoxes();
+  }
+
+  spawnItemBoxes() {
+    // Generate some basic placeholder item boxes on an oval or line
+    // In the future this can read the track's glTF dummy nodes
+    for (let i = 0; i < 8; i++) {
+        const angle = (Math.PI * 2) * (i / 8);
+        const radius = 20; // Some random radius
+        const id = `box_${i}`;
+        
+        const box = new EntityState();
+        box.id = id;
+        box.type = "item_box";
+        box.active = true;
+        // spread them out
+        box.x = Math.cos(angle) * radius;
+        box.y = 2.0; // floating a bit above ground
+        box.z = Math.sin(angle) * radius;
+
+        this.state.entities.set(id, box);
+    }
   }
 
   onJoin(client, options = {}) {
@@ -172,6 +214,17 @@ export class RaceRoom extends Room {
         p.rw = input.rw;
         p.lastProcessedInput = input.seq;
       }
+    });
+
+    // Handle entity respawns and updates
+    this.state.entities.forEach((e) => {
+        if (!e.active && e.respawnTimer > 0) {
+            e.respawnTimer -= deltaTime;
+            if (e.respawnTimer <= 0) {
+                e.respawnTimer = 0;
+                e.active = true; // respawn!
+            }
+        }
     });
   }
 }
