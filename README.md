@@ -14,26 +14,6 @@ A real-time multiplayer 3D racing game built with JavaScript and modern web tech
 - **Mobile Support**: Optimized for desktop and mobile with touch controls
 - **Car Customization**: Choose from various car colors
 
-## How to Play
-
-### Creating a Game
-
-1. Visit the Twisted Kart website
-2. Enter your name
-3. Choose your car color
-4. Click "Create Party" or "Quick Match"
-5. For private games, share the generated lobby code with friends
-6. Select a track from the dropdown menu
-7. Click "Start Race" when everyone is ready
-
-### Joining a Game
-
-1. Visit the Twisted Kart website
-2. Enter your name
-3. Choose your car color
-4. Enter the lobby code provided by the host
-5. Click "Join"
-6. Wait for the host to start the race
 
 ## Controls
 
