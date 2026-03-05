@@ -418,7 +418,7 @@ class KartPreview {
     const loader = new THREE.GLTFLoader();
     if (this.kart) { this.scene.remove(this.kart); this.kart = null; this.isInitialized = false; }
     const nameEl = document.getElementById('kart-name');
-    if (nameEl) nameEl.textContent = '...';
+    if (nameEl) { nameEl.classList.add('kart-swapping'); nameEl.textContent = '...'; }
 
     loader.load(
       `/models/stk/karts/${id}/kart.glb`,
@@ -475,7 +475,10 @@ class KartPreview {
     const k = STK_KARTS[this.currentIndex];
     const nameEl  = document.getElementById('kart-name');
     const indexEl = document.getElementById('kart-index');
-    if (nameEl)  nameEl.textContent  = k.name;
+    if (nameEl) {
+      nameEl.classList.remove('kart-swapping');
+      nameEl.textContent = k.name;
+    }
     if (indexEl) indexEl.textContent = `${this.currentIndex + 1} / ${STK_KARTS.length}`;
     sessionStorage.setItem('selectedKart',     k.id);
     sessionStorage.setItem('selectedKartName', k.name);

@@ -411,17 +411,110 @@ body {
   border-radius: 1px;
 }
 
-/* 3D Kart preview */
+/* ═══════════════════════════════════════════════════
+   3D KART PREVIEW — cutting-edge CSS flourishes
+   @property conic halo + rotating spotlight + glow ring
+═══════════════════════════════════════════════════ */
+
+/* Houdini animatable angle for the conic halo rotation */
+@property --halo-angle {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+
+/* Houdini animatable angle for the under-kart spotlight */
+@property --spot-angle {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+
+@keyframes haloSpin {
+  to { --halo-angle: 360deg; }
+}
+
+@keyframes spotSpin {
+  to { --spot-angle: 360deg; }
+}
+
 #car-model-container {
   width: 100%;
   flex: 1;
   position: relative;
   min-height: 281px;
   max-height: 531px;
-  background:
-    radial-gradient(ellipse 70% 55% at 50% 70%, rgba(255,0,128,0.18) 0%, transparent 65%),
-    radial-gradient(ellipse 90% 50% at 50% 90%, rgba(0,0,0,0.7) 0%, transparent 80%);
   overflow: hidden;
+
+  /* Rotating turntable spotlight — tinted by GLO colour */
+  background:
+    conic-gradient(
+      from var(--spot-angle) at 50% 75%,
+      transparent 0deg,
+      rgba(var(--glo-rgb), 0.08) 40deg,
+      rgba(var(--glo-rgb), 0.22) 90deg,
+      transparent 140deg,
+      transparent 220deg,
+      rgba(var(--glo-rgb), 0.06) 280deg,
+      transparent 360deg
+    ),
+    radial-gradient(ellipse 70% 55% at 50% 70%, rgba(var(--glo-rgb), 0.18) 0%, transparent 65%),
+    radial-gradient(ellipse 90% 50% at 50% 90%, rgba(0,0,0,0.7) 0%, transparent 80%);
+
+  animation: spotSpin 12s linear infinite;
+}
+
+/* Conic gradient halo ring — rotates around the kart viewport edge */
+#car-model-container::before {
+  content: "";
+  position: absolute;
+  inset: -2px;
+  border-radius: 16px;
+  padding: 2px;
+  background:
+    conic-gradient(
+      from var(--halo-angle),
+      transparent       0deg,
+      rgba(var(--glo-rgb), 0.55) 60deg,
+      transparent      120deg,
+      transparent      180deg,
+      rgba(var(--glo-rgb), 0.35) 250deg,
+      transparent      310deg,
+      transparent      360deg
+    );
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+  animation: haloSpin 6s linear infinite;
+  pointer-events: none;
+  z-index: 2;
+}
+
+/* Soft ambient glow bloom under the kart */
+#car-model-container::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: 10%;
+  width: 80%;
+  height: 35%;
+  background: radial-gradient(
+    ellipse 100% 100% at 50% 100%,
+    rgba(var(--glo-rgb), 0.28) 0%,
+    rgba(var(--glo-rgb), 0.08) 40%,
+    transparent 70%
+  );
+  filter: blur(16px);
+  pointer-events: none;
+  z-index: 1;
+  opacity: 0.8;
+  animation: kartGlowPulse 3s ease-in-out infinite;
+}
+
+@keyframes kartGlowPulse {
+  0%, 100% { opacity: 0.6; }
+  50%      { opacity: 1; }
 }
 
 .panel-title {
@@ -1339,8 +1432,10 @@ input::placeholder { color: var(--text-muted); font-size: 0.88rem; }
   font-size: 0.72rem;
   letter-spacing: 3px;
   text-transform: uppercase;
-  color: var(--text-muted);
+  color: rgba(var(--glo-rgb), 0.7);
+  text-shadow: 0 0 8px rgba(var(--glo-rgb), 0.25);
   margin-bottom: 2px;
+  transition: color 0.4s ease, text-shadow 0.4s ease;
 }
 
 .kart-nav-row {
@@ -1373,6 +1468,44 @@ input::placeholder { color: var(--text-muted); font-size: 0.88rem; }
     0  1px 0 rgba(255,255,255,0.12) inset,
     0  2px 8px rgba(0,0,0,0.25);
 }
+/* Conic spinner ring on nav button hover */
+@property --nav-spin {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+@keyframes navRingSpin {
+  to { --nav-spin: 360deg; }
+}
+.kart-nav-btn {
+  position: relative;
+  overflow: hidden;
+}
+.kart-nav-btn::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  padding: 1.5px;
+  background: conic-gradient(
+    from var(--nav-spin),
+    transparent 0deg,
+    rgba(var(--glo-rgb), 0.8) 90deg,
+    transparent 180deg
+  );
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+  opacity: 0;
+  transition: opacity 0.25s ease;
+  pointer-events: none;
+}
+.kart-nav-btn:hover::before {
+  opacity: 1;
+  animation: navRingSpin 1.2s linear infinite;
+}
+
 .kart-nav-btn:hover {
   background: linear-gradient(
     160deg,
@@ -1410,9 +1543,23 @@ input::placeholder { color: var(--text-muted); font-size: 0.88rem; }
   font-weight: 400;
   letter-spacing: 2px;
   color: #fff;
-  text-shadow: 0 0 16px var(--accent-glow);
   text-transform: uppercase;
   white-space: nowrap;
+
+  /* Reactive multi-layer GLO name glow */
+  text-shadow:
+    0 0 8px  rgba(var(--glo-rgb), 0.7),
+    0 0 24px rgba(var(--glo-rgb), 0.45),
+    0 0 48px rgba(var(--glo-rgb), 0.20);
+
+  /* Smooth kart swap transition */
+  transition: opacity 0.25s ease, transform 0.3s cubic-bezier(0.34,1.56,0.64,1);
+}
+
+/* Pop-in effect when kart name changes (toggled via JS class) */
+#kart-name.kart-swapping {
+  opacity: 0;
+  transform: scale(0.85) translateY(4px);
 }
 
 .kart-index {
