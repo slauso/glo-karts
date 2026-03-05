@@ -1,0 +1,11 @@
+Author: Wolter Hellmund <wolterh6@gmail.com>
+
+License: Creative Commons - Attribution-ShareAlike 3.0 <http://creativecommons.org/licenses/by-sa/3.0/>
+
+Please read the license for more information. The text is unbelievably short, so don't back down.
+
+The attribution I demand is just to entitle me always as the original creator of all the models and textures of this kart. Any modifications or further distributions of this model must give credit to me.
+
+The model represents the beagle search tool.
+
+Place on Add-ons (for 0.9.2) by Ludsky.

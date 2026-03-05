@@ -1,18 +1,23 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { getTrackModelPath, getTrackScale, isCustomMap, getFallThreshold } from './track-data.js';
 
 // Function to load the track model and add to scene
 export function loadTrackModel(ammo, mapId = "map1", scene, physicsWorld, loadingManager, callback) {
   // Use the loading manager with your loader
   const loader = new GLTFLoader(loadingManager);
   
+  const modelPath = getTrackModelPath(mapId);
+  const scale = getTrackScale(mapId);
+  console.log(`Loading track model from: ${modelPath} (scale ${scale})`);
+  
   loader.load(
-    `/models/maps/${mapId}/track.glb`,
+    modelPath,
     (gltf) => {
       const track = gltf.scene;
       
-      // Scale to match the world scale
-      track.scale.set(8, 8, 8);
+      // Scale to match the world scale (8 for custom maps, 1 for STK tracks)
+      track.scale.set(scale, scale, scale);
       
       // Position at origin
       track.position.set(0, 0, 0);
@@ -22,12 +27,30 @@ export function loadTrackModel(ammo, mapId = "map1", scene, physicsWorld, loadin
       track.traverse((node) => {
         if (node.isMesh) {
           node.castShadow = true;
-          node.receiveShadow = true; // Enable for better lighting
-          
-          // Enhance track materials
-          if (node.material) {
+          node.receiveShadow = true;
+
+          // STK SPM normals are skipped in the pipeline; recompute from geometry
+          // so lighting is correct.
+          if (node.geometry) {
+            node.geometry.computeVertexNormals();
+          }
+
+          // STK meshes use Irrlicht's left-handed winding. Even after winding
+          // reversal in the pipeline, thin geometry (walls, railings, signs)
+          // needs DoubleSide as a safety net to prevent holes.
+          if (Array.isArray(node.material)) {
+            node.material = node.material.map(m => {
+              const mc = m.clone();
+              mc.roughness = 0.7;
+              mc.metalness = 0.3;
+              mc.side = THREE.DoubleSide;
+              return mc;
+            });
+          } else if (node.material) {
+            node.material = node.material.clone();
             node.material.roughness = 0.7;
             node.material.metalness = 0.3;
+            node.material.side = THREE.DoubleSide;
           }
         }
       });
@@ -55,102 +78,87 @@ export function loadTrackModel(ammo, mapId = "map1", scene, physicsWorld, loadin
 
 // Function to create a physics collider for the entire track
 function addTrackCollider(trackModel, ammo, physicsWorld) {
-  // Extract all mesh geometries from the track
-  let vertices = [];
-  let indices = [];
-  let indexOffset = 0;
-  
-  // Update world matrix to apply all transformations
+  // Cap triangles to avoid browser freeze on large 70-mesh tracks.
+  // Old approach: new ammo.btVector3() + ammo.destroy() per vertex = 1.5M+ Ammo
+  // heap ops → freeze. New approach: reuse 3 btVector3 with setValue().
+  const MAX_TRIANGLES = 80000;
+  const triangleMesh = new ammo.btTriangleMesh();
+
+  // Reusable btVector3 objects — setValue() is far cheaper than create/destroy
+  const _va = new ammo.btVector3(0, 0, 0);
+  const _vb = new ammo.btVector3(0, 0, 0);
+  const _vc = new ammo.btVector3(0, 0, 0);
+  let triCount = 0;
+
   trackModel.updateMatrixWorld(true);
-  
-  // Traverse all meshes in the track model
+
+  const _vec = new THREE.Vector3();
+
   trackModel.traverse(child => {
-    if (child.isMesh && child.geometry) {
-      // Get vertices
-      const positionAttr = child.geometry.getAttribute('position');
-      const vertexCount = positionAttr.count;
-      
-      // Apply mesh's transform to vertices
-      const worldMatrix = child.matrixWorld;
-      
-      // Extract vertices with transformation
-      for (let i = 0; i < vertexCount; i++) {
-        const vertex = new THREE.Vector3().fromBufferAttribute(positionAttr, i);
-        vertex.applyMatrix4(worldMatrix);
-        
-        vertices.push(vertex.x, vertex.y, vertex.z);
+    if (triCount >= MAX_TRIANGLES) return;
+    if (!child.isMesh || !child.geometry) return;
+
+    const geo = child.geometry;
+    const pos = geo.getAttribute('position');
+    if (!pos) return;
+    const mat = child.matrixWorld;
+    const idx = geo.index;
+
+    const setV = (bv, i) => {
+      _vec.fromBufferAttribute(pos, i).applyMatrix4(mat);
+      bv.setValue(_vec.x, _vec.y, _vec.z);
+    };
+
+    if (idx) {
+      for (let i = 0; i + 2 < idx.count && triCount < MAX_TRIANGLES; i += 3) {
+        setV(_va, idx.getX(i));
+        setV(_vb, idx.getX(i + 1));
+        setV(_vc, idx.getX(i + 2));
+        triangleMesh.addTriangle(_va, _vb, _vc, false);
+        triCount++;
       }
-      
-      // Get indices - if they exist
-      if (child.geometry.index) {
-        const indices32 = child.geometry.index.array;
-        for (let i = 0; i < indices32.length; i++) {
-          indices.push(indices32[i] + indexOffset);
-        }
-      } else {
-        // No indices - assume vertices are already arranged as triangles
-        for (let i = 0; i < vertexCount; i++) {
-          indices.push(i + indexOffset);
-        }
+    } else {
+      for (let i = 0; i + 2 < pos.count && triCount < MAX_TRIANGLES; i += 3) {
+        setV(_va, i);
+        setV(_vb, i + 1);
+        setV(_vc, i + 2);
+        triangleMesh.addTriangle(_va, _vb, _vc, false);
+        triCount++;
       }
-      
-      indexOffset += vertexCount;
     }
   });
-  
-  // Create Ammo triangle mesh
-  const triangleMesh = new ammo.btTriangleMesh();
-  
-  // Add all triangles to the mesh
-  for (let i = 0; i < indices.length; i += 3) {
-    const i1 = indices[i] * 3;
-    const i2 = indices[i+1] * 3;
-    const i3 = indices[i+2] * 3;
-    
-    const v1 = new ammo.btVector3(vertices[i1], vertices[i1+1], vertices[i1+2]);
-    const v2 = new ammo.btVector3(vertices[i2], vertices[i2+1], vertices[i2+2]);
-    const v3 = new ammo.btVector3(vertices[i3], vertices[i3+1], vertices[i3+2]);
-    
-    triangleMesh.addTriangle(v1, v2, v3, false);
-    
-    // Clean up Ammo vectors
-    ammo.destroy(v1);
-    ammo.destroy(v2);
-    ammo.destroy(v3);
-  }
-  
-  // Create track collision shape using triangle mesh
+
+  ammo.destroy(_va);
+  ammo.destroy(_vb);
+  ammo.destroy(_vc);
+
   const trackShape = new ammo.btBvhTriangleMeshShape(triangleMesh, true, true);
 
-  // The rigid body uses identity transform since all transformations are in the vertices
   const trackTransform = new ammo.btTransform();
   trackTransform.setIdentity();
-  
-  // Create motion state
+
   const motionState = new ammo.btDefaultMotionState(trackTransform);
-  
-  // Set up track rigid body (static - mass = 0)
-  const mass = 0;
   const localInertia = new ammo.btVector3(0, 0, 0);
-  
-  // Create rigid body
-  const rbInfo = new ammo.btRigidBodyConstructionInfo(
-    mass, motionState, trackShape, localInertia
-  );
-  
+
+  const rbInfo = new ammo.btRigidBodyConstructionInfo(0, motionState, trackShape, localInertia);
   const trackBody = new ammo.btRigidBody(rbInfo);
-  trackBody.setFriction(1.0); // Increase from 0.8 for better grip on ramps
-  
-  // Add to physics world
+  trackBody.setFriction(1.0);
+
   physicsWorld.addRigidBody(trackBody);
-  
-  console.log("Track physics collider created successfully");
+  console.log(`Track physics collider: ${triCount.toLocaleString()} triangles (cap ${MAX_TRIANGLES.toLocaleString()})`);
 }
 
 // Function to load map decorations
 export function loadMapDecorations(mapId = "map1", scene, renderer, camera, loadingManager) {
+  // STK tracks don't have separate decorations files
+  if (!isCustomMap(mapId)) {
+    console.log(`Skipping decorations for ${mapId} (STK track/arena — no decorations.glb)`);
+    return;
+  }
+  
   // Use the loading manager with your loader
   const loader = new GLTFLoader(loadingManager);
+  const scale = getTrackScale(mapId);
   
   loader.load(
     `/models/maps/${mapId}/decorations.glb`,
@@ -158,7 +166,7 @@ export function loadMapDecorations(mapId = "map1", scene, renderer, camera, load
       const decorations = gltf.scene;
       
       // Scale to match track scale
-      decorations.scale.set(8, 8, 8);
+      decorations.scale.set(scale, scale, scale);
       decorations.position.set(0, 0, 0);
       
       // Important: Process all materials in the decoration model
@@ -207,7 +215,7 @@ export function loadMapDecorations(mapId = "map1", scene, renderer, camera, load
 }
 
 // Export checkGroundCollision to be used from main.js
-export function checkGroundCollision(ammo, carBody, resetFunction) {
+export function checkGroundCollision(ammo, carBody, resetFunction, fallThreshold = -50) {
   // Get the car's position
   if (!carBody) return;
   
@@ -216,8 +224,8 @@ export function checkGroundCollision(ammo, carBody, resetFunction) {
   motionState.getWorldTransform(transform);
   const position = transform.getOrigin();
   
-  // If car is below certain height, reset it
-  if (position.y() < 0) {
+  // If car is below the fall threshold for this track, reset it
+  if (position.y() < fallThreshold) {
     console.log("Car fell off track - resetting position");
     if (resetFunction) resetFunction(ammo);
   }

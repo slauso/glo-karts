@@ -2,6 +2,7 @@ import { Room } from "@colyseus/core";
 import { BattleState } from "../schema/BattleState.js";
 import { PlayerState } from "../schema/PlayerState.js";
 import { EntityState } from "../schema/EntityState.js";
+import { grantWeapon, handleFireWeapon, tickProjectiles } from "../combat.js";
 
 const TICK_RATE = 1000 / 60;
 const ACCEL = 20;
@@ -95,6 +96,9 @@ export class BattleRoom extends Room {
         if (this.state.gameType === "ctf") {
           if (attacker.team === "red") this.state.redScore += 1;
           else this.state.blueScore += 1;
+        } else {
+          // Deathmatch / TDM — check score limit
+          this._checkDeathmatchWin(attacker);
         }
       }
     });
@@ -102,40 +106,88 @@ export class BattleRoom extends Room {
     this.onMessage("pickupItem", (client, data) => {
         const entityId = data.entityId;
         const e = this.state.entities.get(entityId);
+        const player = this.state.players.get(client.sessionId);
         
-        if (e && e.type === "item_box" && e.active) {
+        if (e && e.type === "item_box" && e.active && player) {
             e.active = false;
             e.respawnTimer = 10000; 
             
-            const weapons = ["missile", "bowling_ball", "shield"];
-            const rolled = weapons[Math.floor(Math.random() * weapons.length)];
+            const rolled = grantWeapon(player);
             
             client.send("itemReceived", { weapon: rolled });
         }
     });
 
+    this.onMessage("fireWeapon", (client) => {
+        const player = this.state.players.get(client.sessionId);
+        if (!player || !this.state.started) return;
+
+        const result = handleFireWeapon(player, this.state.entities, this.state.players);
+        if (!result) return;
+
+        if (result.projectile) {
+            const proj = result.projectile;
+            this.broadcast("projectileFired", {
+                id: proj.id,
+                subType: proj.subType,
+                ownerId: proj.ownerId,
+                x: proj.x, y: proj.y, z: proj.z,
+                vx: proj.vx, vy: proj.vy, vz: proj.vz,
+            });
+        }
+        if (result.effectApplied) {
+            this.broadcast("effectApplied", result.effectApplied);
+        }
+    });
+
     this.setSimulationInterval((deltaTime) => this.update(deltaTime), TICK_RATE);
-    console.log(`[battle_room] created roomId=${this.roomId} gameType=${state.gameType} maxClients=${this.maxClients}`);
+    console.log(`[battle_room] created roomId=${this.roomId} gameType=${state.gameType} scoreLimit=${state.scoreLimit} maxClients=${this.maxClients}`);
     
     this.spawnItemBoxes();
   }
+
+  _checkDeathmatchWin(attacker) {
+    if (!this.state.started) return;
+    if (attacker.score >= this.state.scoreLimit) {
+      // Build standings sorted by score
+      const standings = [];
+      this.state.players.forEach((p) => {
+        standings.push({ sessionId: p.id, name: p.name, score: p.score, team: p.team });
+      });
+      standings.sort((a, b) => b.score - a.score);
+
+      this.broadcast("matchEnd", {
+        mode: "battle",
+        gameType: this.state.gameType,
+        winner: attacker.name,
+        winnerId: attacker.id,
+        winReason: `${attacker.score} kills`,
+        standings,
+      });
+      this.state.started = false;
+      console.log(`[battle_room] deathmatch won by ${attacker.name} (${attacker.score} kills)`);
+    }
+  }
   
   spawnItemBoxes() {
-    for (let i = 0; i < 8; i++) {
-        const angle = (Math.PI * 2) * (i / 8);
-        const radius = 25; 
-        const id = `box_${i}`;
-        
-        const box = new EntityState();
-        box.id = id;
-        box.type = "item_box";
-        box.active = true;
-        box.x = Math.cos(angle) * radius;
-        box.y = 2.0; 
-        box.z = Math.sin(angle) * radius;
-
-        this.state.entities.set(id, box);
-    }
+    // Grid of item boxes spread around the arena centre at 4 cardinal + 4 diagonal positions
+    const positions = [
+      { x:  20, z:   0 }, { x: -20, z:   0 },
+      { x:   0, z:  20 }, { x:   0, z: -20 },
+      { x:  15, z:  15 }, { x: -15, z:  15 },
+      { x:  15, z: -15 }, { x: -15, z: -15 },
+    ];
+    positions.forEach((pos, i) => {
+      const id = `box_${i}`;
+      const box = new EntityState();
+      box.id = id;
+      box.type = "item_box";
+      box.active = true;
+      box.x = pos.x;
+      box.y = 2.0;
+      box.z = pos.z;
+      this.state.entities.set(id, box);
+    });
   }
 
   onJoin(client, options = {}) {
@@ -165,6 +217,21 @@ export class BattleRoom extends Room {
       gameType: this.state.gameType,
       team: p.team,
     });
+
+    // If the match is already started or mid-countdown, send catchup events
+    // so late-joining clients (e.g. reconnect) receive the lifecycle signals.
+    if (this.state.started) {
+      const durationMs = 0;
+      const serverNow = Date.now();
+      client.send("startSequence", { durationMs, startAt: serverNow, serverNow });
+      client.send("matchLive", { startedAt: serverNow });
+    } else if (this.countdownActive) {
+      // Mid-countdown — send startSequence with remaining time so client shows
+      // correct countdown and transitions to matchLive when it fires.
+      const durationMs = 4000;
+      const serverNow = Date.now();
+      client.send("startSequence", { durationMs, startAt: serverNow + 1000, serverNow });
+    }
   }
 
   onLeave(client) {
@@ -252,7 +319,7 @@ export class BattleRoom extends Room {
     }
 
     this.state.entities.forEach((e) => {
-        if (!e.active && e.respawnTimer > 0) {
+        if (!e.active && e.type === "item_box" && e.respawnTimer > 0) {
             e.respawnTimer -= deltaTime;
             if (e.respawnTimer <= 0) {
                 e.respawnTimer = 0;
@@ -260,5 +327,44 @@ export class BattleRoom extends Room {
             }
         }
     });
+
+    // Tick projectiles — movement, lifespan, hit detection
+    const hits = tickProjectiles(this.state.entities, this.state.players, deltaTime);
+    for (const { projectile, victim, shieldAbsorbed } of hits) {
+        if (shieldAbsorbed) {
+            this.broadcast("shieldAbsorbed", {
+                projectileId: projectile.id,
+                victimId: victim.id,
+            });
+            continue;
+        }
+        victim.health = Math.max(0, victim.health - projectile.damage);
+
+        // Award score to attacker
+        const attacker = this.state.players.get(projectile.ownerId);
+        if (victim.health === 0) {
+            if (attacker) attacker.score += 1;
+            victim.health = 100;
+            const spawn = this.getSpawnPoint(this.state.players.size, Math.floor(Math.random() * 12));
+            victim.x = spawn.x;
+            victim.z = spawn.z;
+
+            if (this.state.gameType === "ctf" && attacker) {
+                if (attacker.team === "red") this.state.redScore += 1;
+                else this.state.blueScore += 1;
+            } else if (attacker) {
+                this._checkDeathmatchWin(attacker);
+            }
+        }
+
+        this.broadcast("projectileHit", {
+            projectileId: projectile.id,
+            victimId: victim.id,
+            subType: projectile.subType,
+            damage: projectile.damage,
+            remainingHealth: victim.health,
+            effect: projectile.subType,
+        });
+    }
   }
 }

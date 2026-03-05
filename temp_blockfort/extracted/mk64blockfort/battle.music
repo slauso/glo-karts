@@ -1,0 +1,6 @@
+<?xml version="1.0"?>
+<music title    = "Battle Arena"
+       composer = "Kenta Nagata"
+       file     = "battle.ogg"/>
+<loop-start = 1.025>
+<loop-end = 89.271>

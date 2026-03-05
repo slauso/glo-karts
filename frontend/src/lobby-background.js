@@ -1,302 +1,169 @@
-import * as THREE from 'three';
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+/**
+ * lobby-background.js — GLO-reactive ambient background (Canvas 2D edition)
+ *
+ * Six soft radial blobs on a plain Canvas 2D element — no WebGL, no Three.js.
+ * Renders at ≤20 fps and pauses entirely when the tab is hidden.
+ * GLO theme syncs from sessionStorage and re-syncs on the 'gloChanged' event.
+ */
+
+// ── Per-theme colour palettes ───────────────────────────────────────────────
+const THEME_PALETTE = {
+  sunrise:          ['#1a0030','#881100','#ff4400','#ff9900','#ffdd55'],
+  sunset:           ['#ff5500','#ff2200','#cc0055','#880033','#440011'],
+  'sunset-glow':    ['#ffaa00','#ff5500','#ff1166','#ff8800'],
+  spring:           ['#ffaabb','#aaffbb','#ffffaa','#ccaaff'],
+  aurora:           ['#00ff88','#00bbff','#8800ff','#00ff44','#00ffaa'],
+  'full-rainbow':   null,                     // handled via HSL
+  forest:           ['#003300','#116611','#335522','#005500'],
+  ocean:            ['#001133','#002266','#0044aa','#0077cc','#44aaff'],
+  snowing:          ['#bbccee','#ddeeff','#ffffff','#aabbdd'],
+  'spring-wind':    ['#eeffcc','#ccffee','#ffeeff','#ffffcc'],
+  cloudy:           ['#667788','#778899','#99aabb'],
+  firefly:          ['#ffff88','#ffff44'],
+  fire:             ['#ff0000','#ff4400','#ff8800','#ffcc00'],
+  waterfall:        ['#0077bb','#00aaee','#55ccff','#ffffff'],
+  'falling-petals': ['#ffbbcc','#ff88aa','#ffbbdd','#ffffff'],
+  wave:             ['#001144','#003388','#0055aa','#0088cc'],
+  raining:          ['#3355aa','#4466bb','#6688cc'],
+  'falling-leaves': ['#aa3300','#dd6600','#cc8800','#772200'],
+  river:            ['#005566','#007788','#009999','#44aaaa'],
+  'water-drop':     ['#0088cc','#00aaee','#55ccff'],
+};
+
+const BLOB_COUNT = 6;
 
 class LobbyBackground {
   constructor() {
-    this.scene = null;
-    this.camera = null;
-    this.renderer = null;
-    this.controls = null;
-    this.availableMaps = ['map1', 'map2']; // Define all available maps
-    this.mapModels = {}; // Store models for each map
-    this.currentMap = 'map1'; // Default active map
-    this.clock = new THREE.Clock();
-    this.loadingManager = new THREE.LoadingManager();
-    this.totalAssetsToLoad = this.availableMaps.length * 3; // 3 files per map (track, gates, decorations)
-    this.loadedAssets = 0;
-    
-    this.setupLoadingManager();
-    this.init();
-  }
-  
-  setupLoadingManager() {
-    // Setup loading manager events
-    this.loadingManager.onLoad = () => {
-      console.log('All map assets loaded successfully');
-      this.hideLoadingScreen();
-    };
-    
-    this.loadingManager.onProgress = (url, itemsLoaded, itemsTotal) => {
-      console.log(`Loaded ${itemsLoaded} of ${itemsTotal} files`);
-      // Update loading progress if needed
-    };
-    
-    this.loadingManager.onError = (url) => {
-      console.error('Error loading', url);
-    };
-  }
-  
-  hideLoadingScreen() {
-    setTimeout(() => {
-      const loadingScreen = document.getElementById('loading-screen');
-      if (loadingScreen) {
-        loadingScreen.style.opacity = '0';
-        
-        // Remove from DOM after fade out
-        setTimeout(() => {
-          loadingScreen.style.display = 'none';
-        }, 500);
-      }
-    }, 500);
-  }
-  
-  init() {
-    // Create scene
-    this.scene = new THREE.Scene();
-    setupCartoonySkybox(this.scene); 
-    
-    // Create camera
-    this.camera = new THREE.PerspectiveCamera(
-      60, 
-      window.innerWidth / window.innerHeight, 
-      0.1, 
-      1500
-    );
-    this.camera.position.set(0, 10, 40);
-    this.camera.lookAt(0, 0, 0);
-    
-    // Create renderer
-    this.renderer = new THREE.WebGLRenderer({ 
-      antialias: true,
-      alpha: false
-    });
-    this.renderer.setSize(window.innerWidth, window.innerHeight);
-    this.renderer.physicallyCorrectLights = true;
-    this.renderer.outputColorSpace = THREE.SRGBColorSpace;
-    this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    
-    // Add canvas to page as background
-    const canvas = this.renderer.domElement;
-    canvas.id = 'background-canvas';
-    canvas.style.position = 'fixed';
-    canvas.style.top = '0';
-    canvas.style.left = '0';
-    canvas.style.width = '100%';
-    canvas.style.height = '100%';
-    canvas.style.zIndex = '-1';
-    document.body.insertBefore(canvas, document.body.firstChild);
-    
-    // Add orbit controls for smooth camera movement
-    this.controls = new OrbitControls(this.camera, canvas);
-    this.controls.enableDamping = true;
-    this.controls.dampingFactor = 0.05;
-    this.controls.enableZoom = false;
-    this.controls.enablePan = false;
-    this.controls.autoRotate = true;
-    this.controls.autoRotateSpeed = 0.5;
-    
-    this.setupLights();
-    
-    // Load all available maps at once
-    this.preloadAllMaps();
+    this._time     = 0;
+    this._lastDraw = 0;
+    this._hidden   = document.hidden;
+    this._syncEffect();
+    this._init();
 
-    // Handle window resize
-    window.addEventListener('resize', this.onWindowResize.bind(this));
-    
-    // Start animation loop
-    this.animate();
-  }
-  
-  setupLights() {
-    // Ambient light
-    const ambientLight = new THREE.AmbientLight(0xffffff, 1.5);
-    this.scene.add(ambientLight);
-    
-    // Directional light (sun)
-    const directionalLight = new THREE.DirectionalLight(0xffffff, 3.5);
-    directionalLight.position.set(50, 100, 50);
-    
-    this.scene.add(directionalLight);
-  }
-  
-  // Preload all available maps
-  preloadAllMaps() {
-    console.log('Preloading all map assets...');
-    
-    // Create a group for each map to hold its models
-    this.availableMaps.forEach(mapId => {
-      this.mapModels[mapId] = {
-        group: new THREE.Group(),
-        loaded: false
-      };
-      
-      // Add the group to the scene but hide it initially
-      this.scene.add(this.mapModels[mapId].group);
-      this.mapModels[mapId].group.visible = mapId === this.currentMap;
-      
-      // Load the map's assets
-      this.loadMapAssets(mapId);
+    document.addEventListener('gloChanged', () => {
+      this._syncEffect();
+      this._buildBlobs();
+    });
+    document.addEventListener('visibilitychange', () => {
+      this._hidden = document.hidden;
     });
   }
-  
-  // Load assets for a specific map
-  loadMapAssets(mapId) {
-    console.log(`Loading assets for ${mapId}`);
-    const loader = new GLTFLoader(this.loadingManager);
-    const mapGroup = this.mapModels[mapId].group;
-    
-    // Load track
-    loader.load(`/models/maps/${mapId}/track.glb`, (gltf) => {
-      const track = gltf.scene;
-      track.traverse((child) => {
-        if (child.isMesh) {
-          child.receiveShadow = true;
-          child.castShadow = true;
-        }
-      });
-      mapGroup.add(track);
-      this.mapModels[mapId].track = track;
-    });
-    
-    // Load gates
-    loader.load(`/models/maps/${mapId}/gates.glb`, (gltf) => {
-      const gates = gltf.scene;
-      gates.traverse((child) => {
-        if (child.isMesh) {
-          child.castShadow = true;
-          child.receiveShadow = true;
-        }
-      });
-      mapGroup.add(gates);
-      this.mapModels[mapId].gates = gates;
-    });
-    
-    // Load decorations
-    loader.load(`/models/maps/${mapId}/decorations.glb`, (gltf) => {
-      const decorations = gltf.scene;
-      
-      decorations.traverse((child) => {
-        if (child.isMesh) {
-          // Force material to be MeshStandardMaterial
-          if (child.material) {
-            // Clone current material properties
-            const oldMat = child.material;
-            const color = oldMat.color ? oldMat.color.clone() : new THREE.Color(0xffffff);
-            const map = oldMat.map;
-            
-            // Create new standard material
-            const newMat = new THREE.MeshStandardMaterial({
-              color: color,
-              map: map,
-              metalness: 0.1,
-              roughness: 0.8
-            });
-            
-            // Replace the material
-            child.material = newMat;
-            child.material.needsUpdate = true;
-          }
-          
-          // Set shadow properties
-          child.castShadow = true;
-          child.receiveShadow = true;
-        }
-      });
-      
-      mapGroup.add(decorations);
-      this.mapModels[mapId].decorations = decorations;
-      
-      // Mark this map as fully loaded
-      this.mapModels[mapId].loaded = true;
-      
-      // Force a couple of renders to update materials
-      if (mapId === this.currentMap) {
-        setTimeout(() => {
-          for (let i = 0; i < 3; i++) {
-            this.renderer.render(this.scene, this.camera);
-          }
-        }, 100);
-      }
-    });
+
+  _syncEffect() {
+    this._effect = sessionStorage.getItem('gloEffect') || 'solid';
+    this._color  = sessionStorage.getItem('gloColor')  || '#ff0080';
+    this._color2 = sessionStorage.getItem('gloColor2') || '#00e5ff';
   }
-  
-  // Switch to a different map - instantly, since all maps are preloaded
-  updateMap(mapId) {
-    if (this.currentMap === mapId || !this.mapModels[mapId]) return;
-    
-    // Hide current map
-    if (this.mapModels[this.currentMap]) {
-      this.mapModels[this.currentMap].group.visible = false;
+
+  _getPalette() {
+    const fixed = THEME_PALETTE[this._effect];
+    if (fixed) return fixed;
+    if (this._effect === 'two-color') return [this._color, this._color2];
+    return [this._color];
+  }
+
+  _hexToRgb(hex) {
+    if (!hex || hex.length < 7) return [128, 0, 128];
+    return [
+      parseInt(hex.slice(1, 3), 16),
+      parseInt(hex.slice(3, 5), 16),
+      parseInt(hex.slice(5, 7), 16),
+    ];
+  }
+
+  _resolveRGBA(pidx, t, alpha) {
+    if (this._effect === 'rainbow' || this._effect === 'full-rainbow') {
+      const hue = (((t * 0.12 + pidx * 0.05) % 1) + 1) % 1 * 360;
+      return `hsla(${hue.toFixed(1)},100%,55%,${alpha})`;
     }
-    
-    // Show selected map
-    this.mapModels[mapId].group.visible = true;
-    this.currentMap = mapId;
-    
-    console.log(`Switched to ${mapId}`);
+    const pal = this._getPalette();
+    const nv  = (((t * 0.07 + pidx * 0.019) % 1) + 1) % 1 * pal.length;
+    const i   = Math.floor(nv) % pal.length;
+    const f   = nv - Math.floor(nv);
+    const a   = this._hexToRgb(pal[i]);
+    const b   = this._hexToRgb(pal[(i + 1) % pal.length]);
+    return `rgba(${Math.round(a[0]+(b[0]-a[0])*f)},${Math.round(a[1]+(b[1]-a[1])*f)},${Math.round(a[2]+(b[2]-a[2])*f)},${alpha})`;
   }
-  
-  onWindowResize() {
-    this.camera.aspect = window.innerWidth / window.innerHeight;
-    this.camera.updateProjectionMatrix();
-    this.renderer.setSize(window.innerWidth, window.innerHeight);
+
+  _init() {
+    this._canvas = document.createElement('canvas');
+    this._canvas.id = 'background-canvas';
+    Object.assign(this._canvas.style, {
+      position: 'fixed', top: '0', left: '0',
+      width: '100%', height: '100%',
+      zIndex: '-1', pointerEvents: 'none',
+    });
+    document.body.insertBefore(this._canvas, document.body.firstChild);
+    this._ctx = this._canvas.getContext('2d');
+    this._resize();
+    window.addEventListener('resize', () => this._resize());
+    this._buildBlobs();
+    this._tick();
+    // Dismiss loading screen (no assets to wait for)
+    setTimeout(() => {
+      const ls = document.getElementById('loading-screen');
+      if (ls) { ls.style.opacity = '0'; setTimeout(() => { ls.style.display = 'none'; }, 500); }
+    }, 300);
   }
-  
-  animate() {
-    requestAnimationFrame(this.animate.bind(this));
-    
-    // Update controls
-    this.controls.update();
-    
-    // Render scene
-    this.renderer.render(this.scene, this.camera);
+
+  _resize() {
+    // Render at CSS pixels to minimise GPU fill cost on HiDPI screens
+    this._w = this._canvas.width  = window.innerWidth;
+    this._h = this._canvas.height = window.innerHeight;
+    if (this._blobs) this._buildBlobs();
+  }
+
+  _buildBlobs() {
+    const w = this._w || window.innerWidth;
+    const h = this._h || window.innerHeight;
+    const r = Math.min(w, h);
+    this._blobs = Array.from({ length: BLOB_COUNT }, (_, i) => ({
+      bx:    w * (0.1 + (i / BLOB_COUNT) * 0.8),
+      by:    h * (0.15 + Math.random() * 0.7),
+      r:     r * (0.22 + Math.random() * 0.28),
+      phase: i * 1.047 + Math.random() * 0.5,
+      spd:   0.055 + Math.random() * 0.065,
+      ox:    w * 0.09,
+      oy:    h * 0.10,
+    }));
+  }
+
+  _tick() {
+    requestAnimationFrame(() => this._tick());
+    if (this._hidden) return;
+    const now = performance.now();
+    if (now - this._lastDraw < 50) return; // ≤20 fps
+    this._lastDraw = now;
+    this._time += 0.05;
+    this._draw();
+  }
+
+  _draw() {
+    const ctx = this._ctx;
+    const w   = this._w;
+    const h   = this._h;
+    const t   = this._time;
+    // Dark base
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.fillStyle = '#06060f';
+    ctx.fillRect(0, 0, w, h);
+    // Additive colour blobs
+    ctx.globalCompositeOperation = 'lighter';
+    this._blobs.forEach((b, i) => {
+      const sl  = t * b.spd + b.phase;
+      const cx  = b.bx + Math.sin(sl * 0.6)  * b.ox;
+      const cy  = b.by + Math.cos(sl * 0.45) * b.oy;
+      const col = this._resolveRGBA(i, t, 0.10);
+      const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, b.r);
+      grad.addColorStop(0, col);
+      grad.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(cx, cy, b.r, 0, Math.PI * 2);
+      ctx.fill();
+    });
+    ctx.globalCompositeOperation = 'source-over';
   }
 }
 
-// Add this function to your code, before or after setupEnhancedLighting()
-function setupCartoonySkybox(scene) {
-  // Create shader materials for gradient skybox
-  const skyGeo = new THREE.SphereGeometry(1000, 32, 32); // Large sphere to contain the scene
-  
-  // Shader material for gradient
-  const uniforms = {
-    topColor: { value: new THREE.Color(0x88ccff) },  // Light blue at top
-    bottomColor: { value: new THREE.Color(0xbbe2ff) }, // White/light color at horizon
-    offset: { value: 0 },
-    exponent: { value: 0.6 }
-  };
-  
-  const skyMat = new THREE.ShaderMaterial({
-    uniforms: uniforms,
-    vertexShader: `
-      varying vec3 vWorldPosition;
-      void main() {
-        vec4 worldPosition = modelMatrix * vec4(position, 1.0);
-        vWorldPosition = worldPosition.xyz;
-        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-      }
-    `,
-    fragmentShader: `
-      uniform vec3 topColor;
-      uniform vec3 bottomColor;
-      uniform float offset;
-      uniform float exponent;
-      varying vec3 vWorldPosition;
-      void main() {
-        float h = normalize(vWorldPosition + offset).y;
-        float t = max(pow(max(h, 0.0), exponent), 0.0);
-        gl_FragColor = vec4(mix(bottomColor, topColor, t), 1.0);
-      }
-    `,
-    side: THREE.BackSide // Render the inside of the sphere
-  });
-  
-  const sky = new THREE.Mesh(skyGeo, skyMat);
-  scene.add(sky);
-}
-
-// Export the background class and make it available globally
-window.LobbyBackground = LobbyBackground;
 export default LobbyBackground;

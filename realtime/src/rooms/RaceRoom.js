@@ -2,6 +2,7 @@ import { Room } from "@colyseus/core";
 import { RaceState } from "../schema/RaceState.js";
 import { PlayerState } from "../schema/PlayerState.js";
 import { EntityState } from "../schema/EntityState.js";
+import { grantWeapon, handleFireWeapon, tickProjectiles } from "../combat.js";
 
 const TICK_RATE = 1000 / 60;
 const ACCEL = 22;
@@ -21,9 +22,12 @@ export class RaceRoom extends Room {
   onCreate(options = {}) {
     const state = new RaceState();
     state.trackId = options.trackId || "cocoa_temple";
+    state.totalLaps = Math.min(Math.max(Number(options.totalLaps) || 3, 1), 10);
     this.setState(state);
 
     this.maxClients = Math.min(Number(options.maxPlayers) || 12, 12);
+    // Minimum elapsed time (ms) before a new lap is accepted — prevents double-trigger
+    this._minLapMs = 15000;
     this.inputBySession = new Map();
     this.countdownActive = false;
 
@@ -78,48 +82,160 @@ export class RaceRoom extends Room {
       });
     });
 
+    this.onMessage("checkpoint", (client, data) => {
+      if (!this.state.started) return;
+      const player = this.state.players.get(client.sessionId);
+      if (!player || player.finished) return;
+
+      const now = this.state.serverTime;
+      const sinceLastLap = now - (player._lastLapAt || 0);
+
+      // Only accept the finish-line checkpoint (idx 0) and enforce minimum lap time
+      const idx = Number(data.idx || 0);
+      if (idx !== 0) return; // currently only finish-line supported
+      if (sinceLastLap < this._minLapMs && player.lap > 0) return; // anti-spam
+
+      player._lastLapAt = now;
+
+      if (player.lap === 0) {
+        // First crossing after race starts — begin lap 1
+        player.lap = 1;
+        player.checkpointIdx = 0;
+        client.send("lapStarted", { lap: 1, totalLaps: this.state.totalLaps });
+        return;
+      }
+
+      // Subsequent crossings — complete the current lap
+      player.lap += 1;
+      player.checkpointIdx = 0;
+
+      if (player.lap > this.state.totalLaps) {
+        // Player finished the race
+        player.finished = true;
+        player.raceFinishTime = now;
+        this.state.finishCount += 1;
+        const position = this.state.finishCount;
+
+        this.broadcast("raceFinished", {
+          sessionId: client.sessionId,
+          name: player.name,
+          position,
+          raceFinishTime: now,
+        });
+
+        client.send("youFinished", { position, raceFinishTime: now });
+
+        // If all players finished, end the match
+        const totalPlayers = this.state.players.size;
+        if (position >= totalPlayers) {
+          this._endRace();
+        }
+        return;
+      }
+
+      this.broadcast("lapComplete", {
+        sessionId: client.sessionId,
+        name: player.name,
+        lap: player.lap,
+        totalLaps: this.state.totalLaps,
+      });
+      client.send("yourLap", { lap: player.lap, totalLaps: this.state.totalLaps });
+    });
+
     this.onMessage("pickupItem", (client, data) => {
         const entityId = data.entityId;
         const e = this.state.entities.get(entityId);
+        const player = this.state.players.get(client.sessionId);
         
-        if (e && e.type === "item_box" && e.active) {
+        if (e && e.type === "item_box" && e.active && player) {
             // "Consume" the item box
             e.active = false;
             e.respawnTimer = 10000; // 10 seconds respawn
             
-            // Randomly pick a weapon for now
-            const weapons = ["missile", "bowling_ball", "shield"];
-            const rolled = weapons[Math.floor(Math.random() * weapons.length)];
+            // Grant weapon via combat system
+            const rolled = grantWeapon(player);
             
             // Tell the specific client what they got
             client.send("itemReceived", { weapon: rolled });
         }
     });
 
+    this.onMessage("fireWeapon", (client) => {
+        const player = this.state.players.get(client.sessionId);
+        if (!player || !this.state.started) return;
+
+        const result = handleFireWeapon(player, this.state.entities, this.state.players);
+        if (!result) return;
+
+        if (result.projectile) {
+            const proj = result.projectile;
+            this.broadcast("projectileFired", {
+                id: proj.id,
+                subType: proj.subType,
+                ownerId: proj.ownerId,
+                x: proj.x, y: proj.y, z: proj.z,
+                vx: proj.vx, vy: proj.vy, vz: proj.vz,
+            });
+        }
+        if (result.effectApplied) {
+            this.broadcast("effectApplied", result.effectApplied);
+        }
+    });
+
     this.setSimulationInterval((deltaTime) => this.update(deltaTime), TICK_RATE);
-    console.log(`[race_room] created roomId=${this.roomId} track=${state.trackId} maxClients=${this.maxClients}`);
+    console.log(`[race_room] created roomId=${this.roomId} track=${state.trackId} laps=${state.totalLaps} maxClients=${this.maxClients}`);
 
     this.spawnItemBoxes();
   }
 
+  _endRace() {
+    // Collect final standings sorted by finish time (finished first) then score
+    const standings = [];
+    this.state.players.forEach((p) => {
+      standings.push({
+        sessionId: p.id,
+        name: p.name,
+        lap: p.lap,
+        finished: p.finished,
+        raceFinishTime: p.raceFinishTime,
+      });
+    });
+    standings.sort((a, b) => {
+      if (a.finished && !b.finished) return -1;
+      if (!a.finished && b.finished) return 1;
+      if (a.finished && b.finished) return a.raceFinishTime - b.raceFinishTime;
+      return b.lap - a.lap;
+    });
+
+    this.broadcast("matchEnd", { mode: "race", standings });
+    this.state.started = false;
+    console.log(`[race_room] race ended — ${standings.length} finishers`);
+  }
+
   spawnItemBoxes() {
-    // Generate some basic placeholder item boxes on an oval or line
-    // In the future this can read the track's glTF dummy nodes
-    for (let i = 0; i < 8; i++) {
-        const angle = (Math.PI * 2) * (i / 8);
-        const radius = 20; // Some random radius
-        const id = `box_${i}`;
-        
+    // Spawn item boxes in rows at known positions relative to the track start.
+    // Two rows of 4 boxes offset either side of the start-line so karts pass
+    // through them naturally on each lap.
+    const rows = [
+      { zOff:  30, count: 4, spread: 12 },
+      { zOff:  80, count: 4, spread: 12 },
+      { zOff: 150, count: 4, spread: 10 },
+      { zOff: -30, count: 3, spread: 10 }, // behind start line
+    ];
+    let i = 0;
+    for (const row of rows) {
+      for (let s = 0; s < row.count; s++) {
+        const id = `box_${i++}`;
         const box = new EntityState();
         box.id = id;
         box.type = "item_box";
         box.active = true;
-        // spread them out
-        box.x = Math.cos(angle) * radius;
-        box.y = 2.0; // floating a bit above ground
-        box.z = Math.sin(angle) * radius;
-
+        const tOff = (s / (row.count - 1 || 1) - 0.5) * row.spread;
+        box.x = tOff;
+        box.y = 2.5;
+        box.z = row.zOff;
         this.state.entities.set(id, box);
+      }
     }
   }
 
@@ -132,6 +248,10 @@ export class RaceRoom extends Room {
     p.gloEffect = options.gloEffect || "solid";
     p.gloColor = options.gloColor || "#ff0080";
     p.gloColor2 = options.gloColor2 || "#00e5ff";
+
+    // Lap tracking — initialise _lastLapAt in the past so first trigger
+    // is never blocked by the minimum-lap-time guard.
+    p._lastLapAt = -this._minLapMs;
 
     const idx = this.state.players.size;
     const spawn = this.getSpawnPoint(this.maxClients, idx);
@@ -218,7 +338,7 @@ export class RaceRoom extends Room {
 
     // Handle entity respawns and updates
     this.state.entities.forEach((e) => {
-        if (!e.active && e.respawnTimer > 0) {
+        if (!e.active && e.type === "item_box" && e.respawnTimer > 0) {
             e.respawnTimer -= deltaTime;
             if (e.respawnTimer <= 0) {
                 e.respawnTimer = 0;
@@ -226,5 +346,26 @@ export class RaceRoom extends Room {
             }
         }
     });
+
+    // Tick projectiles — movement, lifespan, hit detection
+    const hits = tickProjectiles(this.state.entities, this.state.players, deltaTime);
+    for (const { projectile, victim, shieldAbsorbed } of hits) {
+        if (shieldAbsorbed) {
+            this.broadcast("shieldAbsorbed", {
+                projectileId: projectile.id,
+                victimId: victim.id,
+            });
+            continue;
+        }
+        victim.health = Math.max(0, victim.health - projectile.damage);
+        this.broadcast("projectileHit", {
+            projectileId: projectile.id,
+            victimId: victim.id,
+            subType: projectile.subType,
+            damage: projectile.damage,
+            remainingHealth: victim.health,
+            effect: projectile.subType,
+        });
+    }
   }
 }

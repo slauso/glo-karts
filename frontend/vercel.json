@@ -4,9 +4,8 @@
   "framework": "vite",
   "installCommand": "npm install",
   "rewrites": [
-    {
-      "source": "/(.*)",
-      "destination": "/index.html"
-    }
+    { "source": "/game.html",     "destination": "/game.html"     },
+    { "source": "/battle.html",   "destination": "/battle.html"   },
+    { "source": "/realtime.html", "destination": "/realtime.html" }
   ]
 }

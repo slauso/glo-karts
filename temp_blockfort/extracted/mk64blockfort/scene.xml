@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<scene>
+  <track model="mk64blockfort_track.spm" x="0" y="0" z="0"/>
+  <sky-box texture="skytop.png skybottom.png sky.png sky.png sky.png sky.png" />
+  <camera far="1000.0"/>
+  <item id="Empty" x="70.85" y="3.60" z="114.55" />
+  <item id="Empty.001" x="74.70" y="3.60" z="118.29" />
+  <item id="Empty.002" x="67.01" y="3.60" z="118.81" />
+  <item id="Empty.003" x="67.07" y="3.60" z="8.17" />
+  <item id="Empty.004" x="74.79" y="3.60" z="7.68" />
+  <item id="Empty.005" x="71.00" y="3.60" z="12.09" />
+  <item id="Empty.008" x="14.34" y="3.60" z="60.29" />
+  <item id="Empty.007" x="18.74" y="3.60" z="64.23" />
+  <item id="Empty.006" x="14.88" y="3.60" z="68.08" />
+  <item id="Empty.011" x="125.45" y="3.60" z="68.11" />
+  <item id="Empty.010" x="121.14" y="3.60" z="64.22" />
+  <item id="Empty.009" x="124.97" y="3.60" z="60.38" />
+  <item id="Empty.012" x="78.80" y="6.92" z="75.61" />
+  <item id="Empty.013" x="84.50" y="6.92" z="78.15" />
+  <item id="Empty.015" x="78.80" y="6.92" z="50.73" />
+  <item id="Empty.014" x="84.50" y="6.92" z="48.54" />
+  <item id="Empty.017" x="62.10" y="6.92" z="50.64" />
+  <item id="Empty.016" x="56.40" y="6.92" z="48.32" />
+  <item id="Empty.019" x="56.40" y="6.92" z="77.79" />
+  <item id="Empty.018" x="62.10" y="6.92" z="75.61" />
+  <item id="Empty.021" x="43.64" y="10.41" z="93.77" />
+  <item id="Empty.020" x="37.94" y="10.41" z="97.86" />
+  <item id="Empty.023" x="104.21" y="10.41" z="94.79" />
+  <item id="Empty.022" x="98.51" y="10.41" z="90.70" />
+  <item id="Empty.025" x="97.37" y="10.41" z="37.08" />
+  <item id="Empty.024" x="103.06" y="10.41" z="33.00" />
+  <item id="Empty.027" x="38.33" y="10.41" z="33.00" />
+  <item id="Empty.026" x="43.56" y="10.41" z="37.08" />
+  <default-start karts-per-row     ="1"
+                 forwards-distance ="1.50"
+                 sidewards-distance="1.80"
+                 upwards-distance  ="1.10"/>
+  <start x="70.59" y="4.89" z="18.84" h="-0.00"/>
+  <start x="69.62" y="4.89" z="108.85" h="-180.00"/>
+  <start x="116.61" y="4.89" z="63.91" h="-90.00"/>
+  <start x="22.50" y="4.89" z="64.46" h="90.00"/>
+  <start x="39.72" y="10.40" z="93.99" h="-180.00"/>
+  <start x="99.40" y="10.40" z="34.94" h="-0.00"/>
+  <start x="100.03" y="10.40" z="93.99" h="-180.00"/>
+  <start x="15.53" y="4.89" z="8.75" h="-0.00"/>
+  <start x="125.94" y="4.89" z="119.78" h="-180.00"/>
+</scene>

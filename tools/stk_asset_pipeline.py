@@ -21,7 +21,7 @@ Curated asset selection (avoids bloat):
          battleIsland, citadel, snowtuxpeak_battle, farm
 """
 
-import argparse, json, os, struct, sys, zipfile
+import argparse, json, os, struct, sys, zipfile, xml.etree.ElementTree as ET
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -141,12 +141,13 @@ def parse_spm(data: bytes, tex_dir: Path) -> list[dict]:
             uv_two = bool(mat['tex2'])
             idx_size = 4 if vc > 65535 else 2 if vc > 255 else 1
 
-            positions, uvs, colors = [], [], []
+            positions, normals, uvs, colors = [], [], [], []
 
             for _ in range(vc):
                 x, y, z = struct.unpack('<fff', f.read(12))
                 positions.append((x, y, z))
                 if read_normal:
+                    # SPM normals are 10-10-10-2 packed uint32 — skip and recompute in Three.js
                     f.read(4)
                 if read_vcolor:
                     ci = struct.unpack('<B', f.read(1))[0]
@@ -173,18 +174,50 @@ def parse_spm(data: bytes, tex_dir: Path) -> list[dict]:
             else:
                 indices = list(struct.unpack(f'<{ic}B', f.read(ic)))
 
+            # SPM (Irrlicht left-handed, CW) → Three.js/GLTF (right-handed, CCW)
+            # Reverse winding of each triangle so faces cull correctly
+            for ti in range(0, len(indices), 3):
+                indices[ti + 1], indices[ti + 2] = indices[ti + 2], indices[ti + 1]
+
             meshes.append({
                 'positions': positions,
+                'normals':   [],  # skipped — recomputed from geometry in Three.js
                 'uvs': uvs,
                 'colors': colors,
                 'indices': indices,
                 'tex1': mat['tex1'],
+                '_translation': None,  # set by caller for positioned parts (wheels etc.)
             })
 
         if spm_type == 'SPMS':
             f.read(24)
 
     return meshes
+
+# ── kart.xml Parser ─────────────────────────────────────────────────────────
+def parse_kart_xml(data: bytes) -> dict:
+    """Parse kart.xml bytes -> {'body': 'file.spm', 'wheels': [(name, model, (x,y,z)), ...]}"""
+    try:
+        root = ET.fromstring(data.decode('utf-8', errors='replace'))
+    except ET.ParseError:
+        return {}
+    body = root.get('model-file', '')
+    wheels = []
+    wheels_node = root.find('wheels')
+    if wheels_node is not None:
+        for wname in ('front-right', 'front-left', 'rear-right', 'rear-left'):
+            w = wheels_node.find(wname)
+            if w is not None:
+                model = w.get('model', '')
+                pos_str = w.get('position', '0 0 0')
+                try:
+                    x, y, z = [float(v) for v in pos_str.split()]
+                except ValueError:
+                    x, y, z = 0.0, 0.0, 0.0
+                if model:
+                    wheels.append((wname, model, (x, y, z)))
+    return {'body': body, 'wheels': wheels}
+
 
 # ── GLB Builder ──────────────────────────────────────────────────────────────
 def build_glb(meshes: list, tex_lut: dict) -> bytes:
@@ -226,6 +259,7 @@ def build_glb(meshes: list, tex_lut: dict) -> bytes:
         mat_i = len(materials)
         materials.append({
             'name': tex_name,
+            'doubleSided': True,
             'pbrMetallicRoughness': {
                 'baseColorTexture': {'index': tex_i},
                 'metallicFactor': 0.0,
@@ -248,6 +282,11 @@ def build_glb(meshes: list, tex_lut: dict) -> bytes:
         acc_p = add_acc(bv_p, len(pos), FLOAT, 'VEC3', mn, mx)
         attrs = {'POSITION': acc_p}
 
+        # Include normals if available (SPM SNORM8 decoded to float)
+        if m.get('normals'):
+            flat_n = b''.join(pf(*v) for v in m['normals'])
+            attrs['NORMAL'] = add_acc(add_bv(flat_n, ARRAY_BUFFER), len(m['normals']), FLOAT, 'VEC3')
+
         if m['uvs']:
             flat_uv = b''.join(pf(*v) for v in m['uvs'])
             attrs['TEXCOORD_0'] = add_acc(add_bv(flat_uv, ARRAY_BUFFER), len(m['uvs']), FLOAT, 'VEC2')
@@ -267,9 +306,19 @@ def build_glb(meshes: list, tex_lut: dict) -> bytes:
         prim = {'attributes': attrs, 'indices': acc_i, 'mode': 4}
         mat_i = get_mat(m['tex1'])
         if mat_i is not None: prim['material'] = mat_i
-        gltf_meshes.append({'name': f'mesh_{mi}', 'primitives': [prim]})
+        mesh_name = m.get('_name', f'mesh_{mi}')
+        gltf_meshes.append({'name': mesh_name, 'primitives': [prim]})
 
-    nodes = [{'mesh': i} for i in range(len(gltf_meshes))]
+    nodes = []
+    for i, m in enumerate(meshes):
+        node = {'mesh': i}
+        t = m.get('_translation')
+        if t is not None:
+            node['translation'] = list(t)  # [x, y, z] from kart.xml
+        name = m.get('_name')
+        if name:
+            node['name'] = name
+        nodes.append(node)
     gltf = {
         'asset': {'version': '2.0', 'generator': 'stk-asset-pipeline'},
         'scene': 0,
@@ -347,6 +396,97 @@ def get_spm_prefix_from_zip(namelist: list) -> str:
     return ''
 
 
+def process_spm_from_zip(zf, spm_path):
+    """Read and parse a single SPM from zip. Returns list of mesh dicts or []."""
+    try:
+        with zf.open(spm_path) as fh:
+            spm_data = fh.read()
+        return parse_spm(spm_data, None)
+    except Exception as e:
+        print(f'  [WARN] {spm_path}: {e}')
+        return []
+
+
+def process_kart(zf, namelist, zip_prefix, item_id, display_name, item_profile, out_root):
+    """Convert a single kart using kart.xml for proper wheel positioning."""
+    dir_prefix = f'{zip_prefix}data/karts/{item_id}/'
+    dir_entries = [n for n in namelist if n.startswith(dir_prefix)]
+    if not dir_entries:
+        print(f'  [SKIP] {item_id}: not found in zip')
+        return None
+
+    tex_lut = load_textures_from_zip(zf, namelist, dir_prefix)
+
+    # Parse kart.xml
+    kart_xml_path = f'{dir_prefix}kart.xml'
+    kart_info = {}
+    if kart_xml_path in namelist:
+        try:
+            with zf.open(kart_xml_path) as fh:
+                kart_info = parse_kart_xml(fh.read())
+        except Exception as e:
+            print(f'  [WARN] {item_id} kart.xml parse: {e}')
+
+    combined_meshes = []
+
+    # Load body SPM (defined in kart.xml, else fall back to guessing)
+    body_model = kart_info.get('body', '')
+    if not body_model:
+        # Fallback: the SPM file whose name contains the kart ID
+        for entry in dir_entries:
+            bn = Path(entry).name.lower()
+            if entry.lower().endswith('.spm') and item_id.lower() in bn:
+                body_model = Path(entry).name
+                break
+    if not body_model:
+        spm_files = sorted([n for n in dir_entries if n.lower().endswith('.spm')])
+        if spm_files:
+            body_model = Path(spm_files[0]).name
+
+    if body_model:
+        body_path = f'{dir_prefix}{body_model}'
+        if body_path in namelist:
+            body_meshes = process_spm_from_zip(zf, body_path)
+            for m in body_meshes:
+                m['_name'] = 'body'
+                m['_translation'] = None  # at origin
+            combined_meshes.extend(body_meshes)
+        else:
+            print(f'  [WARN] {item_id}: body model {body_model} not found in zip')
+
+    # Load wheel SPMs at their kart.xml positions
+    wheel_names = ['front-right', 'front-left', 'rear-right', 'rear-left']
+    for wname, wmodel, wpos in kart_info.get('wheels', []):
+        wheel_path = f'{dir_prefix}{wmodel}'
+        if wheel_path not in namelist:
+            continue
+        wheel_meshes = process_spm_from_zip(zf, wheel_path)
+        for m in wheel_meshes:
+            m['_name'] = f'wheel-{wname}'
+            m['_translation'] = wpos  # (x, y, z) from kart.xml
+        combined_meshes.extend(wheel_meshes)
+
+    if not combined_meshes:
+        print(f'  [SKIP] {item_id}: no valid meshes')
+        return None
+
+    glb_data = build_glb(combined_meshes, tex_lut)
+    out_dir = out_root / 'karts' / item_id
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out_path = out_dir / 'kart.glb'
+    out_path.write_bytes(glb_data)
+
+    wheel_count = len(kart_info.get('wheels', []))
+    size_kb = len(glb_data) // 1024
+    print(f'  [OK] {item_id} -> kart.glb ({size_kb:,} KB, body+{wheel_count} wheels, {len(combined_meshes)} meshes)')
+    return {
+        'id': item_id,
+        'name': display_name,
+        'sizeBytes': len(glb_data),
+        'profile': item_profile,
+    }
+
+
 def process_category(zf, namelist, zip_prefix, category, items, out_root, profile_filter, is_arena=False):
     """Convert selected karts or tracks from zip to GLB."""
     results = []
@@ -356,10 +496,14 @@ def process_category(zf, namelist, zip_prefix, category, items, out_root, profil
         if profile_index(item_profile) > prof_limit:
             continue
 
+        # Karts use kart.xml-aware processing for correct wheel positions
         if category == 'karts':
-            dir_prefix = f'{zip_prefix}data/karts/{item_id}/'
-        else:
-            dir_prefix = f'{zip_prefix}data/tracks/{item_id}/'
+            result = process_kart(zf, namelist, zip_prefix, item_id, display_name, item_profile, out_root)
+            if result:
+                results.append(result)
+            continue
+
+        dir_prefix = f'{zip_prefix}data/tracks/{item_id}/'
 
         # Check directory exists in zip
         dir_entries = [n for n in namelist if n.startswith(dir_prefix)]
@@ -375,21 +519,17 @@ def process_category(zf, namelist, zip_prefix, category, items, out_root, profil
             print(f'  [SKIP] {item_id}: no .spm files')
             continue
 
-        # Prefer main kart/track/arena model
+        # Prefer main track/arena model
         def priority_key(p):
             bn = Path(p).name.lower()
-            if category == 'karts':
-                if item_id.lower() in bn: return 0
-                if 'kart' in bn: return 1
-            else:
-                if 'track' in bn: return 0
-                if 'arena' in bn: return 1
-                if item_id.lower() in bn: return 2
-                if 'scene' in bn: return 3
+            if 'track' in bn: return 0
+            if 'arena' in bn: return 1
+            if item_id.lower() in bn: return 2
+            if 'scene' in bn: return 3
             return 10
         spm_candidates.sort(key=lambda p: (priority_key(p), len(p)))
 
-        # Combine all meshes from all SPM files for this asset (for tracks)
+        # Combine all meshes from all SPM files for this asset
         combined_meshes = []
         for spm_path in spm_candidates[:5]:  # limit to 5 spm files per asset
             try:
@@ -397,7 +537,7 @@ def process_category(zf, namelist, zip_prefix, category, items, out_root, profil
                     spm_data = fh.read()
                 meshes = parse_spm(spm_data, None)
                 combined_meshes.extend(meshes)
-            except Exception as e:
+            except Exception:
                 pass  # skip bad SPMs
 
         if not combined_meshes:
@@ -406,10 +546,7 @@ def process_category(zf, namelist, zip_prefix, category, items, out_root, profil
 
         glb_data = build_glb(combined_meshes, tex_lut)
 
-        if category == 'karts':
-            out_dir = out_root / 'karts' / item_id
-            glb_name = 'kart.glb'
-        elif is_arena:
+        if is_arena:
             out_dir = out_root / 'arenas' / item_id
             glb_name = 'arena.glb'
         else:

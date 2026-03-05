@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { hasTrackOutline, getTrackScale } from './track-data.js';
 
 // Store minimap state
 const minimap = {
@@ -10,7 +11,8 @@ const minimap = {
   scale: 1,
   offsetX: 0,
   offsetY: 0,
-  mapId: 'map1' // Default map ID
+  mapId: 'map1', // Default map ID
+  worldScale: 8,  // Track world scale (8 for custom maps, 1 for STK)
 };
 
 // Create the minimap canvas
@@ -19,6 +21,9 @@ export function createMinimap(mapId) {
   if (mapId) {
     minimap.mapId = mapId;
   }
+  
+  // Store the world scale for this track
+  minimap.worldScale = getTrackScale(mapId);
   
   // Create canvas element
   minimap.canvas = document.createElement('canvas');
@@ -52,6 +57,12 @@ export function createMinimap(mapId) {
 
 // Load the Bezier curve model for the track
 function loadTrackCurve(mapId) {
+  // STK tracks don't have track-outline.glb — we'll use the track model fallback
+  if (!hasTrackOutline(mapId)) {
+    console.log(`Skipping track outline for ${mapId} (will use track model fallback)`);
+    return;
+  }
+
   const loader = new GLTFLoader();
   
   // Use the specified map's track outline
@@ -285,7 +296,8 @@ export function updateMinimapPlayers(localPlayer, opponents) {
     Object.values(opponents).forEach(opponent => {
       // Only draw if the model exists and is visible
       if (opponent.model && opponent.model.visible) {
-        const { x, y } = worldToMinimap(opponent.model.position.x/8, opponent.model.position.z/8);
+        const ws = minimap.worldScale || 8;
+        const { x, y } = worldToMinimap(opponent.model.position.x/ws, opponent.model.position.z/ws);
         
         // Draw white circle for opponents
         minimap.ctx.beginPath();
@@ -298,7 +310,8 @@ export function updateMinimapPlayers(localPlayer, opponents) {
   
   // Draw local player as a blue dot
   if (localPlayer) {
-    const { x, y } = worldToMinimap(localPlayer.position.x/8, localPlayer.position.z/8);
+    const ws = minimap.worldScale || 8;
+    const { x, y } = worldToMinimap(localPlayer.position.x/ws, localPlayer.position.z/ws);
     
     // Draw blue circle for local player
     minimap.ctx.beginPath();

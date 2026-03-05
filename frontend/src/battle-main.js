@@ -18,11 +18,40 @@ import {
 import { loadArena } from './modules/battle/arena.js';
 import { createHealthSystem } from './modules/battle/health.js';
 import { initWeapons, attemptFire, getWeaponDef, hostBroadcastPickups } from './modules/battle/weapons.js';
+import {
+  playTrackMusic, playSFX, playWeaponFireSFX,
+  startEngineSound, updateEnginePitch, stopEngineSound,
+  playCountdownSequence, stopBGM, disposeAudio,
+} from './modules/game-audio.js';
+import { initParticles, updateParticles, emitHitBurst } from './modules/particles.js';
+import { initPostProcessing } from './modules/post-processing.js';
 
 console.log('🎮 BATTLE MODE LOADING...');
 
 function getCurrentPlayerId() {
   return sessionStorage.getItem('myPlayerId') || localStorage.getItem('myPlayerId');
+}
+
+/**
+ * Blink the kart model to show invulnerability after a respawn.
+ * Toggles mesh visibility 8 times over 1.6 seconds then restores fully visible.
+ * @param {THREE.Object3D|null} model - the car root mesh (may be null if not yet loaded)
+ */
+function _doRespawnBlink(model) {
+  if (!model) return;
+  let count = 0;
+  const BLINKS = 8;
+  const INTERVAL_MS = 200;
+  const id = setInterval(() => {
+    model.traverse((child) => {
+      if (child.isMesh) child.visible = count % 2 === 0;
+    });
+    count++;
+    if (count > BLINKS * 2) {
+      clearInterval(id);
+      model.traverse((child) => { if (child.isMesh) child.visible = true; });
+    }
+  }, INTERVAL_MS);
 }
 
 // Check for game config from lobby
@@ -104,6 +133,7 @@ let healthSystem = null;
 let arenaInfo = null; // populated after loadArena
 let playerSpawnIndex = 0; // index into arena spawn points
 let weaponsSystem = null; // weapons module interface
+let battlePostProcessing = null; // bloom + SMAA pipeline
 let ctfState = null;
 let ctfSyncClock = 0;
 
@@ -134,6 +164,7 @@ async function init() {
     scene = new THREE.Scene();
     scene.background = new THREE.Color(0x87ceeb); // Sky blue
     scene.fog = new THREE.Fog(0x87ceeb, 0, 500);
+    initParticles(scene); // Initialize particle / VFX pools
 
     // Camera
     camera = new THREE.PerspectiveCamera(
@@ -154,6 +185,10 @@ async function init() {
   renderer.toneMappingExposure = 1.0;
     const appEl = document.getElementById('app');
     appEl.appendChild(renderer.domElement);
+
+    // Post-processing (bloom + SMAA)
+    battlePostProcessing = initPostProcessing(renderer, scene, camera);
+
     // Ensure canvas can receive keyboard focus
     renderer.domElement.tabIndex = 1;
     renderer.domElement.addEventListener('click', () => renderer.domElement.focus());
@@ -223,7 +258,9 @@ async function init() {
       onRespawn: () => {
         // Re-apply spawn transform on respawn
         applySpawnTransform(true);
-        // TODO: Add respawn FX (blink, sound)
+        // Respawn FX: blink the car model + play respawn sound
+        playSFX('respawn');
+        _doRespawnBlink(carModel);
       },
       maxHealth: battleState.maxHealth,
       invulnMs: 2000,
@@ -389,13 +426,17 @@ function handleWeaponFire() {
   }
   // Host or singleplayer fires locally
   const fired = attemptFire(carModel, battleState);
-  if (fired) console.log('🔫 Fired weapon');
+  if (fired) {
+    console.log('🔫 Fired weapon');
+    playWeaponFireSFX(battleState.currentWeapon || 'missile');
+  }
 }
 
 function onWindowResize() {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
+  if (battlePostProcessing) battlePostProcessing.resize(window.innerWidth, window.innerHeight);
 }
 
 // Apply the arena spawn transform to the player's car
@@ -427,6 +468,11 @@ function applySpawnTransform(resetVelocity = false) {
 
 // ----- Health & Respawn (incremental) -----
 function applyDamage(amount) {
+  // Hit VFX & SFX on local player
+  if (carModel) {
+    emitHitBurst(carModel.position, 0xff2222, 15);
+    playSFX('crash');
+  }
   // Prefer modular health system if available
   if (healthSystem) {
     const st = healthSystem.damage(amount);
@@ -494,6 +540,10 @@ function startCountdown() {
   createCountdownOverlay();
   let remaining = 3;
   updateCountdownOverlay(remaining);
+
+  // Play countdown audio SFX (3-2-1-GO)
+  playCountdownSequence();
+
   const interval = setInterval(() => {
     remaining -= 1;
     if (remaining > 0) {
@@ -503,6 +553,12 @@ function startCountdown() {
       battleState.battleStarted = true;
       updateCountdownOverlay('GO!');
       setTimeout(removeCountdownOverlay, 600);
+
+      // Start engine sound & arena BGM
+      startEngineSound();
+      const arenaId = (gameConfig && (gameConfig.arenaId || gameConfig.battleArena))
+        ? (gameConfig.arenaId || gameConfig.battleArena) : 'battleisland';
+      playTrackMusic(arenaId);
     }
   }, 1000);
 }
@@ -842,6 +898,7 @@ function animate() {
       // Update speed for debug HUD
       if (physicsResult && typeof physicsResult.currentSpeed === 'number') {
         currentSpeedKPH = physicsResult.currentSpeed;
+        updateEnginePitch(currentSpeedKPH);
       }
 
       // Update car rendering from physics
@@ -890,8 +947,15 @@ function animate() {
     updateDamageNumbers(deltaTime);
   }
 
-  // Render
-  renderer.render(scene, camera);
+  // Update particles (drift sparks, boost flames, hit effects)
+  updateParticles(deltaTime, carModel, kartState);
+
+  // Render through post-processing pipeline (bloom + SMAA)
+  if (battlePostProcessing) {
+    battlePostProcessing.composer.render();
+  } else {
+    renderer.render(scene, camera);
+  }
 }
 
 // Debug HUD updater
@@ -1055,7 +1119,8 @@ window.onWeaponFireRequestFrom = function(playerId) {
 };
 
 // Receive weapon grant (guest)
-window.receiveWeaponGrant = function(weaponId) {
+window.addEventListener('weaponEquipped', (e) => { window.receiveWeaponGrant(e.detail.weapon); });
+  window.receiveWeaponGrant = function(weaponId) {
   const def = getWeaponDef(weaponId);
   if (def) {
     battleState.currentWeapon = def;

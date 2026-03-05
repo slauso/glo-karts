@@ -11,7 +11,16 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test:lobby:regression": "node scripts/lobby-ux-regression.mjs"
+    "test:lobby:regression": "node scripts/lobby-ux-regression.mjs",
+    "test": "npx playwright test",
+    "test:spawn": "npx playwright test tests/01-spawn-sequence.spec.js",
+    "test:maps": "npx playwright test tests/02-map-viability.spec.js",
+    "test:pvp": "npx playwright test tests/03-pvp-session.spec.js",
+    "test:scaling": "npx playwright test tests/04-kart-scaling.spec.js",
+    "test:smoke": "npx playwright test tests/phase1-smoke.spec.js",
+    "test:full": "npx playwright test && node scripts/apply-map-audit.mjs --dry-run",
+    "audit:maps": "npx playwright test tests/02-map-viability.spec.js && node scripts/apply-map-audit.mjs",
+    "audit:maps:dryrun": "npx playwright test tests/02-map-viability.spec.js && node scripts/apply-map-audit.mjs --dry-run"
   },
   "devDependencies": {
     "@playwright/test": "^1.58.2",

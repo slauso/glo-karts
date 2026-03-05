@@ -75,10 +75,14 @@ export class LobbyRoom extends Room {
       const playerCount = this.state.players.size;
       if (playerCount < 1) return;
 
+      // Auto-ready the host when they initiate start
+      player.isReady = true;
+
       if (this.state.gameMode === "battle") {
         const everyoneReady = [...this.state.players.values()].every((p) => p.isReady);
         if (!everyoneReady) {
-          client.send("matchError", { message: "All players must be ready." });
+          const notReady = [...this.state.players.values()].filter(p => !p.isReady).map(p => p.name);
+          client.send("matchError", { message: `Waiting for: ${notReady.join(", ")}` });
           return;
         }
       }

@@ -7,7 +7,10 @@
   <link rel="icon" type="image/png" href="/favicon.png" />
   <link rel="stylesheet" href="src/lobby-style.css">
   <script type="module" src="/src/lobby-car.js"></script>
+  <script type="module" src="/src/lobby-track-preview.js"></script>
   <script type="module" src="/src/lobby.js"></script>
+  <script type="module" src="/src/title-glow.js"></script>
+  <script type="module" src="/src/game-modes.js"></script>
   <link href="https://fonts.googleapis.com/css2?family=Bungee&family=Exo+2:wght@400;700&display=swap" rel="stylesheet">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.min.js"></script>
@@ -17,27 +20,54 @@
   <link href="https://fonts.googleapis.com/css2?family=Funnel+Sans:ital,wght@0,300..800;1,300..800&family=Poppins:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900&display=swap" rel="stylesheet">
   <script type="module">
     import LobbyBackground from '/src/lobby-background.js';
-    
-    // Create the background with default map (map1)
-    let lobbyBackground;
-    
     document.addEventListener('DOMContentLoaded', () => {
-      // Initialize the background
-      lobbyBackground = new LobbyBackground('map1');
-      
-      // Add a global event listener for map changes
-      document.addEventListener('mapChanged', (event) => {
-        if (lobbyBackground && event.detail && event.detail.mapId) {
-          lobbyBackground.updateMap(event.detail.mapId);
-        }
-      });
+      new LobbyBackground();
     });
-    
-    // Make background available globally if needed
-    window.lobbyBackground = lobbyBackground;
   </script>
 </head>
 <body>
+
+  <!-- ╔══════════════════════════════════════════════════╗
+       ║  LIQUID GLASS — hidden SVG displacement filters  ║
+       ╚══════════════════════════════════════════════════╝ -->
+  <svg xmlns="http://www.w3.org/2000/svg"
+       aria-hidden="true" focusable="false"
+       style="position:absolute;width:0;height:0;overflow:hidden;pointer-events:none">
+    <defs>
+      <!-- Main liquid refraction filter — used on panels via backdrop-filter -->
+      <filter id="lg-refract" x="-30%" y="-30%" width="160%" height="160%" color-interpolation-filters="linearRGB">
+        <feTurbulence type="fractalNoise" baseFrequency="0.012 0.018"
+                      numOctaves="3" seed="7" stitchTiles="stitch" result="noise"/>
+        <feColorMatrix in="noise" type="saturate" values="0" result="grayNoise"/>
+        <feDisplacementMap in="SourceGraphic" in2="grayNoise"
+                           scale="9" xChannelSelector="R" yChannelSelector="G"
+                           result="displaced"/>
+        <feGaussianBlur in="displaced" stdDeviation="0.4" result="softDisplace"/>
+        <feComposite in="softDisplace" in2="SourceGraphic" operator="in"/>
+      </filter>
+
+      <!-- Chromatic aberration — subtle RGB channel split on button edges -->
+      <filter id="lg-chroma" x="-10%" y="-10%" width="120%" height="120%">
+        <feOffset in="SourceGraphic" dx="-0.8" dy="0" result="r"/>
+        <feOffset in="SourceGraphic" dx="0.8"  dy="0" result="b"/>
+        <feBlend in="r" in2="SourceGraphic" mode="screen" result="rb"/>
+        <feBlend in="rb" in2="b" mode="screen"/>
+      </filter>
+
+      <!-- Soft specular glow for panel rim highlights -->
+      <filter id="lg-glow" x="-15%" y="-15%" width="130%" height="130%">
+        <feGaussianBlur in="SourceGraphic" stdDeviation="3" result="blur"/>
+        <feColorMatrix in="blur" type="matrix"
+          values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 14 -3"
+          result="thicken"/>
+        <feMerge>
+          <feMergeNode in="thicken"/>
+          <feMergeNode in="SourceGraphic"/>
+        </feMerge>
+      </filter>
+    </defs>
+  </svg>
+
   <div id="rotate-message">
     <div class="rotate-content">
       <i class="fas fa-sync-alt rotate-icon"></i>
@@ -74,13 +104,6 @@
           <div id="host-controls">
             <button id="create-party-btn" class="icon-btn create-btn">Create Party</button>
             <button id="quick-match-btn" class="icon-btn join-btn">Quick Match</button>
-            <div class="lobby-privacy-row">
-              <label for="lobby-privacy-select">Lobby</label>
-              <select id="lobby-privacy-select">
-                <option value="private" selected>Private (Code)</option>
-                <option value="open">Open (Public)</option>
-              </select>
-            </div>
             
             <div id="host-info" class="hidden">
               <!-- Party Code Display -->
@@ -98,30 +121,37 @@
             </div>
           </div>
           
-          <!-- Game Mode Selector -->
+          <!-- Game Mode Selector (populated by game-modes.js) -->
           <div class="mode-selector-container">
             <h3 class="mode-selector-title">GAME MODE</h3>
-            <div class="mode-buttons">
-              <button class="mode-btn active" data-mode="race">
-                <i class="fas fa-flag-checkered"></i>
-                <span>RACE</span>
-              </button>
-              <button class="mode-btn" data-mode="battle">
-                <i class="fas fa-crosshairs"></i>
-                <span>BATTLE</span>
-              </button>
-            </div>
+            <!-- Category tabs: SOLO / ONLINE -->
+            <div class="mode-category-tabs" id="mode-category-tabs"></div>
+            <!-- Mode cards within selected category -->
+            <div class="mode-cards" id="mode-cards"></div>
           </div>
           
           <div class="map-selector-container">
-            <div class="map-dropdown">
-              <button class="dropdown-button">
-                <span class="dropdown-arrow">▼</span>
-                <span class="selected-map-name">Forest Freeway</span>
-              </button>
-              <div class="dropdown-content" id="track-dropdown-options">
-                <!-- Populated dynamically by lobby.js from STK manifest -->
+            <!-- 3D Track Carousel -->
+            <div class="track-carousel">
+              <div id="track-preview-container" class="track-preview-box"></div>
+              <p class="track-carousel-title">SELECT TRACK</p>
+              <div class="track-nav-row">
+                <button id="track-prev-btn" class="kart-nav-btn" aria-label="Previous track">
+                  <i class="fas fa-chevron-left"></i>
+                </button>
+                <div class="track-name-display">
+                  <span id="track-carousel-name">Pompeii Ruins</span>
+                  <span id="track-carousel-index" class="track-carousel-index">1 / 3</span>
+                </div>
+                <button id="track-next-btn" class="kart-nav-btn" aria-label="Next track">
+                  <i class="fas fa-chevron-right"></i>
+                </button>
               </div>
+            </div>
+            <!-- Hidden dropdown kept for lobby.js sync (not displayed) -->
+            <div class="map-dropdown" style="display:none">
+              <span class="selected-map-name">Pompeii Ruins</span>
+              <div class="dropdown-content" id="track-dropdown-options"></div>
             </div>
           </div>
           <!-- Battle Settings Panel (hidden unless battle mode) -->
@@ -134,12 +164,8 @@
                 <option value="ctf">Capture The Flag</option>
               </select>
             </div>
-            <div class="battle-setting-group">
-              <label for="battle-arena-select">Arena</label>
-              <select id="battle-arena-select">
-                <!-- Populated dynamically by lobby.js from STK manifest -->
-              </select>
-            </div>
+            <!-- Arena selector is handled by the track carousel when in battle mode -->
+            <input type="hidden" id="battle-arena-select" value="battleisland" />
             <div class="battle-setting-group">
               <label for="battle-max-players">Player Cap</label>
               <select id="battle-max-players">
@@ -164,7 +190,7 @@
               <label for="battle-score-limit">Score / KOs to Win</label>
               <input type="number" id="battle-score-limit" value="5" min="1" max="50" />
             </div>
-            <p class="battle-hint">Players Ready Up. Host starts countdown.</p>
+            <p class="battle-hint">All players ready up, then host starts the match.</p>
           </div>
         </div>
       </section>
@@ -191,41 +217,31 @@
           </div>
         </div>
         
+        <!-- GLO Underglow Picker -->
+        <div id="glo-picker-container" class="glo-picker">
+          <p class="glo-picker-title">PICK YOUR GLO</p>
+          <div id="glo-carousel" class="glo-carousel"></div>
+        </div>
+
         <!-- Player Name Input -->
         <div class="player-name-container">
           <h3>YOUR NAME</h3>
           <input type="text" id="player-name-input" placeholder="Enter your name" maxlength="15">
         </div>
 
-        <!-- GLO Underglow Picker -->
-        <div id="glo-picker-container" class="glo-picker">
-          <p class="glo-picker-title">PICK YOUR GLO</p>
-          <div id="glo-effects-row" class="glo-effects-row"></div>
-          <div id="glo-swatches" class="glo-swatches"></div>
-          <div class="glo-custom-row">
-            <label class="glo-label">Color</label>
-            <input type="color" id="glo-color-picker" value="#ff0080">
-          </div>
-          <div id="glo-color2-row" class="glo-custom-row" style="display:none">
-            <label class="glo-label">Color 2</label>
-            <input type="color" id="glo-color-picker2" value="#00e5ff">
-          </div>
-        </div>
-
-        <!-- Always-visible Play Button -->
+        <!-- Action Buttons -->
         <button id="play-btn" class="game-btn play-btn">PLAY GAME</button>
-        <button id="battle-start-btn" class="game-btn play-btn hidden">START BATTLE</button>
+        <button id="ready-btn" class="game-btn ready-btn hidden">READY UP</button>
+        <button id="start-match-btn" class="game-btn start-match-btn hidden">START MATCH</button>
       </section>
       
       <!-- Right Side - Players List and Join -->
       <section class="right-panel">
         <div class="panel-content">
-          <h2 class="panel-title hidden">RACERS</h2>
-          <div class="players-container hidden">
-            <ul id="player-list" class="player-list">
-              <li class="no-players">No racers have joined yet</li>
-            </ul>
-            <div id="ready-states" class="ready-states hidden"></div>
+          <h2 class="panel-title">RACERS</h2>
+          <div class="players-container">
+            <ul id="player-list" class="player-list"></ul>
+            <div id="ready-count" class="ready-count hidden"></div>
           </div>
           
           <!-- Join Lobby Section -->
@@ -245,11 +261,11 @@
 
   <!-- Music toggle -->
   <button class="mute-btn" id="mute-btn" aria-label="Toggle music">
-    <i class="fas fa-music" id="mute-icon"></i>
+    <i class="fas fa-volume-up" id="mute-icon"></i>
   </button>
 
   <!-- Background music (STK menu theme) -->
-  <audio id="menu-music" src="/audio/music/menutheme.ogg" loop preload="auto"></audio>
+  <audio id="menu-music" src="/audio/music/music%202/main%20menu.mp3" loop preload="auto"></audio>
 
   <!-- Info popup -->
   <div id="info-popup" class="info-popup hidden">

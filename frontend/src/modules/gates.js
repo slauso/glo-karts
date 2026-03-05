@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { hasGates, getTrackScale } from './track-data.js';
 
 // Gate-related constants and variables
 const GATE_FADE_DURATION = 1.0;
@@ -14,9 +15,25 @@ export function loadGates(mapId, scene, loadingManager, onGatesLoaded) {
   const totalGates = 8;
   const currentGatePosition = new THREE.Vector3(0, 2, 0);
   const currentGateQuaternion = new THREE.Quaternion();
+
+  // STK tracks have no gates — return empty data immediately
+  if (!hasGates(mapId)) {
+    console.log(`Skipping gates for ${mapId} (no gates.glb available)`);
+    const emptyData = {
+      gates,
+      fadingGates,
+      currentGateIndex,
+      totalGates: 0,
+      currentGatePosition,
+      currentGateQuaternion
+    };
+    if (onGatesLoaded) onGatesLoaded(emptyData);
+    return emptyData;
+  }
   
   // Use the loading manager with your loader
   const loader = new GLTFLoader(loadingManager);
+  const scale = getTrackScale(mapId);
   
   loader.load(
     `/models/maps/${mapId}/gates.glb`,
@@ -24,7 +41,7 @@ export function loadGates(mapId, scene, loadingManager, onGatesLoaded) {
       const gatesModel = gltf.scene;
       
       // Scale to match the world scale
-      gatesModel.scale.set(8, 8, 8);
+      gatesModel.scale.set(scale, scale, scale);
       
       // Find all numbered gates
       for (let i = 0; i < 7; i++) {

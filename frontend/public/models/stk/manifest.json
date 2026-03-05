@@ -1,235 +1,235 @@
 {
   "version": "1.5",
-  "generated": "2026-02-24T04:29:01.469974Z",
+  "generated": "2026-03-04T03:54:52.954589Z",
   "karts": [
     {
       "id": "tux",
       "name": "Tux",
-      "sizeBytes": 1340392
+      "sizeBytes": 1345892
     },
     {
       "id": "adiumy",
       "name": "Adiumy",
-      "sizeBytes": 579288
+      "sizeBytes": 588316
     },
     {
       "id": "nolok",
       "name": "Nolok",
-      "sizeBytes": 1436136
+      "sizeBytes": 1443576
     },
     {
       "id": "wilber",
       "name": "Wilber",
-      "sizeBytes": 631732
+      "sizeBytes": 635296
     },
     {
       "id": "xue",
       "name": "Xue",
-      "sizeBytes": 565632
+      "sizeBytes": 549284
     },
     {
       "id": "hexley",
       "name": "Hexley",
-      "sizeBytes": 516176
+      "sizeBytes": 516640
     },
     {
       "id": "gavroche",
       "name": "Gavroche",
-      "sizeBytes": 982672
+      "sizeBytes": 983120
     },
     {
       "id": "emule",
       "name": "Emule",
-      "sizeBytes": 1041224
+      "sizeBytes": 1054160
     },
     {
       "id": "kiki",
       "name": "Kiki",
-      "sizeBytes": 1800560
+      "sizeBytes": 1807836
     },
     {
       "id": "beastie",
       "name": "Godette",
-      "sizeBytes": 2625608
+      "sizeBytes": 2641508
     },
     {
       "id": "amanda",
       "name": "Amanda",
-      "sizeBytes": 1162632
+      "sizeBytes": 1167500
     },
     {
       "id": "suzanne",
       "name": "Suzanne",
-      "sizeBytes": 384164
+      "sizeBytes": 389664
     },
     {
       "id": "gnu",
       "name": "Gnu",
-      "sizeBytes": 1227708
+      "sizeBytes": 727672
     },
     {
       "id": "konqi",
       "name": "Konqi",
-      "sizeBytes": 1126608
+      "sizeBytes": 1145032
     },
     {
       "id": "sara_the_racer",
       "name": "Pepper",
-      "sizeBytes": 1732480
+      "sizeBytes": 1710704
     },
     {
       "id": "sara_the_wizard",
       "name": "Sara",
-      "sizeBytes": 743700
+      "sizeBytes": 701780
     },
     {
       "id": "puffy",
       "name": "Puffy",
-      "sizeBytes": 671628
+      "sizeBytes": 674304
     },
     {
       "id": "pidgin",
       "name": "Pidgin",
-      "sizeBytes": 1733172
+      "sizeBytes": 1792780
     }
   ],
   "tracks": [
     {
       "id": "cocoa_temple",
-      "name": "Pompeii Ruins",
+      "name": "Cocoa Temple",
       "sizeBytes": 4136980
     },
     {
       "id": "hacienda",
-      "name": "Tuscan Villa",
-      "sizeBytes": 3291208
+      "name": "Hacienda",
+      "sizeBytes": 3291856
     },
     {
       "id": "minigolf",
-      "name": "Portofino Green",
-      "sizeBytes": 3989948
+      "name": "Mini Golf",
+      "sizeBytes": 3990328
     },
     {
       "id": "sandtrack",
-      "name": "Sardinia Dunes",
-      "sizeBytes": 2482720
+      "name": "Sand Track",
+      "sizeBytes": 2482852
     },
     {
       "id": "snowtuxpeak",
-      "name": "Monte Cervino",
-      "sizeBytes": 1033964
+      "name": "Snow Tux Peak",
+      "sizeBytes": 1034136
     },
     {
       "id": "zengarden",
-      "name": "Giardini di Boboli",
-      "sizeBytes": 7364708
+      "name": "Zen Garden",
+      "sizeBytes": 7365220
     },
     {
       "id": "lighthouse",
-      "name": "Faro di Capri",
-      "sizeBytes": 7711100
+      "name": "Lighthouse",
+      "sizeBytes": 7711556
     },
     {
       "id": "olivermath",
-      "name": "Piazza Navona",
-      "sizeBytes": 2350052
+      "name": "Oliver's Math Class",
+      "sizeBytes": 2350204
     },
     {
       "id": "black_forest",
-      "name": "Val di Non",
-      "sizeBytes": 8255724
+      "name": "Black Forest",
+      "sizeBytes": 8256332
     },
     {
       "id": "xr591",
-      "name": "Circuito di Monza",
-      "sizeBytes": 2207520
+      "name": "XR591",
+      "sizeBytes": 2207920
     },
     {
       "id": "oasis",
-      "name": "Oasi di Vendicari",
-      "sizeBytes": 3263768
+      "name": "Oasis",
+      "sizeBytes": 3263900
     },
     {
       "id": "gran_paradiso_island",
-      "name": "Gran Paradiso",
-      "sizeBytes": 4853960
+      "name": "Gran Paradiso Island",
+      "sizeBytes": 4853996
     },
     {
       "id": "mines",
-      "name": "Miniere di Carrara",
-      "sizeBytes": 12322384
+      "name": "Mines",
+      "sizeBytes": 12322840
     },
     {
       "id": "snowmountain",
-      "name": "Monte Bianco",
-      "sizeBytes": 892904
+      "name": "Snow Mountain",
+      "sizeBytes": 893000
     },
     {
       "id": "abyss",
-      "name": "Grotta Azzurra",
-      "sizeBytes": 5365204
+      "name": "Abyss",
+      "sizeBytes": 5365280
     },
     {
       "id": "cornfield_crossing",
-      "name": "Campagna Toscana",
-      "sizeBytes": 3718612
+      "name": "Cornfield Crossing",
+      "sizeBytes": 3718652
     },
     {
       "id": "volcano_island",
-      "name": "Isola di Stromboli",
-      "sizeBytes": 12009992
+      "name": "Volcano Island",
+      "sizeBytes": 12010712
     },
     {
       "id": "ravenbridge_mansion",
-      "name": "Villa Borghese",
-      "sizeBytes": 5869848
+      "name": "Ravenbridge Mansion",
+      "sizeBytes": 5869864
     }
   ],
   "arenas": [
     {
       "id": "battleisland",
-      "name": "Isola di Murano",
-      "sizeBytes": 1894888
+      "name": "Battle Island",
+      "sizeBytes": 1894984
     },
     {
       "id": "lasdunasarena",
-      "name": "Arena di Verona",
+      "name": "Las Dunas Arena",
       "sizeBytes": 2807884
     },
     {
       "id": "cave",
-      "name": "Grotta di Castellana",
-      "sizeBytes": 1940904
+      "name": "Cave X",
+      "sizeBytes": 1940964
     },
     {
       "id": "pumpkin_park",
-      "name": "Parco dei Mostri",
+      "name": "Pumpkin Park",
       "sizeBytes": 3222384
     },
     {
       "id": "arena_candela_city",
-      "name": "Piazza San Marco",
+      "name": "Candela City",
       "sizeBytes": 2571120
     },
     {
       "id": "ancient_colosseum_labyrinth",
-      "name": "Colosseo",
-      "sizeBytes": 8747908
+      "name": "Ancient Colosseum",
+      "sizeBytes": 8748176
     },
     {
       "id": "stadium",
-      "name": "San Siro",
-      "sizeBytes": 438148
+      "name": "The Stadium",
+      "sizeBytes": 438244
     },
     {
       "id": "alien_signal",
-      "name": "Matera",
+      "name": "Alien Signal",
       "sizeBytes": 2453176
     },
     {
       "id": "temple",
-      "name": "Tempio di Agrigento",
-      "sizeBytes": 1469608
+      "name": "Temple",
+      "sizeBytes": 1469684
     }
   ],
   "profiles": {

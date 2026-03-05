@@ -1,0 +1,580 @@
+{
+  "generatedAt": "2026-03-04T17:34:44.713Z",
+  "results": [
+    {
+      "id": "map1",
+      "label": "Amalfi Coast",
+      "type": "race",
+      "viable": true,
+      "reasons": [],
+      "debug": {
+        "trackPhysicsCount": 52,
+        "kartLoaded": true,
+        "spawnPos": {
+          "x": 0,
+          "y": 1,
+          "z": 0
+        },
+        "effectiveKartScale": 2.2
+      },
+      "criticalErrorCount": 0,
+      "timedOut": false
+    },
+    {
+      "id": "map2",
+      "label": "Desert Dunes",
+      "type": "race",
+      "viable": true,
+      "reasons": [],
+      "debug": {
+        "trackPhysicsCount": 80,
+        "kartLoaded": true,
+        "spawnPos": {
+          "x": 0,
+          "y": 1,
+          "z": 0
+        },
+        "effectiveKartScale": 2.2
+      },
+      "criticalErrorCount": 0,
+      "timedOut": false
+    },
+    {
+      "id": "cocoa_temple",
+      "label": "Cocoa Temple",
+      "type": "race",
+      "viable": true,
+      "reasons": [],
+      "debug": {
+        "trackPhysicsCount": 37,
+        "kartLoaded": true,
+        "spawnPos": {
+          "x": 26.25,
+          "y": 1.57,
+          "z": 43.16
+        },
+        "effectiveKartScale": 2.2
+      },
+      "criticalErrorCount": 0,
+      "timedOut": false
+    },
+    {
+      "id": "cornfield_crossing",
+      "label": "Cornfield Xing",
+      "type": "race",
+      "viable": true,
+      "reasons": [],
+      "debug": {
+        "trackPhysicsCount": 44,
+        "kartLoaded": true,
+        "spawnPos": {
+          "x": 0.41,
+          "y": 3.36,
+          "z": 21.76
+        },
+        "effectiveKartScale": 2.2
+      },
+      "criticalErrorCount": 0,
+      "timedOut": false
+    },
+    {
+      "id": "zengarden",
+      "label": "Zen Garden",
+      "type": "race",
+      "viable": true,
+      "reasons": [],
+      "debug": {
+        "trackPhysicsCount": 30,
+        "kartLoaded": true,
+        "spawnPos": {
+          "x": 1.49,
+          "y": 3.26,
+          "z": 0.12
+        },
+        "effectiveKartScale": 2.2
+      },
+      "criticalErrorCount": 0,
+      "timedOut": false
+    },
+    {
+      "id": "hacienda",
+      "label": "Hacienda",
+      "type": "race",
+      "viable": true,
+      "reasons": [],
+      "debug": {
+        "trackPhysicsCount": 44,
+        "kartLoaded": true,
+        "spawnPos": {
+          "x": 0,
+          "y": 2.01,
+          "z": 5
+        },
+        "effectiveKartScale": 2.2
+      },
+      "criticalErrorCount": 0,
+      "timedOut": false
+    },
+    {
+      "id": "minigolf",
+      "label": "Minigolf",
+      "type": "race",
+      "viable": true,
+      "reasons": [],
+      "debug": {
+        "trackPhysicsCount": 32,
+        "kartLoaded": true,
+        "spawnPos": {
+          "x": -0.08,
+          "y": 3.48,
+          "z": -40.98
+        },
+        "effectiveKartScale": 2.2
+      },
+      "criticalErrorCount": 0,
+      "timedOut": false
+    },
+    {
+      "id": "sandtrack",
+      "label": "Shifting Sands",
+      "type": "race",
+      "viable": true,
+      "reasons": [],
+      "debug": {
+        "trackPhysicsCount": 19,
+        "kartLoaded": true,
+        "spawnPos": {
+          "x": 1.37,
+          "y": 2,
+          "z": 11.15
+        },
+        "effectiveKartScale": 2.2
+      },
+      "criticalErrorCount": 0,
+      "timedOut": false
+    },
+    {
+      "id": "snowtuxpeak",
+      "label": "Snow Peak",
+      "type": "race",
+      "viable": true,
+      "reasons": [],
+      "debug": {
+        "trackPhysicsCount": 22,
+        "kartLoaded": true,
+        "spawnPos": {
+          "x": -197.58,
+          "y": 2.94,
+          "z": 37.24
+        },
+        "effectiveKartScale": 2.2
+      },
+      "criticalErrorCount": 0,
+      "timedOut": false
+    },
+    {
+      "id": "lighthouse",
+      "label": "Around the Lighthouse",
+      "type": "race",
+      "viable": true,
+      "reasons": [],
+      "debug": {
+        "trackPhysicsCount": 36,
+        "kartLoaded": true,
+        "spawnPos": {
+          "x": 26.26,
+          "y": 2,
+          "z": -51.25
+        },
+        "effectiveKartScale": 2.2
+      },
+      "criticalErrorCount": 0,
+      "timedOut": false
+    },
+    {
+      "id": "olivermath",
+      "label": "Oliver's Math Class",
+      "type": "race",
+      "viable": true,
+      "reasons": [],
+      "debug": {
+        "trackPhysicsCount": 26,
+        "kartLoaded": true,
+        "spawnPos": {
+          "x": -13.29,
+          "y": 2.94,
+          "z": -2.89
+        },
+        "effectiveKartScale": 2.2
+      },
+      "criticalErrorCount": 0,
+      "timedOut": false
+    },
+    {
+      "id": "black_forest",
+      "label": "Black Forest",
+      "type": "race",
+      "viable": true,
+      "reasons": [],
+      "debug": {
+        "trackPhysicsCount": 71,
+        "kartLoaded": true,
+        "spawnPos": {
+          "x": -104.99,
+          "y": 9.23,
+          "z": 63.05
+        },
+        "effectiveKartScale": 2.2
+      },
+      "criticalErrorCount": 0,
+      "timedOut": false
+    },
+    {
+      "id": "xr591",
+      "label": "XR591",
+      "type": "race",
+      "viable": true,
+      "reasons": [],
+      "debug": {
+        "trackPhysicsCount": 30,
+        "kartLoaded": true,
+        "spawnPos": {
+          "x": -0.33,
+          "y": 3.4,
+          "z": -12.35
+        },
+        "effectiveKartScale": 2.2
+      },
+      "criticalErrorCount": 0,
+      "timedOut": false
+    },
+    {
+      "id": "oasis",
+      "label": "Oasis",
+      "type": "race",
+      "viable": true,
+      "reasons": [],
+      "debug": {
+        "trackPhysicsCount": 30,
+        "kartLoaded": true,
+        "spawnPos": {
+          "x": 0,
+          "y": 5,
+          "z": 0
+        },
+        "effectiveKartScale": 2.2
+      },
+      "criticalErrorCount": 0,
+      "timedOut": false
+    },
+    {
+      "id": "gran_paradiso_island",
+      "label": "Gran Paradiso Island",
+      "type": "race",
+      "viable": true,
+      "reasons": [],
+      "debug": {
+        "trackPhysicsCount": 66,
+        "kartLoaded": true,
+        "spawnPos": {
+          "x": 132.11,
+          "y": 8.99,
+          "z": 86.83
+        },
+        "effectiveKartScale": 2.2
+      },
+      "criticalErrorCount": 0,
+      "timedOut": false
+    },
+    {
+      "id": "mines",
+      "label": "Old Mine",
+      "type": "race",
+      "viable": true,
+      "reasons": [],
+      "debug": {
+        "trackPhysicsCount": 39,
+        "kartLoaded": true,
+        "spawnPos": {
+          "x": 0.35,
+          "y": 2.88,
+          "z": 15.35
+        },
+        "effectiveKartScale": 2.2
+      },
+      "criticalErrorCount": 0,
+      "timedOut": false
+    },
+    {
+      "id": "snowmountain",
+      "label": "Northern Resort",
+      "type": "race",
+      "viable": true,
+      "reasons": [],
+      "debug": {
+        "trackPhysicsCount": 26,
+        "kartLoaded": true,
+        "spawnPos": {
+          "x": 0.02,
+          "y": 0.76,
+          "z": 5.19
+        },
+        "effectiveKartScale": 2.2
+      },
+      "criticalErrorCount": 0,
+      "timedOut": false
+    },
+    {
+      "id": "abyss",
+      "label": "Antediluvian Abyss",
+      "type": "race",
+      "viable": true,
+      "reasons": [],
+      "debug": {
+        "trackPhysicsCount": 28,
+        "kartLoaded": true,
+        "spawnPos": {
+          "x": -5.84,
+          "y": 4.51,
+          "z": -131.87
+        },
+        "effectiveKartScale": 2.2
+      },
+      "criticalErrorCount": 0,
+      "timedOut": false
+    },
+    {
+      "id": "volcano_island",
+      "label": "Volcan Island",
+      "type": "race",
+      "viable": true,
+      "reasons": [],
+      "debug": {
+        "trackPhysicsCount": 42,
+        "kartLoaded": true,
+        "spawnPos": {
+          "x": -36.38,
+          "y": 15.98,
+          "z": -135.98
+        },
+        "effectiveKartScale": 2.2
+      },
+      "criticalErrorCount": 0,
+      "timedOut": false
+    },
+    {
+      "id": "ravenbridge_mansion",
+      "label": "Ravenbridge Mansion",
+      "type": "race",
+      "viable": true,
+      "reasons": [],
+      "debug": {
+        "trackPhysicsCount": 49,
+        "kartLoaded": true,
+        "spawnPos": {
+          "x": -4.7,
+          "y": 2.27,
+          "z": -75.78
+        },
+        "effectiveKartScale": 2.2
+      },
+      "criticalErrorCount": 0,
+      "timedOut": false
+    },
+    {
+      "id": "blockfort",
+      "label": "Block Fort",
+      "type": "battle",
+      "viable": true,
+      "reasons": [],
+      "debug": {
+        "trackPhysicsCount": 19,
+        "kartLoaded": true,
+        "spawnPos": {
+          "x": 70.59,
+          "y": 7.89,
+          "z": 18.84
+        },
+        "effectiveKartScale": 0.4
+      },
+      "criticalErrorCount": 0,
+      "timedOut": false
+    },
+    {
+      "id": "battleisland",
+      "label": "Battle Island",
+      "type": "battle",
+      "viable": true,
+      "reasons": [],
+      "debug": {
+        "trackPhysicsCount": 24,
+        "kartLoaded": true,
+        "spawnPos": {
+          "x": -7,
+          "y": 0.1,
+          "z": -10
+        },
+        "effectiveKartScale": 0.55
+      },
+      "criticalErrorCount": 0,
+      "timedOut": false
+    },
+    {
+      "id": "lasdunasarena",
+      "label": "Las Dunas Arena",
+      "type": "battle",
+      "viable": true,
+      "reasons": [],
+      "debug": {
+        "trackPhysicsCount": 60,
+        "kartLoaded": true,
+        "spawnPos": {
+          "x": 0,
+          "y": 5,
+          "z": 0
+        },
+        "effectiveKartScale": 0.5
+      },
+      "criticalErrorCount": 0,
+      "timedOut": false
+    },
+    {
+      "id": "cave",
+      "label": "Cave X",
+      "type": "battle",
+      "viable": true,
+      "reasons": [],
+      "debug": {
+        "trackPhysicsCount": 15,
+        "kartLoaded": true,
+        "spawnPos": {
+          "x": 0,
+          "y": 5,
+          "z": 0
+        },
+        "effectiveKartScale": 0.5
+      },
+      "criticalErrorCount": 0,
+      "timedOut": false
+    },
+    {
+      "id": "pumpkin_park",
+      "label": "Pumpkin Park",
+      "type": "battle",
+      "viable": true,
+      "reasons": [],
+      "debug": {
+        "trackPhysicsCount": 33,
+        "kartLoaded": true,
+        "spawnPos": {
+          "x": 0,
+          "y": 5,
+          "z": 0
+        },
+        "effectiveKartScale": 0.5
+      },
+      "criticalErrorCount": 0,
+      "timedOut": false
+    },
+    {
+      "id": "arena_candela_city",
+      "label": "Candela City",
+      "type": "battle",
+      "viable": true,
+      "reasons": [],
+      "debug": {
+        "trackPhysicsCount": 67,
+        "kartLoaded": true,
+        "spawnPos": {
+          "x": 0,
+          "y": 5,
+          "z": 0
+        },
+        "effectiveKartScale": 0.5
+      },
+      "criticalErrorCount": 0,
+      "timedOut": false
+    },
+    {
+      "id": "ancient_colosseum_labyrinth",
+      "label": "Ancient Colosseum",
+      "type": "battle",
+      "viable": true,
+      "reasons": [],
+      "debug": {
+        "trackPhysicsCount": 48,
+        "kartLoaded": true,
+        "spawnPos": {
+          "x": 0,
+          "y": 5,
+          "z": 0
+        },
+        "effectiveKartScale": 0.4
+      },
+      "criticalErrorCount": 0,
+      "timedOut": false
+    },
+    {
+      "id": "stadium",
+      "label": "The Stadium",
+      "type": "battle",
+      "viable": true,
+      "reasons": [],
+      "debug": {
+        "trackPhysicsCount": 9,
+        "kartLoaded": true,
+        "spawnPos": {
+          "x": 0,
+          "y": 0.5,
+          "z": -15
+        },
+        "effectiveKartScale": 0.55
+      },
+      "criticalErrorCount": 0,
+      "timedOut": false
+    },
+    {
+      "id": "alien_signal",
+      "label": "Alien Signal",
+      "type": "battle",
+      "viable": true,
+      "reasons": [],
+      "debug": {
+        "trackPhysicsCount": 32,
+        "kartLoaded": true,
+        "spawnPos": {
+          "x": 0,
+          "y": 5,
+          "z": 0
+        },
+        "effectiveKartScale": 0.5
+      },
+      "criticalErrorCount": 0,
+      "timedOut": false
+    },
+    {
+      "id": "temple",
+      "label": "Temple",
+      "type": "battle",
+      "viable": true,
+      "reasons": [],
+      "debug": {
+        "trackPhysicsCount": 20,
+        "kartLoaded": true,
+        "spawnPos": {
+          "x": 0,
+          "y": 5,
+          "z": 0
+        },
+        "effectiveKartScale": 0.5
+      },
+      "criticalErrorCount": 0,
+      "timedOut": false
+    }
+  ],
+  "summary": {
+    "total": 30,
+    "viable": 30,
+    "nonViable": 0
+  }
+}

@@ -1,37 +1,49 @@
 import { Client } from 'colyseus.js';
 import { getColyseusEndpoint } from './modules/realtime/feature-flag.js';
+import {
+  MODE_STATUS,
+  CATEGORIES,
+  MODE_REGISTRY,
+  getCategoryTree,
+  getPageForMode,
+  requiresLobby,
+  isPlayable,
+  buildGameConfig,
+  getMode,
+} from './game-modes.js';
 
 const STK_TRACKS = [
-  { id: 'cocoa_temple', name: 'Pompeii Ruins' },
-  { id: 'hacienda', name: 'Tuscan Villa' },
-  { id: 'minigolf', name: 'Portofino Green' },
-  { id: 'sandtrack', name: 'Sardinia Dunes' },
-  { id: 'snowtuxpeak', name: 'Monte Cervino' },
-  { id: 'zengarden', name: 'Giardini di Boboli' },
-  { id: 'lighthouse', name: 'Faro di Capri' },
-  { id: 'olivermath', name: 'Piazza Navona' },
-  { id: 'black_forest', name: 'Val di Non' },
-  { id: 'xr591', name: 'Circuito di Monza' },
-  { id: 'oasis', name: 'Oasi di Vendicari' },
-  { id: 'gran_paradiso_island', name: 'Gran Paradiso' },
-  { id: 'mines', name: 'Miniere di Carrara' },
-  { id: 'snowmountain', name: 'Monte Bianco' },
-  { id: 'abyss', name: 'Grotta Azzurra' },
-  { id: 'cornfield_crossing', name: 'Campagna Toscana' },
-  { id: 'volcano_island', name: 'Isola di Stromboli' },
-  { id: 'ravenbridge_mansion', name: 'Villa Borghese' },
+  { id: 'cocoa_temple',         name: 'Cocoa Temple' },
+  { id: 'hacienda',             name: 'Hacienda' },
+  { id: 'minigolf',             name: 'Minigolf' },
+  { id: 'sandtrack',            name: 'Shifting Sands' },
+  { id: 'snowtuxpeak',          name: 'Snow Peak' },
+  { id: 'zengarden',            name: 'Zen Garden' },
+  { id: 'lighthouse',           name: 'Around the Lighthouse' },
+  { id: 'olivermath',           name: "Oliver's Math Class" },
+  { id: 'black_forest',         name: 'Black Forest' },
+  { id: 'xr591',                name: 'XR591' },
+  { id: 'oasis',                name: 'Oasis' },
+  { id: 'gran_paradiso_island', name: 'Gran Paradiso Island' },
+  { id: 'mines',                name: 'Old Mine' },
+  { id: 'snowmountain',         name: 'Northern Resort' },
+  { id: 'abyss',                name: 'Antediluvian Abyss' },
+  { id: 'cornfield_crossing',   name: 'Cornfield Crossing' },
+  { id: 'volcano_island',       name: 'Volcan Island' },
+  { id: 'ravenbridge_mansion',  name: 'Ravenbridge Mansion' },
 ];
 
 const STK_ARENAS = [
-  { id: 'battleisland', name: 'Isola di Murano' },
-  { id: 'lasdunasarena', name: 'Arena di Verona' },
-  { id: 'cave', name: 'Grotta di Castellana' },
-  { id: 'pumpkin_park', name: 'Parco dei Mostri' },
-  { id: 'arena_candela_city', name: 'Piazza San Marco' },
-  { id: 'ancient_colosseum_labyrinth', name: 'Colosseo' },
-  { id: 'stadium', name: 'San Siro' },
-  { id: 'alien_signal', name: 'Matera' },
-  { id: 'temple', name: 'Tempio di Agrigento' },
+  { id: 'blockfort',                   name: 'Block Fort' },
+  { id: 'battleisland',                name: 'Battle Island' },
+  { id: 'lasdunasarena',               name: 'Las Dunas Arena' },
+  { id: 'cave',                        name: 'Cave X' },
+  { id: 'pumpkin_park',                name: 'Pumpkin Park' },
+  { id: 'arena_candela_city',          name: 'Candela City' },
+  { id: 'ancient_colosseum_labyrinth', name: 'Ancient Colosseum' },
+  { id: 'stadium',                     name: 'The Stadium' },
+  { id: 'alien_signal',                name: 'Alien Signal' },
+  { id: 'temple',                      name: 'Temple' },
 ];
 
 const DEFAULTS = {
@@ -83,6 +95,7 @@ class RacingLobby {
     this.isReady = false;
 
     this.selectedMode = DEFAULTS.mode;
+    this.selectedModeId = 'quick_race'; // default mode from game-modes.js
     this.selectedMap = DEFAULTS.trackId;
     this.selectedBattleType = DEFAULTS.battleType;
     this.selectedMaxPlayers = DEFAULTS.maxPlayers;
@@ -108,12 +121,12 @@ class RacingLobby {
     this.partyCodeDisplay = document.getElementById('party-code');
     this.copyCodeBtn = document.getElementById('copy-code-btn');
     this.hostStopBtn = document.getElementById('host-stop-btn');
-    this.privacySelect = document.getElementById('lobby-privacy-select');
 
     this.mapSelectorContainer = document.querySelector('.map-selector-container');
     this.playerNameInput = document.getElementById('player-name-input');
     this.playBtn = document.getElementById('play-btn');
-    this.battleStartBtn = document.getElementById('battle-start-btn');
+    this.readyBtn = document.getElementById('ready-btn');
+    this.startMatchBtn = document.getElementById('start-match-btn');
 
     this.joinCodeInput = document.getElementById('join-code-input');
     this.joinPartyBtn = document.getElementById('join-party-btn');
@@ -121,13 +134,10 @@ class RacingLobby {
     this.joinSection = document.querySelector('.join-section');
 
     this.playerList = document.getElementById('player-list');
-    this.readyStatesEl = document.getElementById('ready-states');
+    this.readyCountEl = document.getElementById('ready-count');
     this.racersTitle = document.querySelector('.right-panel .panel-title');
-    this.playersContainer = document.querySelector('.players-container');
 
     this.playerNameInput.value = this.playerName;
-    this.racersTitle.classList.add('hidden');
-    this.playersContainer.classList.add('hidden');
   }
 
   attachEventListeners() {
@@ -147,12 +157,23 @@ class RacingLobby {
     });
 
     this.playBtn?.addEventListener('click', () => this.onPlayClicked());
-    this.battleStartBtn?.addEventListener('click', () => this.startMatch());
+    this.readyBtn?.addEventListener('click', () => this.toggleReady());
+    this.startMatchBtn?.addEventListener('click', () => this.startMatch());
 
     document.addEventListener('kartChanged', (event) => {
       if (!event.detail?.kartId) return;
       sessionStorage.setItem('selectedKart', event.detail.kartId);
       this.sendPlayerUpdate();
+    });
+
+    // Track carousel integration
+    document.addEventListener('trackCarouselChanged', (event) => {
+      if (!event.detail?.trackId) return;
+      this.selectedMap = event.detail.trackId;
+      // Sync hidden dropdown for compatibility
+      const mapName = document.querySelector('.selected-map-name');
+      if (mapName) mapName.textContent = event.detail.trackName || event.detail.trackId;
+      this.sendSettingsUpdate();
     });
 
     document.querySelectorAll('.color-option').forEach((option) => {
@@ -171,7 +192,7 @@ class RacingLobby {
   }
 
   async createLobby() {
-    const privacy = this.privacySelect?.value === 'open' ? 'open' : 'private';
+    const privacy = 'private';
     const code = generateLobbyCode();
     try {
       await this.connectLobby('joinOrCreate', {
@@ -335,7 +356,7 @@ class RacingLobby {
 
       this.applyStateToUI(state);
       this.updatePlayerList();
-      this.updateReadyStates();
+      this.refreshActionButtons();
       this.refreshBattleControls();
     });
 
@@ -348,9 +369,9 @@ class RacingLobby {
     });
 
     room.onMessage('countdown', ({ t }) => {
-      if (this.readyStatesEl) {
-        this.readyStatesEl.classList.remove('hidden');
-        this.readyStatesEl.innerHTML = `<div><strong>Match starts in:</strong> ${t}</div>`;
+      if (this.readyCountEl) {
+        this.readyCountEl.classList.remove('hidden');
+        this.readyCountEl.innerHTML = `<span class="countdown-timer">Starting in ${t}…</span>`;
       }
     });
 
@@ -360,7 +381,8 @@ class RacingLobby {
 
     room.onMessage('matchStart', ({ gameConfig }) => {
       sessionStorage.setItem('gameConfig', JSON.stringify(gameConfig));
-      window.location.href = this.getGamePage({ multiplayer: true });
+      // Online modes always go to realtime.html
+      window.location.href = getPageForMode(this.selectedModeId) || 'realtime.html';
     });
 
     room.onLeave(() => {
@@ -391,11 +413,9 @@ class RacingLobby {
     this.createPartyBtn?.classList.remove('hidden');
     this.quickMatchBtn?.classList.remove('hidden');
     this.joinSection?.classList.remove('hidden');
-    this.racersTitle?.classList.add('hidden');
-    this.playersContainer?.classList.add('hidden');
 
     this.updatePlayerList();
-    this.updateReadyStates();
+    this.refreshActionButtons();
     this.refreshBattleControls();
     this.setJoinStatus(statusText);
   }
@@ -405,8 +425,6 @@ class RacingLobby {
     this.createPartyBtn?.classList.add('hidden');
     this.quickMatchBtn?.classList.add('hidden');
     this.joinSection?.classList.add('hidden');
-    this.racersTitle?.classList.remove('hidden');
-    this.playersContainer?.classList.remove('hidden');
   }
 
   setJoinStatus(text) {
@@ -464,51 +482,42 @@ class RacingLobby {
   }
 
   onPlayClicked() {
+    const modeId = this.selectedModeId;
+
+    // Not in a lobby — start solo or create lobby for online modes
     if (!this.room) {
+      if (requiresLobby(modeId)) {
+        // Auto-create a lobby when hitting PLAY GAME on an online mode
+        this.createLobby();
+        return;
+      }
       this.startSinglePlayerGame();
       return;
     }
-
-    if (this.selectedMode === 'race' && this.isHost) {
-      this.startMatch();
-      return;
-    }
-
-    this.toggleReady();
   }
 
   getGamePage({ multiplayer = false } = {}) {
-    if (multiplayer) return 'realtime.html';
-    return this.selectedMode === 'battle' ? 'battle.html' : 'game.html';
+    // Use the mode registry for routing
+    if (multiplayer) return getPageForMode(this.selectedModeId) || 'realtime.html';
+    return getPageForMode(this.selectedModeId) || 'game.html';
   }
 
   startSinglePlayerGame() {
-    const isBattle = this.selectedMode === 'battle';
-    const gameConfig = {
-      type: 'startGame',
-      trackId: this.selectedMap,
-      gameMode: this.selectedMode,
-      selectedKart: sessionStorage.getItem('selectedKart') || 'tux',
-      arenaId: isBattle ? (document.getElementById('battle-arena-select')?.value || DEFAULTS.arenaId) : undefined,
-      battleType: isBattle ? this.selectedBattleType : undefined,
-      maxPlayers: isBattle ? this.selectedMaxPlayers : undefined,
-      botCount: isBattle ? this.selectedBotCount : undefined,
-      loadoutId: isBattle ? this.selectedLoadout : undefined,
-      collisionDamage: isBattle ? !!document.getElementById('battle-collision-damage')?.checked : undefined,
-      scoreLimit: isBattle ? (parseInt(document.getElementById('battle-score-limit')?.value || '5', 10) || 5) : undefined,
-      players: [{
-        id: this.playerId || 'solo-player',
-        name: this.playerName,
-        isHost: true,
-        playerColor: sessionStorage.getItem('carColor') || 'red',
-        playerKart: sessionStorage.getItem('selectedKart') || 'tux',
-      }],
-      isSinglePlayer: true,
-      multiplayerProvider: 'colyseus',
+    const lobbyState = {
+      selectedMap: this.selectedMap,
+      selectedBattleType: this.selectedBattleType,
+      selectedMaxPlayers: this.selectedMaxPlayers,
+      selectedBotCount: this.selectedBotCount,
+      selectedLoadout: this.selectedLoadout,
+      selectedCup: this.selectedCup || 'starter',
+      playerId: this.playerId,
+      playerName: this.playerName,
     };
 
+    const gameConfig = buildGameConfig(this.selectedModeId, lobbyState);
+
     sessionStorage.setItem('gameConfig', JSON.stringify(gameConfig));
-    window.location.href = this.getGamePage({ multiplayer: false });
+    window.location.href = getPageForMode(this.selectedModeId);
   }
 
   copyCode() {
@@ -529,24 +538,24 @@ class RacingLobby {
     if (!this.players.length) {
       const li = document.createElement('li');
       li.className = 'no-players';
-      li.textContent = 'No players in lobby';
+      li.textContent = this.room ? 'Waiting for players…' : '';
       this.playerList.appendChild(li);
+      if (this.readyCountEl) this.readyCountEl.classList.add('hidden');
       return;
     }
 
     this.players.forEach((player) => {
       const li = document.createElement('li');
-      li.style.display = 'flex';
-      li.style.alignItems = 'center';
-      li.style.gap = '8px';
+      li.className = 'player-row';
+      if (player.isReady) li.classList.add('is-ready');
 
-      const readyDot = document.createElement('span');
-      readyDot.textContent = player.isReady ? '●' : '○';
-      readyDot.style.color = player.isReady ? '#7CFC00' : '#888';
-      readyDot.style.fontSize = '18px';
-      li.appendChild(readyDot);
+      // Ready indicator
+      const indicator = document.createElement('span');
+      indicator.className = `ready-indicator ${player.isReady ? 'ready' : 'not-ready'}`;
+      li.appendChild(indicator);
 
       const name = document.createElement('span');
+      name.className = 'player-name-text';
       name.textContent = player.name;
       li.appendChild(name);
 
@@ -557,57 +566,95 @@ class RacingLobby {
         li.appendChild(badge);
       }
 
+      if (player.id === this.playerId) {
+        const youBadge = document.createElement('span');
+        youBadge.textContent = 'YOU';
+        youBadge.className = 'you-badge';
+        li.appendChild(youBadge);
+      }
+
       this.playerList.appendChild(li);
     });
+
+    // Ready count summary
+    if (this.readyCountEl && this.room) {
+      const total = this.players.length;
+      const ready = this.players.filter((p) => p.isReady).length;
+      this.readyCountEl.classList.remove('hidden');
+      this.readyCountEl.innerHTML = `<span class="ready-fraction">${ready}/${total}</span> ready`;
+      this.readyCountEl.classList.toggle('all-ready', ready === total && total > 0);
+    }
   }
 
-  updateReadyStates() {
-    if (!this.readyStatesEl) return;
+  refreshActionButtons() {
+    const inLobby = !!this.room;
+    const total = this.players.length;
+    const readyCount = this.players.filter(p => p.isReady).length;
+    const allReady = total > 0 && readyCount === total;
 
-    if (this.selectedMode !== 'battle') {
-      this.readyStatesEl.classList.add('hidden');
-      this.readyStatesEl.innerHTML = '';
-      return;
+    // PLAY GAME button: visible only when NOT in a lobby
+    if (this.playBtn) {
+      this.playBtn.classList.toggle('hidden', inLobby);
     }
 
-    this.readyStatesEl.classList.remove('hidden');
-    const total = this.players.length;
-    const ready = this.players.filter((p) => p.isReady).length;
-    const rows = this.players.map((p) => `<div>${p.isReady ? '●' : '○'} ${p.name}${p.isHost ? ' (HOST)' : ''}</div>`).join('');
-    this.readyStatesEl.innerHTML = `<div><strong>Ready:</strong> ${ready}/${total}</div>${rows}`;
+    // READY UP button: visible when in lobby (for everyone)
+    if (this.readyBtn) {
+      this.readyBtn.classList.toggle('hidden', !inLobby);
+      if (inLobby) {
+        this.readyBtn.textContent = this.isReady ? '✓ READY' : 'READY UP';
+        this.readyBtn.classList.toggle('is-ready', this.isReady);
+      }
+    }
+
+    // START MATCH button: visible only for host, enabled when all ready
+    if (this.startMatchBtn) {
+      const showStart = inLobby && this.isHost;
+      this.startMatchBtn.classList.toggle('hidden', !showStart);
+      if (showStart) {
+        this.startMatchBtn.disabled = false; // Host can always attempt — server auto-readies host
+        if (total <= 1) {
+          this.startMatchBtn.textContent = 'START MATCH';
+        } else if (allReady) {
+          this.startMatchBtn.textContent = 'START MATCH';
+        } else {
+          this.startMatchBtn.textContent = `START (${readyCount}/${total} ready)`;
+        }
+      }
+    }
   }
 
   refreshBattleControls() {
     const battleSettings = document.getElementById('battle-settings');
-    const inLobby = !!this.room;
-    const isBattleMode = this.selectedMode === 'battle';
+    const modeEntry = getMode(this.selectedModeId);
+    const showBattle = !!(modeEntry?.selectors?.battleSettings);
 
-    battleSettings?.classList.toggle('hidden', !isBattleMode);
+    battleSettings?.classList.toggle('hidden', !showBattle);
 
-    if (!isBattleMode) {
-      this.battleStartBtn?.classList.add('hidden');
-      if (this.playBtn) this.playBtn.textContent = inLobby && this.isHost ? 'START RACE' : (inLobby ? 'READY UP' : 'PLAY GAME');
-      return;
-    }
-
-    if (this.playBtn) this.playBtn.textContent = inLobby ? (this.isReady ? 'CANCEL READY' : 'READY UP') : 'PLAY GAME';
-
-    const everyoneReady = this.players.length > 0 && this.players.every((p) => p.isReady);
-    if (this.battleStartBtn) {
-      this.battleStartBtn.classList.toggle('hidden', !(inLobby && this.isHost));
-      this.battleStartBtn.disabled = !everyoneReady;
-    }
+    // Action buttons are handled by refreshActionButtons()
+    this.refreshActionButtons();
   }
 
   applyStateToUI(state) {
-    const modeButtons = document.querySelectorAll('.mode-btn');
-    modeButtons.forEach((button) => {
-      button.classList.toggle('active', button.getAttribute('data-mode') === this.selectedMode);
-    });
+    // Sync selectedModeId from server gameMode (race/battle)
+    const serverIsBattle = state.gameMode === 'battle';
+    // If we're in a lobby, derive the modeId from server state
+    if (this.room) {
+      this.selectedModeId = serverIsBattle ? 'battle_online' : 'race_online';
+      this.selectedMode = serverIsBattle ? 'battle' : 'race';
+    }
+
+    // Re-render mode selector UI
+    this._selectCategory(this._activeCategory());
 
     const mapName = document.querySelector('.selected-map-name');
     const selectedTrack = ((this.selectedMode === 'battle') ? STK_ARENAS : STK_TRACKS).find((t) => t.id === this.selectedMap);
     if (mapName && selectedTrack) mapName.textContent = selectedTrack.name;
+
+    // Sync the 3D track carousel to server state
+    if (window.__trackPreview) {
+      window.__trackPreview.setMode(this.selectedMode === 'battle' ? 'battle' : 'race');
+      window.__trackPreview.setById(this.selectedMap);
+    }
 
     document.querySelectorAll('.dropdown-option').forEach((option) => {
       option.classList.toggle('selected', option.getAttribute('data-map-id') === this.selectedMap);
@@ -667,20 +714,31 @@ class RacingLobby {
   }
 
   initModeSelector() {
-    const modeButtons = document.querySelectorAll('.mode-btn');
+    // ── Build category tabs + mode cards from game-modes.js ──
+    const tabsContainer = document.getElementById('mode-category-tabs');
+    const cardsContainer = document.getElementById('mode-cards');
     const battleTypeEl = document.getElementById('battle-type-select');
     const maxPlayersEl = document.getElementById('battle-max-players');
     const botCountEl = document.getElementById('battle-bot-count');
 
-    modeButtons.forEach((button) => {
-      button.addEventListener('click', () => {
-        this.selectedMode = button.getAttribute('data-mode') === 'battle' ? 'battle' : 'race';
-        this.refreshBattleControls();
-this.initMapSelector();
-this.sendSettingsUpdate();
-      });
-    });
+    const tree = getCategoryTree();
 
+    // Render category tabs
+    if (tabsContainer) {
+      tabsContainer.innerHTML = '';
+      tree.forEach((cat) => {
+        const tab = document.createElement('button');
+        tab.className = `mode-cat-tab${cat.id === this._activeCategory() ? ' active' : ''}`;
+        tab.setAttribute('data-cat', cat.id);
+        tab.innerHTML = `<i class="fas ${cat.icon}"></i><span>${cat.label}</span>`;
+        tab.addEventListener('click', () => this._selectCategory(cat.id));
+        tabsContainer.appendChild(tab);
+      });
+    }
+
+    this._renderModeCards();
+
+    // Battle settings listeners (unchanged)
     battleTypeEl?.addEventListener('change', () => {
       this.selectedBattleType = battleTypeEl.value === 'ctf' ? 'ctf' : 'deathmatch';
       this.sendSettingsUpdate();
@@ -700,20 +758,103 @@ this.sendSettingsUpdate();
     });
   }
 
-  populateArenaSelector() {
-    const arenaSelectEl = document.getElementById('battle-arena-select');
-    if (!arenaSelectEl) return;
+  /** Which category is active based on selectedModeId */
+  _activeCategory() {
+    const mode = getMode(this.selectedModeId);
+    return mode ? mode.category : 'solo';
+  }
 
-    arenaSelectEl.innerHTML = '';
-    STK_ARENAS.forEach((arena, index) => {
-      const option = document.createElement('option');
-      option.value = arena.id;
-      option.textContent = arena.name;
-      if (index === 0) option.selected = true;
-      arenaSelectEl.appendChild(option);
+  _selectCategory(catId) {
+    // highlight tab
+    document.querySelectorAll('.mode-cat-tab').forEach((tab) => {
+      tab.classList.toggle('active', tab.getAttribute('data-cat') === catId);
     });
 
-    arenaSelectEl.addEventListener('change', () => this.sendSettingsUpdate());
+    // If the current mode isn't in this category, pick the first playable one
+    const mode = getMode(this.selectedModeId);
+    if (!mode || mode.category !== catId) {
+      const tree = getCategoryTree();
+      const cat = tree.find(c => c.id === catId);
+      const first = cat?.modes.find(m => isPlayable(m.id)) || cat?.modes[0];
+      if (first) this._selectMode(first.id);
+    }
+
+    this._renderModeCards();
+  }
+
+  _selectMode(modeId) {
+    const mode = getMode(modeId);
+    if (!mode || !isPlayable(modeId)) return;
+
+    this.selectedModeId = modeId;
+
+    // Derive legacy selectedMode for backward compat with Colyseus payloads
+    const isBattle = modeId === 'battle_solo' || modeId === 'battle_online';
+    this.selectedMode = isBattle ? 'battle' : 'race';
+
+    // Sync track carousel to the right list
+    if (window.__trackPreview) {
+      window.__trackPreview.setMode(isBattle ? 'battle' : 'race');
+    }
+
+    // Reset map to defaults when switching race↔battle
+    this.initMapSelector();
+    this.refreshBattleControls();
+    this._renderModeCards();
+    this.sendSettingsUpdate();
+  }
+
+  _renderModeCards() {
+    const cardsContainer = document.getElementById('mode-cards');
+    if (!cardsContainer) return;
+
+    const catId = this._activeCategory();
+    const tree = getCategoryTree();
+    const cat = tree.find(c => c.id === catId);
+    if (!cat) return;
+
+    cardsContainer.innerHTML = '';
+    cat.modes.forEach((mode) => {
+      const playable = isPlayable(mode.id);
+      const card = document.createElement('div');
+      card.className = 'mode-card';
+      if (mode.id === this.selectedModeId) card.classList.add('active');
+      if (!playable) card.classList.add('disabled');
+      card.setAttribute('data-mode-id', mode.id);
+
+      let badgeHTML = '';
+      if (mode.status === MODE_STATUS.PLANNED) {
+        badgeHTML = '<span class="mode-card-badge coming-soon">SOON</span>';
+      } else if (mode.status === MODE_STATUS.BETA) {
+        badgeHTML = '<span class="mode-card-badge beta">BETA</span>';
+      }
+
+      card.innerHTML = `
+        <div class="mode-card-icon"><i class="fas ${mode.icon}"></i></div>
+        <div class="mode-card-info">
+          <div class="mode-card-label">${mode.label}</div>
+        </div>
+        ${badgeHTML}
+      `;
+
+      if (playable) {
+        card.addEventListener('click', () => this._selectMode(mode.id));
+      }
+      cardsContainer.appendChild(card);
+    });
+  }
+
+  populateArenaSelector() {
+    // Arena selection is now handled by the 3D track carousel.
+    // Keep the hidden input synced via the trackCarouselChanged event.
+    const arenaInput = document.getElementById('battle-arena-select');
+    if (arenaInput) {
+      document.addEventListener('trackCarouselChanged', (event) => {
+        if (event.detail?.mode === 'battle' && event.detail?.trackId) {
+          arenaInput.value = event.detail.trackId;
+        }
+      });
+    }
   }
 
   initWeaponLoadout() {
@@ -766,7 +907,8 @@ document.addEventListener('DOMContentLoaded', () => {
   muteBtn?.addEventListener('click', () => {
     if (!menuMusic) return;
     menuMusic.muted = !menuMusic.muted;
-    if (muteIcon) muteIcon.className = menuMusic.muted ? 'fas fa-volume-mute' : 'fas fa-music';
+    if (muteIcon) muteIcon.className = menuMusic.muted ? 'fas fa-volume-mute' : 'fas fa-volume-up';
+    if (muteBtn) muteBtn.dataset.muted = menuMusic.muted;
   });
 
   const clickSfx = new Audio('/audio/sfx/grab_collectable.ogg');

@@ -3,6 +3,7 @@ import "./style.css";
 import Ammo from './lib/ammo.js';
 import { createVehicle, updateSteering, resetCarPosition, updateCarPosition } from './modules/car.js';
 import { loadTrackModel, loadMapDecorations, checkGroundCollision } from './modules/track.js';
+import { applyStartPosition, getFallThreshold, hasGates, hasDecorations } from './modules/track-data.js';
 import { 
   loadGates, 
   updateGateFading, 
@@ -16,6 +17,14 @@ import {
 } from './modules/multiplayer.js';
 import { initPhysics, updatePhysics, FIXED_PHYSICS_STEP } from './modules/physics.js';
 import { createMinimap, extractTrackData, updateMinimapPlayers } from './modules/minimap.js';
+import {
+  playTrackMusic, playSFX, playFastVariant,
+  startEngineSound, updateEnginePitch, stopEngineSound,
+  playCountdownSequence, stopBGM, disposeAudio,
+  playPreRaceMusic, playPostRaceMusic,
+} from './modules/game-audio.js';
+import { initParticles, updateParticles, disposeParticles } from './modules/particles.js';
+import { createGloSystem, updateGloSystem, disposeGloSystem } from './modules/glo-system.js';
 
 // Check for game config from lobby
 let gameConfig = null;
@@ -59,6 +68,9 @@ let carBody;
 let vehicle;
 let wheelMeshes = [];
 let carModel;
+
+// GLO underglow state (created after car loads)
+let gloSystem = null;
 
 // Car flip detection
 let carFlippedTime = 0;
@@ -492,6 +504,9 @@ function startCountdown() {
   countdownOverlay.style.display = 'block';
   raceState.countdownStarted = true;
   
+  // Play countdown audio SFX (3-2-1-GO)
+  playCountdownSequence();
+  
   // Run countdown sequence
   raceState.countdownValue = 3;
   countdownOverlay.innerHTML = raceState.countdownValue.toString();
@@ -512,6 +527,10 @@ function startCountdown() {
       // Set race started and log it
       raceState.raceStarted = true;
       console.log('Race started!', raceState);
+
+      // Start engine sound & track BGM
+      startEngineSound();
+      playTrackMusic(window._currentMapId || 'map1');
 
       // Show leaderboard when race starts for BOTH single player and multiplayer
       leaderboard.style.display = 'block';
@@ -877,42 +896,57 @@ function getPlayerColorHex(colorName) {
 window.showFinalLeaderboard = showFinalLeaderboard;
 
 function setupCartoonySkybox(scene) {
-  // Create shader materials for gradient skybox
-  const skyGeo = new THREE.SphereGeometry(1000, 32, 32);
-  
-  // Shader material for gradient
+  // Enhanced procedural sky dome: gradient + sun disc + horizon glow
+  const skyGeo = new THREE.SphereGeometry(1000, 48, 48);
+
   const uniforms = {
-    topColor: { value: new THREE.Color(0x88ccff) },  
-    bottomColor: { value: new THREE.Color(0xbbe2ff) }, 
-    offset: { value: 0 },
-    exponent: { value: 0.6 }
+    topColor:      { value: new THREE.Color(0x3388dd) },   // deep blue zenith
+    horizonColor:  { value: new THREE.Color(0xaaddff) },   // pale horizon
+    bottomColor:   { value: new THREE.Color(0xddeeff) },   // ground fade
+    sunDirection:  { value: new THREE.Vector3(0.4, 0.6, 0.3).normalize() },
+    sunColor:      { value: new THREE.Color(0xffffcc) },
+    sunSize:       { value: 0.998 },                       // dot threshold
+    hazePower:     { value: 3.0 },
   };
-  
+
   const skyMat = new THREE.ShaderMaterial({
-    uniforms: uniforms,
+    uniforms,
     vertexShader: `
-      varying vec3 vWorldPosition;
+      varying vec3 vWorldDir;
       void main() {
-        vec4 worldPosition = modelMatrix * vec4(position, 1.0);
-        vWorldPosition = worldPosition.xyz;
+        vec4 worldPos = modelMatrix * vec4(position, 1.0);
+        vWorldDir = normalize(worldPos.xyz);
         gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
       }
     `,
     fragmentShader: `
       uniform vec3 topColor;
+      uniform vec3 horizonColor;
       uniform vec3 bottomColor;
-      uniform float offset;
-      uniform float exponent;
-      varying vec3 vWorldPosition;
+      uniform vec3 sunDirection;
+      uniform vec3 sunColor;
+      uniform float sunSize;
+      uniform float hazePower;
+      varying vec3 vWorldDir;
       void main() {
-        float h = normalize(vWorldPosition + offset).y;
-        float t = max(pow(max(h, 0.0), exponent), 0.0);
-        gl_FragColor = vec4(mix(bottomColor, topColor, t), 1.0);
+        float h = normalize(vWorldDir).y;
+        // Sky gradient
+        vec3 sky = mix(horizonColor, topColor, pow(max(h, 0.0), 0.6));
+        sky = mix(bottomColor, sky, smoothstep(-0.05, 0.15, h));
+        // Sun disc
+        float sunDot = dot(normalize(vWorldDir), sunDirection);
+        float sun = smoothstep(sunSize, sunSize + 0.002, sunDot);
+        sky += sunColor * sun * 1.2;
+        // Horizon haze (warm glow around sun direction at horizon)
+        float haze = pow(max(sunDot, 0.0), hazePower) * smoothstep(0.3, 0.0, abs(h));
+        sky += sunColor * haze * 0.35;
+        gl_FragColor = vec4(sky, 1.0);
       }
     `,
-    side: THREE.BackSide 
+    side: THREE.BackSide,
+    depthWrite: false,
   });
-  
+
   const sky = new THREE.Mesh(skyGeo, skyMat);
   scene.add(sky);
 }
@@ -924,7 +958,9 @@ function init() {
   window.addEventListener('orientationchange', handleOrientationChange);
   window.addEventListener('resize', handleOrientationChange);
 
-  // Set up loading manager to track all asset loading
+  // Start pre-race ambient music (plays while loading / waiting for countdown)
+  playPreRaceMusic();
+
   loadingManager = new THREE.LoadingManager();
   
   loadingManager.onLoad = function() {
@@ -961,6 +997,9 @@ function init() {
   scene = new THREE.Scene();
   setupCartoonySkybox(scene); // Add this line instead of setting scene.background
   setupEnhancedLighting();
+  initParticles(scene); // Initialize particle / VFX pools
+  // Subtle distance fog for atmospheric depth
+  scene.fog = new THREE.Fog(0xaaddff, 250, 900);
   
   // Setup camera
   camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 2000);
@@ -1001,16 +1040,17 @@ function init() {
     
     // Load the track as a single model
     const mapToLoad = gameConfig?.trackId || 'map1'; // Default to map1 if no config
+    window._currentMapId = mapToLoad; // Store for fall-threshold lookups
     loadTrackModel(ammo, mapToLoad, scene, physicsWorld, loadingManager, (trackModel) => {
       console.log(`Track model loaded (${mapToLoad}), extracting for minimap`);
       // Extract track data for minimap when track is loaded
       extractTrackData(trackModel);
     });
     
-    // Load map decorations
+    // Load map decorations (skipped automatically for STK tracks by track-data)
     loadMapDecorations(mapToLoad, scene, renderer, camera, loadingManager);
     
-    // Load gates
+    // Load gates (returns empty data for STK tracks via track-data)
     gateData = loadGates(mapToLoad, scene, loadingManager, (loadedGateData) => {
       // Store the reference when gates are fully loaded
       gateData = loadedGateData;
@@ -1031,9 +1071,9 @@ function init() {
       carModel = loadedComponents.carModel;
       currentSteeringAngle = loadedComponents.currentSteeringAngle;
       
-      console.log("Car model loaded and global variables set:", carModel);
-      
-      // Update car reference in multiplayer state
+      // Initialise GLO underglow using the settings chosen in the lobby
+      gloSystem = createGloSystem(scene);
+
       multiplayerState.carModel = carModel;
       
       // For single player, start the countdown immediately
@@ -1049,6 +1089,10 @@ function init() {
     // Set physics body immediately for physics to work
     carBody = carComponents.carBody;
     vehicle = carComponents.vehicle;
+
+    // Move the car to the correct start position for this track
+    applyStartPosition(ammo, carBody, vehicle, mapToLoad);
+    console.log(`Car spawned at start position for ${mapToLoad}`);
     
     // Set up controls early so they work when the car loads
     setupKeyControls();
@@ -1200,6 +1244,8 @@ function animate() {
       // Update speed
       const speedKPH = physicsResult.currentSpeed;
       updateSpeedometer(speedKPH);
+      // Update engine pitch based on speed
+      updateEnginePitch(speedKPH);
       currentSteeringAngle = physicsResult.currentSteeringAngle;
       // Update car position
       updateCarPosition(window.Ammo, vehicle, carModel, wheelMeshes);
@@ -1215,7 +1261,7 @@ function animate() {
           gateData.currentGatePosition, 
           gateData.currentGateQuaternion
         );
-      });
+      }, getFallThreshold(window._currentMapId || 'map1'));
 
       // Check if car is flipped
       if (carModel && !raceState.raceFinished) {
@@ -1243,7 +1289,14 @@ function animate() {
         if (raceFinished) {
           // Only show finish message if we haven't already shown it
           if (!raceState.raceFinished) {
-            showFinishMessage(gateData.totalGates, null); 
+            showFinishMessage(gateData.totalGates, null);
+
+            // Stop engine & BGM, play finish fanfare
+            stopEngineSound();
+            stopBGM();
+            playSFX('race_win');
+            // Play post-race results music after fanfare SFX finishes
+            setTimeout(() => playPostRaceMusic(), 2500);
             
             // Stop the race timer
             if (timerInterval) {
@@ -1314,8 +1367,19 @@ function animate() {
       }
     }
   }
+
+  // Update particles (drift sparks, boost flames, etc.)
+  updateParticles(deltaTime, carModel, kartState);
+
+  // Update GLO underglow (colour, intensity, position tracking)
+  updateGloSystem(gloSystem, deltaTime, carModel);
   
-  renderer.render(scene, camera);
+  // Render through post-processing pipeline (bloom + SMAA)
+  if (postProcessing) {
+    postProcessing.composer.render();
+  } else {
+    renderer.render(scene, camera);
+  }
 }
 
 // Add this new function to check if the car is flipped and auto-reset if needed

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<track  name           = "Block Fort (Mario Kart 64)"
+        version        = "7"
+        groups         = "Add-Ons"
+        designer       = "dreamer72"
+        music          = "battle.music"
+        arena          = "Y"
+        max-arena-players = "9"
+        screenshot     = "blockfort.jpg"
+        smooth-normals = "false"
+        default-number-of-laps = "4"
+        reverse        = "N"
+        is-during-day  = "Y"
+        shadows        = "Y"
+>
+</track>

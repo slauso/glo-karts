@@ -3,31 +3,120 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>GLO Karts - Realtime</title>
+    <title>GLO Karts - Online</title>
     <link rel="icon" type="image/png" href="/favicon.png" />
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Bungee&family=Exo+2:wght@400;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/src/realtime-style.css" />
-    <script type="module" src="/src/realtime-main.js"></script>
-  <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.4.0/model-viewer.min.js"></script>\n  </head>
+    <script src="https://kit.fontawesome.com/1ab8f48e0a.js" crossorigin="anonymous"></script>
+    <style>
+      *{margin:0;padding:0;box-sizing:border-box}
+      body{background:#05050a;color:#fff;font-family:"Exo 2","Poppins",sans-serif;overflow:hidden}
+      #loading-screen{position:fixed;inset:0;background:#000;display:flex;flex-direction:column;justify-content:center;align-items:center;z-index:9999;transition:opacity .5s ease-in-out}
+      .loading-title{font-family:"Bungee","Impact",sans-serif;font-weight:400;font-size:clamp(3.5rem,8vw,6rem);text-transform:uppercase;color:#fff;letter-spacing:6px;margin-bottom:8px;text-shadow:0 0 60px rgba(255,0,128,.5)}
+      .loading-subtitle{font-weight:700;font-size:1.4rem;text-transform:uppercase;letter-spacing:10px;color:#ff0080;margin-bottom:48px}
+      .loader{display:flex;gap:8px;margin-bottom:16px}
+      .bar{width:10px;height:48px;background:#ff0080;border-radius:4px;animation:barLoad 1.4s infinite ease-in-out;transform:scaleY(.1)}
+      .bar:nth-child(1){animation-delay:0s}.bar:nth-child(2){animation-delay:.1s}.bar:nth-child(3){animation-delay:.2s}.bar:nth-child(4){animation-delay:.3s}.bar:nth-child(5){animation-delay:.4s}
+      @keyframes barLoad{0%,100%{transform:scaleY(.1)}50%{transform:scaleY(1)}}
+      .loading-text{color:rgba(255,255,255,.65);font-weight:600;font-size:1rem;letter-spacing:3px;text-transform:uppercase}
+      #realtime-canvas{width:100vw;height:100vh;display:block;touch-action:none}
+      .exit-game-btn{position:fixed;top:20px;right:20px;z-index:100;width:44px;height:44px;border-radius:50%;background:rgba(12,12,18,.55);backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,.15);color:rgba(255,255,255,.7);display:flex;align-items:center;justify-content:center;text-decoration:none;font-size:18px;transition:all .2s}
+      .exit-game-btn:hover{background:#ff0080;color:#fff;border-color:#b30059}
+      #weapon-hud{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);padding:8px 20px;border-radius:12px;z-index:50;background:rgba(12,12,18,.6);backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,.12);font-weight:700;font-size:.9rem;letter-spacing:2px;text-transform:uppercase;color:rgba(255,255,255,.8)}
+      #effect-overlay{position:fixed;inset:0;z-index:40;pointer-events:none;display:none}
+    </style>
+  </head>
   <body>
-    <div id="splash-screen">
-      <div class="splash-content">
-        <h1 class="splash-title">GLO KARTS</h1>
-        <h2 id="splash-mode">RACE - COCOA TEMPLE</h2>
-        <div id="splash-players"></div>
-        <div id="splash-status">WAITING FOR OTHERS...</div>
-        
+    <!-- Loading Screen -->
+    <div id="loading-screen">
+      <h1 class="loading-title">GLO Karts</h1>
+      <p class="loading-subtitle">ONLINE</p>
+      <div class="loader">
+        <div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div>
       </div>
+      <div class="loading-text">Connecting...</div>
     </div>
-    <div id="countdown-overlay" style="display:none;"></div>
-    <div class="hud" id="rt-hud">
-      <div class="title">Realtime (Colyseus + Babylon)</div>
-      <div id="rt-status">Connecting…</div>
-      <div class="help">W/S throttle • A/D steer • SPACE brake • ENTER start</div>
-      <a href="index.html" class="exit">Back to Lobby</a>
-    </div>
+
+    <!-- Babylon.js canvas -->
     <canvas id="realtime-canvas"></canvas>
+
+    <!-- Weapon HUD -->
+    <div id="weapon-hud">NO WEAPON</div>
+
+    <!-- Status-effect overlay -->
+    <div id="effect-overlay"></div>
+
+    <!-- Exit to lobby -->
+    <a href="index.html" class="exit-game-btn" aria-label="Return to lobby">
+      <i class="fas fa-door-open"></i>
+    </a>
+
+    <!-- Entry script — bootstraps Colyseus + Babylon.js client -->
+    <script type="module">
+      import { ColyseusBabylonClient } from '/src/modules/realtime/colyseus-babylon-client.js';
+      import { getColyseusEndpoint } from '/src/modules/realtime/feature-flag.js';
+
+      const config = JSON.parse(sessionStorage.getItem('gameConfig') || '{}');
+      const myId   = sessionStorage.getItem('myPlayerId') || localStorage.getItem('myPlayerId');
+      const glo    = {
+        gloEffect: sessionStorage.getItem('gloEffect') || 'solid',
+        gloColor:  sessionStorage.getItem('gloColor')  || '#ff0080',
+        gloColor2: sessionStorage.getItem('gloColor2') || '#00e5ff',
+      };
+
+      const isBattle = config.gameMode === 'battle';
+      const roomName = isBattle ? 'battle_room' : 'race_room';
+      const canvas   = document.getElementById('realtime-canvas');
+
+      // Update splash subtitle
+      const sub = document.querySelector('.loading-subtitle');
+      if (sub) sub.textContent = isBattle ? 'BATTLE' : 'RACE';
+
+      const client = new ColyseusBabylonClient({
+        endpoint:   getColyseusEndpoint(),
+        roomName,
+        playerName: config.players?.find(p => p.id === myId)?.name || 'Player',
+        maxPlayers: config.maxPlayers || 12,
+        gameType:   config.battleType || 'deathmatch',
+      });
+
+      (async () => {
+        try {
+          await client.initBabylon(canvas);
+          await client.connect({
+            partyCode:   config.lobbyCode || config.partyCode || '',
+            trackId:     config.trackId   || 'cocoa_temple',
+            arenaId:     config.arenaId   || 'battleisland',
+            gameMode:    config.gameMode  || 'race',
+            gameType:    config.battleType || 'deathmatch',
+            maxPlayers:  config.maxPlayers || 12,
+            scoreLimit:  config.scoreLimit || 5,
+            playerName:  config.players?.find(p => p.id === myId)?.name || 'Player',
+            kartId:      config.selectedKart || sessionStorage.getItem('selectedKart') || 'tux',
+            playerColor: config.players?.find(p => p.id === myId)?.playerColor || 'red',
+            ...glo,
+          });
+          // Expose for automated Playwright tests
+          window.__gloClient = client;
+
+          // Hide loading screen
+          const ls = document.getElementById('loading-screen');
+          if (ls) { ls.style.opacity = '0'; setTimeout(() => ls.style.display = 'none', 500); }
+        } catch (err) {
+          console.error('[Realtime] Connection failed:', err);
+          const lt = document.querySelector('.loading-text');
+          if (lt) lt.textContent = 'Connection failed — returning to lobby...';
+          setTimeout(() => { window.location.href = 'index.html'; }, 3000);
+        }
+      })();
+    </script>
+
+    <!-- Vercel analytics: only on deployed domain -->
+    <script type="module">
+      if (/\.vercel\.app$/i.test(location.hostname)) {
+        import('https://esm.sh/@vercel/analytics').then(({ inject }) => inject()).catch(() => {});
+      }
+    </script>
   </body>
 </html>

@@ -1,0 +1,773 @@
+{
+  "config": {
+    "configFile": "C:\\Users\\laptop\\twistedkart\\frontend\\playwright.config.js",
+    "rootDir": "C:/Users/laptop/twistedkart/frontend/tests",
+    "forbidOnly": false,
+    "fullyParallel": false,
+    "globalSetup": null,
+    "globalTeardown": null,
+    "globalTimeout": 0,
+    "grep": {},
+    "grepInvert": null,
+    "maxFailures": 0,
+    "metadata": {},
+    "preserveOutput": "always",
+    "projects": [
+      {
+        "outputDir": "C:/Users/laptop/twistedkart/frontend/test-results",
+        "repeatEach": 1,
+        "retries": 1,
+        "metadata": {},
+        "id": "chromium-game",
+        "name": "chromium-game",
+        "testDir": "C:/Users/laptop/twistedkart/frontend/tests",
+        "testIgnore": [],
+        "testMatch": [
+          "**/*.@(spec|test).?(c|m)[jt]s?(x)"
+        ],
+        "timeout": 90000
+      }
+    ],
+    "quiet": false,
+    "reporter": [
+      [
+        "list",
+        null
+      ],
+      [
+        "json",
+        {
+          "outputFile": "tests/reports/playwright-results.json"
+        }
+      ],
+      [
+        "html",
+        {
+          "outputFolder": "tests/reports/html",
+          "open": "never"
+        }
+      ]
+    ],
+    "reportSlowTests": {
+      "max": 5,
+      "threshold": 300000
+    },
+    "runAgents": "none",
+    "shard": null,
+    "tags": [],
+    "updateSnapshots": "missing",
+    "updateSourceMethod": "patch",
+    "version": "1.58.2",
+    "workers": 1,
+    "webServer": {
+      "command": "npm run dev",
+      "url": "http://localhost:5173",
+      "reuseExistingServer": true,
+      "timeout": 30000
+    }
+  },
+  "suites": [
+    {
+      "title": "01-spawn-sequence.spec.js",
+      "file": "01-spawn-sequence.spec.js",
+      "column": 0,
+      "line": 0,
+      "specs": [],
+      "suites": [
+        {
+          "title": "Spawn Sequence",
+          "file": "01-spawn-sequence.spec.js",
+          "line": 21,
+          "column": 6,
+          "specs": [
+            {
+              "title": "kart is hidden before matchLive and visible after",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 90000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium-game",
+                  "projectName": "chromium-game",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "241b92c9944461e0cbe7-933229a550ccd6fad077",
+              "file": "01-spawn-sequence.spec.js",
+              "line": 22,
+              "column": 3
+            },
+            {
+              "title": "kart does not leave spawn area in first 500ms after GO",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 90000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium-game",
+                  "projectName": "chromium-game",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "241b92c9944461e0cbe7-ea4974743bf308bc77e2",
+              "file": "01-spawn-sequence.spec.js",
+              "line": 61,
+              "column": 3
+            },
+            {
+              "title": "kart extents match arena kartScale",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 90000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium-game",
+                  "projectName": "chromium-game",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "241b92c9944461e0cbe7-25c7ee52e10add23588b",
+              "file": "01-spawn-sequence.spec.js",
+              "line": 88,
+              "column": 3
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "02-map-viability.spec.js",
+      "file": "02-map-viability.spec.js",
+      "column": 0,
+      "line": 0,
+      "specs": [],
+      "suites": [
+        {
+          "title": "Race Tracks — Map Viability",
+          "file": "02-map-viability.spec.js",
+          "line": 90,
+          "column": 6,
+          "specs": [
+            {
+              "title": "[race] Amalfi Coast (map1)",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 90000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium-game",
+                  "projectName": "chromium-game",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "05cd79b561398bc260ea-62f8eff630d85aa4649e",
+              "file": "02-map-viability.spec.js",
+              "line": 92,
+              "column": 5
+            },
+            {
+              "title": "[race] Desert Dunes (map2)",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 90000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium-game",
+                  "projectName": "chromium-game",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "05cd79b561398bc260ea-06d7ba571e5059b33c00",
+              "file": "02-map-viability.spec.js",
+              "line": 92,
+              "column": 5
+            },
+            {
+              "title": "[race] Cocoa Temple (cocoa_temple)",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 90000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium-game",
+                  "projectName": "chromium-game",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "05cd79b561398bc260ea-f0a6f6e460d134bb4362",
+              "file": "02-map-viability.spec.js",
+              "line": 92,
+              "column": 5
+            },
+            {
+              "title": "[race] Cornfield Xing (cornfield_crossing)",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 90000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium-game",
+                  "projectName": "chromium-game",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "05cd79b561398bc260ea-ff41c2e7abf9907ef161",
+              "file": "02-map-viability.spec.js",
+              "line": 92,
+              "column": 5
+            },
+            {
+              "title": "[race] Zen Garden (zengarden)",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 90000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium-game",
+                  "projectName": "chromium-game",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "05cd79b561398bc260ea-7f8ad751aea7a26aec8a",
+              "file": "02-map-viability.spec.js",
+              "line": 92,
+              "column": 5
+            }
+          ]
+        },
+        {
+          "title": "Battle Arenas — Map Viability",
+          "file": "02-map-viability.spec.js",
+          "line": 138,
+          "column": 6,
+          "specs": [
+            {
+              "title": "[battle] Battle Island (battleisland)",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 90000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium-game",
+                  "projectName": "chromium-game",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "05cd79b561398bc260ea-7ceebb85025cc8c43bbe",
+              "file": "02-map-viability.spec.js",
+              "line": 140,
+              "column": 5
+            },
+            {
+              "title": "[battle] Stadium (stadium)",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 90000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium-game",
+                  "projectName": "chromium-game",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "05cd79b561398bc260ea-22eef726c24998bc405c",
+              "file": "02-map-viability.spec.js",
+              "line": 140,
+              "column": 5
+            },
+            {
+              "title": "[battle] Block Fort (blockfort)",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 90000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium-game",
+                  "projectName": "chromium-game",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "05cd79b561398bc260ea-6f1161d36d6a7eb7e88d",
+              "file": "02-map-viability.spec.js",
+              "line": 140,
+              "column": 5
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "03-pvp-session.spec.js",
+      "file": "03-pvp-session.spec.js",
+      "column": 0,
+      "line": 0,
+      "specs": [],
+      "suites": [
+        {
+          "title": "PvP Battle Session",
+          "file": "03-pvp-session.spec.js",
+          "line": 30,
+          "column": 6,
+          "specs": [
+            {
+              "title": "2 players join battle_room and reach matchLive",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 90000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium-game",
+                  "projectName": "chromium-game",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "0c3419ee17ca251e3faa-4ef4ced17d45ea4aacff",
+              "file": "03-pvp-session.spec.js",
+              "line": 32,
+              "column": 3
+            },
+            {
+              "title": "item box pickup grants weapon to local player",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 90000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium-game",
+                  "projectName": "chromium-game",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "0c3419ee17ca251e3faa-33d7a9f43cc647581d4b",
+              "file": "03-pvp-session.spec.js",
+              "line": 86,
+              "column": 3
+            },
+            {
+              "title": "fire weapon broadcasts projectileFired to both players",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 90000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium-game",
+                  "projectName": "chromium-game",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "0c3419ee17ca251e3faa-5ee7537529327293cc50",
+              "file": "03-pvp-session.spec.js",
+              "line": 131,
+              "column": 3
+            },
+            {
+              "title": "kart positions stay finite for both players during live play",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 90000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium-game",
+                  "projectName": "chromium-game",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "0c3419ee17ca251e3faa-413c221fb12377cb5057",
+              "file": "03-pvp-session.spec.js",
+              "line": 186,
+              "column": 3
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "04-kart-scaling.spec.js",
+      "file": "04-kart-scaling.spec.js",
+      "column": 0,
+      "line": 0,
+      "specs": [],
+      "suites": [
+        {
+          "title": "Kart Scaling per Arena",
+          "file": "04-kart-scaling.spec.js",
+          "line": 32,
+          "column": 6,
+          "specs": [
+            {
+              "title": "Block Fort (blockfort) — effective kart scale",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 90000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium-game",
+                  "projectName": "chromium-game",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "7c2695246ada175f00ff-bdd566f830224c6f155f",
+              "file": "04-kart-scaling.spec.js",
+              "line": 34,
+              "column": 5
+            },
+            {
+              "title": "Battle Island (battleisland) — effective kart scale",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 90000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium-game",
+                  "projectName": "chromium-game",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "7c2695246ada175f00ff-62f8628058d986cef00a",
+              "file": "04-kart-scaling.spec.js",
+              "line": 34,
+              "column": 5
+            },
+            {
+              "title": "Stadium (stadium) — effective kart scale",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 90000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium-game",
+                  "projectName": "chromium-game",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "7c2695246ada175f00ff-9966df3e7938827eaecb",
+              "file": "04-kart-scaling.spec.js",
+              "line": 34,
+              "column": 5
+            },
+            {
+              "title": "Cocoa Temple (cocoa_temple) — effective kart scale",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 90000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium-game",
+                  "projectName": "chromium-game",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "7c2695246ada175f00ff-7267345265e6bf0e60c8",
+              "file": "04-kart-scaling.spec.js",
+              "line": 34,
+              "column": 5
+            },
+            {
+              "title": "Amalfi Coast (map1) — effective kart scale",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 90000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium-game",
+                  "projectName": "chromium-game",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "7c2695246ada175f00ff-2db2a7507b448458bccc",
+              "file": "04-kart-scaling.spec.js",
+              "line": 34,
+              "column": 5
+            },
+            {
+              "title": "no arena produces a physics box wider than 6 m",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 90000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium-game",
+                  "projectName": "chromium-game",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "7c2695246ada175f00ff-1d9022c2898157310d6e",
+              "file": "04-kart-scaling.spec.js",
+              "line": 86,
+              "column": 3
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "phase1-smoke.spec.js",
+      "file": "phase1-smoke.spec.js",
+      "column": 0,
+      "line": 0,
+      "specs": [],
+      "suites": [
+        {
+          "title": "Lobby Page",
+          "file": "phase1-smoke.spec.js",
+          "line": 9,
+          "column": 6,
+          "specs": [
+            {
+              "title": "loads without console errors",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 90000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium-game",
+                  "projectName": "chromium-game",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "0d33261e8f63f2a56851-4cc478a7794b03e3d38f",
+              "file": "phase1-smoke.spec.js",
+              "line": 10,
+              "column": 3
+            },
+            {
+              "title": "has Play button / mode selector",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 90000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium-game",
+                  "projectName": "chromium-game",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "0d33261e8f63f2a56851-87876a37935b8483968a",
+              "file": "phase1-smoke.spec.js",
+              "line": 28,
+              "column": 3
+            }
+          ]
+        },
+        {
+          "title": "Realtime Page",
+          "file": "phase1-smoke.spec.js",
+          "line": 43,
+          "column": 6,
+          "specs": [
+            {
+              "title": "loads canvas without crash",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 90000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium-game",
+                  "projectName": "chromium-game",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "0d33261e8f63f2a56851-bbf1819b7028d0d8cb9a",
+              "file": "phase1-smoke.spec.js",
+              "line": 44,
+              "column": 3
+            }
+          ]
+        },
+        {
+          "title": "Colyseus Backend",
+          "file": "phase1-smoke.spec.js",
+          "line": 69,
+          "column": 6,
+          "specs": [
+            {
+              "title": "health endpoint responds",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 90000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium-game",
+                  "projectName": "chromium-game",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "0d33261e8f63f2a56851-e85351a5566a81d6590f",
+              "file": "phase1-smoke.spec.js",
+              "line": 70,
+              "column": 3
+            }
+          ]
+        },
+        {
+          "title": "Two-Player Multiplayer",
+          "file": "phase1-smoke.spec.js",
+          "line": 82,
+          "column": 6,
+          "specs": [
+            {
+              "title": "two browsers can join the same race room",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 90000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium-game",
+                  "projectName": "chromium-game",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "0d33261e8f63f2a56851-1a54bf68c5a47f0278bb",
+              "file": "phase1-smoke.spec.js",
+              "line": 83,
+              "column": 3
+            }
+          ]
+        },
+        {
+          "title": "Entity Schema Contract",
+          "file": "phase1-smoke.spec.js",
+          "line": 131,
+          "column": 6,
+          "specs": [
+            {
+              "title": "EntityState has required fields via Colyseus monitor",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 90000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium-game",
+                  "projectName": "chromium-game",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "0d33261e8f63f2a56851-e1e0ea2c88cb3f64fb67",
+              "file": "phase1-smoke.spec.js",
+              "line": 132,
+              "column": 3
+            }
+          ]
+        },
+        {
+          "title": "Battle Page",
+          "file": "phase1-smoke.spec.js",
+          "line": 141,
+          "column": 6,
+          "specs": [
+            {
+              "title": "loads without crash",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 90000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium-game",
+                  "projectName": "chromium-game",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "0d33261e8f63f2a56851-df9d01c9641686fa20f2",
+              "file": "phase1-smoke.spec.js",
+              "line": 142,
+              "column": 3
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "stats": {
+    "startTime": "2026-03-04T15:49:56.671Z",
+    "duration": 517.2909999999999,
+    "expected": 0,
+    "skipped": 28,
+    "unexpected": 0,
+    "flaky": 0
+  }
+}

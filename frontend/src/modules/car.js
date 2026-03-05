@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { resolveKartAsset } from './content-registry.js';
 
 // Vehicle parameters
 const VEHICLE_WIDTH = 2.0;
@@ -131,6 +132,27 @@ function loadCarModel(ammo, scene, carComponents, wheelPositions, onModelLoaded)
   
   // Get the player ID
   const myPlayerId = sessionStorage.getItem('myPlayerId') || localStorage.getItem('myPlayerId');
+
+  // ── Resolve kart model from content registry ─────────────────────────────
+  // Prefer lobbyLoadout > gameConfig.players kartId > fallback to default
+  let kartId = sessionStorage.getItem('kartId') || 'default';
+  try {
+    const savedConfig = sessionStorage.getItem('gameConfig');
+    if (savedConfig) {
+      const gc = JSON.parse(savedConfig);
+      const me = gc?.players?.find(p => p.id === myPlayerId);
+      if (me?.kartId) kartId = me.kartId;
+    }
+  } catch (_) {}
+
+  const kartInfo = resolveKartAsset(kartId);
+  const isSTKKart = kartInfo.id !== 'default';
+  const kartModelPath = isSTKKart ? kartInfo.modelPath : null; // null → fall back to carColor
+  const kartModelScale = isSTKKart ? kartInfo.scale : null;    // null → use hardcoded 4
+  // ─────────────────────────────────────────────────────────────────────────
+  
+  // Get the player ID
+  const myPlayerId = sessionStorage.getItem('myPlayerId') || localStorage.getItem('myPlayerId');
   
   // Determine car color with proper priority:
   let carColor = 'red';
@@ -164,13 +186,16 @@ function loadCarModel(ammo, scene, carComponents, wheelPositions, onModelLoaded)
   }
   
   // Load the appropriate colored car model
+  const modelPath = kartModelPath || `/models/car_${carColor}.glb`;
+  const modelScale = kartModelScale ?? 4;
+
   loader.load(
-    `/models/car_${carColor}.glb`,
+    modelPath,
     (gltf) => {
       const carModel = gltf.scene;
       
-      // Adjust model scale and position if needed
-      carModel.scale.set(4, 4, 4); // Adjust scale as needed
+      // Apply scale — STK karts use content-registry scale; old car.glb uses 4
+      carModel.scale.setScalar(modelScale);
       carModel.position.set(0, 0, 0); // Position will be updated by physics
       
       // Make sure car casts shadows
@@ -180,63 +205,58 @@ function loadCarModel(ammo, scene, carComponents, wheelPositions, onModelLoaded)
           node.receiveShadow = false;
         }
       });
+
+      // ── Wheel extraction: only for the old car.glb (has named wheel meshes) ──
+      // STK karts are single-piece models; skip wheel lookups for them.
+      if (!isSTKKart) {
       
-      // Find wheel meshes in the car model
-      let wheelMeshFL = carModel.getObjectByName('wheel-fr');
-      let wheelMeshFR = carModel.getObjectByName('wheel-fl');
-      let wheelMeshBL = carModel.getObjectByName('wheel-br');
-      let wheelMeshBR = carModel.getObjectByName('wheel-bl');
-      
-      const wheelModelMeshes = [wheelMeshFL, wheelMeshFR, wheelMeshBL, wheelMeshBR];
-      
-      // Store reference to wheel meshes and detach them from car model
-      for (let i = 0; i < wheelModelMeshes.length; i++) {
-        if (wheelModelMeshes[i]) {
-          // Get the original world matrix before removal to preserve transformations
-          wheelModelMeshes[i].updateMatrixWorld(true);
-          
-          // Remove from car model
-          carModel.remove(wheelModelMeshes[i]);
-          
-          // Add directly to scene so we can control it separately
-          scene.add(wheelModelMeshes[i]);
-          
-          // Apply the same scale as the car model
-          wheelModelMeshes[i].scale.set(4, 4, 4);
-          
-          // Save reference
-          carComponents.wheelMeshes[i] = wheelModelMeshes[i];
-          
-          console.log(`Found and set up wheel: ${wheelPositions[i].name}`);
-        } else {
-          console.warn(`Could not find wheel mesh: ${wheelPositions[i].name}`);
-          
-          // Create a default wheel as fallback
-          const wheelGeometry = new THREE.CylinderGeometry(
-            WHEEL_RADIUS, WHEEL_RADIUS, WHEEL_WIDTH, 24
-          );
-          wheelGeometry.rotateZ(Math.PI/2); 
-          
-          const wheelMaterial = new THREE.MeshStandardMaterial({ color: 0x222222 });
-          const wheelMesh = new THREE.Mesh(wheelGeometry, wheelMaterial);
-          wheelMesh.castShadow = true;
-          scene.add(wheelMesh);
-          
-          // Scale the default wheel to match too
-          wheelMesh.scale.set(4, 4, 4);
-          
-          // Use this default wheel
-          carComponents.wheelMeshes[i] = wheelMesh;
+        // Find wheel meshes in the car model
+        let wheelMeshFL = carModel.getObjectByName('wheel-fr');
+        let wheelMeshFR = carModel.getObjectByName('wheel-fl');
+        let wheelMeshBL = carModel.getObjectByName('wheel-br');
+        let wheelMeshBR = carModel.getObjectByName('wheel-bl');
+
+        const wheelModelMeshes = [wheelMeshFL, wheelMeshFR, wheelMeshBL, wheelMeshBR];
+
+        // Store reference to wheel meshes and detach them from car model
+        for (let i = 0; i < wheelModelMeshes.length; i++) {
+          if (wheelModelMeshes[i]) {
+            wheelModelMeshes[i].updateMatrixWorld(true);
+            carModel.remove(wheelModelMeshes[i]);
+            scene.add(wheelModelMeshes[i]);
+            wheelModelMeshes[i].scale.setScalar(modelScale);
+            carComponents.wheelMeshes[i] = wheelModelMeshes[i];
+            console.log(`Found and set up wheel: ${wheelPositions[i].name}`);
+          } else {
+            console.warn(`Could not find wheel mesh: ${wheelPositions[i].name}`);
+            const wheelGeometry = new THREE.CylinderGeometry(WHEEL_RADIUS, WHEEL_RADIUS, WHEEL_WIDTH, 24);
+            wheelGeometry.rotateZ(Math.PI / 2);
+            const wheelMaterial = new THREE.MeshStandardMaterial({ color: 0x222222 });
+            const wheelMesh = new THREE.Mesh(wheelGeometry, wheelMaterial);
+            wheelMesh.castShadow = true;
+            scene.add(wheelMesh);
+            wheelMesh.scale.setScalar(modelScale);
+            carComponents.wheelMeshes[i] = wheelMesh;
+          }
+        }
+      } // end !isSTKKart wheel extraction
+
+      // For STK karts, create invisible proxy wheel meshes that just track physics positions
+      // (the kart model renders its own wheels as part of the body)
+      if (isSTKKart) {
+        for (let i = 0; i < wheelPositions.length; i++) {
+          const geo = new THREE.SphereGeometry(WHEEL_RADIUS, 6, 6);
+          const mat = new THREE.MeshBasicMaterial({ visible: false });
+          const proxy = new THREE.Mesh(geo, mat);
+          scene.add(proxy);
+          carComponents.wheelMeshes[i] = proxy;
         }
       }
-      
-      // Add car model to scene
+
+      // Add car model to scene and fire the loaded callback
       scene.add(carModel);
       carComponents.carModel = carModel;
-      
-      console.log('Car model loaded successfully');
-      
-      // Now call the callback with the updated components
+      console.log(`Car model loaded: ${modelPath} (scale ${modelScale}${isSTKKart ? ', STK kart' : ', classic'})`);
       if (onModelLoaded) onModelLoaded(carComponents);
     },
     undefined,
