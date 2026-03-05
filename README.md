@@ -1,10 +1,6 @@
 # GLO Karts
 
-![GLO Karts](frontend/public/favicon.png)
 
-**A browser-native, multiplayer 3D kart racing and battle game** — featuring 19 playable characters, 20 race tracks, 10 battle arenas, 28 animated underglow effects, and an authoritative Colyseus netcode backend. Built entirely with modern web technologies, no plugins or installs required.
-
-> [Play GLO Karts Online](https://racez.io)
 
 ---
 
