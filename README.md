@@ -1,9 +1,7 @@
 
 A real-time multiplayer 3D racing game built with JavaScript and modern web technologies. Race with friends through various tracks, compete for the best time, and enjoy physics-based driving mechanics.
 
-## Play Now
 
-[Play Twisted Kart Online](https://racez.io)
 
 ## Features
 
