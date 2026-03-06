@@ -2,8 +2,8 @@ import { Room } from "@colyseus/core";
 import { LobbyState } from "../schema/LobbyState.js";
 import { LobbyPlayerState } from "../schema/LobbyPlayerState.js";
 
-const DEFAULT_TRACK = "cocoa_temple";
-const DEFAULT_ARENA = "battleisland";
+const DEFAULT_TRACK = "test_box";
+const DEFAULT_ARENA = "test_box";
 const DEFAULT_BATTLE_TYPE = "deathmatch";
 const DEFAULT_MAX_PLAYERS = 12;
 const MAX_CONCURRENT_LOBBY_PLAYERS = 100;

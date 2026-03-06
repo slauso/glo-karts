@@ -17,6 +17,7 @@
     "test:maps": "npx playwright test tests/02-map-viability.spec.js",
     "test:pvp": "npx playwright test tests/03-pvp-session.spec.js",
     "test:scaling": "npx playwright test tests/04-kart-scaling.spec.js",
+    "test:prematch": "npx playwright test tests/05-prematch-lobby.spec.js",
     "test:smoke": "npx playwright test tests/phase1-smoke.spec.js",
     "test:full": "npx playwright test && node scripts/apply-map-audit.mjs --dry-run",
     "audit:maps": "npx playwright test tests/02-map-viability.spec.js && node scripts/apply-map-audit.mjs",
@@ -32,8 +33,6 @@
     "@babylonjs/havok": "^1.3.11",
     "@babylonjs/loaders": "^8.53.0",
     "@vercel/analytics": "^1.5.0",
-    "cannon-es": "^0.20.0",
-    "cannon-es-debugger": "^1.0.0",
     "colyseus.js": "^0.16.22",
     "three": "^0.175.0"
   }

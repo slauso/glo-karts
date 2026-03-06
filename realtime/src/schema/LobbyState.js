@@ -7,8 +7,8 @@ export class LobbyState extends Schema {
     this.lobbyCode = "";
     this.privacy = "private";
     this.gameMode = "race";
-    this.trackId = "cocoa_temple";
-    this.arenaId = "battleisland";
+    this.trackId = "test_box";
+    this.arenaId = "test_box";
     this.battleType = "deathmatch";
     this.maxPlayers = 12;
     this.status = "waiting";

@@ -1,40 +1,14 @@
-// GLO Karts — Track / Arena Carousel (lobby-track-preview.js)
-// Navigation + events only. Thumbnails are a placeholder; visual preview to be added later.
+// GLO KARTS — Track / Arena Carousel (lobby-track-preview.js)
+// Navigation + thumbnail preview display.
 
 // ── Rosters (mirrors lobby.js STK_TRACKS / STK_ARENAS) ─────────────────────
 
 const STK_TRACKS = [
-  { id: 'cocoa_temple',         name: 'Cocoa Temple' },
-  { id: 'hacienda',             name: 'Hacienda' },
-  { id: 'minigolf',             name: 'Minigolf' },
-  { id: 'sandtrack',            name: 'Shifting Sands' },
-  { id: 'snowtuxpeak',          name: 'Snow Peak' },
-  { id: 'zengarden',            name: 'Zen Garden' },
-  { id: 'lighthouse',           name: 'Around the Lighthouse' },
-  { id: 'olivermath',           name: "Oliver's Math Class" },
-  { id: 'black_forest',         name: 'Black Forest' },
-  { id: 'xr591',                name: 'XR591' },
-  { id: 'oasis',                name: 'Oasis' },
-  { id: 'gran_paradiso_island', name: 'Gran Paradiso Island' },
-  { id: 'mines',                name: 'Old Mine' },
-  { id: 'snowmountain',         name: 'Northern Resort' },
-  { id: 'abyss',                name: 'Antediluvian Abyss' },
-  { id: 'cornfield_crossing',   name: 'Cornfield Crossing' },
-  { id: 'volcano_island',       name: 'Volcan Island' },
-  { id: 'ravenbridge_mansion',  name: 'Ravenbridge Mansion' },
+  { id: 'test_box', name: 'Test Box' },
 ];
 
 const STK_ARENAS = [
-  { id: 'blockfort',                   name: 'Block Fort' },
-  { id: 'battleisland',                name: 'Battle Island' },
-  { id: 'lasdunasarena',               name: 'Las Dunas Arena' },
-  { id: 'cave',                        name: 'Cave X' },
-  { id: 'pumpkin_park',                name: 'Pumpkin Park' },
-  { id: 'arena_candela_city',          name: 'Candela City' },
-  { id: 'ancient_colosseum_labyrinth', name: 'Ancient Colosseum' },
-  { id: 'stadium',                     name: 'The Stadium' },
-  { id: 'alien_signal',                name: 'Alien Signal' },
-  { id: 'temple',                      name: 'Temple' },
+  { id: 'test_box', name: 'Test Box' },
 ];
 
 function getList(mode) {
@@ -57,6 +31,110 @@ class TrackPreview {
   }
 
   // ── Thumbnail display ──────────────────────────────────────────────────────
+
+  _getThumbPath(item) {
+    const prefix = this.mode === 'battle' ? 'battle' : 'race';
+    return `/thumbs/${prefix}-${item.id}.jpg`;
+  }
+
+  _updateThumb() {
+    const img = document.getElementById('track-preview-thumb');
+    if (!img) return;
+    const item = this._currentItem();
+    const src  = this._getThumbPath(item);
+
+    // Remove any previous procedural canvas
+    const oldCanvas = this.container?.querySelector('.track-preview-canvas');
+    if (oldCanvas) oldCanvas.remove();
+
+    // Try loading the thumbnail image; fall back to procedural preview on error
+    img.onerror = () => {
+      img.style.opacity = '0';
+      this._drawProceduralPreview(item);
+    };
+    img.onload = () => {
+      img.style.opacity = '1';
+    };
+    img.src = src;
+    img.alt = item.name;
+  }
+
+  /** Draw a simple procedural top-down arena preview when no thumbnail exists */
+  _drawProceduralPreview(item) {
+    if (!this.container) return;
+    // Avoid duplicates
+    if (this.container.querySelector('.track-preview-canvas')) return;
+
+    const canvas = document.createElement('canvas');
+    canvas.className = 'track-preview-canvas';
+    canvas.width = 480;
+    canvas.height = 300;
+    this.container.appendChild(canvas);
+
+    const ctx = canvas.getContext('2d');
+    const w = canvas.width, h = canvas.height;
+
+    // Dark background
+    ctx.fillStyle = '#0a0a18';
+    ctx.fillRect(0, 0, w, h);
+
+    // Subtle grid
+    ctx.strokeStyle = 'rgba(255,255,255,0.04)';
+    ctx.lineWidth = 1;
+    for (let x = 0; x < w; x += 20) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke(); }
+    for (let y = 0; y < h; y += 20) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke(); }
+
+    // Isometric arena floor
+    const cx = w / 2, cy = h * 0.48;
+    const sx = w * 0.38, sy = h * 0.22;
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(cx, cy - sy);
+    ctx.lineTo(cx + sx, cy);
+    ctx.lineTo(cx, cy + sy);
+    ctx.lineTo(cx - sx, cy);
+    ctx.closePath();
+
+    const floorGrad = ctx.createLinearGradient(cx - sx, cy, cx + sx, cy);
+    floorGrad.addColorStop(0, '#1a1a2e');
+    floorGrad.addColorStop(0.5, '#252545');
+    floorGrad.addColorStop(1, '#1a1a2e');
+    ctx.fillStyle = floorGrad;
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(0,200,255,0.25)';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    // Walls (raised edges)
+    const wallH = h * 0.06;
+    ctx.fillStyle = 'rgba(0,200,255,0.12)';
+    // Left wall
+    ctx.beginPath();
+    ctx.moveTo(cx - sx, cy); ctx.lineTo(cx, cy - sy);
+    ctx.lineTo(cx, cy - sy - wallH); ctx.lineTo(cx - sx, cy - wallH);
+    ctx.closePath(); ctx.fill();
+    // Right wall
+    ctx.fillStyle = 'rgba(0,200,255,0.08)';
+    ctx.beginPath();
+    ctx.moveTo(cx, cy - sy); ctx.lineTo(cx + sx, cy);
+    ctx.lineTo(cx + sx, cy - wallH); ctx.lineTo(cx, cy - sy - wallH);
+    ctx.closePath(); ctx.fill();
+
+    // Edge glow lines
+    ctx.strokeStyle = 'rgba(0,200,255,0.35)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(cx - sx, cy); ctx.lineTo(cx, cy - sy); ctx.lineTo(cx + sx, cy);
+    ctx.stroke();
+
+    ctx.restore();
+
+    // Track name label
+    ctx.font = '600 13px system-ui, sans-serif';
+    ctx.fillStyle = 'rgba(255,255,255,0.35)';
+    ctx.textAlign = 'center';
+    ctx.fillText(item.name.toUpperCase(), cx, h - 16);
+  }
 
   // ── Navigation ─────────────────────────────────────────────────────────────
 
@@ -126,6 +204,7 @@ class TrackPreview {
     const indexEl = document.getElementById('track-carousel-index');
     if (nameEl)  nameEl.textContent  = item.name;
     if (indexEl) indexEl.textContent = `${this.currentIndex + 1} / ${list.length}`;
+    this._updateThumb();
   }
 
   _setupNavButtons() {

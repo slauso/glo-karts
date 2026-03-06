@@ -1,5 +1,5 @@
 /**
- * GLO Karts — Map Viability Audit
+ * GLO KARTS — Map Viability Audit
  *
  * Tests every track and arena defined in content-registry for:
  *   ✓  Track physics colliders created (> 0)

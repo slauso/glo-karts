@@ -1,5 +1,5 @@
 /**
- * GLO Karts — Shared Playwright test helpers
+ * GLO KARTS — Shared Playwright test helpers
  *
  * Provides:
  *  - injectGameConfig(page, cfg)  — set sessionStorage before navigation

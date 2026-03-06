@@ -21,7 +21,7 @@ function safeUnit(value, fallback = 0) {
 export class RaceRoom extends Room {
   onCreate(options = {}) {
     const state = new RaceState();
-    state.trackId = options.trackId || "cocoa_temple";
+    state.trackId = options.trackId || "test_box";
     state.totalLaps = Math.min(Math.max(Number(options.totalLaps) || 3, 1), 10);
     this.setState(state);
 
@@ -35,9 +35,10 @@ export class RaceRoom extends Room {
       if (this.state.started || this.countdownActive) return;
       this.countdownActive = true;
 
-      const durationMs = 4000;
+      const durationMs = 10000;
       const serverNow = Date.now();
       const startAt = serverNow + durationMs;
+      this._countdownStartAt = startAt;
 
       this.broadcast("startSequence", { durationMs, startAt, serverNow });
 
@@ -52,9 +53,10 @@ export class RaceRoom extends Room {
       if (this.state.started || this.countdownActive) return;
       this.countdownActive = true;
 
-      const durationMs = 4000;
+      const durationMs = 10000;
       const serverNow = Date.now();
       const startAt = serverNow + durationMs;
+      this._countdownStartAt = startAt;
 
       this.broadcast("startSequence", { durationMs, startAt, serverNow });
 

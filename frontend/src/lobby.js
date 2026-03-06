@@ -13,37 +13,11 @@ import {
 } from './game-modes.js';
 
 const STK_TRACKS = [
-  { id: 'cocoa_temple',         name: 'Cocoa Temple' },
-  { id: 'hacienda',             name: 'Hacienda' },
-  { id: 'minigolf',             name: 'Minigolf' },
-  { id: 'sandtrack',            name: 'Shifting Sands' },
-  { id: 'snowtuxpeak',          name: 'Snow Peak' },
-  { id: 'zengarden',            name: 'Zen Garden' },
-  { id: 'lighthouse',           name: 'Around the Lighthouse' },
-  { id: 'olivermath',           name: "Oliver's Math Class" },
-  { id: 'black_forest',         name: 'Black Forest' },
-  { id: 'xr591',                name: 'XR591' },
-  { id: 'oasis',                name: 'Oasis' },
-  { id: 'gran_paradiso_island', name: 'Gran Paradiso Island' },
-  { id: 'mines',                name: 'Old Mine' },
-  { id: 'snowmountain',         name: 'Northern Resort' },
-  { id: 'abyss',                name: 'Antediluvian Abyss' },
-  { id: 'cornfield_crossing',   name: 'Cornfield Crossing' },
-  { id: 'volcano_island',       name: 'Volcan Island' },
-  { id: 'ravenbridge_mansion',  name: 'Ravenbridge Mansion' },
+  { id: 'test_box', name: 'Test Box' },
 ];
 
 const STK_ARENAS = [
-  { id: 'blockfort',                   name: 'Block Fort' },
-  { id: 'battleisland',                name: 'Battle Island' },
-  { id: 'lasdunasarena',               name: 'Las Dunas Arena' },
-  { id: 'cave',                        name: 'Cave X' },
-  { id: 'pumpkin_park',                name: 'Pumpkin Park' },
-  { id: 'arena_candela_city',          name: 'Candela City' },
-  { id: 'ancient_colosseum_labyrinth', name: 'Ancient Colosseum' },
-  { id: 'stadium',                     name: 'The Stadium' },
-  { id: 'alien_signal',                name: 'Alien Signal' },
-  { id: 'temple',                      name: 'Temple' },
+  { id: 'test_box', name: 'Test Box' },
 ];
 
 const DEFAULTS = {
@@ -53,8 +27,8 @@ const DEFAULTS = {
   botCount: 6,
   loadoutId: 'random-all',
   scoreLimit: 5,
-  arenaId: 'battleisland',
-  trackId: STK_TRACKS[0].id,
+  arenaId: 'test_box',
+  trackId: 'test_box',
 };
 
 function normalizeLobbyCode(raw) {
@@ -136,6 +110,7 @@ class RacingLobby {
     this.playerList = document.getElementById('player-list');
     this.readyCountEl = document.getElementById('ready-count');
     this.racersTitle = document.querySelector('.right-panel .panel-title');
+    this.rightPanel = document.querySelector('.right-panel');
 
     this.playerNameInput.value = this.playerName;
   }
@@ -413,6 +388,7 @@ class RacingLobby {
     this.createPartyBtn?.classList.remove('hidden');
     this.quickMatchBtn?.classList.remove('hidden');
     this.joinSection?.classList.remove('hidden');
+    this.rightPanel?.classList.remove('lobby-active');
 
     this.updatePlayerList();
     this.refreshActionButtons();
@@ -425,6 +401,7 @@ class RacingLobby {
     this.createPartyBtn?.classList.add('hidden');
     this.quickMatchBtn?.classList.add('hidden');
     this.joinSection?.classList.add('hidden');
+    this.rightPanel?.classList.add('lobby-active');
   }
 
   setJoinStatus(text) {
@@ -614,10 +591,13 @@ class RacingLobby {
         this.startMatchBtn.disabled = false; // Host can always attempt — server auto-readies host
         if (total <= 1) {
           this.startMatchBtn.textContent = 'START MATCH';
+          this.startMatchBtn.classList.remove('all-ready');
         } else if (allReady) {
           this.startMatchBtn.textContent = 'START MATCH';
+          this.startMatchBtn.classList.add('all-ready');
         } else {
           this.startMatchBtn.textContent = `START (${readyCount}/${total} ready)`;
+          this.startMatchBtn.classList.remove('all-ready');
         }
       }
     }

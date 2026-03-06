@@ -1,5 +1,5 @@
 /**
- * GLO Karts — Spawn Sequence Tests
+ * GLO KARTS — Spawn Sequence Tests
  *
  * Verifies that:
  *  1. Kart mesh is hidden (isVisible=false) during the pre-match countdown.

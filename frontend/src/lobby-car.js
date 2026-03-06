@@ -1,4 +1,4 @@
-// GLO Karts — Kart Preview (lobby-car.js)
+// GLO KARTS — Kart Preview (lobby-car.js)
 // Renamed STK characters, 3D underglow, Pick-your-GLO system
 
 // ── Kart roster with GLO-Karts character names ──────────────────
@@ -128,12 +128,27 @@ class KartPreview {
     this.glowLight     = null;   // PointLight
     this.glowTime      = 0;
 
+    // Animated parts
+    this._wheels       = [];     // wheel mesh refs for spin
+    this._characterRoot = null;  // character node for breathing
+
     // Showroom effects
     this._orbitLight   = null;   // orbiting accent light
     this._showTime     = 0;      // shared timer for bob + orbit
     this._kartBaseY    = 0;      // rest Y after placement
+    this._kartBaseX    = 0;
+    this._kartScale    = 1;
     this._lastFrame    = 0;      // for real delta-time
     this._boundAnimate = this.animate.bind(this); // avoid per-frame alloc
+
+    // Swap transition state
+    this._exitingKart      = null;
+    this._exitingKartScale = 1;
+    this._exitBaseX        = 0;
+    this._exitDir          = 0;
+    this._exitT            = 1;
+    this._enterDir         = 0;
+    this._enterT           = 1; // 1 = fully settled
 
     const savedId = sessionStorage.getItem('selectedKart') || 'tux';
     this.currentIndex = STK_KARTS.findIndex(k => k.id === savedId);
@@ -170,14 +185,16 @@ class KartPreview {
     // Camera
     const w = this.container.clientWidth  || 400;
     const h = this.container.clientHeight || 300;
-    this.camera = new THREE.PerspectiveCamera(28, w / h, 0.1, 200);
-    this.camera.position.set(0, 2.4, 4.77);
-    this.camera.lookAt(0, 0.72, 0);
+    const renderH = Math.round(h / 0.85);          // render taller, crop top 15%
+    this.camera = new THREE.PerspectiveCamera(28, w / renderH, 0.1, 200);
+    this.camera.position.set(0, 2.38, 5.25);
+    this.camera.lookAt(0, 0.28, 0);
 
     // Renderer — transparent so panel glass shows behind
     this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    this.renderer.setSize(w, h);
+    this.renderer.setSize(w, renderH);
+    this.renderer.domElement.style.marginTop = `${-(renderH - h)}px`;
     this.renderer.setClearColor(0x000000, 0);
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -414,9 +431,19 @@ class KartPreview {
   }
 
   // ── Load a kart GLB ──────────────────────────────────────────
-  loadKart(id) {
+  loadKart(id, dir = 0) {
     const loader = new THREE.GLTFLoader();
-    if (this.kart) { this.scene.remove(this.kart); this.kart = null; this.isInitialized = false; }
+    if (this.kart && dir !== 0) {
+      // Keep old kart alive for exit slide
+      if (this._exitingKart) this.scene.remove(this._exitingKart);
+      this._exitingKart = this.kart;
+      this._exitingKartScale = this.kart.scale.x;
+      this._exitBaseX = this.kart.position.x;
+      this._exitDir = dir;
+      this._exitT = 0;
+      this.kart = null;
+      this.isInitialized = false;
+    } else if (this.kart) { this.scene.remove(this.kart); this.kart = null; this.isInitialized = false; }
     const nameEl = document.getElementById('kart-name');
     if (nameEl) { nameEl.classList.add('kart-swapping'); nameEl.textContent = '...'; }
 
@@ -426,14 +453,18 @@ class KartPreview {
         this.kart = gltf.scene;
         const box    = new THREE.Box3().setFromObject(this.kart);
         const size   = box.getSize(new THREE.Vector3());
-        const maxDim = Math.max(size.x, size.y, size.z);
-        const scale  = 2.1 / maxDim;
+        const diag   = size.length(); // bounding-sphere → uniform visual fill
+        const scale  = 1.98 / diag;
         this.kart.scale.setScalar(scale);
         const box2   = new THREE.Box3().setFromObject(this.kart);
         const center = box2.getCenter(new THREE.Vector3());
         const minY   = box2.min.y;
-        this.kart.position.set(-center.x, -minY, -center.z);
-        this._kartBaseY = -minY;
+        this.kart.position.set(-center.x, -minY + 0.1, -center.z);
+        this._kartBaseY = -minY + 0.1;
+        this._kartBaseX = -center.x;
+        this._kartScale = scale;
+        this._enterDir = dir;
+        this._enterT = dir !== 0 ? 0 : 1;
         this.kart.rotation.y = this.kartRotation;
         this.kart.traverse(c => {
           if (c.isMesh) {
@@ -460,6 +491,7 @@ class KartPreview {
           }
         });
         this.scene.add(this.kart);
+        this._findAnimatedParts();
         this.isInitialized = true;
         this.updateKartInfo();
       },
@@ -469,6 +501,46 @@ class KartPreview {
         if (nameEl) nameEl.textContent = STK_KARTS[this.currentIndex].name;
       }
     );
+  }
+
+  /** Scan loaded kart for wheels and character body to animate */
+  _findAnimatedParts() {
+    this._wheels = [];
+    this._characterRoot = null;
+    if (!this.kart) return;
+
+    const kartId = STK_KARTS[this.currentIndex].id;
+    const skipWheels = kartId === 'beagle_2'; // Walter — wheel spin glitches
+
+    // Shared rubber material for tire surfaces
+    if (!KartPreview._rubberMat) {
+      KartPreview._rubberMat = new THREE.MeshStandardMaterial({
+        color: new THREE.Color(0x1a1a1a),
+        roughness: 0.92,
+        metalness: 0.0,
+        side: THREE.DoubleSide,
+      });
+    }
+
+    this.kart.traverse(node => {
+      const n = (node.name || '').toLowerCase();
+      // Wheels: STK models name them *wheel*, *tire*, *rim*
+      if (!skipWheels && node.isMesh && (n.includes('wheel') || n.includes('tire'))) {
+        this._wheels.push(node);
+        // Apply uniform rubber look to tire surfaces
+        if (n.includes('tire') || n.includes('wheel')) {
+          node.material = KartPreview._rubberMat;
+        }
+      }
+      // Character body: look for common STK character node names
+      if (!this._characterRoot && (
+        n.includes('character') || n.includes('driver') ||
+        n.includes('body') || n.includes('torso') ||
+        n.includes('head') || n.includes('armature')
+      )) {
+        this._characterRoot = node;
+      }
+    });
   }
 
   updateKartInfo() {
@@ -500,19 +572,21 @@ class KartPreview {
   prevKart() {
     this._userRotating = false; // resume auto-rotation on nav change
     this.currentIndex = (this.currentIndex - 1 + STK_KARTS.length) % STK_KARTS.length;
-    this.loadKart(STK_KARTS[this.currentIndex].id);
+    this.loadKart(STK_KARTS[this.currentIndex].id, 1);
   }
   nextKart() {
     this._userRotating = false;
     this.currentIndex = (this.currentIndex + 1) % STK_KARTS.length;
-    this.loadKart(STK_KARTS[this.currentIndex].id);
+    this.loadKart(STK_KARTS[this.currentIndex].id, -1);
   }
 
   onWindowResize() {
     if (!this.camera || !this.renderer || !this.container) return;
     const w = this.container.clientWidth, h = this.container.clientHeight;
-    this.camera.aspect = w / h; this.camera.updateProjectionMatrix();
-    this.renderer.setSize(w, h);
+    const renderH = Math.round(h / 0.85);
+    this.camera.aspect = w / renderH; this.camera.updateProjectionMatrix();
+    this.renderer.setSize(w, renderH);
+    this.renderer.domElement.style.marginTop = `${-(renderH - h)}px`;
   }
 
   animate() {
@@ -533,12 +607,43 @@ class KartPreview {
       this.kart.position.y = this._kartBaseY + Math.sin(this._showTime * 1.8) * 0.04;
     }
 
+    // Wheel spin — rotate on local X axis
+    if (this._wheels.length > 0) {
+      const wheelSpeed = 2.5 * (dt / 0.016);
+      for (const w of this._wheels) w.rotation.x += 0.04 * wheelSpeed;
+    }
+
+    // Character breathing — gentle scale pulse
+    if (this._characterRoot) {
+      const breath = 1 + Math.sin(this._showTime * 2.2) * 0.012;
+      this._characterRoot.scale.set(breath, breath, breath);
+    }
+
     // Orbiting accent light — circles the kart, GLO-coloured
     if (this._orbitLight) {
       const r = 2.8, speed = 0.6;
       this._orbitLight.position.x = Math.cos(this._showTime * speed) * r;
       this._orbitLight.position.z = Math.sin(this._showTime * speed) * r;
       this._orbitLight.color.copy(this.glowLight.color);
+    }
+
+    // ── Swap transition: exiting kart slides out ──
+    if (this._exitingKart) {
+      this._exitT = Math.min(this._exitT + dt * 4, 1);
+      const easeOut = this._exitT * this._exitT; // ease-in (accelerate off)
+      this._exitingKart.position.x = this._exitBaseX + this._exitDir * easeOut * 3.5;
+      this._exitingKart.scale.setScalar(this._exitingKartScale * (1 - easeOut * 0.3));
+      if (this._exitT >= 1) {
+        this.scene.remove(this._exitingKart);
+        this._exitingKart = null;
+      }
+    }
+    // ── Swap transition: entering kart slides in ──
+    if (this.kart && this.isInitialized && this._enterT < 1) {
+      this._enterT = Math.min(this._enterT + dt * 4, 1);
+      const easeIn = 1 - (1 - this._enterT) ** 2; // ease-out (decelerate in)
+      this.kart.position.x = this._kartBaseX + (-this._enterDir * 3.5) * (1 - easeIn);
+      this.kart.scale.setScalar(this._kartScale * (0.7 + 0.3 * easeIn));
     }
 
     this.updateUnderglow(dt);
@@ -784,11 +889,6 @@ class KartPreview {
         bg.style.background = CHIP_BG[ef.id] || 'var(--accent)';
         if (CHIP_ANIM[ef.id]) bg.classList.add(CHIP_ANIM[ef.id]);
         face.appendChild(bg);
-        // category tag
-        const tag = document.createElement('div');
-        tag.className = 'glo-drum-face-tag';
-        tag.textContent = ef.category;
-        face.appendChild(tag);
         const fLbl = document.createElement('div');
         fLbl.className = 'glo-drum-face-lbl';
         fLbl.textContent = ef.label;

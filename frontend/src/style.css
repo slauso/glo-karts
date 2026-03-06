@@ -14,6 +14,25 @@ html, body {
   user-select: none;
 }
 
+#lap-counter {
+  display: none;
+  position: absolute;
+  top: 60px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: 'Poppins', sans-serif;
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: #fff;
+  text-shadow: 0 2px 8px rgba(0,0,0,0.7);
+  background: rgba(0,0,0,0.4);
+  padding: 6px 20px;
+  border-radius: 20px;
+  letter-spacing: 2px;
+  z-index: 200;
+  pointer-events: none;
+}
+
 #speedometer {
   position: relative;
   width: 200px;

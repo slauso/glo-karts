@@ -1,15 +1,32 @@
-import * as THREE from 'three';
+// ── Babylon.js core imports ─────────────────────────────────────────────────
+import { Vector3, Quaternion, Color3 } from '@babylonjs/core/Maths/math';
+import { Scene } from '@babylonjs/core/scene';
+import "@babylonjs/core/Helpers/sceneHelpers";
+import "@babylonjs/loaders/glTF";
 import "./style.css";
-import Ammo from './lib/ammo.js';
-import { createVehicle, updateSteering, resetCarPosition, updateCarPosition } from './modules/car.js';
-import { loadTrackModel, loadMapDecorations, checkGroundCollision } from './modules/track.js';
-import { applyStartPosition, getFallThreshold, hasGates, hasDecorations } from './modules/track-data.js';
+
+// ── Babylon.js rendering engine ─────────────────────────────────────────────
+import { initBabylonRenderer } from './modules/babylon-renderer.js';
+
+// ── Game modules (Babylon.js ports) ─────────────────────────────────────────
+import { createVehicle, resetCarPosition } from './modules/babylon-car.js';
+import { loadTrackModel, loadMapDecorations, checkGroundCollision } from './modules/babylon-track.js';
+import { applyStartPosition, getFallThreshold, hasGates, hasDecorations, isSTKTrack } from './modules/track-data.js';
+import { resetKart } from './modules/havok-physics.js';
 import { 
   loadGates, 
   updateGateFading, 
   checkGateProximity, 
   showFinishMessage, 
 } from './modules/gates.js';
+import { loadTrackData } from './modules/track-data-loader.js';
+import {
+  initCheckpoints,
+  updateCheckpoints,
+  getCurrentQuadCenter,
+  getCurrentQuadHeading,
+  getRaceProgress,
+} from './modules/checkpoints.js';
 import { 
   initMultiplayer, 
   updateMarkers, 
@@ -23,8 +40,19 @@ import {
   playCountdownSequence, stopBGM, disposeAudio,
   playPreRaceMusic, playPostRaceMusic,
 } from './modules/game-audio.js';
-import { initParticles, updateParticles, disposeParticles } from './modules/particles.js';
-import { createGloSystem, updateGloSystem, disposeGloSystem } from './modules/glo-system.js';
+import { initParticles, updateParticles, disposeParticles } from './modules/babylon-particles.js';
+import { createGloSystem, updateGloSystem, disposeGloSystem } from './modules/babylon-glo.js';
+import { createRaceBots, updateRaceBots, getRacePositions, getBotProgress, disposeRaceBots } from './modules/bot-controller.js';
+import {
+  initRaceItems, updateRaceItems, useCurrentItem,
+  getCurrentItem, getActiveEffect, getProjectiles, disposeRaceItems,
+} from './modules/race-items.js';
+import {
+  startGrandPrix, reportRaceResult, hasNextRace, advanceToNextRace,
+  getStandings, getCurrentRaceInfo, isGrandPrixActive, endGrandPrix,
+  showStandingsOverlay, showFinalResultsOverlay,
+} from './modules/grand-prix.js';
+import { SINGLE_PLAYER_CUPS } from './modules/content-registry.js';
 
 // Check for game config from lobby
 let gameConfig = null;
@@ -59,13 +87,19 @@ if (useColyseusRealtime) {
 
 // Global variables
 let camera, scene, renderer, controls;
-let physicsWorld, tmpTrans;
+let bRenderer = null; // Babylon.js renderer instance
 let debugObjects = [];
-const clock = new THREE.Clock();
+
+// Simple clock replacement (was THREE.Clock)
+const clock = { _prev: 0, _started: false, getDelta() {
+  const now = performance.now() / 1000;
+  if (!this._started) { this._started = true; this._prev = now; return 0; }
+  const dt = now - this._prev;
+  this._prev = now;
+  return dt;
+}};
 
 // Car components
-let carBody;
-let vehicle;
 let wheelMeshes = [];
 let carModel;
 
@@ -75,7 +109,6 @@ let gloSystem = null;
 // Car flip detection
 let carFlippedTime = 0;
 let carIsFlipped = false;
-let prevCarRotation = new THREE.Euler();
 let prevUpDot = 1.0; // Start assuming car is upright
 let upDotDelta = 0;
 
@@ -90,9 +123,6 @@ const CAMERA_HEIGHT = 5;
 const CAMERA_LERP = 0.1;     
 const CAMERA_LOOK_AHEAD = 2; 
 
-// Steering parameters
-let currentSteeringAngle = 0; 
-
 // UI variables
 let speedElement;
 let needleElement;
@@ -104,8 +134,10 @@ const MAX_SPEED_KPH = 200;
 let multiplayerState;
 
 let gateData = null;
-let currentGatePosition = new THREE.Vector3(0, 2, 0);
-let currentGateQuaternion = new THREE.Quaternion();
+let currentGatePosition = new Vector3(0, 2, 0);
+let currentGateQuaternion = new Quaternion();
+let _stkTrackData = null;  // Loaded track-data.json for STK tracks
+let _useCheckpoints = false; // true when STK driveline checkpoints are active
 
 // Race state variables
 let raceState = {
@@ -143,10 +175,16 @@ let minimapState;
 
 let finalLeaderboardShown = false;
 
+// Grand Prix state
+let gpBotNames = []; // names of bot competitors for GP scoring
+
 let playerFinishTimes = {};
 window.playerFinishTimes = playerFinishTimes;
 
 let loadingManager;
+
+// Bot AI state
+let raceBots = [];
 
 
 // Create the waiting and countdown UI elements
@@ -318,8 +356,12 @@ function updateLeaderboard() {
   if (gateData && gateData.gates && gateData.gates.length > myGateIndex && carModel) {
     const nextGate = gateData.gates[myGateIndex];
     if (nextGate) {
-      const gatePos = new THREE.Vector3();
-      nextGate.getWorldPosition(gatePos);
+      const gatePos = nextGate.position || Vector3.Zero();
+      // gates.js may use getWorldPosition — handle both Babylon and fallback
+      if (nextGate.getAbsolutePosition) {
+        const abs = nextGate.getAbsolutePosition();
+        gatePos.x = abs.x; gatePos.y = abs.y; gatePos.z = abs.z;
+      }
       
       const dx = carModel.position.x - gatePos.x;
       const dy = carModel.position.y - gatePos.y;
@@ -372,6 +414,28 @@ function updateLeaderboard() {
       return distA - distB;
     });
   }
+
+  // Add AI bots to leaderboard in single-player mode
+  if (!raceState.isMultiplayer && raceBots.length > 0 && _useCheckpoints) {
+    const playerProg = getRaceProgress();
+    const positions = getRacePositions(raceBots, playerProg, myName);
+    // Replace the simple array with the full ranked list
+    playerPositions.length = 0;
+    for (const entry of positions) {
+      playerPositions.push({
+        id: entry.id,
+        name: entry.name,
+        color: entry.id === 'player' ? myColor : '#aaa',
+        gateIndex: Math.floor(entry.progress * 100),
+        distanceToNextGate: 0,
+        progress: entry.progress,
+      });
+    }
+  } else if (!raceState.isMultiplayer && !_useCheckpoints) {
+    // Legacy single-player without checkpoints: no sort needed
+  } else {
+    // Multiplayer sort already done above
+  }
   
   // Restore saved finish times from our permanent store
   playerPositions.forEach(player => {
@@ -384,7 +448,7 @@ function updateLeaderboard() {
   let leaderboardHTML = '';
   playerPositions.forEach((player, index) => {
     // In single player mode, always show as position 1
-    const position = raceState.isMultiplayer ? (index + 1) : 1;
+    const position = raceState.isMultiplayer ? (index + 1) : (index + 1);
     const positionLabel = getPositionLabel(position);
     const isCurrentPlayer = player.id === myPlayerId;
     
@@ -424,6 +488,114 @@ function getPositionColor(position) {
 
 // Make updateLeaderboard available globally for multiplayer.js
 window.updateLeaderboard = updateLeaderboard;
+
+// Item HUD — shows current weapon/item in corner
+function updateItemHUD() {
+  let el = document.getElementById('race-item-hud');
+  const item = getCurrentItem();
+  const effect = getActiveEffect();
+
+  if (!item && !effect) {
+    if (el) el.style.display = 'none';
+    return;
+  }
+
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'race-item-hud';
+    el.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.7);color:#fff;font-family:Poppins,sans-serif;padding:10px 18px;border-radius:12px;z-index:100;text-align:center;pointer-events:none;font-size:16px;border:2px solid rgba(255,255,255,0.2);';
+    document.body.appendChild(el);
+  }
+
+  el.style.display = 'block';
+
+  if (item) {
+    el.innerHTML = `<span style="font-size:28px">${item.icon || '🎯'}</span><br><span style="font-size:12px">${item.name} [SPACE]</span>`;
+    el.style.borderColor = 'rgba(255,204,0,0.6)';
+  } else if (effect) {
+    const icon = effect.type === 'boost' ? '⚡' : effect.type === 'shield' ? '🛡️' : '✨';
+    const secs = effect.timer.toFixed(1);
+    el.innerHTML = `<span style="font-size:28px">${icon}</span><br><span style="font-size:12px">${effect.type} ${secs}s</span>`;
+    el.style.borderColor = 'rgba(0,255,100,0.6)';
+  }
+}
+
+// ── Grand Prix race finish handler ──────────────────────────────────────────
+
+async function handleGrandPrixRaceEnd() {
+  // Build finish order from bot positions + player
+  const playerProg = _useCheckpoints ? getRaceProgress() : 0;
+  const positions = getRacePositions(raceBots, playerProg, 'You');
+  const finishOrder = positions.map(p => ({ id: p.id, name: p.name }));
+
+  reportRaceResult(finishOrder);
+
+  // Wait a moment for the finish message, then show standings
+  await new Promise(r => setTimeout(r, 3000));
+
+  const action = await showStandingsOverlay();
+
+  if (action === 'final' || !hasNextRace()) {
+    // Show final results
+    await showFinalResultsOverlay();
+    endGrandPrix();
+    // Return to lobby
+    window.location.href = 'index.html';
+  } else {
+    // Advance to next race — reload page with updated config
+    const next = advanceToNextRace();
+    if (next && gameConfig) {
+      gameConfig.trackId = next.trackId;
+      gameConfig._gpRaceIdx = next.raceNumber - 1;
+      gameConfig._gpStandings = getStandings();
+      sessionStorage.setItem('gameConfig', JSON.stringify(gameConfig));
+      // Reload the page to start fresh for the next race
+      window.location.reload();
+    }
+  }
+}
+
+// ── Grand Prix initializer (called after bots are created) ──────────────────
+
+function initGrandPrixIfNeeded() {
+  if (!gameConfig || gameConfig.subMode !== 'grand_prix') return;
+
+  const cupId = gameConfig.cupId || 'starter';
+  const cup = SINGLE_PLAYER_CUPS[cupId];
+  if (!cup) return;
+
+  // Competitor names: player + bot names
+  const competitorNames = ['You', ...gpBotNames];
+
+  // If resuming a GP (race 2+), restore standings
+  if (gameConfig._gpRaceIdx > 0 && gameConfig._gpStandings) {
+    // Re-start the GP then restore state
+    const info = startGrandPrix(cupId, competitorNames, null);
+    // This is a simplified restore — we just re-init and skip to current race
+    // The standings are passed through config
+    console.log(`Grand Prix: Resuming ${cup.label}, race ${gameConfig._gpRaceIdx + 1}`);
+  } else {
+    startGrandPrix(cupId, competitorNames, null);
+    console.log(`Grand Prix: Starting ${cup.label} (${cup.trackIds.length} races)`);
+  }
+
+  // Show GP banner
+  showGPBanner();
+}
+
+function showGPBanner() {
+  const info = getCurrentRaceInfo();
+  if (!info) return;
+
+  let banner = document.getElementById('gp-banner');
+  if (!banner) {
+    banner = document.createElement('div');
+    banner.id = 'gp-banner';
+    banner.style.cssText = 'position:fixed;top:8px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.7);color:#fff;font-family:Poppins,sans-serif;padding:6px 18px;border-radius:8px;z-index:100;text-align:center;pointer-events:none;font-size:14px;';
+    document.body.appendChild(banner);
+  }
+  banner.innerHTML = `${info.cupIcon} <strong>${info.cupLabel}</strong> — Race ${info.raceNumber}/${info.totalRaces}`;
+}
 
 // Function to start the timer
 function startRaceTimer() {
@@ -530,7 +702,7 @@ function startCountdown() {
 
       // Start engine sound & track BGM
       startEngineSound();
-      playTrackMusic(window._currentMapId || 'map1');
+      playTrackMusic(window._currentMapId || 'test_box');
 
       // Show leaderboard when race starts for BOTH single player and multiplayer
       leaderboard.style.display = 'block';
@@ -685,24 +857,23 @@ function updateSpectatorCamera() {
   // Get car's position
   const carPos = targetCar.position.clone();
   
-  // Get car's forward direction
-  const carDirection = new THREE.Vector3(0, 0, 1);
-  carDirection.applyQuaternion(targetCar.quaternion);
+  // Get car's forward direction (Babylon.js)
+  const carDirection = targetCar.forward || new Vector3(0, 0, 1);
   
   // Calculate camera position - behind and above the car
-  const cameraOffset = carDirection.clone().multiplyScalar(-CAMERA_DISTANCE);
+  const cameraOffset = carDirection.scale(-CAMERA_DISTANCE);
   const targetPosition = carPos.clone()
     .add(cameraOffset)
-    .add(new THREE.Vector3(0, CAMERA_HEIGHT, 0));
+    .add(new Vector3(0, CAMERA_HEIGHT, 0));
   
   // Smoothly interpolate camera position
-  camera.position.lerp(targetPosition, CAMERA_LERP);
+  camera.position = Vector3.Lerp(camera.position, targetPosition, CAMERA_LERP);
   
   // Look at a point slightly ahead of the car
   const lookAtPos = carPos.clone().add(
-    carDirection.clone().multiplyScalar(CAMERA_LOOK_AHEAD)
+    carDirection.scale(CAMERA_LOOK_AHEAD)
   );
-  camera.lookAt(lookAtPos);
+  camera.setTarget(lookAtPos);
 }
 
 function showFinalLeaderboard() {
@@ -895,64 +1066,13 @@ function getPlayerColorHex(colorName) {
 
 window.showFinalLeaderboard = showFinalLeaderboard;
 
-function setupCartoonySkybox(scene) {
-  // Enhanced procedural sky dome: gradient + sun disc + horizon glow
-  const skyGeo = new THREE.SphereGeometry(1000, 48, 48);
-
-  const uniforms = {
-    topColor:      { value: new THREE.Color(0x3388dd) },   // deep blue zenith
-    horizonColor:  { value: new THREE.Color(0xaaddff) },   // pale horizon
-    bottomColor:   { value: new THREE.Color(0xddeeff) },   // ground fade
-    sunDirection:  { value: new THREE.Vector3(0.4, 0.6, 0.3).normalize() },
-    sunColor:      { value: new THREE.Color(0xffffcc) },
-    sunSize:       { value: 0.998 },                       // dot threshold
-    hazePower:     { value: 3.0 },
-  };
-
-  const skyMat = new THREE.ShaderMaterial({
-    uniforms,
-    vertexShader: `
-      varying vec3 vWorldDir;
-      void main() {
-        vec4 worldPos = modelMatrix * vec4(position, 1.0);
-        vWorldDir = normalize(worldPos.xyz);
-        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-      }
-    `,
-    fragmentShader: `
-      uniform vec3 topColor;
-      uniform vec3 horizonColor;
-      uniform vec3 bottomColor;
-      uniform vec3 sunDirection;
-      uniform vec3 sunColor;
-      uniform float sunSize;
-      uniform float hazePower;
-      varying vec3 vWorldDir;
-      void main() {
-        float h = normalize(vWorldDir).y;
-        // Sky gradient
-        vec3 sky = mix(horizonColor, topColor, pow(max(h, 0.0), 0.6));
-        sky = mix(bottomColor, sky, smoothstep(-0.05, 0.15, h));
-        // Sun disc
-        float sunDot = dot(normalize(vWorldDir), sunDirection);
-        float sun = smoothstep(sunSize, sunSize + 0.002, sunDot);
-        sky += sunColor * sun * 1.2;
-        // Horizon haze (warm glow around sun direction at horizon)
-        float haze = pow(max(sunDot, 0.0), hazePower) * smoothstep(0.3, 0.0, abs(h));
-        sky += sunColor * haze * 0.35;
-        gl_FragColor = vec4(sky, 1.0);
-      }
-    `,
-    side: THREE.BackSide,
-    depthWrite: false,
-  });
-
-  const sky = new THREE.Mesh(skyGeo, skyMat);
-  scene.add(sky);
+function setupCartoonySkybox(_scene) {
+  // Sky is now created by babylon-renderer.js (createProceduralSky)
+  // This stub is kept for call-site compatibility.
 }
 
 // Initialize everything
-function init() {
+async function init() {
   // Check and handle orientation
   handleOrientationChange();
   window.addEventListener('orientationchange', handleOrientationChange);
@@ -961,22 +1081,10 @@ function init() {
   // Start pre-race ambient music (plays while loading / waiting for countdown)
   playPreRaceMusic();
 
-  loadingManager = new THREE.LoadingManager();
-  
-  loadingManager.onLoad = function() {
-    console.log('All assets loaded');
-    hideLoadingScreen();
-  };
-  
-  loadingManager.onProgress = function(url, itemsLoaded, itemsTotal) {
-    console.log(`Loaded ${itemsLoaded} of ${itemsTotal} assets`);
-  };
-  
-  loadingManager.onError = function(url) {
-    console.error('Error loading asset:', url);
-  };
-  
-  // Make loadingManager globally available to other modules
+  // Babylon.js doesn't use a LoadingManager — use a simple counter instead
+  loadingManager = null; // kept for API compat with gates.js etc.
+
+  // Inline asset-count observers (replaced THREE.LoadingManager)
   window.loadingManager = loadingManager;
 
   console.log("Main module loaded");
@@ -993,62 +1101,49 @@ function init() {
   loadingEl.textContent = 'Loading Physics Engine...';
   document.body.appendChild(loadingEl);
 
-  // Setup scene
-  scene = new THREE.Scene();
-  setupCartoonySkybox(scene); // Add this line instead of setting scene.background
-  setupEnhancedLighting();
-  initParticles(scene); // Initialize particle / VFX pools
-  // Subtle distance fog for atmospheric depth
-  scene.fog = new THREE.Fog(0xaaddff, 250, 900);
-  
-  // Setup camera
-  camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 2000);
-  camera.position.set(0, 10, 20);
-  
-  // Setup renderer
-  renderer = new THREE.WebGLRenderer({ antialias: true });
-  renderer.outputColorSpace = THREE.SRGBColorSpace;
-  renderer.setPixelRatio(window.devicePixelRatio);
-  renderer.setSize(window.innerWidth, window.innerHeight);
-  renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-  renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.0;
-  document.body.appendChild(renderer.domElement);
+  // ── Babylon.js renderer, scene, camera, lighting, post-processing ──────
+  // initBabylonRenderer creates: Engine, Scene, Camera, Lights, Shadows,
+  // DefaultRenderingPipeline (bloom + FXAA + tone-mapping), procedural sky,
+  // fog, and returns a renderer API object.
+  bRenderer = await initBabylonRenderer('app');
+  scene    = bRenderer.scene;
+  camera   = bRenderer.camera;
+  renderer = bRenderer.engine; // kept for API compat
+
+  // Initialize particle pools in the Babylon.js scene
+  initParticles(scene);
   
   // Initialize UI
   initUI();
   
-  // Handle window resize
-  window.addEventListener('resize', () => {
-    camera.aspect = window.innerWidth / window.innerHeight;
-    camera.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight);
-  });
-  
-  console.log("About to initialize Ammo.js");
-  // Initialize Ammo.js and setup physics
-  Ammo().then(ammo => {
-    console.log("Ammo.js initialized");
-    window.Ammo = ammo;
+  console.log("About to initialise Havok physics");
+  // Initialize Havok and setup physics
+  initPhysics().then(() => {
+    console.log("Havok physics initialised");
     
     document.body.removeChild(loadingEl);
     
-    const physicsState = initPhysics(ammo);
-    physicsWorld = physicsState.physicsWorld;
-    tmpTrans = physicsState.tmpTrans;
-    
     // Load the track as a single model
-    const mapToLoad = gameConfig?.trackId || 'map1'; // Default to map1 if no config
+    let mapToLoad = gameConfig?.trackId || 'test_box'; // Default to test_box if no config
+
+    // Grand Prix: override trackId from cup track list
+    if (gameConfig?.subMode === 'grand_prix' && gameConfig.cupId) {
+      const cup = SINGLE_PLAYER_CUPS[gameConfig.cupId];
+      if (cup) {
+        const raceIdx = gameConfig._gpRaceIdx || 0;
+        mapToLoad = cup.trackIds[raceIdx] || cup.trackIds[0];
+        gameConfig.trackId = mapToLoad; // sync config
+      }
+    }
     window._currentMapId = mapToLoad; // Store for fall-threshold lookups
-    loadTrackModel(ammo, mapToLoad, scene, physicsWorld, loadingManager, (trackModel) => {
+    loadTrackModel(mapToLoad, scene, loadingManager, (trackModel) => {
       console.log(`Track model loaded (${mapToLoad}), extracting for minimap`);
       // Extract track data for minimap when track is loaded
       extractTrackData(trackModel);
-    });
+    }, bRenderer.shadowGen);
     
     // Load map decorations (skipped automatically for STK tracks by track-data)
-    loadMapDecorations(mapToLoad, scene, renderer, camera, loadingManager);
+    loadMapDecorations(mapToLoad, scene, renderer, camera, loadingManager, bRenderer.shadowGen);
     
     // Load gates (returns empty data for STK tracks via track-data)
     gateData = loadGates(mapToLoad, scene, loadingManager, (loadedGateData) => {
@@ -1058,18 +1153,54 @@ function init() {
       window.gateData = gateData;
       console.log(`Gates loaded for ${mapToLoad}. Total gates: ${gateData.totalGates}`);
     });
-    
-    console.log("About to create vehicle physics");
 
-    // First create just the physics body, don't set global variables yet
-    const carComponents = createVehicle(ammo, scene, physicsWorld, debugObjects, (loadedComponents) => {
+    // Load STK track auxiliary data (driveline, checkpoints, start grid)
+    if (isSTKTrack(mapToLoad)) {
+      loadTrackData(mapToLoad, 'track').then(td => {
+        if (td && td.driveline && td.driveline.length > 0) {
+          _stkTrackData = td;
+          _useCheckpoints = true;
+          initCheckpoints(td);
+          console.log(`STK track data loaded for ${mapToLoad}: ${td.driveline.length} quads, ${td.checkpoints.length} checkpoints`);
+
+          // Apply correct start position + heading from extracted grid
+          if (td.startPositions && td.startPositions.length > 0) {
+            const sp = td.startPositions[0]; // Player gets grid slot 0
+            const pos = { x: sp.position[0], y: sp.position[1] + 1, z: sp.position[2] };
+            const heading = sp.heading || 0;
+            resetKart(pos, heading);
+            console.log(`Start grid applied: pos=(${pos.x.toFixed(1)}, ${pos.y.toFixed(1)}, ${pos.z.toFixed(1)}), heading=${heading.toFixed(2)}`);
+          }
+
+          // Create AI bots for single player STK races (skip for free roam/no-opponents modes)
+          if (!raceState.isMultiplayer && !gameConfig?.noOpponents) {
+            const botCount = gameConfig?.botCount || 7;
+            const playerKart = sessionStorage.getItem('kartId') || 'tux';
+            raceBots = createRaceBots(scene, td, botCount, playerKart);
+
+            // Capture bot names for Grand Prix scoring
+            gpBotNames = raceBots.map(b => {
+              return b.kartId.charAt(0).toUpperCase() + b.kartId.slice(1);
+            });
+            initGrandPrixIfNeeded();
+          }
+
+          // Initialize item boxes, nitro pads, and bananas (skip for time trial/no-items modes)
+          if (td.items && td.items.length > 0 && !gameConfig?.noItems) {
+            initRaceItems(scene, td.items);
+          }
+        }
+      });
+    }
+    
+    console.log("About to create vehicle");
+
+    // Create the kart physics body + load the visual model
+    createVehicle(scene, (loadedComponents) => {
       
       // Now set all the global variables
-      carBody = loadedComponents.carBody;
-      vehicle = loadedComponents.vehicle;
       wheelMeshes = loadedComponents.wheelMeshes;
       carModel = loadedComponents.carModel;
-      currentSteeringAngle = loadedComponents.currentSteeringAngle;
       
       // Initialise GLO underglow using the settings chosen in the lobby
       gloSystem = createGloSystem(scene);
@@ -1085,13 +1216,9 @@ function init() {
       // Now that the car is fully loaded, we can start the animation loop
       animate();
     });
-    
-    // Set physics body immediately for physics to work
-    carBody = carComponents.carBody;
-    vehicle = carComponents.vehicle;
 
     // Move the car to the correct start position for this track
-    applyStartPosition(ammo, carBody, vehicle, mapToLoad);
+    applyStartPosition(mapToLoad);
     console.log(`Car spawned at start position for ${mapToLoad}`);
     
     // Set up controls early so they work when the car loads
@@ -1116,8 +1243,8 @@ function init() {
   createSpectatorUI(); // Add this line
   
   // Create minimap
-  const mapToLoad = gameConfig?.trackId || 'map1'; 
-  minimapState = createMinimap(mapToLoad);
+  const mapToLoad = gameConfig?.trackId || 'test_box'; 
+  minimapState = createMinimap(mapToLoad, scene);
 
   // Make spectator functions globally available
   window.enterSpectatorMode = enterSpectatorMode;
@@ -1153,17 +1280,17 @@ function setupKeyControls() {
 
     // Replace the keydown R handler with this improved version:
     if (event.key.toLowerCase() === 'r') {
-      if (window.Ammo && carBody && gateData) {
-        // Use the gateData values instead of the global variables
-        currentSteeringAngle = resetCarPosition(
-          window.Ammo, 
-          carBody, 
-          vehicle, 
-          currentSteeringAngle, 
-          gateData.currentGatePosition, 
-          gateData.currentGateQuaternion
-        );
-      }
+        if (_useCheckpoints) {
+          const center = getCurrentQuadCenter();
+          const heading = getCurrentQuadHeading();
+          const pos = new Vector3(center[0], center[1] + 1, center[2]);
+          const quat = Quaternion.RotationAxis(new Vector3(0, 1, 0), heading);
+          resetCarPosition(pos, quat);
+        } else if (gateData) {
+          resetCarPosition(
+            gateData.currentGatePosition, gateData.currentGateQuaternion
+          );
+        }
     }
 
     // Add spectator mode toggle
@@ -1173,6 +1300,15 @@ function setupKeyControls() {
       } else {
         enterSpectatorMode();
       }
+    }
+
+    // Fire/use current race item (Space key)
+    if (event.key === ' ' && raceState.raceStarted && !raceState.raceFinished && carModel) {
+      const used = useCurrentItem(carModel);
+      if (used) {
+        playSFX('crash'); // weapon fire sfx
+      }
+      event.preventDefault();
     }
   });
   
@@ -1192,23 +1328,21 @@ function updateCamera() {
   const carPos = carModel.position.clone();
   
   // Get car's forward direction
-  const carDirection = new THREE.Vector3();
-  carModel.getWorldDirection(carDirection);
+  const carDirection = carModel.forward || new Vector3(0, 0, 1);
   
   // Calculate camera position - behind and above the car
-  const cameraOffset = carDirection.clone().multiplyScalar(-CAMERA_DISTANCE);
-  const targetPosition = carPos.clone()
-    .add(cameraOffset)
-    .add(new THREE.Vector3(0, CAMERA_HEIGHT, 0));
+  const cameraOffset = carDirection.scale(-CAMERA_DISTANCE);
+  const targetPosition = carPos.add(cameraOffset)
+    .add(new Vector3(0, CAMERA_HEIGHT, 0));
   
   // Smoothly interpolate camera position
-  camera.position.lerp(targetPosition, CAMERA_LERP);
+  camera.position = Vector3.Lerp(camera.position, targetPosition, CAMERA_LERP);
   
   // Look at a point slightly ahead of the car
   const lookAtPos = carPos.clone().add(
-    carDirection.clone().multiplyScalar(CAMERA_LOOK_AHEAD)
+    carDirection.scale(CAMERA_LOOK_AHEAD)
   );
-  camera.lookAt(lookAtPos);
+  camera.setTarget(lookAtPos);
 }
 
 // Replace your physics update in animate() with this
@@ -1219,26 +1353,19 @@ function animate() {
   const deltaTime = Math.min(clock.getDelta(), 0.1);
   accumulator += deltaTime;
   
-  if (physicsWorld) {
+  if (carModel) {
     // Run physics at fixed intervals
     while (accumulator >= FIXED_PHYSICS_STEP) {
       const carState = {
-        carBody, 
-        vehicle, 
         carModel, 
         wheelMeshes,
         keyState,
-        currentSteeringAngle,
-        updateSteering
       };
 
       const physicsResult = updatePhysics(
         FIXED_PHYSICS_STEP, 
-        window.Ammo, 
-        { physicsWorld, tmpTrans }, 
         carState, 
-        debugObjects,
-        raceState // Pass the race state
+        raceState
       );
 
       // Update speed
@@ -1246,26 +1373,59 @@ function animate() {
       updateSpeedometer(speedKPH);
       // Update engine pitch based on speed
       updateEnginePitch(speedKPH);
-      currentSteeringAngle = physicsResult.currentSteeringAngle;
-      // Update car position
-      updateCarPosition(window.Ammo, vehicle, carModel, wheelMeshes);
 
-      // Add this line to check if car has fallen off the track
-      checkGroundCollision(window.Ammo, carBody, () => {
-        // This will reset the car to the last gate position when it falls off
-        currentSteeringAngle = resetCarPosition(
-          window.Ammo, 
-          carBody, 
-          vehicle, 
-          currentSteeringAngle, 
-          gateData.currentGatePosition, 
-          gateData.currentGateQuaternion
-        );
-      }, getFallThreshold(window._currentMapId || 'map1'));
+      // ── Fall-off respawn (shared by both systems) ──
+      checkGroundCollision(() => {
+        if (_useCheckpoints) {
+          // Respawn at nearest quad on the driveline
+          const center = getCurrentQuadCenter();
+          const heading = getCurrentQuadHeading();
+          const pos = new Vector3(center[0], center[1] + 1, center[2]);
+          const quat = Quaternion.RotationAxis(new Vector3(0, 1, 0), heading);
+          resetCarPosition(pos, quat);
+        } else {
+          resetCarPosition(
+            gateData.currentGatePosition, gateData.currentGateQuaternion
+          );
+        }
+      }, getFallThreshold(window._currentMapId || 'test_box'));
 
       // Check if car is flipped
       if (carModel && !raceState.raceFinished) {
         checkCarFlipped(FIXED_PHYSICS_STEP);
+      }
+
+      // Update AI bots
+      if (raceBots.length > 0) {
+        const playerProg = _useCheckpoints ? getRaceProgress() : 0;
+        updateRaceBots(raceBots, FIXED_PHYSICS_STEP, playerProg, raceState.raceStarted);
+      }
+
+      // Update race items (item boxes, nitros, traps, projectiles)
+      if (carModel && raceState.raceStarted && !raceState.raceFinished) {
+        const posRatio = raceBots.length > 0
+          ? (() => {
+              const positions = getRacePositions(raceBots, _useCheckpoints ? getRaceProgress() : 0);
+              const myIdx = positions.findIndex(e => e.id === 'player');
+              return myIdx >= 0 ? myIdx / Math.max(positions.length - 1, 1) : 0.5;
+            })()
+          : 0.5;
+        const itemResult = updateRaceItems(FIXED_PHYSICS_STEP, carModel, posRatio);
+
+        // Apply item effects
+        if (itemResult.boost > 0) {
+          window._raceItemBoost = itemResult.boost;
+        } else {
+          window._raceItemBoost = 0;
+        }
+        if (itemResult.spinout) {
+          // Spin the car briefly
+          playSFX('crash');
+          if (carModel) {
+            const spin = (Math.random() > 0.5 ? 1 : -1) * Math.PI;
+            carModel.rotation.y += spin;
+          }
+        }
       }
       
       accumulator -= FIXED_PHYSICS_STEP;
@@ -1274,7 +1434,31 @@ function animate() {
       } else {
         updateCamera();
       }
-      if (gateData) {
+      // ── Checkpoint / Gate progress ──
+      if (_useCheckpoints && carModel && !raceState.raceFinished) {
+        const cpResult = updateCheckpoints(carModel.position);
+
+        // Update lap counter HUD
+        const lapEl = document.getElementById('lap-counter');
+        if (lapEl) {
+          lapEl.textContent = `Lap ${Math.min(cpResult.currentLap + 1, cpResult.totalLaps)} / ${cpResult.totalLaps}`;
+          lapEl.style.display = 'block';
+        }
+
+        if (cpResult.raceFinished && !raceState.raceFinished) {
+          showFinishMessage(cpResult.totalLaps, null);
+          stopEngineSound();
+          stopBGM();
+          playSFX('race_win');
+          setTimeout(() => playPostRaceMusic(), 2500);
+          if (timerInterval) clearInterval(timerInterval);
+
+          // Grand Prix: report result and handle progression
+          if (isGrandPrixActive()) {
+            handleGrandPrixRaceEnd();
+          }
+        }
+      } else if (gateData) {
         // Check if player passed through a gate
         const raceFinished = checkGateProximity(carModel, gateData);
         
@@ -1356,6 +1540,9 @@ function animate() {
     // Update leaderboard
     updateLeaderboard();
 
+    // Update item HUD
+    updateItemHUD();
+
     // Check if all players have finished the race
     if (raceState.isMultiplayer && raceState.raceStarted && !finalLeaderboardShown) {
       const allFinished = checkAllPlayersFinished();
@@ -1374,26 +1561,36 @@ function animate() {
   // Update GLO underglow (colour, intensity, position tracking)
   updateGloSystem(gloSystem, deltaTime, carModel);
   
-  // Render through post-processing pipeline (bloom + SMAA)
-  if (postProcessing) {
-    postProcessing.composer.render();
-  } else {
-    renderer.render(scene, camera);
+  // Render through Babylon.js engine (post-processing is built into DefaultRenderingPipeline)
+  if (bRenderer && bRenderer.scene) {
+    bRenderer.scene.render();
   }
 }
 
 // Add this new function to check if the car is flipped and auto-reset if needed
 function checkCarFlipped(deltaTime) {
   // Get the car's up direction (Y axis in local space)
-  const carUpVector = new THREE.Vector3(0, 1, 0);
-  carUpVector.applyQuaternion(carModel.quaternion);
+  const carUpVector = new Vector3(0, 1, 0);
+  if (carModel.rotationQuaternion) {
+    // Babylon.js: rotate via matrix
+    const m = new (Vector3.Zero().constructor === Vector3 ? Object : Object);
+    // Simple approach: use Quaternion to rotate the up vector
+    const q = carModel.rotationQuaternion;
+    // Manual quaternion rotation of (0,1,0)
+    const ix = q.w * 0 + q.y * 0 - q.z * 1;
+    const iy = q.w * 1 + q.z * 0 - q.x * 0;
+    const iz = q.w * 0 + q.x * 1 - q.y * 0;
+    const iw = -q.x * 0 - q.y * 1 - q.z * 0;
+    carUpVector.x = ix * q.w + iw * -q.x + iy * -q.z - iz * -q.y;
+    carUpVector.y = iy * q.w + iw * -q.y + iz * -q.x - ix * -q.z;
+    carUpVector.z = iz * q.w + iw * -q.z + ix * -q.y - iy * -q.x;
+  }
   
   // World up vector
-  const worldUp = new THREE.Vector3(0, 1, 0);
+  const worldUp = new Vector3(0, 1, 0);
   
   // Dot product between car's up and world up
-  // 1 = perfectly upright, 0 = on its side, -1 = upside down
-  const upDot = carUpVector.dot(worldUp);
+  const upDot = Vector3.Dot(carUpVector, worldUp);
   
   // Calculate change in dot product since last frame
   upDotDelta = Math.abs(upDot - prevUpDot);
@@ -1423,12 +1620,8 @@ function checkCarFlipped(deltaTime) {
         carFlippedTime = 0;
         
         // Reset car to last checkpoint
-        if (window.Ammo && carBody && gateData) {
-          currentSteeringAngle = resetCarPosition(
-            window.Ammo, 
-            carBody, 
-            vehicle, 
-            currentSteeringAngle, 
+        if (gateData) {
+          resetCarPosition(
             gateData.currentGatePosition, 
             gateData.currentGateQuaternion
           );
@@ -1444,33 +1637,8 @@ function checkCarFlipped(deltaTime) {
 
 // Enhanced lighting system - add this function
 function setupEnhancedLighting() {
-  // Remove existing lights
-  scene.children.forEach(child => {
-    if (child.isLight) scene.remove(child);
-  });
-  
-  // Reduce ambient light intensity for better shadow definition
-  const ambientLight = new THREE.AmbientLight(0xcccccc, 2);
-  scene.add(ambientLight);
-  
-  // Primary directional light (sun)
-  const directionalLight = new THREE.DirectionalLight(0xffffff, 3.5);
-    directionalLight.position.set(40, 250, 30);
-    directionalLight.castShadow = true;
-    directionalLight.shadow.mapSize.width = 2048;
-    directionalLight.shadow.mapSize.height = 2048;
-    directionalLight.shadow.camera.near = 0.5;
-    directionalLight.shadow.camera.far = 1500;
-    directionalLight.shadow.camera.left = -300;
-    directionalLight.shadow.camera.right = 300;
-    directionalLight.shadow.camera.top = 300;
-    directionalLight.shadow.camera.bottom = -300;
-    directionalLight.shadow.bias = -0.001; // Reduce shadow acne
-    scene.add(directionalLight);
-    
-    // Also include a hemisphere light for better ambient color blending
-    const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444, 1.5);
-    scene.add(hemiLight);
+  // Lighting is now handled by babylon-renderer.js (initBabylonRenderer)
+  // This stub is kept for call-site compatibility.
 }
 
 // Function to initialize UI elements

@@ -1,0 +1,149 @@
+﻿<?xml version="1.0"?>
+<!DOCTYPE assets
+SYSTEM "../assets/dtd/assets2.dtd">
+<assets version="2" mtime="1450328402" frequency="0">
+    <kart>
+        <addon id="alternative-tux" name="Alternative Tux" designer="Joost Verdoorn" description="" uploader="Auria" min-include-version="" max-include-version="" image-list="" license="" rating="2.143">
+            <revision file="http://addons.supertuxkart.net/dl/1201809349552da39065bf9.zip" date="1429054353" format="2" revision="1" status="449" size="1947574" image="http://addons.supertuxkart.net/dl/images/1110206859552da39065475.png" icon="http://addons.supertuxkart.net/dl/images/1110206859552da39065475.png"></revision>
+        </addon>
+        <addon id="amiga-kart" name="Amiga kart" designer="nickdoc" description="" uploader="nickdoc" min-include-version="" max-include-version="" image-list="" license="" rating="2.000">
+            <revision file="http://addons.supertuxkart.net/dl/476877961559fba011b7ee.zip" date="1436531201" format="2" revision="1" status="321" size="215827" image="http://addons.supertuxkart.net/dl/images/133980091559fba011afd5.png" icon="http://addons.supertuxkart.net/dl/images/133980091559fba011afd5.png"></revision>
+        </addon>
+        <addon id="android" name="Android" designer="nickdoc" description="" uploader="nickdoc" min-include-version="" max-include-version="" image-list="" license="" rating="2.500">
+            <revision file="http://addons.supertuxkart.net/dl/19724771655a01762e113a.zip" date="1436555107" format="2" revision="1" status="769" size="1120366" image="http://addons.supertuxkart.net/dl/images/55326689155a01762e0845.png" icon="http://addons.supertuxkart.net/dl/images/55326689155a01762e0845.png"></revision>
+        </addon>
+        <addon id="android_1" name="Android" designer="AppleMan" description="" uploader="PaulTheAmaze" min-include-version="" max-include-version="" image-list="" license="" rating="0.000">
+            <revision file="http://addons.supertuxkart.net/dl/32700159855a5b51c9870f.zip" date="1436923165" format="2" revision="1" status="768" size="1120366" image="http://addons.supertuxkart.net/dl/images/46115867155a5b5a737fee.jpg" icon="http://addons.supertuxkart.net/dl/images/164801527755a5b51c96c49.png"></revision>
+        </addon>
+        <addon id="argo2" name="Argo2" designer="" description="" uploader="Aristurtle" min-include-version="" max-include-version="" image-list="" license="" rating="1.000">
+            <revision file="http://addons.supertuxkart.net/dl/35952527655672935bdadc.zip" date="1432824117" format="2" revision="1" status="321" size="204651" image="http://addons.supertuxkart.net/dl/images/159024492855672935bcc2e.png" icon="http://addons.supertuxkart.net/dl/images/159024492855672935bcc2e.png"></revision>
+        </addon>
+        <addon id="blinky" name="Blinky" designer="nickdoc" description="This is Blinky, FreeDOS' mascot." uploader="nickdoc" min-include-version="" max-include-version="" image-list="" license="" rating="3.000">
+            <revision file="http://addons.supertuxkart.net/dl/1416085130559edc6417810.zip" date="1436474468" format="2" revision="1" status="961" size="308517" image="http://addons.supertuxkart.net/dl/images/1542081685559edc64160d0.png" icon="http://addons.supertuxkart.net/dl/images/1542081685559edc64160d0.png"></revision>
+        </addon>
+        <addon id="catapult-ted" name="Catapult Ted" designer="nickdoc" description="" uploader="nickdoc" min-include-version="" max-include-version="" image-list="" license="" rating="2.000">
+            <revision file="http://addons.supertuxkart.net/dl/88108106055a017949e43c.zip" date="1436555156" format="2" revision="1" status="321" size="390696" image="http://addons.supertuxkart.net/dl/images/74633238155a017949d694.png" icon="http://addons.supertuxkart.net/dl/images/74633238155a017949d694.png"></revision>
+        </addon>
+        <addon id="evil-tux-v1" name="Evil Tux-V1" designer="nickdoc" description="" uploader="nickdoc" min-include-version="" max-include-version="" image-list="" license="" rating="2.333">
+            <revision file="http://addons.supertuxkart.net/dl/202021135655a01723d0114.zip" date="1436555045" format="2" revision="1" status="321" size="1096609" image="http://addons.supertuxkart.net/dl/images/37679009755a01723cf6a9.png" icon="http://addons.supertuxkart.net/dl/images/37679009755a01723cf6a9.png"></revision>
+        </addon>
+        <addon id="firefox" name="Firefox" designer="" description="" uploader="nickdoc" min-include-version="" max-include-version="" image-list="" license="" rating="0.000">
+            <revision file="http://addons.supertuxkart.net/dl/1762976851564a261dc0f25.zip" date="1447699999" format="2" revision="1" status="256" size="660679" image="http://addons.supertuxkart.net/dl/images/1727211105564a261dbe463.png" icon="http://addons.supertuxkart.net/dl/images/1727211105564a261dbe463.png"></revision>
+        </addon>
+        <addon id="geeko" name="Geeko" designer="nickdoc" description="" uploader="nickdoc" min-include-version="" max-include-version="" image-list="" license="" rating="2.333">
+            <revision file="http://addons.supertuxkart.net/dl/1723723250559fba8691289.zip" date="1436531334" format="2" revision="1" status="257" size="120288" image="http://addons.supertuxkart.net/dl/images/855348329559fba8690787.png" icon="http://addons.supertuxkart.net/dl/images/855348329559fba8690787.png"></revision>
+        </addon>
+        <addon id="golden-adiumy" name="Golden Adiumy" designer="nickdoc" description="" uploader="nickdoc" min-include-version="" max-include-version="" image-list="" license="" rating="3.000">
+            <revision file="http://addons.supertuxkart.net/dl/117561309255a00625420d6.zip" date="1436550693" format="2" revision="1" status="256" size="260458" image="http://addons.supertuxkart.net/dl/images/153240279555a00625404b8.png" icon="http://addons.supertuxkart.net/dl/images/153240279555a00625404b8.png"></revision>
+        </addon>
+        <addon id="golden-adiumy_1" name="Golden Adiumy" designer="" description="" uploader="PaulTheAmaze" min-include-version="" max-include-version="" image-list="" license="" rating="0.000">
+            <revision file="http://addons.supertuxkart.net/dl/16930023355b02169ec9e7.zip" date="1437606249" format="2" revision="1" status="256" size="260458" image="http://addons.supertuxkart.net/dl/images/183423721455b02169eb424.png" icon="http://addons.supertuxkart.net/dl/images/183423721455b02169eb424.png"></revision>
+        </addon>
+        <addon id="konqo" name="Konqo" designer="nickdoc" description="" uploader="nickdoc" min-include-version="" max-include-version="" image-list="" license="" rating="2.333">
+            <revision file="http://addons.supertuxkart.net/dl/1593904571559fbabeee9ec.zip" date="1436531391" format="2" revision="1" status="321" size="390536" image="http://addons.supertuxkart.net/dl/images/73764510559fbabeee00f.png" icon="http://addons.supertuxkart.net/dl/images/73764510559fbabeee00f.png"></revision>
+        </addon>
+        <addon id="mini-tux-christmas-edition" name="Mini Tux Christmas Edition" designer="nickdoc" description="" uploader="nickdoc" min-include-version="" max-include-version="" image-list="" license="" rating="2.333">
+            <revision file="http://addons.supertuxkart.net/dl/109003132155a018810fdda.zip" date="1436555393" format="2" revision="1" status="833" size="3221428" image="http://addons.supertuxkart.net/dl/images/130018703155a018810f2ed.png" icon="http://addons.supertuxkart.net/dl/images/130018703155a018810f2ed.png"></revision>
+        </addon>
+        <addon id="minix" name="Minix" designer="Cyrille" description="" uploader="Auria" min-include-version="" max-include-version="" image-list="" license="" rating="2.000">
+            <revision file="http://addons.supertuxkart.net/dl/1242386400552d9e5a369ab.zip" date="1429053019" format="2" revision="1" status="961" size="775545" image="http://addons.supertuxkart.net/dl/images/40421520552d9e5a35b38.png" icon="http://addons.supertuxkart.net/dl/images/40421520552d9e5a35b38.png"></revision>
+        </addon>
+        <addon id="minix-tux" name="Minix Tux" designer="nickdoc" description="" uploader="nickdoc" min-include-version="" max-include-version="" image-list="" license="" rating="2.333">
+            <revision file="http://addons.supertuxkart.net/dl/134311599355a0183d3ec45.zip" date="1436555325" format="2" revision="1" status="833" size="2430719" image="http://addons.supertuxkart.net/dl/images/64209190755a0183d3e321.png" icon="http://addons.supertuxkart.net/dl/images/64209190755a0183d3e321.png"></revision>
+        </addon>
+        <addon id="minix-tux_1" name="Minix Tux" designer="Hacke007" description="" uploader="Hacker007" min-include-version="" max-include-version="" image-list="" license="" rating="0.000">
+            <revision file="http://addons.supertuxkart.net/dl/517936985565d35d40af9b.zip" date="1448949204" format="2" revision="1" status="772" size="3649445" image="http://addons.supertuxkart.net/dl/images/102623468565d35d407f1e.png" icon="http://addons.supertuxkart.net/dl/images/102623468565d35d407f1e.png"></revision>
+        </addon>
+        <addon id="minix-tux_2" name="Minix Tux" designer="" description="" uploader="Hacker007" min-include-version="" max-include-version="" image-list="" license="" rating="0.000">
+            <revision file="http://addons.supertuxkart.net/dl/1129086816566f7ca808ca1.zip" date="1450146984" format="2" revision="1" status="768" size="3649445" image="http://addons.supertuxkart.net/dl/images/671675118566f7ca802638.png" icon="http://addons.supertuxkart.net/dl/images/671675118566f7ca802638.png"></revision>
+        </addon>
+        <addon id="mm001" name="MM001" designer="" description="" uploader="Hacker007" min-include-version="" max-include-version="" image-list="" license="" rating="0.000">
+            <revision file="http://addons.supertuxkart.net/dl/1860826260566f7d83d2cc6.zip" date="1450147203" format="2" revision="1" status="833" size="276758" image="http://addons.supertuxkart.net/dl/images/1419562009566f7d83d147a.png" icon="http://addons.supertuxkart.net/dl/images/1419562009566f7d83d147a.png"></revision>
+        </addon>
+        <addon id="penny32" name="Penny32" designer="nickdoc" description="" uploader="nickdoc" min-include-version="" max-include-version="" image-list="" license="" rating="2.500">
+            <revision file="http://addons.supertuxkart.net/dl/489758467559faf34a63fd.zip" date="1436528436" format="2" revision="1" status="321" size="222449" image="http://addons.supertuxkart.net/dl/images/921785223559faf34a5a02.png" icon="http://addons.supertuxkart.net/dl/images/921785223559faf34a5a02.png"></revision>
+        </addon>
+        <addon id="philae" name="philae" designer="nickdoc" description="" uploader="nickdoc" min-include-version="" max-include-version="" image-list="" license="" rating="2.000">
+            <revision file="http://addons.supertuxkart.net/dl/152581958155a016c52f3de.zip" date="1436554949" format="2" revision="1" status="321" size="2710054" image="http://addons.supertuxkart.net/dl/images/188022339155a016c52e9fe.png" icon="http://addons.supertuxkart.net/dl/images/188022339155a016c52e9fe.png"></revision>
+        </addon>
+        <addon id="proog" name="Proog" designer="nickdoc" description="" uploader="nickdoc" min-include-version="" max-include-version="" image-list="" license="" rating="2.000">
+            <revision file="http://addons.supertuxkart.net/dl/1956838329559fb9a585bb8.zip" date="1436531110" format="2" revision="1" status="769" size="375910" image="http://addons.supertuxkart.net/dl/images/591653763559fb9a584e85.png" icon="http://addons.supertuxkart.net/dl/images/591653763559fb9a584e85.png"></revision>
+        </addon>
+        <addon id="python" name="Python" designer="nickdoc" description="" uploader="nickdoc" min-include-version="" max-include-version="" image-list="" license="" rating="2.400">
+            <revision file="http://addons.supertuxkart.net/dl/111813124355a018a557e64.zip" date="1436555429" format="2" revision="1" status="833" size="297915" image="http://addons.supertuxkart.net/dl/images/125606579955a018a5570cd.png" icon="http://addons.supertuxkart.net/dl/images/125606579955a018a5570cd.png"></revision>
+        </addon>
+        <addon id="skirpy" name="Skirpy" designer="nickdoc" description="" uploader="nickdoc" min-include-version="" max-include-version="" image-list="" license="" rating="2.333">
+            <revision file="http://addons.supertuxkart.net/dl/46944241655a018e113a00.zip" date="1436555493" format="2" revision="1" status="833" size="1823463" image="http://addons.supertuxkart.net/dl/images/167531504955a018e112b6f.png" icon="http://addons.supertuxkart.net/dl/images/167531504955a018e112b6f.png"></revision>
+        </addon>
+        <addon id="xfce-mouse" name="Xfce mouse" designer="Paul Ch &amp; Zaul B" description="Similar to Xue." uploader="PaulTheAmaze" min-include-version="" max-include-version="" image-list="" license="" rating="0.000">
+            <revision file="http://addons.supertuxkart.net/dl/134844842955a7ce03be2b2.zip" date="1437060612" format="2" revision="1" status="256" size="548665" image="http://addons.supertuxkart.net/dl/images/13568358455a7ce03bd8c8.png" icon="http://addons.supertuxkart.net/dl/images/13568358455a7ce03bd8c8.png"></revision>
+        </addon>
+    </kart>
+    <track>
+        <addon id="alpine-2" name="Alpine-2" designer="nickdoc" description="" uploader="nickdoc" min-include-version="" max-include-version="" image-list="" license="" rating="0.000">
+            <revision file="http://addons.supertuxkart.net/dl/954394012564a24cabd614.zip" date="1447699659" format="5" revision="1" status="768" size="6999738" image="http://addons.supertuxkart.net/dl/images/678482410564a24ca8786d.jpg"></revision>
+        </addon>
+        <addon id="amazonian-journey" name="Amazonian Journey" designer="Marianne Gagnon &amp; Jean-Manuel Cl&#xE9;men&#xE7;on" description="" uploader="Auria" min-include-version="" max-include-version="" image-list="" license="" rating="2.929">
+            <revision file="http://addons.supertuxkart.net/dl/1486612266552dac0faadef.zip" date="1429056528" format="6" revision="1" status="321" size="6442651" image="http://addons.supertuxkart.net/dl/images/1617090342552dac0f8725e.jpg"></revision>
+        </addon>
+        <addon id="beehive--beta-" name="beehive (beta)" designer="rubberduck" description="track in a beehive (beta), partly in a forest.&#13;&#10;With a lot of different elements in the hive and some small firefly-hives on the wall as lig" uploader="rubberduck" min-include-version="" max-include-version="" image-list="" license="" rating="2.812">
+            <revision file="http://addons.supertuxkart.net/dl/3391221195544ef4382246.zip" date="1430581060" format="6" revision="1" status="961" size="14911656" image="http://addons.supertuxkart.net/dl/images/5215895955544ef4360b0e.jpg"></revision>
+        </addon>
+        <addon id="carnaval-del-cacao" name="Carnaval del cacao" designer="jean-manuel cl&#xE9;men&#xE7;on" description="" uploader="samuncle" min-include-version="" max-include-version="" image-list="" license="" rating="2.800">
+            <revision file="http://addons.supertuxkart.net/dl/73017542562188f16708b.zip" date="1445038325" format="6" revision="2" status="385" size="13850318" image="http://addons.supertuxkart.net/dl/images/7382768215621832f5da3a.png"></revision>
+        </addon>
+        <addon id="classic-tollway" name="Classic Tollway" designer="nickdoc" description="" uploader="nickdoc" min-include-version="" max-include-version="" image-list="" license="" rating="0.000">
+            <revision file="http://addons.supertuxkart.net/dl/6865904605649f0351002e.zip" date="1447686197" format="5" revision="1" status="256" size="360936" image="http://addons.supertuxkart.net/dl/images/4503564295649f034b3f78.png"></revision>
+        </addon>
+        <addon id="coyote-canyon" name="Coyote Canyon" designer="Thomas Oppl" description="" uploader="nickdoc" min-include-version="" max-include-version="" image-list="" license="" rating="0.000">
+            <revision file="http://addons.supertuxkart.net/dl/697164937564a26984a7a0.zip" date="1447700120" format="5" revision="1" status="256" size="1591956" image="http://addons.supertuxkart.net/dl/images/1138876254564a26981a09e.jpg"></revision>
+        </addon>
+        <addon id="hacienda--edit-" name="Hacienda [edit]" designer="Paul Ch" description="This isn't by me, but I found it and uploaded it." uploader="PaulTheAmaze" min-include-version="" max-include-version="" image-list="" license="" rating="3.000">
+            <revision file="http://addons.supertuxkart.net/dl/85529849755a80722ad65a.zip" date="1437075235" format="5" revision="1" status="256" size="2931861" image="http://addons.supertuxkart.net/dl/images/116169543055a807228f763.jpg"></revision>
+            <revision file="http://addons.supertuxkart.net/dl/134024950155a80772e8db5.zip" date="1437075315" format="5" revision="2" status="0" size="2931862" image="http://addons.supertuxkart.net/dl/images/116169543055a807228f763.jpg"></revision>
+        </addon>
+        <addon id="in-the-spaceship" name="In the Spaceship" designer="rubberduck, ported by Hacker007" description="" uploader="Hacker007" min-include-version="" max-include-version="" image-list="" license="" rating="0.000">
+            <revision file="http://addons.supertuxkart.net/dl/5437739855663592d6c300.zip" date="1449351471" format="6" revision="1" status="768" size="9729132" image="http://addons.supertuxkart.net/dl/images/20076644895663592d15555.png"></revision>
+        </addon>
+        <addon id="soccer-arena" name="Soccer arena" designer="Dawid Gan (Deve)" description="Arena for soccer mini-game, in which I was trying to make the game more dynamic." uploader="deve" min-include-version="" max-include-version="" image-list="" license="" rating="2.571">
+            <revision file="http://addons.supertuxkart.net/dl/47640704954c35dccc2be3.zip" date="1422089677" format="6" revision="1" status="512" size="4767939" image="http://addons.supertuxkart.net/dl/images/37944831254c35dccc1ad2.png"></revision>
+            <revision file="http://addons.supertuxkart.net/dl/23115314454c361ab30667.zip" date="1422090667" format="6" revision="2" status="769" size="6347491" image="http://addons.supertuxkart.net/dl/images/37944831254c35dccc1ad2.png"></revision>
+        </addon>
+        <addon id="subterranean-cave" name="Subterranean cave" designer="nickdoc" description="" uploader="nickdoc" min-include-version="" max-include-version="" image-list="" license="" rating="0.000">
+            <revision file="http://addons.supertuxkart.net/dl/482164735564a287a02899.zip" date="1447700603" format="5" revision="1" status="768" size="10914421" image="http://addons.supertuxkart.net/dl/images/1094816737564a2879ad58a.png"></revision>
+        </addon>
+        <addon id="the-cube" name="The Cube" designer="Paul Ch" description="Cube goes round round round round until you get back." uploader="PaulTheAmaze" min-include-version="" max-include-version="" image-list="" license="" rating="0.000">
+            <revision file="http://addons.supertuxkart.net/dl/157886391756363a5ad1c46.zip" date="1446394460" format="5" revision="1" status="768" size="7935426" image="http://addons.supertuxkart.net/dl/images/185549477956363a5aac5cc.png"></revision>
+        </addon>
+        <addon id="the-island" name="The Island" designer="Johannes Sjolund" description="" uploader="samuncle" min-include-version="" max-include-version="" image-list="" license="" rating="2.429">
+            <revision file="http://addons.supertuxkart.net/dl/1410202933548fab8ebb734.zip" date="1418701710" format="6" revision="1" status="193" size="2091890" image="http://addons.supertuxkart.net/dl/images/745100719548fab8e96b9a.jpg"></revision>
+            <revision file="http://addons.supertuxkart.net/dl/192745865755440a14de418.zip" date="1430522389" format="6" revision="2" status="193" size="2845826" image="http://addons.supertuxkart.net/dl/images/745100719548fab8e96b9a.jpg"></revision>
+            <revision file="http://addons.supertuxkart.net/dl/160165009755440b97805b1.zip" date="1430522775" format="6" revision="3" status="449" size="2845833" image="http://addons.supertuxkart.net/dl/images/745100719548fab8e96b9a.jpg"></revision>
+        </addon>
+        <addon id="traditional-shifting-sands" name="Traditional Shifting Sands" designer="Paul Ch &amp; Zaul B" description="The Shifting Sands from SuperTuxKart 0.7.0" uploader="PaulTheAmaze" min-include-version="" max-include-version="" image-list="" license="" rating="0.000">
+            <revision file="http://addons.supertuxkart.net/dl/5494369155a7cce6ca2ef.zip" date="1437060326" format="5" revision="1" status="256" size="610768" image="http://addons.supertuxkart.net/dl/images/131121859755a7cce6b006a.jpg"></revision>
+        </addon>
+    </track>
+    <arena>
+        <addon id="extreme-playground-stadium" name="Extreme playground stadium" designer=" Hacker007 (originally by Fabio&amp;Paolo)" description="This is Hacker007's updated version of Fabio and Paolo's origninal. :) Enjoy" uploader="Hacker007" min-include-version="" max-include-version="" image-list="" license="" rating="3.000">
+            <revision file="http://addons.supertuxkart.net/dl/17278056175662711003fbf.zip" date="1449292048" format="6" revision="1" status="0" size="1821461" image="http://addons.supertuxkart.net/dl/images/14912815305662710ff3251.jpg"></revision>
+            <revision file="http://addons.supertuxkart.net/dl/18960787515662bf6ae19e8.zip" date="1449312107" format="6" revision="2" status="257" size="2569989"></revision>
+        </addon>
+        <addon id="labirus" name="labirus" designer="laolTomsk" description="" uploader="laoltomsk" min-include-version="" max-include-version="" image-list="" license="" rating="0.750">
+            <revision file="http://addons.supertuxkart.net/dl/20642421765566faa4c6d38.zip" date="1432812198" format="6" revision="1" status="257" size="983918" image="http://addons.supertuxkart.net/dl/images/19499111855566faa4c5474.png"></revision>
+        </addon>
+        <addon id="parkade" name="Parkade" designer="Hacker007 (Original by sj04736)" description="" uploader="Hacker007" min-include-version="" max-include-version="" image-list="" license="" rating="3.000">
+            <revision file="http://addons.supertuxkart.net/dl/1421116850566278cfa9b6a.zip" date="1449294031" format="6" revision="1" status="321" size="440068" image="http://addons.supertuxkart.net/dl/images/117306585566278cfa486b.png"></revision>
+        </addon>
+        <addon id="shipwreck" name="shipwreck" designer="seth" description="" uploader="leyyin" min-include-version="" max-include-version="" image-list="" license="" rating="3.000">
+            <revision file="http://addons.supertuxkart.net/dl/110491699253e4a1ae91fd5.zip" date="1407492526" format="5" revision="1" status="256" size="88725" image="http://addons.supertuxkart.net/dl/images/54395484453e4a1ae9175a.jpg"></revision>
+        </addon>
+        <addon id="two-towers" name="Two Towers" designer="Hacker007" description="" uploader="Hacker007" min-include-version="" max-include-version="" image-list="" license="" rating="2.667">
+            <revision file="http://addons.supertuxkart.net/dl/179401773355137837b6ea7.zip" date="1427339321" format="6" revision="1" status="514" size="7959878" image="http://addons.supertuxkart.net/dl/images/71155521055137837a870a.jpg"></revision>
+            <revision file="http://addons.supertuxkart.net/dl/1700784485514faa194d0f.zip" date="1427438242" format="6" revision="2" status="579" size="6684750" image="http://addons.supertuxkart.net/dl/images/71155521055137837a870a.jpg"></revision>
+            <revision file="http://addons.supertuxkart.net/dl/1546388973565d2d1e68281.zip" date="1448946975" format="6" revision="3" status="325" size="5026434"></revision>
+        </addon>
+    </arena>
+    <music></music>
+</assets>
+

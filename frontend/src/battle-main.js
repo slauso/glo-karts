@@ -1,14 +1,20 @@
 /*
- * GLO Karts - BATTLE MODE
+ * GLO KARTS - BATTLE MODE
  * Main game loop for battle/combat mode
  * This is completely separate from race mode (main.js)
  */
 
-import * as THREE from 'three';
+import { Vector3 } from '@babylonjs/core/Maths/math.vector';
+import { Color3 } from '@babylonjs/core/Maths/math.color';
+import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder';
+import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial';
+import { PBRMaterial } from '@babylonjs/core/Materials/PBR/pbrMaterial';
+import "@babylonjs/loaders/glTF";
 import "./style.css";
-import Ammo from './lib/ammo.js';
-import { createVehicle, updateSteering, resetCarPosition, updateCarPosition } from './modules/car.js';
+import { initBabylonRenderer } from './modules/babylon-renderer.js';
+import { createVehicle, resetCarPosition } from './modules/babylon-car.js';
 import { initPhysics, updatePhysics, FIXED_PHYSICS_STEP } from './modules/physics.js';
+import { resetKart } from './modules/havok-physics.js';
 import { 
   initMultiplayer, 
   updateMarkers, 
@@ -23,8 +29,12 @@ import {
   startEngineSound, updateEnginePitch, stopEngineSound,
   playCountdownSequence, stopBGM, disposeAudio,
 } from './modules/game-audio.js';
-import { initParticles, updateParticles, emitHitBurst } from './modules/particles.js';
-import { initPostProcessing } from './modules/post-processing.js';
+import { initParticles, updateParticles, emitHitBurst } from './modules/babylon-particles.js';
+import { loadTrackData, getNavmesh } from './modules/track-data-loader.js';
+import {
+  createBattleBots, updateBattleBots, damageBattleBot,
+  getBattleScoreboard, disposeBattleBots,
+} from './modules/battle-bot-controller.js';
 
 console.log('🎮 BATTLE MODE LOADING...');
 
@@ -87,12 +97,11 @@ if (useColyseusRealtime) {
 
 // Global variables
 let camera, scene, renderer;
-let physicsWorld, tmpTrans;
-const clock = new THREE.Clock();
+let bRenderer = null;
+let lastTime = performance.now();
+const clock = { getDelta() { const now = performance.now(); const dt = (now - lastTime) / 1000; lastTime = now; return dt; } };
 
 // Car components
-let carBody;
-let vehicle;
 let wheelMeshes = [];
 let carModel;
 
@@ -109,9 +118,6 @@ const CAMERA_DISTANCE = 12;
 const CAMERA_HEIGHT = 6;     
 const CAMERA_LERP = 0.1;     
 const CAMERA_LOOK_AHEAD = 2; 
-
-// Steering parameters
-let currentSteeringAngle = 0;
 
 // Battle state variables
 let battleState = {
@@ -136,6 +142,8 @@ let weaponsSystem = null; // weapons module interface
 let battlePostProcessing = null; // bloom + SMAA pipeline
 let ctfState = null;
 let ctfSyncClock = 0;
+let battleBots = []; // AI opponents for single-player battle
+let battleNavmesh = null; // cached navmesh for bots
 
 const CTF_CAPTURE_RADIUS = 4;
 const CTF_FLAG_PICKUP_RADIUS = 3.4;
@@ -148,76 +156,33 @@ async function init() {
   console.log('🏁 Initializing Battle Mode...');
 
   try {
-    // Initialize Ammo.js first
-    const ammo = await Ammo();
-    window.Ammo = ammo;
-    console.log('✅ Ammo.js loaded');
+    // Initialize Havok physics engine
+    console.log('Initializing Havok physics...');
+    await initPhysics();
+    console.log('✅ Havok physics initialized');
 
-    // Initialize physics
-    console.log('Initializing physics world...');
-    const physicsState = initPhysics(ammo);
-    physicsWorld = physicsState.physicsWorld;
-    tmpTrans = physicsState.tmpTrans;
-    console.log('✅ Physics initialized');
-
-    // Create scene
-    scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x87ceeb); // Sky blue
-    scene.fog = new THREE.Fog(0x87ceeb, 0, 500);
+    // Create Babylon.js renderer (scene + camera + lights + post-processing)
+    bRenderer = await initBabylonRenderer('app');
+    scene = bRenderer.scene;
+    camera = bRenderer.camera;
+    renderer = bRenderer.engine;
     initParticles(scene); // Initialize particle / VFX pools
 
-    // Camera
-    camera = new THREE.PerspectiveCamera(
-      75,
-      window.innerWidth / window.innerHeight,
-      0.1,
-      1000
-    );
-    camera.position.set(0, 10, 20);
-    camera.lookAt(0, 0, 0);
-
-    // Renderer
-    renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-  renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.0;
-    const appEl = document.getElementById('app');
-    appEl.appendChild(renderer.domElement);
-
-    // Post-processing (bloom + SMAA)
-    battlePostProcessing = initPostProcessing(renderer, scene, camera);
-
     // Ensure canvas can receive keyboard focus
-    renderer.domElement.tabIndex = 1;
-    renderer.domElement.addEventListener('click', () => renderer.domElement.focus());
-    // Try to focus immediately once attached
-    setTimeout(() => renderer.domElement.focus(), 0);
+    bRenderer.canvas.tabIndex = 1;
+    bRenderer.canvas.addEventListener('click', () => bRenderer.canvas.focus());
+    setTimeout(() => bRenderer.canvas.focus(), 0);
 
   // Dev: create connection status badge
   createConnectionStatusBadge();
 
-    // Lights
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
-    scene.add(ambientLight);
-
-    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-    directionalLight.position.set(50, 100, 50);
-    directionalLight.castShadow = true;
-    directionalLight.shadow.camera.left = -100;
-    directionalLight.shadow.camera.right = 100;
-    directionalLight.shadow.camera.top = 100;
-    directionalLight.shadow.camera.bottom = -100;
-    directionalLight.shadow.mapSize.width = 2048;
-    directionalLight.shadow.mapSize.height = 2048;
-    scene.add(directionalLight);
+    // Lights handled by babylon-renderer.js
 
     // Create arena (modular)
     console.log('Creating arena...');
   // Support new lobby-driven arenaId field
-  const arenaId = (gameConfig && (gameConfig.arenaId || gameConfig.battleArena)) ? (gameConfig.arenaId || gameConfig.battleArena) : 'box';
-    arenaInfo = loadArena(window.Ammo, scene, physicsWorld, arenaId);
+  const arenaId = (gameConfig && (gameConfig.arenaId || gameConfig.battleArena)) ? (gameConfig.arenaId || gameConfig.battleArena) : 'test_box';
+    arenaInfo = loadArena(scene, arenaId);
     window._battleArenaInfo = arenaInfo; // for debugging
     console.log('✅ Arena created', arenaInfo);
 
@@ -243,7 +208,7 @@ async function init() {
     console.log('Creating player car...');
   await createPlayerCar();
   console.log('✅ Player car created');
-  // Apply initial spawn transform after carBody exists
+  // Apply initial spawn transform after car is created
     // If host sent a spawn assignment earlier, use it
     if (typeof window.pendingSpawnIndex === 'number') {
       playerSpawnIndex = window.pendingSpawnIndex;
@@ -253,11 +218,9 @@ async function init() {
 
     // Initialize health system
     healthSystem = createHealthSystem({
-      ammo: window.Ammo,
-      getCarBody: () => carBody,
       onRespawn: () => {
         // Re-apply spawn transform on respawn
-        applySpawnTransform(true);
+        applySpawnTransform();
         // Respawn FX: blink the car model + play respawn sound
         playSFX('respawn');
         _doRespawnBlink(carModel);
@@ -280,6 +243,21 @@ async function init() {
 
     // Setup controls
     setupControls();
+
+    // Create battle bots for single-player mode
+    if (!gameConfig || !gameConfig.multiplayer || gameConfig.players.length <= 1) {
+      const arenaId = (gameConfig && (gameConfig.arenaId || gameConfig.battleArena))
+        ? (gameConfig.arenaId || gameConfig.battleArena) : 'test_box';
+      const td = await loadTrackData(arenaId, 'arena');
+      if (td) {
+        battleNavmesh = getNavmesh(td);
+        const spawnPos = td.spawnPositions || arenaInfo.spawnPoints.map(p => ({ position: [p.x, p.y, p.z], heading: 0 }));
+        if (battleNavmesh) {
+          battleBots = createBattleBots(scene, battleNavmesh, spawnPos, 4);
+          console.log(`✅ Created ${battleBots.length} battle bots`);
+        }
+      }
+    }
 
     // Initialize multiplayer if needed
     if (gameConfig && gameConfig.multiplayer && gameConfig.players.length > 1) {
@@ -330,29 +308,20 @@ async function createPlayerCar() {
     const playerColor = sessionStorage.getItem('carColor') || 'red';
     console.log('Player color:', playerColor);
 
-    // Create vehicle immediately for physics; update visuals in callback when model loads
+    // Create vehicle; update visuals in callback when model loads
     const components = createVehicle(
-      window.Ammo,
       scene,
-      physicsWorld,
-      [],
       (loaded) => {
-        // Model and wheel meshes are now available
-        carBody = loaded.carBody;
-        vehicle = loaded.vehicle;
         wheelMeshes = loaded.wheelMeshes;
         carModel = loaded.carModel;
-        currentSteeringAngle = loaded.currentSteeringAngle || 0;
         console.log('✅ Player car visuals loaded');
-      }
+      },
+      bRenderer.shadowGen
     );
 
-    // Set physics references immediately
-    carBody = components.carBody;
-    vehicle = components.vehicle;
+    // Set references immediately
     wheelMeshes = components.wheelMeshes;
     carModel = components.carModel; // will be null until model loads
-    currentSteeringAngle = components.currentSteeringAngle || 0;
 
     console.log('✅ Player car physics created');
   } catch (error) {
@@ -433,37 +402,16 @@ function handleWeaponFire() {
 }
 
 function onWindowResize() {
-  camera.aspect = window.innerWidth / window.innerHeight;
-  camera.updateProjectionMatrix();
-  renderer.setSize(window.innerWidth, window.innerHeight);
-  if (battlePostProcessing) battlePostProcessing.resize(window.innerWidth, window.innerHeight);
+  if (bRenderer && bRenderer.engine) {
+    bRenderer.engine.resize();
+  }
 }
 
 // Apply the arena spawn transform to the player's car
-function applySpawnTransform(resetVelocity = false) {
-  if (!window.Ammo || !carBody || !arenaInfo || !arenaInfo.spawnPoints || arenaInfo.spawnPoints.length === 0) return;
-  const Ammo = window.Ammo;
+function applySpawnTransform() {
+  if (!arenaInfo || !arenaInfo.spawnPoints || arenaInfo.spawnPoints.length === 0) return;
   const spawn = arenaInfo.spawnPoints[playerSpawnIndex % arenaInfo.spawnPoints.length];
-
-  // Optionally zero velocities
-  if (resetVelocity) {
-    const zero = new Ammo.btVector3(0,0,0);
-    carBody.setLinearVelocity(zero);
-    carBody.setAngularVelocity(zero);
-    Ammo.destroy(zero);
-  }
-
-  const t = new Ammo.btTransform();
-  t.setIdentity();
-  t.setOrigin(new Ammo.btVector3(spawn.x, spawn.y, spawn.z));
-  const q = new Ammo.btQuaternion(0, 0, 0, 1);
-  t.setRotation(q);
-  carBody.setWorldTransform(t);
-  const ms = carBody.getMotionState && carBody.getMotionState();
-  if (ms) ms.setWorldTransform(t);
-
-  Ammo.destroy(t);
-  Ammo.destroy(q);
+  resetKart({ x: spawn.x, y: spawn.y, z: spawn.z }, 0);
 }
 
 // ----- Health & Respawn (incremental) -----
@@ -497,29 +445,11 @@ function respawnPlayer() {
     return;
   }
   // Fallback simple respawn at arena center
-  const Ammo = window.Ammo;
-  if (!Ammo || !carBody) return;
-
-  const zero = new Ammo.btVector3(0,0,0);
-  carBody.setLinearVelocity(zero);
-  carBody.setAngularVelocity(zero);
-
-  const t = new Ammo.btTransform();
-  t.setIdentity();
-  t.setOrigin(new Ammo.btVector3(0, 3, 0));
-  const q = new Ammo.btQuaternion(0, 0, 0, 1);
-  t.setRotation(q);
-  carBody.setWorldTransform(t);
-  const ms = carBody.getMotionState();
-  if (ms) ms.setWorldTransform(t);
+  resetKart({ x: 0, y: 3, z: 0 }, 0);
 
   battleState.health = battleState.maxHealth;
   battleState.invulnerable = true;
   setTimeout(() => { battleState.invulnerable = false; }, 2000);
-
-  Ammo.destroy(zero);
-  Ammo.destroy(t);
-  Ammo.destroy(q);
 }
 
 function hideLoadingScreen() {
@@ -557,7 +487,7 @@ function startCountdown() {
       // Start engine sound & arena BGM
       startEngineSound();
       const arenaId = (gameConfig && (gameConfig.arenaId || gameConfig.battleArena))
-        ? (gameConfig.arenaId || gameConfig.battleArena) : 'battleisland';
+        ? (gameConfig.arenaId || gameConfig.battleArena) : 'test_box';
       playTrackMusic(arenaId);
     }
   }, 1000);
@@ -571,7 +501,7 @@ window.setBattleSpawnIndex = function(idx){
     playerSpawnIndex = idx;
     // if not started yet, reposition immediately
     if (!battleState.battleStarted) {
-      applySpawnTransform(true);
+      applySpawnTransform();
     }
   }
 };
@@ -661,6 +591,25 @@ function updateBattleUI() {
       `;
     }
   }
+
+  // Update battle scoreboard when bots are present
+  if (battleBots.length > 0) {
+    let sb = document.getElementById('battle-scoreboard');
+    if (!sb) {
+      sb = document.createElement('div');
+      sb.id = 'battle-scoreboard';
+      sb.style.cssText = 'position:fixed;top:12px;right:12px;background:rgba(0,0,0,0.6);color:#fff;font-family:Poppins,sans-serif;font-size:13px;padding:8px 12px;border-radius:8px;z-index:100;min-width:140px;pointer-events:none;';
+      document.body.appendChild(sb);
+    }
+    const board = getBattleScoreboard(battleBots, battleState.score);
+    let html = '<div style="font-weight:700;margin-bottom:4px;font-size:14px">SCOREBOARD</div>';
+    board.forEach((entry, i) => {
+      const isPlayer = entry.id === 'player';
+      const color = isPlayer ? '#4ade80' : '#ccc';
+      html += `<div style="color:${color};${isPlayer ? 'font-weight:700' : ''}">${i + 1}. ${entry.name}: ${entry.score}</div>`;
+    });
+    sb.innerHTML = html;
+  }
 }
 
 function getLocalPlayerId() {
@@ -680,33 +629,34 @@ function initCtfMode() {
   const width = arenaInfo?.bounds?.width || 100;
   const baseOffset = Math.max(16, Math.floor(width * 0.32));
 
-  const redBase = new THREE.Vector3(-baseOffset, 0.4, 0);
-  const blueBase = new THREE.Vector3(baseOffset, 0.4, 0);
+  const redBase = new Vector3(-baseOffset, 0.4, 0);
+  const blueBase = new Vector3(baseOffset, 0.4, 0);
 
   const makeBase = (pos, color) => {
-    const mesh = new THREE.Mesh(
-      new THREE.CylinderGeometry(3.2, 3.2, 0.35, 24),
-      new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.2 })
-    );
-    mesh.position.copy(pos);
-    mesh.receiveShadow = true;
-    scene.add(mesh);
+    const mesh = MeshBuilder.CreateCylinder('ctfBase', { height: 0.35, diameter: 6.4, tessellation: 24 }, scene);
+    const mat = new StandardMaterial('ctfBaseMat', scene);
+    const c3 = Color3.FromHexString('#' + color.toString(16).padStart(6, '0'));
+    mat.diffuseColor = c3;
+    mat.emissiveColor = c3.scale(0.2);
+    mesh.material = mat;
+    mesh.position.copyFrom(pos);
+    mesh.receiveShadows = true;
   };
 
   const makeFlag = (pos, color) => {
-    const pole = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.08, 0.08, 2.2, 10),
-      new THREE.MeshStandardMaterial({ color: 0xd0d0d0 })
-    );
-    pole.position.copy(pos).add(new THREE.Vector3(0, 1.1, 0));
-    scene.add(pole);
+    const pole = MeshBuilder.CreateCylinder('ctfPole', { height: 2.2, diameter: 0.16, tessellation: 10 }, scene);
+    const poleMat = new StandardMaterial('ctfPoleMat', scene);
+    poleMat.diffuseColor = Color3.FromHexString('#d0d0d0');
+    pole.material = poleMat;
+    pole.position.copyFrom(pos).addInPlace(new Vector3(0, 1.1, 0));
 
-    const cloth = new THREE.Mesh(
-      new THREE.BoxGeometry(1.0, 0.55, 0.05),
-      new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.25 })
-    );
-    cloth.position.copy(pos).add(new THREE.Vector3(0.55, 1.75, 0));
-    scene.add(cloth);
+    const cloth = MeshBuilder.CreateBox('ctfCloth', { width: 1.0, height: 0.55, depth: 0.05 }, scene);
+    const clothMat = new StandardMaterial('ctfClothMat', scene);
+    const c3 = Color3.FromHexString('#' + color.toString(16).padStart(6, '0'));
+    clothMat.diffuseColor = c3;
+    clothMat.emissiveColor = c3.scale(0.25);
+    cloth.material = clothMat;
+    cloth.position.copyFrom(pos).addInPlace(new Vector3(0.55, 1.75, 0));
 
     return { pole, cloth };
   };
@@ -744,13 +694,13 @@ function initCtfMode() {
 
 function placeFlag(flagData) {
   if (!flagData?.mesh) return;
-  flagData.mesh.pole.position.copy(flagData.current).add(new THREE.Vector3(0, 1.1, 0));
-  flagData.mesh.cloth.position.copy(flagData.current).add(new THREE.Vector3(0.55, 1.75, 0));
+  flagData.mesh.pole.position.copyFrom(flagData.current).addInPlace(new Vector3(0, 1.1, 0));
+  flagData.mesh.cloth.position.copyFrom(flagData.current).addInPlace(new Vector3(0.55, 1.75, 0));
 }
 
 function resetFlag(flagData) {
   flagData.carrierId = null;
-  flagData.current.copy(flagData.home);
+  flagData.current.copyFrom(flagData.home);
 }
 
 function maybeBroadcastCtfState(deltaTime) {
@@ -789,16 +739,16 @@ function updateCtfMode(deltaTime) {
   const enemyFlag = myTeam === 'red' ? ctfState.blue : ctfState.red;
   const ownBase = ownFlag.home;
 
-  if (!enemyFlag.carrierId && myPos.distanceTo(enemyFlag.current) <= CTF_FLAG_PICKUP_RADIUS) {
+  if (!enemyFlag.carrierId && Vector3.Distance(myPos, enemyFlag.current) <= CTF_FLAG_PICKUP_RADIUS) {
     enemyFlag.carrierId = myId;
   }
 
   if (enemyFlag.carrierId === myId) {
-    enemyFlag.current.copy(myPos).add(new THREE.Vector3(0, 1.9, 0));
+    enemyFlag.current.copyFrom(myPos).addInPlace(new Vector3(0, 1.9, 0));
   }
 
-  const ownFlagAtHome = ownFlag.current.distanceTo(ownFlag.home) < 0.1 && !ownFlag.carrierId;
-  const atOwnBase = myPos.distanceTo(ownBase) <= CTF_CAPTURE_RADIUS;
+  const ownFlagAtHome = Vector3.Distance(ownFlag.current, ownFlag.home) < 0.1 && !ownFlag.carrierId;
+  const atOwnBase = Vector3.Distance(myPos, ownBase) <= CTF_CAPTURE_RADIUS;
 
   if (enemyFlag.carrierId === myId && ownFlagAtHome && atOwnBase) {
     ctfState.scores[myTeam] += 1;
@@ -831,26 +781,30 @@ window.receiveCtfState = function(payload) {
 };
 
 function updateCamera() {
-  // Prefer carModel (visual) for camera target; it reflects the final orientation used in rendering
   if (!carModel) return;
 
-  // Get car world position and forward direction
   const carPos = carModel.position.clone();
-  const carDir = new THREE.Vector3();
-  carModel.getWorldDirection(carDir); // carDir points forward
+  // Babylon.js forward is +Z in local space
+  const fwd = new Vector3(0, 0, 1);
+  const q = carModel.rotationQuaternion;
+  if (q) {
+    const ix = q.w * fwd.x + q.y * fwd.z - q.z * fwd.y;
+    const iy = q.w * fwd.y + q.z * fwd.x - q.x * fwd.z;
+    const iz = q.w * fwd.z + q.x * fwd.y - q.y * fwd.x;
+    const iw = -q.x * fwd.x - q.y * fwd.y - q.z * fwd.z;
+    fwd.x = ix * q.w + iw * -q.x + iy * -q.z - iz * -q.y;
+    fwd.y = iy * q.w + iw * -q.y + iz * -q.x - ix * -q.z;
+    fwd.z = iz * q.w + iw * -q.z + ix * -q.y - iy * -q.x;
+  }
+  const carDir = fwd.normalize();
 
-  // Place camera behind and above the car
-  const behindOffset = carDir.clone().multiplyScalar(-CAMERA_DISTANCE);
-  const targetPos = carPos.clone()
-    .add(behindOffset)
-    .add(new THREE.Vector3(0, CAMERA_HEIGHT, 0));
+  const behindOffset = carDir.scale(-CAMERA_DISTANCE);
+  const targetPos = carPos.add(behindOffset).add(new Vector3(0, CAMERA_HEIGHT, 0));
 
-  // Smooth camera movement
-  camera.position.lerp(targetPos, CAMERA_LERP);
+  camera.position = Vector3.Lerp(camera.position, targetPos, CAMERA_LERP);
 
-  // Look slightly ahead of the car
-  const lookAtPos = carPos.clone().add(carDir.clone().multiplyScalar(CAMERA_LOOK_AHEAD));
-  camera.lookAt(lookAtPos);
+  const lookAtPos = carModel.position.clone().add(carDir.scale(CAMERA_LOOK_AHEAD));
+  camera.setTarget(lookAtPos);
 }
 
 // Main game loop
@@ -863,7 +817,7 @@ function animate() {
   const deltaTime = Math.min(clock.getDelta(), 0.1);
   accumulator += deltaTime;
 
-  if (physicsWorld && vehicle && carModel) {
+  if (carModel) {
     // Map battle state to physics "race" state expectations
     const physicsModeState = {
       raceStarted: !!battleState.battleStarted,
@@ -873,36 +827,22 @@ function animate() {
     // Run physics at fixed intervals
     while (accumulator >= FIXED_PHYSICS_STEP) {
       const carState = {
-        carBody,
-        vehicle,
         carModel,
         wheelMeshes,
         keyState,
-        currentSteeringAngle,
-        updateSteering,
       };
 
       const physicsResult = updatePhysics(
         FIXED_PHYSICS_STEP,
-        window.Ammo,
-        { physicsWorld, tmpTrans },
         carState,
-        [], // no debug objects in battle mode (for now)
         physicsModeState
       );
 
-      // Update steering angle returned from physics
-      if (physicsResult && typeof physicsResult.currentSteeringAngle === 'number') {
-        currentSteeringAngle = physicsResult.currentSteeringAngle;
-      }
       // Update speed for debug HUD
       if (physicsResult && typeof physicsResult.currentSpeed === 'number') {
         currentSpeedKPH = physicsResult.currentSpeed;
         updateEnginePitch(currentSpeedKPH);
       }
-
-      // Update car rendering from physics
-      updateCarPosition(window.Ammo, vehicle, carModel, wheelMeshes);
 
       accumulator -= FIXED_PHYSICS_STEP;
     }
@@ -942,6 +882,68 @@ function animate() {
   if (weaponsSystem && typeof weaponsSystem.update === 'function') {
     weaponsSystem.update(deltaTime, carModel, battleState);
   }
+
+  // Update battle bots
+  if (battleBots.length > 0 && battleNavmesh) {
+    updateBattleBots(battleBots, deltaTime, carModel, battleState, battleNavmesh, (bot) => {
+      // Bot fires at player — apply damage if not invulnerable
+      if (carModel && !battleState.invulnerable) {
+        const dist = Vector3.Distance(bot.position, carModel.position);
+        if (dist < 20) {
+          const damage = 10 + Math.floor(Math.random() * 15);
+          applyDamage(damage);
+          spawnDamageNumberAt(carModel.position.clone().addInPlace(new Vector3(0, 2, 0)), damage);
+        }
+      }
+      // Bot gets a point for attacking
+      bot.score++;
+    });
+
+    // Check player weapon hits on bots (proximity-based)
+    if (weaponsSystem && typeof weaponsSystem.getProjectiles === 'function') {
+      const projectiles = weaponsSystem.getProjectiles();
+      for (let pi = projectiles.length - 1; pi >= 0; pi--) {
+        const proj = projectiles[pi];
+        if (proj.remote) continue;
+        for (const bot of battleBots) {
+          if (!bot.alive || bot.invulnTimer > 0) continue;
+          const d = Vector3.Distance(proj.mesh.position, bot.position);
+          if (d < 3.0) {
+            const killed = damageBattleBot(bot, 25 + Math.floor(Math.random() * 15));
+            if (killed) {
+              battleState.score++;
+              emitHitBurst(bot.position, 0xff4444, 20);
+              playSFX('crash');
+            }
+            // Remove projectile
+            proj.mesh.dispose();
+            projectiles.splice(pi, 1);
+            break;
+          }
+        }
+      }
+    }
+
+    // Check player-bot collision damage (both sides)
+    if (carModel && battleState.battleStarted) {
+      const mySpeedMS = (currentSpeedKPH || 0) / 3.6;
+      for (const bot of battleBots) {
+        if (!bot.alive || bot.invulnTimer > 0) continue;
+        const d = Vector3.Distance(bot.position, carModel.position);
+        if (d < 3.0 && (mySpeedMS > 3 || bot.speed > 3)) {
+          const impactDamage = Math.min(25, Math.max(5, Math.round((mySpeedMS + bot.speed) * 1.5)));
+          const killed = damageBattleBot(bot, impactDamage);
+          if (killed) {
+            battleState.score++;
+            emitHitBurst(bot.position, 0xff4444, 15);
+          }
+          if (!battleState.invulnerable) {
+            applyDamage(Math.max(3, impactDamage * 0.5));
+          }
+        }
+      }
+    }
+  }
   // Floating damage numbers animation
   if (typeof updateDamageNumbers === 'function') {
     updateDamageNumbers(deltaTime);
@@ -950,12 +952,8 @@ function animate() {
   // Update particles (drift sparks, boost flames, hit effects)
   updateParticles(deltaTime, carModel, kartState);
 
-  // Render through post-processing pipeline (bloom + SMAA)
-  if (battlePostProcessing) {
-    battlePostProcessing.composer.render();
-  } else {
-    renderer.render(scene, camera);
-  }
+  // Render (Babylon.js handles post-processing internally)
+  scene.render();
 }
 
 // Debug HUD updater
@@ -983,14 +981,14 @@ const DAMAGE_SCALE = 3.0; // tuning multiplier for relative speed
 
 // Track last impact time per opponent and rough opponent speed estimates
 const lastCollisionById = new Map(); // id -> timestamp
-const oppSpeedCache = new Map(); // id -> { pos: THREE.Vector3, t: number, speedMS: number }
+const oppSpeedCache = new Map(); // id -> { pos: Vector3, t: number, speedMS: number }
 
 function estimateOpponentSpeedMS(id, pos) {
   const now = performance.now();
   const prev = oppSpeedCache.get(id);
   if (prev) {
     const dt = Math.max(1, now - prev.t) / 1000; // seconds, avoid div-by-zero
-    const dist = pos.distanceTo(prev.pos);
+    const dist = Vector3.Distance(pos, prev.pos);
     const speed = dist / dt; // m/s
     oppSpeedCache.set(id, { pos: pos.clone(), t: now, speedMS: speed });
     return speed;
@@ -1005,8 +1003,18 @@ function checkPvPCollisionsAndDamage() {
 
   // Precompute my kinematics
   const myPos = carModel.position;
-  const myForward = new THREE.Vector3();
-  carModel.getWorldDirection(myForward);
+  const myForward = new Vector3(0, 0, 1);
+  if (carModel.rotationQuaternion) {
+    const q = carModel.rotationQuaternion;
+    const ix = q.w * 0 + q.y * 1 - q.z * 0;
+    const iy = q.w * 0 + q.z * 0 - q.x * 1;
+    const iz = q.w * 1 + q.x * 0 - q.y * 0;
+    const iw = -q.z * 1;
+    myForward.x = ix * q.w + iw * -q.x + iy * -q.z - iz * -q.y;
+    myForward.y = iy * q.w + iw * -q.y + iz * -q.x - ix * -q.z;
+    myForward.z = iz * q.w + iw * -q.z + ix * -q.y - iy * -q.x;
+    myForward.normalize();
+  }
   const mySpeedMS = (currentSpeedKPH || 0) / 3.6;
 
   const opponents = multiplayerState.opponentCars || {};
@@ -1018,7 +1026,7 @@ function checkPvPCollisionsAndDamage() {
     if (!opp.model || !opp.model.visible) return;
 
     const oppPos = opp.model.position;
-    const d = oppPos.distanceTo(myPos);
+    const d = Vector3.Distance(oppPos, myPos);
     if (d > COLLISION_DISTANCE) return; // not colliding/proximate
 
     // Per-opponent cooldown
@@ -1027,17 +1035,22 @@ function checkPvPCollisionsAndDamage() {
 
     // Estimate opponent speed and direction
     const oppSpeedMS = estimateOpponentSpeedMS(playerId, oppPos);
-    const oppForward = new THREE.Vector3();
-    if (opp.model.getWorldDirection) {
-      opp.model.getWorldDirection(oppForward);
-    } else {
-      // fallback from quaternion
-      oppForward.set(0,0,1).applyQuaternion(opp.model.quaternion).normalize();
+    const oppForward = new Vector3(0, 0, 1);
+    if (opp.model.rotationQuaternion) {
+      const oq = opp.model.rotationQuaternion;
+      const oix = oq.w * 0 + oq.y * 1 - oq.z * 0;
+      const oiy = oq.w * 0 + oq.z * 0 - oq.x * 1;
+      const oiz = oq.w * 1 + oq.x * 0 - oq.y * 0;
+      const oiw = -oq.z * 1;
+      oppForward.x = oix * oq.w + oiw * -oq.x + oiy * -oq.z - oiz * -oq.y;
+      oppForward.y = oiy * oq.w + oiw * -oq.y + oiz * -oq.x - oix * -oq.z;
+      oppForward.z = oiz * oq.w + oiw * -oq.z + oix * -oq.y - oiy * -oq.x;
+      oppForward.normalize();
     }
 
     // Impact geometry: angles and closing component
-    const dirToOpp = oppPos.clone().sub(myPos).normalize();
-    const dirToMe = myPos.clone().sub(oppPos).normalize();
+    const dirToOpp = oppPos.subtract(myPos).normalize();
+    const dirToMe = myPos.subtract(oppPos).normalize();
     const closingFromMe = Math.max(0, myForward.dot(dirToOpp)); // 1 if I'm heading into opponent
     const closingFromOpp = Math.max(0, oppForward.dot(dirToMe)); // 1 if they're heading into me
 
@@ -1130,24 +1143,18 @@ window.addEventListener('weaponEquipped', (e) => { window.receiveWeaponGrant(e.d
 // Car blink/emissive pulse on damage (local)
 window.blinkCarOnDamage = function() {
   if (!carModel) return;
-  carModel.traverse(node => {
-    if (node.isMesh && node.material) {
-      const mat = node.material;
-      if ('emissive' in mat) {
-        const original = mat.emissive.clone();
-        const originalIntensity = mat.emissiveIntensity ?? 1.0;
-        mat.emissive.setRGB(0.8, 0.0, 0.0);
-        mat.emissiveIntensity = Math.max(originalIntensity, 1.5);
-        setTimeout(() => {
-          mat.emissive.copy(original);
-          mat.emissiveIntensity = originalIntensity;
-        }, 180);
-      } else if ('color' in mat) {
-        // Fallback: quick color tint
-        const orig = mat.color.clone();
-        mat.color.setRGB(1, 0.4, 0.4);
-        setTimeout(() => mat.color.copy(orig), 120);
-      }
+  const meshes = carModel.getChildMeshes ? carModel.getChildMeshes() : [];
+  meshes.forEach(mesh => {
+    const mat = mesh.material;
+    if (!mat) return;
+    if (mat.emissiveColor) {
+      const original = mat.emissiveColor.clone();
+      mat.emissiveColor = new Color3(0.8, 0.0, 0.0);
+      setTimeout(() => { mat.emissiveColor = original; }, 180);
+    } else if (mat.diffuseColor) {
+      const orig = mat.diffuseColor.clone();
+      mat.diffuseColor = new Color3(1, 0.4, 0.4);
+      setTimeout(() => { mat.diffuseColor = orig; }, 120);
     }
   });
 };
@@ -1156,12 +1163,17 @@ window.blinkCarOnDamage = function() {
 const activeDamageTexts = [];
 
 function worldToScreen(pos, cam, rend) {
-  const width = rend.domElement.clientWidth;
-  const height = rend.domElement.clientHeight;
-  const projected = pos.clone().project(cam);
-  const x = (projected.x * 0.5 + 0.5) * width;
-  const y = (-projected.y * 0.5 + 0.5) * height;
-  return { x, y, behind: projected.z > 1 };
+  if (!bRenderer) return { x: 0, y: 0, behind: true };
+  const engine = bRenderer.engine;
+  const width = engine.getRenderWidth();
+  const height = engine.getRenderHeight();
+  const projected = Vector3.Project(
+    pos,
+    bRenderer.scene.getTransformMatrix(),
+    cam.getTransformationMatrix(),
+    { x: 0, y: 0, width, height }
+  );
+  return { x: projected.x, y: projected.y, behind: projected.z > 1 };
 }
 
 function spawnDamageNumberAt(worldPos, amount, color = '#ff5555') {
@@ -1194,7 +1206,7 @@ function spawnDamageNumberAt(worldPos, amount, color = '#ff5555') {
 // Expose for multiplayer damage events
 window.spawnLocalDamageNumber = function(amount) {
   if (!carModel) return;
-  const pos = carModel.position.clone().add(new THREE.Vector3(0, 2.2, 0));
+  const pos = carModel.position.clone().addInPlace(new Vector3(0, 2.2, 0));
   spawnDamageNumberAt(pos, amount);
 };
 
@@ -1211,7 +1223,7 @@ function updateDamageNumbers(delta) {
     }
     // Move upward and fade out
     it.yOffset = 30 * t;
-    const screen = worldToScreen(it.worldPos.clone().add(new THREE.Vector3(0, t * 0.8, 0)), camera, renderer);
+    const screen = worldToScreen(it.worldPos.clone().addInPlace(new Vector3(0, t * 0.8, 0)), camera, renderer);
     if (!screen.behind) {
       it.el.style.left = `${screen.x}px`;
       it.el.style.top = `${screen.y - it.yOffset}px`;

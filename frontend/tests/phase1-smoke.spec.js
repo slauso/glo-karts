@@ -1,5 +1,5 @@
 /**
- * GLO Karts — Phase 1 Smoke Tests
+ * GLO KARTS — Phase 1 Smoke Tests
  * Tests lobby page load, realtime page load, Colyseus connectivity,
  * entity schema sync, and two-player multiplayer join.
  */
@@ -14,7 +14,7 @@ test.describe('Lobby Page', () => {
     await page.goto('/');
     await page.waitForTimeout(3000);
 
-    // Title should contain GLO Karts
+    // Title should contain GLO KARTS
     const title = await page.title();
     expect(title.toLowerCase()).toContain('glo karts');
 

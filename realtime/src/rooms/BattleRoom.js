@@ -33,9 +33,10 @@ export class BattleRoom extends Room {
       if (this.state.started || this.countdownActive) return;
       this.countdownActive = true;
 
-      const durationMs = 4000;
+      const durationMs = 10000;
       const serverNow = Date.now();
       const startAt = serverNow + durationMs;
+      this._countdownStartAt = startAt;
 
       this.broadcast("startSequence", { durationMs, startAt, serverNow });
 
@@ -50,9 +51,10 @@ export class BattleRoom extends Room {
       if (this.state.started || this.countdownActive) return;
       this.countdownActive = true;
 
-      const durationMs = 4000;
+      const durationMs = 10000;
       const serverNow = Date.now();
       const startAt = serverNow + durationMs;
+      this._countdownStartAt = startAt;
 
       this.broadcast("startSequence", { durationMs, startAt, serverNow });
 
@@ -228,9 +230,9 @@ export class BattleRoom extends Room {
     } else if (this.countdownActive) {
       // Mid-countdown — send startSequence with remaining time so client shows
       // correct countdown and transitions to matchLive when it fires.
-      const durationMs = 4000;
+      const remaining = Math.max(0, (this._countdownStartAt || Date.now()) - Date.now());
       const serverNow = Date.now();
-      client.send("startSequence", { durationMs, startAt: serverNow + 1000, serverNow });
+      client.send("startSequence", { durationMs: remaining, startAt: serverNow + remaining, serverNow });
     }
   }
 

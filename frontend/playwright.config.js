@@ -1,7 +1,7 @@
 import { defineConfig, devices } from '@playwright/test';
 
 /**
- * GLO Karts — Playwright Configuration
+ * GLO KARTS — Playwright Configuration
  *
  * Test suites:
  *   01-spawn-sequence  — validates kart hidden pre-match, revealed at GO

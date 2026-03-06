@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 import_custom_map.py — Bring any STK-format custom map (race track or battle arena)
-into the GLO Karts project as a fully playable course.
+into the GLO KARTS project as a fully playable course.
 
 Usage:
   python tools/import_custom_map.py \
@@ -49,7 +49,7 @@ SPM_CONVERTER = PROJECT_ROOT / 'temp_blockfort' / 'spm_to_glb.py'
 # ── CLI args ──────────────────────────────────────────────────────────────────
 
 def parse_args():
-    p = argparse.ArgumentParser(description='Import a custom STK map into GLO Karts.')
+    p = argparse.ArgumentParser(description='Import a custom STK map into GLO KARTS.')
     p.add_argument('--src',   required=True, help='Path to extracted map folder (contains .spm file)')
     p.add_argument('--id',    required=True, help='Unique track/arena id (no spaces, e.g. blockfort)')
     p.add_argument('--type',  required=True, choices=['arena', 'track'], help='arena or track')

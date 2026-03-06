@@ -1,9 +1,10 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { getTrackModelPath, getTrackScale, isCustomMap, getFallThreshold } from './track-data.js';
+import { createTrackCollider, getKartY } from './havok-physics.js';
 
 // Function to load the track model and add to scene
-export function loadTrackModel(ammo, mapId = "map1", scene, physicsWorld, loadingManager, callback) {
+export function loadTrackModel(mapId = "map1", scene, loadingManager, callback) {
   // Use the loading manager with your loader
   const loader = new GLTFLoader(loadingManager);
   
@@ -59,8 +60,8 @@ export function loadTrackModel(ammo, mapId = "map1", scene, physicsWorld, loadin
       scene.add(track);
       console.log(`Map ${mapId} track loaded successfully`);
       
-      // Add physics collider for the track
-      addTrackCollider(track, ammo, physicsWorld);
+      // Add physics collider for the track (Havok)
+      addTrackColliderHavok(track);
       
       // Call the callback with the track model if provided
       if (callback && typeof callback === 'function') {
@@ -76,25 +77,18 @@ export function loadTrackModel(ammo, mapId = "map1", scene, physicsWorld, loadin
   );
 }
 
-// Function to create a physics collider for the entire track
-function addTrackCollider(trackModel, ammo, physicsWorld) {
-  // Cap triangles to avoid browser freeze on large 70-mesh tracks.
-  // Old approach: new ammo.btVector3() + ammo.destroy() per vertex = 1.5M+ Ammo
-  // heap ops → freeze. New approach: reuse 3 btVector3 with setValue().
+// Extract geometry from a Three.js model and create a Havok trimesh collider
+function addTrackColliderHavok(trackModel) {
   const MAX_TRIANGLES = 80000;
-  const triangleMesh = new ammo.btTriangleMesh();
-
-  // Reusable btVector3 objects — setValue() is far cheaper than create/destroy
-  const _va = new ammo.btVector3(0, 0, 0);
-  const _vb = new ammo.btVector3(0, 0, 0);
-  const _vc = new ammo.btVector3(0, 0, 0);
+  const positions = [];
+  const indices = [];
+  let vertOffset = 0;
   let triCount = 0;
 
   trackModel.updateMatrixWorld(true);
-
   const _vec = new THREE.Vector3();
 
-  trackModel.traverse(child => {
+  trackModel.traverse((child) => {
     if (triCount >= MAX_TRIANGLES) return;
     if (!child.isMesh || !child.geometry) return;
 
@@ -104,48 +98,34 @@ function addTrackCollider(trackModel, ammo, physicsWorld) {
     const mat = child.matrixWorld;
     const idx = geo.index;
 
-    const setV = (bv, i) => {
+    // Append world-space vertices
+    const baseVert = vertOffset;
+    for (let i = 0; i < pos.count; i++) {
       _vec.fromBufferAttribute(pos, i).applyMatrix4(mat);
-      bv.setValue(_vec.x, _vec.y, _vec.z);
-    };
+      positions.push(_vec.x, _vec.y, _vec.z);
+      vertOffset++;
+    }
 
+    // Append triangle indices
     if (idx) {
       for (let i = 0; i + 2 < idx.count && triCount < MAX_TRIANGLES; i += 3) {
-        setV(_va, idx.getX(i));
-        setV(_vb, idx.getX(i + 1));
-        setV(_vc, idx.getX(i + 2));
-        triangleMesh.addTriangle(_va, _vb, _vc, false);
+        indices.push(baseVert + idx.getX(i), baseVert + idx.getX(i + 1), baseVert + idx.getX(i + 2));
         triCount++;
       }
     } else {
       for (let i = 0; i + 2 < pos.count && triCount < MAX_TRIANGLES; i += 3) {
-        setV(_va, i);
-        setV(_vb, i + 1);
-        setV(_vc, i + 2);
-        triangleMesh.addTriangle(_va, _vb, _vc, false);
+        indices.push(baseVert + i, baseVert + i + 1, baseVert + i + 2);
         triCount++;
       }
     }
   });
 
-  ammo.destroy(_va);
-  ammo.destroy(_vb);
-  ammo.destroy(_vc);
-
-  const trackShape = new ammo.btBvhTriangleMeshShape(triangleMesh, true, true);
-
-  const trackTransform = new ammo.btTransform();
-  trackTransform.setIdentity();
-
-  const motionState = new ammo.btDefaultMotionState(trackTransform);
-  const localInertia = new ammo.btVector3(0, 0, 0);
-
-  const rbInfo = new ammo.btRigidBodyConstructionInfo(0, motionState, trackShape, localInertia);
-  const trackBody = new ammo.btRigidBody(rbInfo);
-  trackBody.setFriction(1.0);
-
-  physicsWorld.addRigidBody(trackBody);
-  console.log(`Track physics collider: ${triCount.toLocaleString()} triangles (cap ${MAX_TRIANGLES.toLocaleString()})`);
+  createTrackCollider(
+    new Float32Array(positions),
+    new Uint32Array(indices),
+    1.0,
+  );
+  console.log(`Track physics collider (Havok): ${triCount.toLocaleString()} triangles (cap ${MAX_TRIANGLES.toLocaleString()})`);
 }
 
 // Function to load map decorations
@@ -214,22 +194,11 @@ export function loadMapDecorations(mapId = "map1", scene, renderer, camera, load
   );
 }
 
-// Export checkGroundCollision to be used from main.js
-export function checkGroundCollision(ammo, carBody, resetFunction, fallThreshold = -50) {
-  // Get the car's position
-  if (!carBody) return;
-  
-  const transform = new ammo.btTransform();
-  const motionState = carBody.getMotionState();
-  motionState.getWorldTransform(transform);
-  const position = transform.getOrigin();
-  
-  // If car is below the fall threshold for this track, reset it
-  if (position.y() < fallThreshold) {
-    console.log("Car fell off track - resetting position");
-    if (resetFunction) resetFunction(ammo);
+// Check if the kart has fallen below the fall threshold
+export function checkGroundCollision(resetFunction, fallThreshold = -50) {
+  const y = getKartY();
+  if (y < fallThreshold) {
+    console.log('Car fell off track - resetting position');
+    if (resetFunction) resetFunction();
   }
-  
-  // Clean up
-  ammo.destroy(transform);
 }

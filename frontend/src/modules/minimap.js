@@ -1,5 +1,7 @@
-import * as THREE from 'three';
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { Vector3 } from '@babylonjs/core/Maths/math.vector';
+import { VertexBuffer } from '@babylonjs/core/Buffers/buffer';
+import { SceneLoader } from '@babylonjs/core/Loading/sceneLoader';
+import '@babylonjs/loaders/glTF';
 import { hasTrackOutline, getTrackScale } from './track-data.js';
 
 // Store minimap state
@@ -16,11 +18,12 @@ const minimap = {
 };
 
 // Create the minimap canvas
-export function createMinimap(mapId) {
+export function createMinimap(mapId, scene) {
   // Use provided mapId or default to map1
   if (mapId) {
     minimap.mapId = mapId;
   }
+  minimap.scene = scene || null;
   
   // Store the world scale for this track
   minimap.worldScale = getTrackScale(mapId);
@@ -63,29 +66,22 @@ function loadTrackCurve(mapId) {
     return;
   }
 
-  const loader = new GLTFLoader();
-  
-  // Use the specified map's track outline
   const trackOutlinePath = `/models/maps/${mapId}/track-outline.glb`;
   console.log(`Loading track outline from: ${trackOutlinePath}`);
-  
-  // Load the model containing the Bezier curve
-  loader.load(
-    trackOutlinePath,
-    (gltf) => {
-      const curveModel = gltf.scene;
-      console.log(`Track curve model loaded for minimap (${mapId})`);
-      extractCurvePoints(curveModel);
-    },
-    (xhr) => {
-      console.log(`Loading track curve: ${(xhr.loaded / xhr.total * 100).toFixed(1)}%`);
-    },
-    (error) => {
-      console.error(`Error loading track curve for ${mapId}:`, error);
-      // Fallback to the regular track model if curve can't be loaded
-      console.log('Will use regular track model as fallback');
-    }
-  );
+
+  const lastSlash = trackOutlinePath.lastIndexOf('/');
+  const dir = trackOutlinePath.substring(0, lastSlash + 1);
+  const file = trackOutlinePath.substring(lastSlash + 1);
+
+  SceneLoader.ImportMeshAsync("", dir, file, minimap.scene).then((result) => {
+    console.log(`Track curve model loaded for minimap (${mapId})`);
+    extractCurvePoints(result.meshes);
+    // Dispose loaded meshes — only needed vertex data for 2D canvas
+    result.meshes.forEach(m => m.dispose());
+  }).catch((error) => {
+    console.error(`Error loading track curve for ${mapId}:`, error);
+    console.log('Will use regular track model as fallback');
+  });
 }
 
 // Add a function to update the minimap if the map changes
@@ -103,35 +99,27 @@ export function updateMinimapTrack(mapId) {
 }
 
 // Extract points from the Bezier curve model
-function extractCurvePoints(curveModel) {
-  if (!curveModel) {
-    console.error('Curve model not available');
+function extractCurvePoints(meshes) {
+  if (!meshes || meshes.length === 0) {
+    console.error('No meshes available for curve extraction');
     return;
   }
-  
+
   console.log('Extracting curve points for minimap...');
-  
-  // Array to store curve points
   const curvePoints = [];
-  
-  // Look for curve objects specifically
-  curveModel.traverse(node => {
-    // Look for a mesh that represents the curve
-    if (node.isMesh && node.geometry) {
-      // Get vertex positions from the curve mesh
-      const positions = node.geometry.getAttribute('position');
-      
-      // Get points along the curve
-      for (let i = 0; i < positions.count; i++) {
-        const vertex = new THREE.Vector3();
-        vertex.fromBufferAttribute(positions, i);
-        
-        // Transform vertex to world coordinates
-        vertex.applyMatrix4(node.matrixWorld);
-        
-        // Store x and z coordinates (top-down view)
-        curvePoints.push({ x: vertex.x, z: vertex.z });
-      }
+
+  meshes.forEach(mesh => {
+    if (!mesh.getTotalVertices || mesh.getTotalVertices() === 0) return;
+    const positions = mesh.getVerticesData(VertexBuffer.PositionKind);
+    if (!positions) return;
+
+    mesh.computeWorldMatrix(true);
+    const worldMatrix = mesh.getWorldMatrix();
+
+    for (let i = 0; i < positions.length; i += 3) {
+      const local = new Vector3(positions[i], positions[i + 1], positions[i + 2]);
+      const world = Vector3.TransformCoordinates(local, worldMatrix);
+      curvePoints.push({ x: world.x, z: world.z });
     }
   });
   
@@ -257,23 +245,23 @@ export function extractTrackData(trackModel) {
   // If the curve model failed to load, fall back to extracting from the track model
   if (trackModel) {
     console.log("Falling back to track model for minimap extraction");
-    // Existing extraction code...
     const trackPoints = [];
-    
-    trackModel.traverse(node => {
-      if (node.isMesh && node.geometry) {
-        const positions = node.geometry.getAttribute('position');
-        
-        // Take fewer points for performance
-        for (let i = 0; i < positions.count; i += 20) {
-          const vertex = new THREE.Vector3();
-          vertex.fromBufferAttribute(positions, i);
-          vertex.applyMatrix4(node.matrixWorld);
-          
-          // Only take points near the track surface
-          if (Math.abs(vertex.y) < 0.5) {
-            trackPoints.push({ x: vertex.x, z: vertex.z });
-          }
+
+    const meshes = trackModel.getChildMeshes ? trackModel.getChildMeshes() : [];
+    meshes.forEach(mesh => {
+      if (!mesh.getTotalVertices || mesh.getTotalVertices() === 0) return;
+      const positions = mesh.getVerticesData(VertexBuffer.PositionKind);
+      if (!positions) return;
+
+      mesh.computeWorldMatrix(true);
+      const worldMatrix = mesh.getWorldMatrix();
+
+      // Take fewer points for performance (every 20th vertex)
+      for (let i = 0; i < positions.length; i += 60) {
+        const local = new Vector3(positions[i], positions[i + 1], positions[i + 2]);
+        const world = Vector3.TransformCoordinates(local, worldMatrix);
+        if (Math.abs(world.y) < 0.5) {
+          trackPoints.push({ x: world.x, z: world.z });
         }
       }
     });
@@ -295,7 +283,7 @@ export function updateMinimapPlayers(localPlayer, opponents) {
   if (opponents) {
     Object.values(opponents).forEach(opponent => {
       // Only draw if the model exists and is visible
-      if (opponent.model && opponent.model.visible) {
+      if (opponent.model && (opponent.model.isEnabled ? opponent.model.isEnabled() : true)) {
         const ws = minimap.worldScale || 8;
         const { x, y } = worldToMinimap(opponent.model.position.x/ws, opponent.model.position.z/ws);
         

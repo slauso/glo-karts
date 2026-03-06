@@ -1,5 +1,5 @@
 /**
- * GLO Karts — PvP Multiplayer Session Tests
+ * GLO KARTS — PvP Multiplayer Session Tests
  *
  * Tests a two-player battle session end-to-end:
  *   1. Both players join the same battle_room

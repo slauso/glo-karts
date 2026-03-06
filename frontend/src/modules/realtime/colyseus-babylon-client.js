@@ -28,6 +28,7 @@ import {
   startEngineSound, updateEnginePitch, stopEngineSound,
   playCountdownSequence, stopBGM, disposeAudio,
 } from "../game-audio.js";
+import * as PrematchLobby from './prematch-lobby.js';
 
 const HAVOK_WASM_PUBLIC_PATH = `${import.meta.env.BASE_URL}havok/HavokPhysics.wasm`;
 
@@ -434,14 +435,46 @@ export class ColyseusBabylonClient {
   }
 
   _createFallbackGround() {
-    console.warn("[realtime] Using fallback ground plane");
-    const ground = MeshBuilder.CreateGround("fallback-ground", { width: 500, height: 500 }, this.scene);
-    const mat = new StandardMaterial("fallback-ground-mat", this.scene);
-    mat.diffuseColor = new Color3(0.25, 0.25, 0.25);
-    mat.alpha = 0.3;
-    ground.material = mat;
-    const agg = new PhysicsAggregate(ground, PhysicsShapeType.BOX, { mass: 0, friction: 0.6 }, this.scene);
-    applyFilterToAggregate(agg, FILTER.TRACK);
+    console.warn("[realtime] Creating test box arena (200×200 floor + 4 walls)");
+    const HALF = 100; // 200×200 total
+    const WALL_H = 6;
+    const WALL_T = 1;
+
+    // ── Floor ──
+    const ground = MeshBuilder.CreateGround("test-box-floor", { width: HALF * 2, height: HALF * 2 }, this.scene);
+    const floorMat = new StandardMaterial("test-box-floor-mat", this.scene);
+    floorMat.diffuseColor = new Color3(0.35, 0.35, 0.4);
+    ground.material = floorMat;
+    const groundAgg = new PhysicsAggregate(ground, PhysicsShapeType.BOX, { mass: 0, friction: 0.8 }, this.scene);
+    applyFilterToAggregate(groundAgg, FILTER.TRACK);
+
+    // ── Grid lines on floor ──
+    const gridMat = new StandardMaterial("test-box-grid-mat", this.scene);
+    gridMat.diffuseColor = new Color3(0.5, 0.5, 0.55);
+    gridMat.alpha = 0.4;
+    gridMat.wireframe = true;
+    const gridPlane = MeshBuilder.CreateGround("test-box-grid", { width: HALF * 2, height: HALF * 2, subdivisions: 20 }, this.scene);
+    gridPlane.position.y = 0.02;
+    gridPlane.material = gridMat;
+
+    // ── Walls ──
+    const wallMat = new StandardMaterial("test-box-wall-mat", this.scene);
+    wallMat.diffuseColor = new Color3(0.6, 0.15, 0.15);
+    wallMat.alpha = 0.7;
+
+    const wallDefs = [
+      { name: "wall-N", w: HALF * 2, h: WALL_H, d: WALL_T, x: 0,      y: WALL_H / 2, z: -HALF },
+      { name: "wall-S", w: HALF * 2, h: WALL_H, d: WALL_T, x: 0,      y: WALL_H / 2, z:  HALF },
+      { name: "wall-E", w: WALL_T,   h: WALL_H, d: HALF * 2, x:  HALF, y: WALL_H / 2, z: 0     },
+      { name: "wall-W", w: WALL_T,   h: WALL_H, d: HALF * 2, x: -HALF, y: WALL_H / 2, z: 0     },
+    ];
+    for (const wd of wallDefs) {
+      const wall = MeshBuilder.CreateBox(wd.name, { width: wd.w, height: wd.h, depth: wd.d }, this.scene);
+      wall.position.set(wd.x, wd.y, wd.z);
+      wall.material = wallMat;
+      const wallAgg = new PhysicsAggregate(wall, PhysicsShapeType.BOX, { mass: 0, friction: 0.3, restitution: 0.5 }, this.scene);
+      applyFilterToAggregate(wallAgg, FILTER.TRACK);
+    }
   }
 
   async loadSceneAssets(options) {
@@ -625,7 +658,7 @@ export class ColyseusBabylonClient {
         maxPlayers: options.maxPlayers || this.maxPlayers,
         gameMode: options.gameMode || "race",
         gameType: options.gameType || this.gameType,
-        trackId: options.trackId || "cocoa_temple",
+        trackId: options.trackId || "test_box",
         scoreLimit: options.scoreLimit || 5,
         partyCode: options.partyCode || "",
         kartId: options.kartId || "tux",
@@ -639,10 +672,31 @@ export class ColyseusBabylonClient {
     await this.loadSceneAssets(joinOptions);
 
     this.room = await this.client.joinOrCreate(this.roomName, joinOptions);
+    this._joinOptions = joinOptions;
     if (typeof window !== 'undefined' && window.__gloDebug) {
       window.__gloDebug.roomJoined = true;
       window.__gloDebug.sessionId = this.room.sessionId;
       window.__gloClient = this;
+    }
+
+    // ── Show prematch lobby (hides loading screen) ──
+    {
+      const ls = document.getElementById('loading-screen');
+      if (ls) { ls.style.opacity = '0'; setTimeout(() => ls.style.display = 'none', 500); }
+      // Build a minimal player map from joinOptions for the initial card
+      const initialPlayers = new Map();
+      initialPlayers.set(this.room.sessionId, {
+        name: joinOptions.playerName,
+        playerKart: joinOptions.kartId,
+        gloEffect: joinOptions.gloEffect,
+        gloColor: joinOptions.gloColor,
+        gloColor2: joinOptions.gloColor2,
+      });
+      PrematchLobby.show(
+        { players: initialPlayers },
+        this.room.sessionId,
+        joinOptions,
+      );
     }
 
     // ── Havok trigger observable — physics-based item pickup + projectile/trap hits ──
@@ -680,14 +734,24 @@ export class ColyseusBabylonClient {
     // Handle countdown sequence from server
     this.room.onMessage("startSequence", (msg) => {
       console.log("[realtime] Start sequence — match begins in", msg.durationMs, "ms");
-      playCountdownSequence();
-      this._showCountdownOverlay(msg.durationMs);
+      const totalSec = Math.round(msg.durationMs / 1000);
+      // Prematch lobby countdown covers the full duration;
+      // the classic 3-2-1 overlay fires in the last 3 seconds.
+      PrematchLobby.startCountdown(totalSec);
+      // Play the audio countdown beeps in the last 3 seconds (no visual overlay —
+      // the prematch lobby countdown already provides the visual).
+      const overlayDelay = Math.max(0, msg.durationMs - 3500);
+      setTimeout(() => {
+        playCountdownSequence();
+      }, overlayDelay);
     });
 
     // Handle match going live
     this.room.onMessage("matchLive", (msg) => {
       console.log("[realtime] Match is LIVE!");
       this.started = true;
+      // Hide prematch lobby if still visible
+      if (PrematchLobby.isVisible()) PrematchLobby.hide();
       this._showGoOverlay();
 
       // ── Reveal local kart and activate physics ──
@@ -741,11 +805,16 @@ export class ColyseusBabylonClient {
         window.__gloDebug.playerCount = state.players.size;
       }
 
+      // Keep prematch lobby player grid in sync
+      if (PrematchLobby.isVisible() && state?.players) {
+        PrematchLobby.updatePlayers(state, this.room.sessionId);
+      }
+
       // Start engine sound + BGM when match begins
       if (this.started && !this._audioStarted) {
         this._audioStarted = true;
         startEngineSound();
-        playTrackMusic(joinOptions.trackId || 'cocoa_temple');
+        playTrackMusic(joinOptions.trackId || 'test_box');
       }
     });
 

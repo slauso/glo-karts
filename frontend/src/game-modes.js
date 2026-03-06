@@ -81,7 +81,7 @@ export const MODE_REGISTRY = {
     desc:     'Race alone against the clock — no items, pure speed.',
     icon:     'fa-stopwatch',
     page:     'game.html',
-    status:   MODE_STATUS.PLANNED,
+    status:   MODE_STATUS.READY,
     selectors: { track: true, arena: false, battleSettings: false },
     buildConfig(lobby) {
       return {
@@ -102,7 +102,7 @@ export const MODE_REGISTRY = {
     desc:     'Compete in a series of races across curated cups.',
     icon:     'fa-trophy',
     page:     'game.html',
-    status:   MODE_STATUS.PLANNED,
+    status:   MODE_STATUS.READY,
     selectors: { track: false, arena: false, battleSettings: false, cup: true },
     buildConfig(lobby) {
       return {
@@ -148,7 +148,7 @@ export const MODE_REGISTRY = {
     desc:     'Explore any track with no timer and no opponents.',
     icon:     'fa-compass',
     page:     'game.html',
-    status:   MODE_STATUS.PLANNED,
+    status:   MODE_STATUS.READY,
     selectors: { track: true, arena: false, battleSettings: false },
     buildConfig(lobby) {
       return {

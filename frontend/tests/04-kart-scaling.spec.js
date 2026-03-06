@@ -1,5 +1,5 @@
 /**
- * GLO Karts — Kart Scaling Tests
+ * GLO KARTS — Kart Scaling Tests
  *
  * Verifies that kart physics extents and visual scale are sensible for each arena.
  * Uses the __gloDebug.effectiveKartScale to assert per-arena rules:

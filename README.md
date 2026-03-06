@@ -1,12 +1,16 @@
-# GLO Karts
+# GLO KARTS
 
+![GLO KARTS](frontend/public/favicon.png)
 
+**A browser-native, multiplayer 3D kart racing and battle game** — featuring 19 playable characters, 20 race tracks, 10 battle arenas, 28 animated underglow effects, and an authoritative Colyseus netcode backend. Built entirely with modern web technologies, no plugins or installs required.
+
+> [Play GLO KARTS Online](https://racez.io)
 
 ---
 
 ## Project Overview
 
-Players pick a kart, customise their GLO underglow, create or join lobbies, and race or battle across dozens of tracks converted from the open-source SuperTuxKart project. The game handles physics, rendering, matchmaking, and state synchronisation across clients in real time.
+GLO KARTS is a full-stack multiplayer game running in the browser. Players pick a kart, customise their GLO underglow, create or join lobbies, and race or battle across dozens of tracks converted from the open-source SuperTuxKart project. The game handles physics, rendering, matchmaking, and state synchronisation across clients in real time.
 
 ### Scale
 
@@ -138,7 +142,7 @@ An Apple-inspired frosted-glass design language built entirely in CSS:
 
 ### SuperTuxKart
 
-GLO Karts uses converted 3D models (tracks, arenas, karts) and music from **[SuperTuxKart](https://supertuxkart.net/)**, an open-source kart racing game licensed under **GPL v3**. All STK assets are stored as `.glb` conversions under `frontend/public/models/stk/` and audio under `frontend/public/audio/music/`.
+GLO KARTS uses converted 3D models (tracks, arenas, karts) and music from **[SuperTuxKart](https://supertuxkart.net/)**, an open-source kart racing game licensed under **GPL v3**. All STK assets are stored as `.glb` conversions under `frontend/public/models/stk/` and audio under `frontend/public/audio/music/`.
 
 - **SuperTuxKart Project** — https://supertuxkart.net/
 - **SuperTuxKart Source** — https://github.com/supertuxkart/stk-code
