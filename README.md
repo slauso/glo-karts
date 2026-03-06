@@ -6,7 +6,7 @@
 
 ## Project Overview
 
-GLO Karts is a full-stack multiplayer game running in the browser. Players pick a kart, customise their GLO underglow, create or join lobbies, and race or battle across dozens of tracks converted from the open-source SuperTuxKart project. The game handles physics, rendering, matchmaking, and state synchronisation across clients in real time.
+Players pick a kart, customise their GLO underglow, create or join lobbies, and race or battle across dozens of tracks converted from the open-source SuperTuxKart project. The game handles physics, rendering, matchmaking, and state synchronisation across clients in real time.
 
 ### Scale
 
