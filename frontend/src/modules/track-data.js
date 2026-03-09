@@ -1,21 +1,18 @@
 /**
  * track-data.js — Central track metadata registry
  *
- * Provides path resolution, scale, spawn positions and feature flags
- * for every selectable track and arena (custom maps, STK race tracks,
- * STK battle arenas).
- *
- * Start positions for STK tracks come from the SuperTuxKart SVN
- * scene.xml files (with a +3 Y offset so the car settles via physics).
+ * All courses are 100% procedurally generated at runtime. No static
+ * STK/addon assets remain. Only kart GLTFs are imported assets.
  */
 
 import { resetKart } from './havok-physics.js';
 
 // ---------------------------------------------------------------------------
-// Registry
+// Registry — procedural courses only
 // ---------------------------------------------------------------------------
 
 const TRACK_REGISTRY = {
+  // ── Default fallback ────────────────────────────────────────────────
   test_box: {
     type: 'procedural',
     scale: 1,
@@ -26,42 +23,76 @@ const TRACK_REGISTRY = {
     hasDecorations: false,
     hasTrackOutline: false,
   },
+
+  // ── Procedural Demo Race Track ──────────────────────────────────────
+  glo_circuit: {
+    type: 'procedural',
+    scale: 1,
+    name: 'Glo Circuit',
+    start: { x: 0, y: 2, z: 0 },
+    startHeading: 0,
+    hasGates: false,
+    hasDecorations: true,
+    hasTrackOutline: false,
+  },
+
+  // ── Procedural Demo Battle Arena ────────────────────────────────────
+  glo_arena: {
+    type: 'procedural-arena',
+    scale: 1,
+    name: 'Glo Arena',
+    start: { x: 0, y: 2, z: 0 },
+    startHeading: 0,
+    halfSize: 65,
+    wallHeight: 5,
+    shape: 'circle',
+  },
 };
 
 // ---------------------------------------------------------------------------
 // Public helpers
 // ---------------------------------------------------------------------------
 
+/** Get full registry object — used by content-registry.js to derive UI lists. */
+export function getTrackRegistry() {
+  return TRACK_REGISTRY;
+}
+
 /**
- * Look up registry entry. Falls back to a generic custom-map entry so
- * the game never crashes on an unknown id.
+ * Look up registry entry. Falls back to test_box so the game never
+ * crashes on an unknown id.
  */
 export function getTrackInfo(mapId) {
   return TRACK_REGISTRY[mapId] || TRACK_REGISTRY.test_box;
 }
 
-export function isSTKTrack(mapId) {
-  const info = TRACK_REGISTRY[mapId];
-  return info?.type === 'stk-track';
-}
+export function isSTKTrack() { return false; }
+export function isSTKArena() { return false; }
+export function isCustomMap() { return false; }
+export function isAddonTrack() { return false; }
 
-export function isSTKArena(mapId) {
-  const info = TRACK_REGISTRY[mapId];
-  return info?.type === 'stk-arena';
-}
-
-export function isCustomMap(mapId) {
-  const info = TRACK_REGISTRY[mapId];
-  return info?.type === 'custom';
-}
-
-/** Returns the URL path to the main .glb model for this track/arena, or null for procedural. */
-export function getTrackModelPath(mapId) {
+/** Get procedural generation parameters (retained for compatibility). */
+export function getAddonParams(mapId) {
   const info = getTrackInfo(mapId);
-  if (info.type === 'procedural') return null;
-  if (info.type === 'stk-track') return `/models/stk/tracks/${mapId}/track.glb`;
-  if (info.type === 'stk-arena') return `/models/stk/arenas/${mapId}/arena.glb`;
-  return `/models/maps/${mapId}/track.glb`;
+  if (info.type === 'procedural-arena') {
+    return {
+      shape: info.shape || 'circle',
+      halfSize: info.halfSize || 65,
+      roadWidth: 14,
+      elevationAmplitude: 0,
+      wallHeight: info.wallHeight || 5,
+      color: [0.3, 0.3, 0.35],
+      accent: [0.5, 0.12, 0.12],
+      obstacles: [],
+      isArena: true,
+    };
+  }
+  return null;
+}
+
+/** All courses are procedural — no model downloads. */
+export function getTrackModelPath() {
+  return null;
 }
 
 /** Uniform scale to apply to the loaded .glb model. */

@@ -52,7 +52,7 @@ function _gradColors(hexArr, t) {
  * Create glo meshes and lights. Returns state for updateGloSystem.
  */
 export function createGloSystem(scene) {
-  const effect = sessionStorage.getItem('gloEffect')  || 'solid';
+  const effect = sessionStorage.getItem('gloEffect')  || 'falling-petals';
   const color  = sessionStorage.getItem('gloColor')   || '#ff0080';
   const color2 = sessionStorage.getItem('gloColor2')  || '#00e5ff';
 

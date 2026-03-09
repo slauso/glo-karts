@@ -20,7 +20,7 @@ GLO KARTS is a full-stack multiplayer game running in the browser. Players pick 
 | Race tracks | **20** (2 custom + 18 STK conversions) |
 | Battle arenas | **10** |
 | GLO underglow effects | **28** across 4 themed categories |
-| Game modes | **7** (4 solo, 3 online — race, battle, free roam) |
+| Game modes | **8** (5 solo, 2 online, 1 tool — race, battle, free roam, track builder) |
 | Concurrent lobby capacity | **100** connections per room; **12** players per match |
 
 ---
@@ -36,8 +36,11 @@ GLO KARTS is a full-stack multiplayer game running in the browser. Players pick 
 | Solo | Battle (Deathmatch / CTF) | Ready |
 | Online | Online Race | Ready |
 | Online | Online Battle | Ready |
+| Tools | Track Builder | Ready |
 
 Battle mode supports **Deathmatch** and **Capture the Flag** sub-types with configurable max players, bot count, score limit, collision damage, and weapon loadout.
+
+The **Track Builder** lets players design custom tracks with drag-and-place segments, obstacles, checkpoints, and start positions. Tracks can be exported as JSON, shared via encoded share codes (`TK1:` prefix), and test-driven in solo race or battle mode.
 
 ---
 
@@ -53,6 +56,7 @@ Battle mode supports **Deathmatch** and **Capture the Flag** sub-types with conf
 - **Mobile Touch Controls** — virtual joystick optimised for phones and tablets
 - **Track Thumbnail Previews** — animated GIF + static JPG thumbnails for every map
 - **Background Music** — STK-sourced soundtrack with per-scene tracks and mute toggle
+- **Track Builder** — in-browser 3D track editor with segment palette, obstacle placement, validation, share codes, and test-race/battle integration
 
 ---
 

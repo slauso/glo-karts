@@ -21,14 +21,10 @@ const TRACK_MUSIC = {
   // Custom maps → deterministic picks from race pool
   map1:  CUSTOM_RACE_POOL[0],
   map2:  CUSTOM_RACE_POOL[1],
-  // STK tracks → continuing race pool picks
-  cocoa_temple:       CUSTOM_RACE_POOL[2],
-  cornfield_crossing: CUSTOM_RACE_POOL[3],
-  zengarden:          CUSTOM_RACE_POOL[4],
-  // STK arenas
-  battleisland:       CUSTOM_RACE_POOL[5],
-  stadium:            CUSTOM_RACE_POOL[6],
-  blockfort:          CUSTOM_RACE_POOL[7],
+  // Procedural tracks/arenas
+  glo_circuit:        CUSTOM_RACE_POOL[2],
+  glo_arena:          CUSTOM_RACE_POOL[3],
+  test_box:           CUSTOM_RACE_POOL[4],
 };
 
 // ── SFX catalogue (keyed by event name) ───────────────────────────────────

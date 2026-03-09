@@ -1,24 +1,29 @@
 /**
- * babylon-track.js — Babylon.js track model loader.
- * Replaces the Three.js-based track.js with equivalent Babylon.js functionality.
+ * babylon-track.js — Babylon.js track model loader with unified-scene physics.
  *
- * Loads track/arena GLB models, sets up PBR materials with double-sided rendering
- * and vertex normal recomputation for STK meshes, then extracts geometry for the
- * Havok trimesh collider.
+ * Loads track/arena GLB models, creates per-mesh clone+bake physics colliders
+ * in the SAME rendering scene. No separate NullEngine physics scene.
+ * Matches the multiplayer architecture (colyseus-babylon-client._createTrackPhysics).
  */
 
 import { SceneLoader } from '@babylonjs/core/Loading/sceneLoader';
 import { Vector3 } from '@babylonjs/core/Maths/math.vector';
+import { Quaternion } from '@babylonjs/core/Maths/math.vector';
 import { Color3 } from '@babylonjs/core/Maths/math.color';
 import { TransformNode } from '@babylonjs/core/Meshes/transformNode';
 import { Mesh } from '@babylonjs/core/Meshes/mesh';
 import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder';
 import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial';
-import { VertexBuffer } from '@babylonjs/core/Buffers/buffer';
+import { PhysicsAggregate } from '@babylonjs/core/Physics/v2/physicsAggregate';
+import { PhysicsShapeType } from '@babylonjs/core/Physics/v2/IPhysicsEnginePlugin';
 import '@babylonjs/loaders/glTF';
 
-import { getTrackModelPath, getTrackScale, getTrackInfo, isCustomMap, getFallThreshold } from './track-data.js';
-import { createTrackCollider, createBoxCollider, getKartY } from './havok-physics.js';
+import { getTrackModelPath, getTrackScale, getTrackInfo, isCustomMap, getFallThreshold, isAddonTrack, getAddonParams } from './track-data.js';
+import { FILTER, applyFilterToAggregate } from './realtime/collision-layers.js';
+import { createProceduralAddonTrack } from './procedural-tracks.js';
+import { generateProceduralTrack } from './procedural-track-gen.js';
+import { generateProceduralArena } from './procedural-arena-gen.js';
+import { generateDemoCourse, generateDemoArena } from './procedural-demo-course.js';
 
 /**
  * Load the track model and add to the Babylon.js scene.
@@ -34,6 +39,61 @@ export function loadTrackModel(mapId = 'test_box', scene, loadingManager, callba
 
   // Procedural track — no GLB to load, build geometry inline
   if (!modelPath) {
+    // ── Phase 19.4 procedural demo course ──
+    if (mapId === 'glo_circuit') {
+      try {
+        const result = generateDemoCourse(scene);
+        if (callback) callback(result.root);
+        return;
+      } catch (e) {
+        console.warn(`[track] Demo course generation failed for ${mapId}:`, e);
+      }
+    } else if (mapId === 'glo_arena') {
+      try {
+        const result = generateDemoArena(scene);
+        if (callback) callback(result.root);
+        return;
+      } catch (e) {
+        console.warn(`[track] Demo arena generation failed for ${mapId}:`, e);
+      }
+    }
+
+    // ── New procedural generators (19.13) ──
+    // Arena maps (identified by addon params or "arena" in ID)
+    const addonParams = getAddonParams(mapId);
+    const isArena = addonParams?.isArena || /arena|battle|soccer/i.test(mapId);
+
+    if (isArena) {
+      console.log(`[track] Generating procedural arena for "${mapId}" (19.x generator)`);
+      try {
+        const result = generateProceduralArena(mapId, scene);
+        if (callback) callback(result.root);
+        return;
+      } catch (e) {
+        console.warn('[track] Procedural arena gen failed, falling back:', e.message);
+      }
+    }
+
+    // Race tracks — try advanced generator first
+    if (!isArena) {
+      console.log(`[track] Generating procedural track for "${mapId}" (19.x generator)`);
+      try {
+        const result = generateProceduralTrack(mapId, scene);
+        if (callback) callback(result.root);
+        return;
+      } catch (e) {
+        console.warn('[track] Procedural track gen failed, falling back:', e.message);
+      }
+    }
+
+    // Legacy addon fallback
+    if (addonParams) {
+      console.log(`[track] Falling back to legacy procedural addon for "${mapId}"`);
+      const track = createProceduralAddonTrack(mapId, addonParams, scene);
+      if (callback) callback(track);
+      return;
+    }
+
     console.log(`[track] Creating procedural test-box arena for "${mapId}"`);
     const track = _createProceduralTestBox(scene);
     if (callback) callback(track);
@@ -85,8 +145,11 @@ export function loadTrackModel(mapId = 'test_box', scene, loadingManager, callba
 
     console.log(`Map ${mapId} track loaded successfully`);
 
-    // Create Havok trimesh collider
-    addTrackColliderHavok(track, scene);
+    // Create per-mesh physics colliders in the SAME scene (clone+bake pattern)
+    _createTrackPhysics(result, scene);
+
+    // Add kill-plane boundary below the track
+    _createKillPlane(scene);
 
     if (callback && typeof callback === 'function') {
       callback(track);
@@ -98,7 +161,7 @@ export function loadTrackModel(mapId = 'test_box', scene, loadingManager, callba
 
 /**
  * Build a large flat arena with four border walls (solo/race mode).
- * Physics colliders are created via havok-physics.js createBoxCollider.
+ * Physics colliders are created directly in the rendering scene.
  */
 function _createProceduralTestBox(scene) {
   const HALF = 100;
@@ -112,7 +175,11 @@ function _createProceduralTestBox(scene) {
   const floorMat = new StandardMaterial('test-box-floor-mat', scene);
   floorMat.diffuseColor = new Color3(0.35, 0.35, 0.4);
   ground.material = floorMat;
-  createBoxCollider({ x: HALF, y: 0.1, z: HALF }, { x: 0, y: 0, z: 0 });
+  const groundCollider = MeshBuilder.CreateBox('ground-collider', { width: HALF * 2, height: 0.2, depth: HALF * 2 }, scene);
+  groundCollider.position.y = -0.1;
+  groundCollider.isVisible = false;
+  const groundAgg = new PhysicsAggregate(groundCollider, PhysicsShapeType.BOX, { mass: 0, friction: 0.9, restitution: 0.05 }, scene);
+  applyFilterToAggregate(groundAgg, FILTER.TRACK);
 
   // Grid overlay
   const gridMat = new StandardMaterial('test-box-grid-mat', scene);
@@ -140,65 +207,90 @@ function _createProceduralTestBox(scene) {
     wall.position.set(wd.x, wd.y, wd.z);
     wall.material = wallMat;
     wall.parent = root;
-    createBoxCollider({ x: wd.w / 2, y: wd.h / 2, z: wd.d / 2 }, { x: wd.x, y: wd.y, z: wd.z });
+    // Physics collider directly on the visual wall
+    const wallAgg = new PhysicsAggregate(wall, PhysicsShapeType.BOX, { mass: 0, friction: 0.6, restitution: 0.05 }, scene);
+    applyFilterToAggregate(wallAgg, FILTER.TRACK);
   }
+
+  // Kill plane
+  _createKillPlane(scene);
 
   return root;
 }
 
 /**
- * Extract geometry from a Babylon.js model and create a Havok trimesh collider.
+ * Create per-mesh static trimesh physics colliders (clone+bake pattern).
+ * Matches colyseus-babylon-client._createTrackPhysics().
  */
-function addTrackColliderHavok(trackNode, scene) {
-  const MAX_TRIANGLES = 80000;
-  const positions = [];
-  const indices = [];
-  let vertOffset = 0;
-  let triCount = 0;
+function _createTrackPhysics(importResult, scene) {
+  if (!importResult?.meshes?.length) return;
 
-  // Get all descendant meshes
-  const meshes = trackNode.getChildMeshes(false);
+  const geometryMeshes = importResult.meshes.filter(
+    (m) => m.getTotalVertices && m.getTotalVertices() > 0 && m.isVisible !== false
+  );
 
-  for (const child of meshes) {
-    if (triCount >= MAX_TRIANGLES) break;
-    if (!(child instanceof Mesh) || !child.geometry) continue;
+  if (geometryMeshes.length === 0) {
+    console.warn('[track] Track has zero geometry meshes – skipping physics');
+    return;
+  }
 
-    const posData = child.getVerticesData(VertexBuffer.PositionKind);
-    if (!posData) continue;
+  // Ensure world matrices are up-to-date
+  scene.render();
+  geometryMeshes.forEach((m) => m.computeWorldMatrix(true));
 
-    const worldMatrix = child.computeWorldMatrix(true);
-    const idx = child.getIndices();
+  let physicsCreated = 0;
 
-    // Append world-space vertices
-    const baseVert = vertOffset;
-    for (let i = 0; i < posData.length; i += 3) {
-      const local = new Vector3(posData[i], posData[i + 1], posData[i + 2]);
-      const world = Vector3.TransformCoordinates(local, worldMatrix);
-      positions.push(world.x, world.y, world.z);
-      vertOffset++;
-    }
+  for (const mesh of geometryMeshes) {
+    try {
+      const clone = mesh.clone(`${mesh.name}_collider`, null);
+      if (!clone) continue;
 
-    // Append triangle indices
-    if (idx) {
-      for (let i = 0; i + 2 < idx.length && triCount < MAX_TRIANGLES; i += 3) {
-        indices.push(baseVert + idx[i], baseVert + idx[i + 1], baseVert + idx[i + 2]);
-        triCount++;
+      clone.computeWorldMatrix(true);
+      clone.bakeCurrentTransformIntoVertices();
+      clone.parent = null;
+      clone.position.copyFromFloats(0, 0, 0);
+      if (clone.rotationQuaternion) {
+        clone.rotationQuaternion.copyFromFloats(0, 0, 0, 1);
+      } else {
+        clone.rotation.copyFromFloats(0, 0, 0);
       }
-    } else {
-      const vertCount = posData.length / 3;
-      for (let i = 0; i + 2 < vertCount && triCount < MAX_TRIANGLES; i += 3) {
-        indices.push(baseVert + i, baseVert + i + 1, baseVert + i + 2);
-        triCount++;
-      }
+      clone.scaling.copyFromFloats(1, 1, 1);
+      clone.isVisible = false;
+
+      const agg = new PhysicsAggregate(
+        clone, PhysicsShapeType.MESH,
+        { mass: 0, friction: 0.6, restitution: 0.05 },
+        scene,
+      );
+      applyFilterToAggregate(agg, FILTER.TRACK);
+      physicsCreated++;
+    } catch (err) {
+      console.warn(`[track] Physics failed for mesh "${mesh.name}":`, err.message);
     }
   }
 
-  createTrackCollider(
-    new Float32Array(positions),
-    new Uint32Array(indices),
-    1.0,
-  );
-  console.log(`Track physics collider (Havok): ${triCount.toLocaleString()} triangles (cap ${MAX_TRIANGLES.toLocaleString()})`);
+  console.log(`[track] Track physics: ${physicsCreated}/${geometryMeshes.length} colliders created`);
+
+  // Safety net: if no colliders were created, add a large flat ground
+  if (physicsCreated === 0) {
+    const fallback = MeshBuilder.CreateGround('fallbackGround', { width: 400, height: 400 }, scene);
+    fallback.isVisible = false;
+    const fbAgg = new PhysicsAggregate(fallback, PhysicsShapeType.BOX, { mass: 0, friction: 0.6, restitution: 0.05 }, scene);
+    applyFilterToAggregate(fbAgg, FILTER.TRACK);
+    console.warn('[track] Created fallback ground collider');
+  }
+}
+
+/**
+ * Create a kill-plane boundary below the track for out-of-bounds detection.
+ */
+function _createKillPlane(scene) {
+  const killPlane = MeshBuilder.CreateBox('killPlane', { width: 2000, height: 1, depth: 2000 }, scene);
+  killPlane.position.y = -80;
+  killPlane.isVisible = false;
+  killPlane._isBoundary = true;
+  const kpAgg = new PhysicsAggregate(killPlane, PhysicsShapeType.BOX, { mass: 0, friction: 0, restitution: 0 }, scene);
+  applyFilterToAggregate(kpAgg, FILTER.BOUNDARY);
 }
 
 /**
@@ -250,10 +342,22 @@ export function loadMapDecorations(mapId = 'map1', scene, renderer, camera, load
 
 /**
  * Check if the kart has fallen below the fall threshold.
+ * Uses the carModel's position directly from the unified scene.
+ * @param {Function} resetFunction  Callback to execute on fall-off
+ * @param {number}   fallThreshold  Y position below which to reset
+ * @param {import("@babylonjs/core").TransformNode} [carModel]  Optional car mesh — if provided, use directly
  */
-export function checkGroundCollision(resetFunction, fallThreshold = -50) {
-  const y = getKartY();
-  if (y < fallThreshold) {
+export function checkGroundCollision(resetFunction, fallThreshold = -50, carModel) {
+  if (carModel) {
+    if (carModel.position.y < fallThreshold) {
+      console.log('Car fell off track - resetting position');
+      if (resetFunction) resetFunction();
+    }
+    return;
+  }
+  // Legacy fallback: check using window._carModel if set
+  const model = typeof window !== 'undefined' && window._carModel;
+  if (model && model.position && model.position.y < fallThreshold) {
     console.log('Car fell off track - resetting position');
     if (resetFunction) resetFunction();
   }

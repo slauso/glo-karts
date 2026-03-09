@@ -11,14 +11,14 @@ import {
   buildGameConfig,
   getMode,
 } from './game-modes.js';
-
-const STK_TRACKS = [
-  { id: 'test_box', name: 'Test Box' },
-];
-
-const STK_ARENAS = [
-  { id: 'test_box', name: 'Test Box' },
-];
+import {
+  getLegacyModeFamily,
+  getSelectableContentList,
+  usesArenaSelection,
+  usesTrackSelection,
+  usesCupSelection,
+} from './modules/single-player-routing.js';
+import { SINGLE_PLAYER_CUPS } from './modules/content-registry.js';
 
 const DEFAULTS = {
   mode: 'race',
@@ -75,6 +75,8 @@ class RacingLobby {
     this.selectedMaxPlayers = DEFAULTS.maxPlayers;
     this.selectedBotCount = DEFAULTS.botCount;
     this.selectedLoadout = DEFAULTS.loadoutId;
+    this.selectedCup = 'starter';
+    this.selectedGlofluxTheme = 'nuclear_desert';
 
     this.currentLobbyCode = '';
     this.currentLobbyPrivacy = 'private';
@@ -83,6 +85,9 @@ class RacingLobby {
     this.attachEventListeners();
     this.initMapSelector();
     this.initModeSelector();
+    this.initCupSelector();
+    this.initRaceSettings();
+    this.initGlofluxSettings();
     this.initWeaponLoadout();
     this.populateArenaSelector();
     this.refreshBattleControls();
@@ -112,7 +117,21 @@ class RacingLobby {
     this.racersTitle = document.querySelector('.right-panel .panel-title');
     this.rightPanel = document.querySelector('.right-panel');
 
-    this.playerNameInput.value = this.playerName;
+    this.playerNameInput.value = '';
+    this.playerNameInput.placeholder = this.playerName;
+    // Cycle placeholder between default name and prompt
+    this._placeholderTexts = [this.playerName, 'Enter Your Name'];
+    this._placeholderIdx = 0;
+    this._placeholderTimer = setInterval(() => {
+      if (this.playerNameInput === document.activeElement) return;
+      if (this.playerNameInput.value) return;
+      this._placeholderIdx = (this._placeholderIdx + 1) % this._placeholderTexts.length;
+      this.playerNameInput.classList.add('ph-fade');
+      setTimeout(() => {
+        this.playerNameInput.placeholder = this._placeholderTexts[this._placeholderIdx];
+        this.playerNameInput.classList.remove('ph-fade');
+      }, 300);
+    }, 2800);
   }
 
   attachEventListeners() {
@@ -148,6 +167,9 @@ class RacingLobby {
       // Sync hidden dropdown for compatibility
       const mapName = document.querySelector('.selected-map-name');
       if (mapName) mapName.textContent = event.detail.trackName || event.detail.trackId;
+      document.querySelectorAll('.dropdown-option').forEach((opt) =>
+        opt.classList.toggle('selected', opt.getAttribute('data-map-id') === event.detail.trackId)
+      );
       this.sendSettingsUpdate();
     });
 
@@ -164,6 +186,47 @@ class RacingLobby {
     const observer = new MutationObserver(() => this.sendPlayerUpdate());
     const gloPicker = document.getElementById('glo-picker-container');
     if (gloPicker) observer.observe(gloPicker, { attributes: true, subtree: true, childList: true });
+
+    // Custom track import
+    const importTrackBtn = document.getElementById('import-track-btn');
+    const importTrackCode = document.getElementById('import-track-code');
+    const importTrackStatus = document.getElementById('import-track-status');
+
+    importTrackBtn?.addEventListener('click', () => this._importCustomTrack());
+    importTrackCode?.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') this._importCustomTrack();
+    });
+  }
+
+  _importCustomTrack() {
+    const input = document.getElementById('import-track-code');
+    const status = document.getElementById('import-track-status');
+    const code = input?.value?.trim();
+
+    if (!code) {
+      if (status) status.textContent = 'Paste a track share code.';
+      return;
+    }
+
+    // Dynamically import track-editor to decode the share code
+    import('./modules/track-editor.js').then(({ importTrackCode, saveCustomTrack }) => {
+      const json = importTrackCode(code);
+      if (!json) {
+        if (status) status.textContent = 'Invalid share code.';
+        return;
+      }
+      try {
+        const trackData = JSON.parse(json);
+        saveCustomTrack(trackData);
+        if (status) {
+          status.textContent = `Imported: ${trackData.name || 'Custom Track'}`;
+          status.style.color = '#44ff88';
+        }
+        if (input) input.value = '';
+      } catch {
+        if (status) status.textContent = 'Failed to parse track data.';
+      }
+    });
   }
 
   async createLobby() {
@@ -207,8 +270,10 @@ class RacingLobby {
     const attempts = [
       { privacy: 'private', gameMode: 'race' },
       { privacy: 'private', gameMode: 'battle' },
+      { privacy: 'private', gameMode: 'gloflux' },
       { privacy: 'open', gameMode: 'race' },
       { privacy: 'open', gameMode: 'battle' },
+      { privacy: 'open', gameMode: 'gloflux' },
     ];
     let lastError = null;
 
@@ -309,6 +374,7 @@ class RacingLobby {
       this.currentLobbyCode = state.lobbyCode || this.currentLobbyCode;
       this.currentLobbyPrivacy = state.privacy || this.currentLobbyPrivacy;
       this.selectedMode = state.gameMode || this.selectedMode;
+      this.selectedModeId = state.modeId || this.selectedModeId;
       this.selectedMap = state.trackId || this.selectedMap;
       this.selectedBattleType = state.battleType || this.selectedBattleType;
       this.selectedMaxPlayers = Number(state.maxPlayers || this.selectedMaxPlayers || 12);
@@ -356,6 +422,10 @@ class RacingLobby {
 
     room.onMessage('matchStart', ({ gameConfig }) => {
       sessionStorage.setItem('gameConfig', JSON.stringify(gameConfig));
+      // If host set a custom track, store it so game pages can load it
+      if (gameConfig.customTrackData) {
+        sessionStorage.setItem('customTrackData', gameConfig.customTrackData);
+      }
       // Online modes always go to realtime.html
       window.location.href = getPageForMode(this.selectedModeId) || 'realtime.html';
     });
@@ -421,11 +491,17 @@ class RacingLobby {
   }
 
   buildSettingsPayload() {
+    const modeEntry = getMode(this.selectedModeId);
+    const isSoloMode = modeEntry?.category === 'solo';
+
     return {
+      modeId: this.selectedModeId,
+      singlePlayerMode: isSoloMode,
       trackId: this.selectedMap,
       arenaId: document.getElementById('battle-arena-select')?.value || DEFAULTS.arenaId,
+      arenaTheme: this.selectedGlofluxTheme,
       battleType: this.selectedBattleType,
-      maxPlayers: this.selectedMaxPlayers,
+      maxPlayers: isSoloMode ? 1 : this.selectedMaxPlayers,
       scoreLimit: parseInt(document.getElementById('battle-score-limit')?.value || '5', 10) || 5,
       loadoutId: this.selectedLoadout,
       collisionDamage: !!document.getElementById('battle-collision-damage')?.checked,
@@ -460,6 +536,12 @@ class RacingLobby {
 
   onPlayClicked() {
     const modeId = this.selectedModeId;
+
+    // Track Builder navigates directly — no game config needed
+    if (modeId === 'track_builder') {
+      window.location.href = getPageForMode(modeId);
+      return;
+    }
 
     // Not in a lobby — start solo or create lobby for online modes
     if (!this.room) {
@@ -605,10 +687,50 @@ class RacingLobby {
 
   refreshBattleControls() {
     const battleSettings = document.getElementById('battle-settings');
+    const raceSettings = document.getElementById('race-settings');
+    const cupSelector = document.getElementById('cup-selector');
+    const glofluxSettings = document.getElementById('gloflux-settings');
     const modeEntry = getMode(this.selectedModeId);
     const showBattle = !!(modeEntry?.selectors?.battleSettings);
+    const isToolMode = modeEntry?.category === 'tools';
+    const isGloflux = modeEntry?.category === 'gloflux';
+    const isShop = modeEntry?.category === 'shop';
+    const isCup = usesCupSelection(this.selectedModeId);
+    const showTrack = usesTrackSelection(this.selectedModeId) || usesArenaSelection(this.selectedModeId);
+    const isRaceWithBots = usesTrackSelection(this.selectedModeId) && !isCup
+      && this.selectedModeId !== 'time_trial' && this.selectedModeId !== 'free_roam';
 
+    // Panel visibility
     battleSettings?.classList.toggle('hidden', !showBattle);
+    raceSettings?.classList.toggle('hidden', !isRaceWithBots);
+    cupSelector?.classList.toggle('hidden', !isCup);
+    glofluxSettings?.classList.toggle('hidden', !isGloflux);
+
+    // Hide track/map selector for modes that don't need it
+    const hideMap = isToolMode || isGloflux || isShop || isCup;
+    if (this.mapSelectorContainer) {
+      this.mapSelectorContainer.classList.toggle('hidden', hideMap);
+    }
+
+    // Update track carousel title for battle vs race
+    const carouselTitle = document.querySelector('.track-carousel-title');
+    if (carouselTitle && !hideMap) {
+      carouselTitle.textContent = usesArenaSelection(this.selectedModeId) ? 'SELECT ARENA' : 'SELECT TRACK';
+    }
+
+    // Hide kart/glo pickers for non-game modes
+    const hideKart = isToolMode || isShop;
+    const kartSelector = document.querySelector('.kart-selector');
+    if (kartSelector) kartSelector.classList.toggle('hidden', hideKart);
+    const gloPicker = document.getElementById('glo-picker-container');
+    if (gloPicker) gloPicker.classList.toggle('hidden', hideKart);
+    const carModel = document.getElementById('car-model-container');
+    if (carModel) carModel.classList.toggle('hidden', hideKart);
+
+    // Update PLAY button text for tools
+    if (this.playBtn && !this.room) {
+      this.playBtn.textContent = isToolMode ? 'OPEN BUILDER' : (isGloflux ? 'CREATE FLUX LOBBY' : 'PLAY GAME');
+    }
 
     // Action buttons are handled by refreshActionButtons()
     this.refreshActionButtons();
@@ -619,20 +741,26 @@ class RacingLobby {
     const serverIsBattle = state.gameMode === 'battle';
     // If we're in a lobby, derive the modeId from server state
     if (this.room) {
-      this.selectedModeId = serverIsBattle ? 'battle_online' : 'race_online';
-      this.selectedMode = serverIsBattle ? 'battle' : 'race';
+      if (state.singlePlayerMode && state.modeId) {
+        this.selectedModeId = state.modeId;
+      } else {
+        this.selectedModeId = state.gameMode === 'gloflux'
+          ? (state.modeId || 'gloflux_arena')
+          : (serverIsBattle ? 'battle_online' : 'race_online');
+      }
+      this.selectedMode = state.gameMode || (serverIsBattle ? 'battle' : 'race');
     }
 
     // Re-render mode selector UI
     this._selectCategory(this._activeCategory());
 
     const mapName = document.querySelector('.selected-map-name');
-    const selectedTrack = ((this.selectedMode === 'battle') ? STK_ARENAS : STK_TRACKS).find((t) => t.id === this.selectedMap);
+    const selectedTrack = getSelectableContentList(this.selectedModeId).find((t) => t.id === this.selectedMap);
     if (mapName && selectedTrack) mapName.textContent = selectedTrack.name;
 
     // Sync the 3D track carousel to server state
     if (window.__trackPreview) {
-      window.__trackPreview.setMode(this.selectedMode === 'battle' ? 'battle' : 'race');
+      window.__trackPreview.setMode(usesArenaSelection(this.selectedModeId) ? 'battle' : 'race');
       window.__trackPreview.setById(this.selectedMap);
     }
 
@@ -654,23 +782,12 @@ class RacingLobby {
   initMapSelector() {
     const mapDropdown = document.querySelector('.map-dropdown');
     const dropdownButton = document.querySelector('.dropdown-button');
-    const selectedMapName = document.querySelector('.selected-map-name');
     const dropdownContent = document.getElementById('track-dropdown-options');
 
-    if (dropdownContent) {
-      dropdownContent.innerHTML = '';
-      ((this.selectedMode === 'battle') ? STK_ARENAS : STK_TRACKS).forEach((track, index) => {
-        const option = document.createElement('div');
-        option.className = `dropdown-option${index === 0 ? ' selected' : ''}`;
-        option.setAttribute('data-map-id', track.id);
-        option.textContent = track.name;
-        dropdownContent.appendChild(option);
-      });
-    }
+    // Populate the dropdown list for the current mode
+    this._rebuildMapDropdown();
 
-    this.selectedMap = ((this.selectedMode === 'battle') ? STK_ARENAS[0].id : STK_TRACKS[0].id);
-    if (selectedMapName) selectedMapName.textContent = ((this.selectedMode === 'battle') ? STK_ARENAS[0].name : STK_TRACKS[0].name);
-
+    // Attach event listeners only once
     dropdownButton?.addEventListener('click', (event) => {
       event.stopPropagation();
       mapDropdown?.classList.toggle('open');
@@ -685,12 +802,42 @@ class RacingLobby {
       const mapId = option.getAttribute('data-map-id');
       this.selectedMap = mapId;
       document.querySelectorAll('.dropdown-option').forEach((opt) => opt.classList.toggle('selected', opt === option));
+      const selectedMapName = document.querySelector('.selected-map-name');
       if (selectedMapName) selectedMapName.textContent = option.textContent;
       mapDropdown?.classList.remove('open');
 
+      // Sync the 3D carousel to the dropdown selection
+      if (window.__trackPreview) {
+        window.__trackPreview.setById(mapId);
+      }
       document.dispatchEvent(new CustomEvent('mapChanged', { detail: { mapId } }));
       this.sendSettingsUpdate();
     });
+  }
+
+  /** Rebuild the map dropdown list without re-attaching listeners. */
+  _rebuildMapDropdown() {
+    const selectedMapName = document.querySelector('.selected-map-name');
+    const dropdownContent = document.getElementById('track-dropdown-options');
+
+    if (dropdownContent) {
+      dropdownContent.innerHTML = '';
+      const items = getSelectableContentList(this.selectedModeId);
+      items.forEach((track, index) => {
+        const option = document.createElement('div');
+        option.className = `dropdown-option${index === 0 ? ' selected' : ''}`;
+        option.setAttribute('data-map-id', track.id);
+        option.textContent = track.name;
+        dropdownContent.appendChild(option);
+      });
+    }
+
+    const items = getSelectableContentList(this.selectedModeId);
+    const firstItem = items[0];
+    if (firstItem) {
+      this.selectedMap = firstItem.id;
+      if (selectedMapName) selectedMapName.textContent = firstItem.name;
+    }
   }
 
   initModeSelector() {
@@ -717,6 +864,11 @@ class RacingLobby {
     }
 
     this._renderModeCards();
+
+    // Enable play button for the default-selected mode
+    if (this.playBtn && isPlayable(this.selectedModeId)) {
+      this.playBtn.disabled = false;
+    }
 
     // Battle settings listeners (unchanged)
     battleTypeEl?.addEventListener('change', () => {
@@ -769,18 +921,23 @@ class RacingLobby {
     this.selectedModeId = modeId;
 
     // Derive legacy selectedMode for backward compat with Colyseus payloads
-    const isBattle = modeId === 'battle_solo' || modeId === 'battle_online';
-    this.selectedMode = isBattle ? 'battle' : 'race';
+    this.selectedMode = getLegacyModeFamily(modeId);
 
     // Sync track carousel to the right list
     if (window.__trackPreview) {
-      window.__trackPreview.setMode(isBattle ? 'battle' : 'race');
+      window.__trackPreview.setMode(usesArenaSelection(modeId) ? 'battle' : 'race');
     }
 
     // Reset map to defaults when switching race↔battle
-    this.initMapSelector();
+    this._rebuildMapDropdown();
+
+    // Sync carousel to the newly selected default map
+    if (window.__trackPreview && this.selectedMap) {
+      window.__trackPreview.setById(this.selectedMap);
+    }
     this.refreshBattleControls();
     this._renderModeCards();
+    if (this.playBtn) this.playBtn.disabled = false;
     this.sendSettingsUpdate();
   }
 
@@ -821,6 +978,64 @@ class RacingLobby {
         card.addEventListener('click', () => this._selectMode(mode.id));
       }
       cardsContainer.appendChild(card);
+    });
+  }
+
+  initCupSelector() {
+    const container = document.getElementById('cup-cards');
+    if (!container) return;
+    container.innerHTML = '';
+
+    Object.values(SINGLE_PLAYER_CUPS).forEach((cup) => {
+      const card = document.createElement('div');
+      card.className = `cup-card${cup.id === this.selectedCup ? ' active' : ''}`;
+      card.setAttribute('data-cup', cup.id);
+      card.innerHTML = `
+        <span class="cup-card-icon">${cup.icon}</span>
+        <div class="cup-card-info">
+          <div class="cup-card-name">${cup.label}</div>
+          <div class="cup-card-desc">${cup.description}</div>
+        </div>
+        <span class="cup-card-theme">${cup.theme}</span>
+      `;
+      card.addEventListener('click', () => {
+        this.selectedCup = cup.id;
+        container.querySelectorAll('.cup-card').forEach((c) => c.classList.remove('active'));
+        card.classList.add('active');
+      });
+      container.appendChild(card);
+    });
+  }
+
+  initRaceSettings() {
+    const botCountEl = document.getElementById('race-bot-count');
+    const lapsEl = document.getElementById('race-laps');
+
+    botCountEl?.addEventListener('change', () => {
+      const parsed = parseInt(botCountEl.value || '5', 10);
+      this.selectedBotCount = Number.isFinite(parsed) ? Math.max(0, Math.min(11, parsed)) : 5;
+      botCountEl.value = String(this.selectedBotCount);
+    });
+
+    lapsEl?.addEventListener('change', () => {
+      this.selectedLaps = parseInt(lapsEl.value || '3', 10);
+    });
+  }
+
+  initGlofluxSettings() {
+    const themeEl = document.getElementById('gloflux-theme');
+    const maxPlayersEl = document.getElementById('gloflux-player-cap');
+
+    themeEl?.addEventListener('change', () => {
+      this.selectedGlofluxTheme = themeEl.value || 'nuclear_desert';
+      this.sendSettingsUpdate();
+    });
+
+    maxPlayersEl?.addEventListener('change', () => {
+      const parsed = parseInt(maxPlayersEl.value || '8', 10);
+      this.selectedMaxPlayers = Number.isFinite(parsed) ? Math.max(2, Math.min(12, parsed)) : 8;
+      maxPlayersEl.value = String(this.selectedMaxPlayers);
+      this.sendSettingsUpdate();
     });
   }
 

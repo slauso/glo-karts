@@ -1,62 +1,81 @@
 /**
- * physics.js — Thin relay over havok-physics.js.
+ * physics.js — Backward-compatibility shim.
  *
- * Exports kept compatible with existing callers so main.js / battle-main.js
- * need only minimal changes.
+ * The old two-scene physics relay is retired. Physics now runs in the unified
+ * rendering scene via scene.render() auto-stepping Havok. This module provides
+ * the same API surface so transitional callers work during Phase 13 rollout.
  */
 
-import {
-  initPhysicsEngine,
-  applyKartDriving,
-  stepPhysics as havokStep,
-  getKartTransform,
-} from './havok-physics.js';
+import { applyKartDriving, createDriftState, FIXED_PHYSICS_STEP } from './kart-physics.js';
 
-// Re-export the async init (no longer takes an `ammo` argument)
-export async function initPhysics() {
-  await initPhysicsEngine();
-  console.log('Physics world initialised (Havok)');
+export { FIXED_PHYSICS_STEP };
+
+// Module-level refs — set by the game loop after kart loads
+let _kartBody = null;
+let _kartMesh = null;
+let _driftState = createDriftState();
+
+/**
+ * Register kart refs so the shim updatePhysics() works.
+ * Called from main.js / battle-main.js after createVehicle callback.
+ */
+export function setPhysicsKartRefs(body, mesh) {
+  _kartBody = body;
+  _kartMesh = mesh;
+  _driftState = createDriftState();
 }
 
 /**
- * Run one fixed-timestep tick: apply driving input, step Havok, sync Three.js mesh.
+ * No-op — physics is now initialised by babylon-renderer.js.
+ * Kept for backward compatibility with existing callers.
+ */
+export async function initPhysics() {
+  console.log('Physics world initialised (Havok — unified scene)');
+}
+
+/**
+ * Run one fixed-timestep tick using the shared kart-physics module.
+ * scene.render() handles Havok stepping, so no manual step call needed.
  *
  * @param {number}  deltaTime
  * @param {object}  carState   { carModel, wheelMeshes, keyState }
  * @param {object}  raceState  { raceStarted, raceFinished }
- * @returns {{ currentSpeed: number }}
+ * @returns {{ currentSpeed: number, driftTier: number, miniBoostTier: number, miniBoostActive: boolean }}
  */
 export function updatePhysics(deltaTime, carState, raceState) {
-  const { carModel, wheelMeshes, keyState } = carState;
-
-  // Apply arcade kart input
-  const { speedKPH } = applyKartDriving(
-    keyState,
-    raceState.raceStarted,
-    raceState.raceFinished,
-    deltaTime,
-  );
-
-  // Advance the Havok simulation
-  havokStep();
-
-  // Sync Three.js mesh to physics transform
-  const t = getKartTransform();
-  if (t && carModel) {
-    carModel.position.set(t.position.x, t.position.y, t.position.z);
-    carModel.quaternion.set(t.quaternion.x, t.quaternion.y, t.quaternion.z, t.quaternion.w);
+  if (!_kartBody || !_kartMesh) {
+    return { currentSpeed: 0, driftTier: 0, miniBoostTier: 0, miniBoostActive: false };
   }
 
+  const { keyState } = carState;
+
+  // Block driving when race hasn't started or is finished
+  if (!raceState.raceStarted || raceState.raceFinished) {
+    // Just return zero speed — kart is frozen (STATIC body)
+    return { currentSpeed: 0, driftTier: 0, miniBoostTier: 0, miniBoostActive: false };
+  }
+
+  // Convert keyState to normalised input
+  const input = {
+    throttle: (keyState.w ? 1 : 0) + (keyState.s ? -1 : 0),
+    steer:    (keyState.a ? 1 : 0) + (keyState.d ? -1 : 0),
+    brake:    !!keyState.space,
+  };
+
+  const result = applyKartDriving(_kartBody, _kartMesh, input, deltaTime, _driftState);
+
   // Spin wheel meshes based on speed
-  if (wheelMeshes) {
-    const rotAmt = (speedKPH / 3.6) * deltaTime * 2.5;
-    for (const wm of wheelMeshes) {
+  if (carState.wheelMeshes) {
+    const rotAmt = (result.speedKPH / 3.6) * deltaTime * 2.5;
+    for (const wm of carState.wheelMeshes) {
       if (wm) wm.rotation.x -= rotAmt;
     }
   }
 
-  return { currentSpeed: speedKPH };
+  return {
+    currentSpeed: result.speedKPH,
+    driftTier: result.driftTier || 0,
+    miniBoostTier: result.miniBoostTier || 0,
+    miniBoostActive: result.miniBoostActive || false,
+  };
 }
-
-// Physics time step constants
-export const FIXED_PHYSICS_STEP = 1 / 60; // 60 Hz

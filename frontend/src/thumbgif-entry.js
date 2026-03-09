@@ -11,7 +11,7 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 
 const W = 400, H = 250;
 const params = new URLSearchParams(window.location.search);
-const id   = params.get('id')   || 'cocoa_temple';
+const id   = params.get('id')   || 'glo_circuit';
 const mode = params.get('mode') || 'race';
 
 const WARMUP_MS  = 3_000;   // texture warm-up before recording starts

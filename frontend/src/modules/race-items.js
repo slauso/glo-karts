@@ -4,6 +4,9 @@
  * Places item boxes at positions from track-data.json, handles collection,
  * equips a random weapon, and manages active effects (boost, traps, projectiles).
  *
+ * Supports both Havok trigger physics (when available) and distance-based
+ * fallback detection for item boxes, projectiles, and traps.
+ *
  * Item types from track-data.json:
  *   "item"        → Item box that gives a random weapon
  *   "banana"      → Pre-placed banana trap
@@ -18,6 +21,14 @@ import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial';
 import { TransformNode } from '@babylonjs/core/Meshes/transformNode';
 import { DynamicTexture } from '@babylonjs/core/Materials/Textures/dynamicTexture';
 import { Mesh } from '@babylonjs/core/Meshes/mesh';
+import { PhysicsAggregate } from '@babylonjs/core/Physics/v2/physicsAggregate';
+import { PhysicsShapeType } from '@babylonjs/core/Physics/v2/IPhysicsEnginePlugin';
+import {
+  createWeaponModel, createItemBoxModel, createBananaModel,
+  createBubblegumModel, createShieldModel,
+} from './battle/weapon-models.js';
+import { FILTER, applyFilterToAggregate } from './realtime/collision-layers.js';
+import { EXTREME_WEAPONS, drawExtremeWeapon } from './procedural-models.js';
 
 // ── Weapon catalogue (client-side, matching server combat.js) ───────────────
 
@@ -31,6 +42,17 @@ const WEAPONS = {
   zipper:       { name: 'Zipper',       icon: '⚡', category: 'buff',       speed: 0,  damage: 0,  lifetime: 0, bounces: 0, gravity: 0, boostFactor: 1.6, boostDuration: 3.0 },
   shield:       { name: 'Shield',       icon: '🛡️', category: 'defence',    speed: 0,  damage: 0,  lifetime: 10, bounces: 0, gravity: 0 },
   swatter:      { name: 'Swatter',      icon: '🪰', category: 'melee',      speed: 0,  damage: 40, lifetime: 0, bounces: 0, gravity: 0, hitRadius: 6 },
+  // Extreme weapons (rare drops)
+  shockwave_cannon: { name: 'Shockwave Cannon', icon: '💥', category: 'instant_aoe', speed: 0, damage: 55, lifetime: 1.5, bounces: 0, gravity: 0, extreme: true },
+  thunderstrike:    { name: 'Thunderstrike',     icon: '⚡', category: 'targeted',    speed: 999, damage: 45, lifetime: 2.0, bounces: 0, gravity: 0, extreme: true },
+  black_hole:       { name: 'Black Hole Orb',    icon: '🕳️', category: 'area_denial', speed: 8, damage: 35, lifetime: 5.0, bounces: 0, gravity: 0, extreme: true },
+  meteor_swarm:     { name: 'Meteor Swarm',      icon: '☄️', category: 'zone_strike', speed: 30, damage: 40, lifetime: 4.0, bounces: 0, gravity: -15, extreme: true },
+  frost_nova:       { name: 'Frost Nova',         icon: '❄️', category: 'instant_aoe', speed: 0, damage: 20, lifetime: 2.5, bounces: 0, gravity: 0, extreme: true },
+  emp_pulse:        { name: 'EMP Pulse',          icon: '📡', category: 'instant_aoe', speed: 0, damage: 10, lifetime: 1.5, bounces: 0, gravity: 0, extreme: true },
+  gravity_flip:     { name: 'Gravity Flip',       icon: '🔄', category: 'area_denial', speed: 0, damage: 15, lifetime: 3.0, bounces: 0, gravity: 0, extreme: true },
+  inferno_trail:    { name: 'Inferno Trail',      icon: '🔥', category: 'trap_trail',  speed: 0, damage: 30, lifetime: 5.0, bounces: 0, gravity: 0, extreme: true },
+  plasma_railgun:   { name: 'Plasma Railgun',     icon: '🔫', category: 'instant_beam', speed: 999, damage: 60, lifetime: 0.5, bounces: 0, gravity: 0, extreme: true },
+  vortex_tornado:   { name: 'Vortex Tornado',     icon: '🌪️', category: 'roaming',     speed: 12, damage: 25, lifetime: 6.0, bounces: 0, gravity: 0, extreme: true },
 };
 
 // Position-aware weighted draw tables
@@ -39,6 +61,12 @@ const MID_WEIGHTS   = { bowling_ball: 3, cake: 2, missile: 2, plunger: 2, banana
 const FRONT_WEIGHTS = { bowling_ball: 1, cake: 1, missile: 1, plunger: 1, banana: 5, bubblegum: 4, zipper: 1, shield: 4, swatter: 1 };
 
 function drawWeapon(positionRatio) {
+  // 8% chance of extreme weapon draw (rare "wow" moment)
+  if (Math.random() < 0.08) {
+    const extreme = drawExtremeWeapon();
+    return { id: extreme.id, ...WEAPONS[extreme.id] };
+  }
+
   // positionRatio: 0 = last place, 1 = first place
   let weights;
   if (positionRatio > 0.66) weights = FRONT_WEIGHTS;
@@ -69,24 +97,43 @@ const PROJECTILE_HIT_RADIUS  = 2.5;
 // ── State ───────────────────────────────────────────────────────────────────
 
 let _scene = null;
-let _itemBoxes = [];      // { mesh, position, active, respawnTimer }
+let _itemBoxes = [];      // { mesh, position, active, respawnTimer, triggerAgg? }
 let _nitroPads = [];      // { mesh, position, type, active, respawnTimer }
-let _droppedTraps = [];   // { mesh, position, type, lifetime }
-let _projectiles = [];    // { mesh, velocity, type, lifetime, birth }
+let _droppedTraps = [];   // { mesh, position, type, lifetime, triggerAgg? }
+let _projectiles = [];    // { mesh, velocity, type, lifetime, birth, triggerAgg? }
 let _prePlacedBananas = []; // from track-data
 
 // Player item state
 let _currentItem = null;  // { id, ...weapon def } or null
 let _activeEffect = null; // { type, timer } — boost, shield, etc.
 
+// Havok trigger physics state
+let _havokPlugin = null;
+let _localKartMesh = null;
+let _triggerObserver = null;
+let _useTriggerPhysics = false;  // true if Havok available + wired
+
 // ── Initialization ──────────────────────────────────────────────────────────
 
 /**
  * Set up item boxes and nitro pads from track-data items array.
+ * @param {import('@babylonjs/core').Scene} scene
+ * @param {Array} trackItems  Items from track-data.json
+ * @param {object} [physicsOpts]  Optional physics config
+ * @param {object} [physicsOpts.havokPlugin]  Havok physics plugin instance
+ * @param {import('@babylonjs/core').AbstractMesh} [physicsOpts.localKartMesh]  Player kart mesh for trigger matching
  */
-export function initRaceItems(scene, trackItems) {
+export function initRaceItems(scene, trackItems, physicsOpts) {
   _scene = scene;
   disposeRaceItems();
+
+  // 13.9: Wire Havok trigger physics if available
+  if (physicsOpts?.havokPlugin && physicsOpts?.localKartMesh) {
+    _havokPlugin = physicsOpts.havokPlugin;
+    _localKartMesh = physicsOpts.localKartMesh;
+    _useTriggerPhysics = true;
+    _wireTriggerObservable();
+  }
 
   if (!trackItems || trackItems.length === 0) return;
 
@@ -97,11 +144,20 @@ export function initRaceItems(scene, trackItems) {
     if (type === 'item') {
       const mesh = createItemBoxMesh();
       mesh.position.copyFromFloats(pos[0], pos[1] + 1.2, pos[2]);
+      mesh._raceItemType = 'item_box';
+
+      // 13.9.1: Create trigger PhysicsAggregate for item box
+      let triggerAgg = null;
+      if (_useTriggerPhysics) {
+        triggerAgg = _createTrigger(mesh, 2.0, FILTER.ITEM_BOX);
+      }
+
       _itemBoxes.push({
         mesh,
         position: new Vector3(pos[0], pos[1] + 1.2, pos[2]),
         active: true,
         respawnTimer: 0,
+        triggerAgg,
       });
     } else if (type === 'small-nitro' || type === 'big-nitro') {
       const isBig = type === 'big-nitro';
@@ -117,16 +173,33 @@ export function initRaceItems(scene, trackItems) {
     } else if (type === 'banana') {
       const mesh = createBananaMesh();
       mesh.position.copyFromFloats(pos[0], pos[1] + 0.3, pos[2]);
+      mesh._raceItemType = 'trap';
+
+      let triggerAgg = null;
+      if (_useTriggerPhysics) {
+        triggerAgg = _createTrigger(mesh, 1.5, FILTER.TRAP);
+      }
+
       _prePlacedBananas.push({
         mesh,
         position: new Vector3(pos[0], pos[1] + 0.3, pos[2]),
         active: true,
+        triggerAgg,
       });
     }
   }
 
-  console.log(`Race items: ${_itemBoxes.length} boxes, ${_nitroPads.length} nitros, ${_prePlacedBananas.length} bananas`);
+  console.log(`Race items: ${_itemBoxes.length} boxes, ${_nitroPads.length} nitros, ${_prePlacedBananas.length} bananas (trigger physics: ${_useTriggerPhysics})`);
 }
+
+// Optional callback when an item is collected (set by consumer for roulette anim)
+let _onItemCollected = null;
+
+/**
+ * Register a callback fired when the player collects an item box.
+ * @param {Function} cb — receives (weaponId)
+ */
+export function onItemCollected(cb) { _onItemCollected = cb; }
 
 // ── Per-frame update ────────────────────────────────────────────────────────
 
@@ -155,6 +228,8 @@ export function updateRaceItems(dt, car, positionRatio = 0.5) {
           box.active = false;
           box.mesh.setEnabled(false);
           box.respawnTimer = ITEM_BOX_RESPAWN_TIME;
+          // Fire roulette callback
+          if (_onItemCollected) _onItemCollected(_currentItem.id);
         }
       }
     } else {
@@ -289,6 +364,13 @@ export function useCurrentItem(car) {
 
     const mesh = createProjectileMesh(item.id);
     mesh.position.copyFrom(start);
+    mesh._raceItemType = 'projectile';
+
+    // 13.9.3: Trigger shape for projectile
+    let triggerAgg = null;
+    if (_useTriggerPhysics) {
+      triggerAgg = _createTrigger(mesh, 0.8, FILTER.PROJECTILE);
+    }
 
     _projectiles.push({
       mesh,
@@ -296,6 +378,7 @@ export function useCurrentItem(car) {
       type: item.id,
       lifetime: item.lifetime,
       bounces: item.bounces || 0,
+      triggerAgg,
     });
   } else if (item.category === 'trap') {
     // Drop behind
@@ -303,12 +386,21 @@ export function useCurrentItem(car) {
 
     const mesh = item.id === 'banana' ? createBananaMesh() : createBubblegumMesh();
     mesh.position.copyFrom(behind);
+    mesh._raceItemType = 'trap';
+    mesh._trapType = item.id;
+
+    // 13.9.3: Trigger shape for trap
+    let triggerAgg = null;
+    if (_useTriggerPhysics) {
+      triggerAgg = _createTrigger(mesh, 1.5, FILTER.TRAP);
+    }
 
     _droppedTraps.push({
       mesh,
       position: behind.clone(),
       type: item.id,
       lifetime: item.lifetime,
+      triggerAgg,
     });
   } else if (item.category === 'buff') {
     // Zipper boost
@@ -361,11 +453,23 @@ export function getProjectiles() {
 // ── Dispose ─────────────────────────────────────────────────────────────────
 
 export function disposeRaceItems() {
-  for (const box of _itemBoxes) box.mesh.dispose(false, true);
+  for (const box of _itemBoxes) {
+    if (box.triggerAgg) box.triggerAgg.dispose();
+    box.mesh.dispose(false, true);
+  }
   for (const pad of _nitroPads) pad.mesh.dispose(false, true);
-  for (const b of _prePlacedBananas) b.mesh.dispose(false, true);
-  for (const t of _droppedTraps) t.mesh.dispose(false, true);
-  for (const p of _projectiles) p.mesh.dispose(false, true);
+  for (const b of _prePlacedBananas) {
+    if (b.triggerAgg) b.triggerAgg.dispose();
+    b.mesh.dispose(false, true);
+  }
+  for (const t of _droppedTraps) {
+    if (t.triggerAgg) t.triggerAgg.dispose();
+    t.mesh.dispose(false, true);
+  }
+  for (const p of _projectiles) {
+    if (p.triggerAgg) p.triggerAgg.dispose();
+    p.mesh.dispose(false, true);
+  }
   _itemBoxes = [];
   _nitroPads = [];
   _prePlacedBananas = [];
@@ -373,42 +477,21 @@ export function disposeRaceItems() {
   _projectiles = [];
   _currentItem = null;
   _activeEffect = null;
+
+  // clean up Havok trigger
+  if (_triggerObserver && _havokPlugin) {
+    _havokPlugin.onTriggerCollisionObservable.remove(_triggerObserver);
+    _triggerObserver = null;
+  }
+  _havokPlugin = null;
+  _localKartMesh = null;
+  _useTriggerPhysics = false;
 }
 
 // ── Visual mesh factories ───────────────────────────────────────────────────
 
 function createItemBoxMesh() {
-  const group = new TransformNode('itemBox', _scene);
-
-  // Question-mark box (STK style)
-  const box = MeshBuilder.CreateBox('itemBoxCube', { size: 1.6 }, _scene);
-  const mat = new StandardMaterial('itemBoxMat', _scene);
-  mat.diffuseColor = new Color3(1, 0.8, 0);
-  mat.emissiveColor = new Color3(1, 0.53, 0).scale(0.3);
-  box.material = mat;
-  box.parent = group;
-
-  // Question mark billboard
-  const tex = new DynamicTexture('qMarkTex', 64, _scene, false);
-  const texCtx = tex.getContext();
-  texCtx.fillStyle = '#fff';
-  texCtx.font = 'bold 48px Arial';
-  texCtx.textAlign = 'center';
-  texCtx.textBaseline = 'middle';
-  texCtx.fillText('?', 32, 32);
-  tex.update();
-
-  const qMark = MeshBuilder.CreatePlane('qMark', { size: 1.0 }, _scene);
-  const qMat = new StandardMaterial('qMarkMat', _scene);
-  qMat.diffuseTexture = tex;
-  qMat.useAlphaFromDiffuseTexture = true;
-  qMat.backFaceCulling = false;
-  qMat.emissiveColor = Color3.White();
-  qMark.material = qMat;
-  qMark.billboardMode = Mesh.BILLBOARDMODE_ALL;
-  qMark.parent = group;
-
-  return group;
+  return createItemBoxModel(_scene);
 }
 
 function createNitroPadMesh(isBig) {
@@ -427,41 +510,15 @@ function createNitroPadMesh(isBig) {
 }
 
 function createBananaMesh() {
-  // Yellow capsule shape
-  const mesh = MeshBuilder.CreateCapsule('banana', {
-    radius: 0.15, height: 0.9, tessellation: 8, subdivisions: 4,
-  }, _scene);
-  const mat = new StandardMaterial('bananaMat', _scene);
-  mat.diffuseColor = new Color3(1, 0.88, 0);
-  mesh.material = mat;
-  mesh.rotation.z = Math.PI * 0.5;
-  return mesh;
+  return createBananaModel(_scene);
 }
 
 function createBubblegumMesh() {
-  const mesh = MeshBuilder.CreateSphere('bubblegum', { diameter: 1.0, segments: 10 }, _scene);
-  const mat = new StandardMaterial('bubblegumMat', _scene);
-  mat.diffuseColor = new Color3(1, 0.41, 0.71);
-  mat.emissiveColor = new Color3(1, 0.41, 0.71).scale(0.2);
-  mat.alpha = 0.7;
-  mesh.material = mat;
-  return mesh;
+  return createBubblegumModel(_scene);
 }
 
 function createProjectileMesh(weaponId) {
-  const colors = {
-    bowling_ball: new Color3(0.2, 0.2, 0.2),
-    cake: new Color3(1, 0.53, 0.67),
-    plunger: new Color3(0.53, 0.27, 0),
-    missile: new Color3(1, 0.13, 0),
-  };
-  const color = colors[weaponId] || new Color3(1, 0.27, 0);
-  const mesh = MeshBuilder.CreateSphere('projectile', { diameter: 0.8, segments: 8 }, _scene);
-  const mat = new StandardMaterial('projMat', _scene);
-  mat.diffuseColor = color;
-  mat.emissiveColor = color.scale(0.3);
-  mesh.material = mat;
-  return mesh;
+  return createWeaponModel(weaponId, _scene);
 }
 
 // ── Internal helpers ────────────────────────────────────────────────────────
@@ -478,12 +535,87 @@ function getForward(mesh) {
 
 function removeTrap(index) {
   const trap = _droppedTraps[index];
+  if (trap.triggerAgg) trap.triggerAgg.dispose();
   if (trap.mesh) trap.mesh.dispose();
   _droppedTraps.splice(index, 1);
 }
 
 function removeProjectile(index) {
   const proj = _projectiles[index];
+  if (proj.triggerAgg) proj.triggerAgg.dispose();
   if (proj.mesh) proj.mesh.dispose();
   _projectiles.splice(index, 1);
+}
+
+// ── Havok trigger helpers (13.9) ────────────────────────────────────────────
+
+/**
+ * Create a trigger PhysicsAggregate for an item mesh.
+ * @param {import('@babylonjs/core').AbstractMesh} mesh
+ * @param {number} radius  Sphere trigger radius
+ * @param {object} filterPreset  FILTER preset from collision-layers.js
+ * @returns {import('@babylonjs/core/Physics/v2/physicsAggregate').PhysicsAggregate|null}
+ */
+function _createTrigger(mesh, radius, filterPreset) {
+  try {
+    const agg = new PhysicsAggregate(mesh, PhysicsShapeType.SPHERE, {
+      mass: 0, radius,
+    }, _scene);
+    agg.shape.isTrigger = true;
+    applyFilterToAggregate(agg, filterPreset);
+    return agg;
+  } catch (e) {
+    console.warn('[race-items] Trigger physics failed:', e);
+    return null;
+  }
+}
+
+/**
+ * Subscribe to Havok trigger collisions for local kart → item/trap/projectile hits.
+ * Trigger-based pickup replaces distance checks when Havok is available;
+ * distance checks remain as a fallback safety net.
+ */
+function _wireTriggerObservable() {
+  if (!_havokPlugin || !_localKartMesh) return;
+
+  _triggerObserver = _havokPlugin.onTriggerCollisionObservable.add((event) => {
+    if (event.type !== 'TRIGGER_ENTERED') return;
+
+    const meshA = event.collider?.transformNode;
+    const meshB = event.collidedAgainst?.transformNode;
+
+    // Identify which body is the local kart and which is the item entity
+    let entityMesh = null;
+    if (meshA === _localKartMesh && meshB?._raceItemType) entityMesh = meshB;
+    else if (meshB === _localKartMesh && meshA?._raceItemType) entityMesh = meshA;
+    else return;
+
+    const itemType = entityMesh._raceItemType;
+
+    if (itemType === 'item_box') {
+      // Find and collect the matching item box
+      const box = _itemBoxes.find(b => b.mesh === entityMesh && b.active);
+      if (box && !_currentItem) {
+        _currentItem = drawWeapon(0.5);
+        box.active = false;
+        box.mesh.setEnabled(false);
+        box.respawnTimer = ITEM_BOX_RESPAWN_TIME;
+        if (_onItemCollected) _onItemCollected(_currentItem.id);
+      }
+    } else if (itemType === 'trap') {
+      // Pre-placed banana or dropped trap
+      const banana = _prePlacedBananas.find(b => b.mesh === entityMesh && b.active);
+      if (banana) {
+        banana.active = false;
+        banana.mesh.setEnabled(false);
+        // Effect applied via distance fallback in updateRaceItems; mark for skip
+      }
+      const trapIdx = _droppedTraps.findIndex(t => t.mesh === entityMesh);
+      if (trapIdx >= 0) {
+        // trigger-based removal handled here; distance check will skip disposed mesh
+        removeTrap(trapIdx);
+      }
+    }
+    // Projectile hits on the local player are not self-inflicted in SP, so skip
+  });
 }

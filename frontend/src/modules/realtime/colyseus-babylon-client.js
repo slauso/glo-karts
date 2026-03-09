@@ -16,13 +16,16 @@ import {
   PhysicsRaycastResult,
   StandardMaterial,
   Color3,
-  GlowLayer,
-  TrailMesh,
 } from "@babylonjs/core";
+import {
+  createGloUnderglow, updateGloUnderglow, setGloVisible, disposeGloUnderglow,
+} from './glo-underglow.js';
 import "@babylonjs/loaders/glTF";
 import HavokPhysics from "@babylonjs/havok";
 import { resolveTrackAsset, resolveArenaAsset, resolveKartAsset } from "../content-registry.js";
 import { FILTER, applyFilterToAggregate } from './collision-layers.js';
+import { createMinimap, updateMinimapPlayers } from '../minimap.js';
+import { initParticles, updateParticles, disposeParticles } from '../babylon-particles.js';
 import {
   playTrackMusic, playSFX, playWeaponFireSFX, playWeaponHitSFX,
   startEngineSound, updateEnginePitch, stopEngineSound,
@@ -52,6 +55,7 @@ export class ColyseusBabylonClient {
     this.entityAggregates = new Map();      // entityId → PhysicsAggregate
     this.remoteKartAggregates = new Map();  // playerId → PhysicsAggregate
     this._remoteTargets = new Map();           // playerId → { pos: Vector3, rot: Quaternion }
+    this._remoteWheelMeshes = new Map();       // playerId → mesh[] (wheel child meshes)
     this.havokPlugin = null;
 
     this.inputSeq = 0;
@@ -80,6 +84,14 @@ export class ColyseusBabylonClient {
     this._raceFinished = false;
     this._lapCooldownUntil = 0;   // timestamp — ignore finish-line triggers before this
 
+    // ── Mini-turbo drift state ──────────────────────────────────────────────
+    this._driftCharge     = 0;
+    this._wasDrifting     = false;
+    this._miniBoostTimer  = 0;
+    this._miniBoostTier   = 0;  // 0=none, 1=blue, 2=orange
+    this._prevDriftTier   = 0;
+    this._prevBoostActive = false;
+
     // ── Automated-test debug bus ─────────────────────────────────────────────
     // window.__gloDebug is read by Playwright specs to assert game state without
     // relying purely on fragile console-log scraping.
@@ -103,10 +115,9 @@ export class ColyseusBabylonClient {
       };
     }
 
-    // GLO trail (replaces flat disc)
-    this._gloTrailMesh = null;
-    this._gloTrailMat  = null;
-    this._gloPivot     = null;
+    // GLO underglow system (shader decal + trail)
+    this._gloKit = null;           // local player's GLO kit
+    this._remoteGloKits = new Map(); // sessionId → GLO kit for remote players
 
     // Kart pre-match state
     this._kartReady       = false;   // true only after matchLive fires
@@ -120,17 +131,7 @@ export class ColyseusBabylonClient {
     this.scene = new Scene(this.engine);
     this.scene.useRightHandedSystem = true; // Phase 1: STK uses right-handed
 
-    // GLO trail GlowLayer — rendered at 1/4 resolution, minimal blur kernel
-    // so it is safe on low-power devices.
-    this.glowLayer = new GlowLayer('glo', this.scene, {
-      mainTextureRatio: 0.25,
-      blurKernelSize: 32,
-    });
-    this.glowLayer.intensity = 0.85;
-    // Only glow the trail mesh, not the entire scene.
-    this.glowLayer.customEmissiveColorSelector = null; // use per-mesh emissive
-    this._gloDisc = null;    // legacy ref — kept null, trail replaces disc
-    this._gloMat  = null;
+    // GLO animation — no longer needs GlowLayer (shaders handle glow internally)
     this._gloTime = 0;
 
     // Setup PBR Environment lighting
@@ -162,7 +163,8 @@ export class ColyseusBabylonClient {
         locateFile: (path) => (path.endsWith(".wasm") ? HAVOK_WASM_PUBLIC_PATH : path),
       });
       const plugin = new HavokPlugin(true, hk);
-      this.scene.enablePhysics(new Vector3(0, -9.81, 0), plugin);
+      // Task 3.1: Match solo gravity (-20) for consistent feel across modes
+      this.scene.enablePhysics(new Vector3(0, -20, 0), plugin);
       this.havokPlugin = plugin;
     } catch (error) {
       console.error("[realtime] Havok init failed, continuing without physics", error);
@@ -174,184 +176,37 @@ export class ColyseusBabylonClient {
         const mesh = this.remoteMeshes.get(id);
         if (!mesh || !mesh.position) continue;
         const LERP = 0.25;
+        // Measure distance before lerp for wheel-spin calculation
+        const preLerpDist = Math.sqrt(
+          (target.pos.x - mesh.position.x) ** 2 +
+          (target.pos.z - mesh.position.z) ** 2
+        );
         Vector3.LerpToRef(mesh.position, target.pos, LERP, mesh.position);
         if (mesh.rotationQuaternion && target.rot) {
           Quaternion.SlerpToRef(mesh.rotationQuaternion, target.rot, LERP, mesh.rotationQuaternion);
         }
+        // ── Wheel spin for remote karts ──
+        const wheels = this._remoteWheelMeshes.get(id);
+        if (wheels) {
+          const rotAmt = preLerpDist * LERP * 2.5;
+          for (const w of wheels) w.rotation.x -= rotAmt;
+        }
       }
 
-      // Animate GLO trail / underglow each frame
-      if ((this._gloTrailMat || this._gloMat) && this.localMesh) {
-        const mat = this._gloTrailMat || this._gloMat;
-        const dt = this.engine.getDeltaTime() / 1000;
-        this._gloTime = (this._gloTime || 0) + dt;
-        const t = this._gloTime;
-        const effect  = this._gloEffect  || 'solid';
-        const color   = this._gloColor   || '#ff0080';
-        const color2  = this._gloColor2  || '#00e5ff';
-        const c1 = Color3.FromHexString(color);
-        const c2 = Color3.FromHexString(color2);
+      // Animate GLO underglow each frame (local + remote)
+      const dt = this.engine.getDeltaTime() / 1000;
+      if (this._gloKit) updateGloUnderglow(this._gloKit, dt);
+      for (const kit of this._remoteGloKits.values()) {
+        updateGloUnderglow(kit, dt);
+      }
 
-        let r = c1.r, g = c1.g, b = c1.b, intens = 0.85;
-        switch (effect) {
-          case 'pulse': {
-            const p = (Math.sin(t * 2.5) + 1) / 2;
-            intens = 0.4 + p * 0.6;
-            break;
-          }
-          case 'strobe': {
-            intens = Math.floor(t * 8) % 2 === 0 ? 1.0 : 0.1;
-            break;
-          }
-          case 'rainbow': {
-            const hue = (t * 60) % 360;
-            const rgb = _hslToRgb(hue / 360, 1, 0.5);
-            r = rgb[0]; g = rgb[1]; b = rgb[2];
-            break;
-          }
-          case 'two-color': {
-            const blend = (Math.sin(t * 3) + 1) / 2;
-            r = c1.r + (c2.r - c1.r) * blend;
-            g = c1.g + (c2.g - c1.g) * blend;
-            b = c1.b + (c2.b - c1.b) * blend;
-            break;
-          }
-          case 'chase': {
-            const on = Math.floor(t * 4) % 2 === 0;
-            r = on ? c1.r : c2.r;
-            g = on ? c1.g : c2.g;
-            b = on ? c1.b : c2.b;
-            break;
-          }
-
-          // ── Themed scene effects ───────────────────────────────────────────
-          case 'sunrise': {
-            const _c = _bGradColors(['#1a0030','#881100','#ff4400','#ff9900','#ffdd55','#ff9900','#ff4400','#881100'], t / 10);
-            r = _c.r; g = _c.g; b = _c.b;
-            intens = 0.75 + 0.25 * Math.sin(t * 0.4);
-            break;
-          }
-          case 'sunset': {
-            const _c = _bGradColors(['#ff5500','#ff2200','#cc0055','#880033','#440011','#880033','#cc0055','#ff2200'], t / 8);
-            r = _c.r; g = _c.g; b = _c.b;
-            intens = 0.8 + 0.2 * Math.sin(t * 0.5);
-            break;
-          }
-          case 'sunset-glow': {
-            const _c = _bGradColors(['#ffaa00','#ff5500','#ff1166','#ff8800'], t / 3);
-            r = _c.r; g = _c.g; b = _c.b;
-            intens = 0.7 + 0.3 * (0.5 + 0.5 * Math.sin(t * 2.5));
-            break;
-          }
-          case 'spring': {
-            const _c = _bGradColors(['#ffaabb','#aaffbb','#ffffaa','#ccaaff','#ffaabb'], t / 8);
-            r = _c.r; g = _c.g; b = _c.b;
-            intens = 0.7 + 0.3 * (0.5 + 0.5 * Math.sin(t * 1.5));
-            break;
-          }
-          case 'aurora': {
-            const _c = _bGradColors(['#00ff88','#00bbff','#8800ff','#00ff44','#00ffaa'], t / 10);
-            r = _c.r; g = _c.g; b = _c.b;
-            intens = 0.6 + 0.4 * (0.5 + 0.5 * Math.sin(t * 3.5 + Math.sin(t * 1.7) * 1.2));
-            break;
-          }
-          case 'full-rainbow': {
-            const rgb = _hslToRgb((t * 0.3) % 1, 1.0, 0.52);
-            r = rgb[0]; g = rgb[1]; b = rgb[2];
-            intens = 0.85 + 0.15 * Math.sin(t * 2.0);
-            break;
-          }
-          case 'forest': {
-            const _c = _bGradColors(['#003300','#116611','#335522','#005500','#224422'], t / 12);
-            r = _c.r; g = _c.g; b = _c.b;
-            intens = 0.7 + 0.3 * (0.5 + 0.5 * Math.sin(t * 0.7));
-            break;
-          }
-          case 'ocean': {
-            const _c = _bGradColors(['#001133','#002266','#0044aa','#0077cc','#44aaff','#0077cc','#0044aa'], t / 8);
-            r = _c.r; g = _c.g; b = _c.b;
-            intens = 0.75 + 0.25 * Math.sin(t * 1.2);
-            break;
-          }
-          case 'snowing': {
-            const _c = _bGradColors(['#bbccee','#ddeeff','#ffffff','#aabbdd'], t / 4);
-            r = _c.r; g = _c.g; b = _c.b;
-            intens = (0.65 + 0.2 * Math.sin(t * 2.0)) * (Math.random() > 0.96 ? 1.45 : 1.0);
-            break;
-          }
-          case 'spring-wind': {
-            const _c = _bGradColors(['#eeffcc','#ccffee','#ffeeff','#ffffcc','#eeffcc'], t / 5);
-            r = _c.r; g = _c.g; b = _c.b;
-            intens = 0.5 + 0.5 * Math.abs(Math.sin(t * 2.2));
-            break;
-          }
-          case 'cloudy': {
-            const _c = _bGradColors(['#667788','#778899','#99aabb','#778899'], t / 20);
-            r = _c.r; g = _c.g; b = _c.b;
-            intens = 0.4 + 0.25 * Math.sin(t * 0.6);
-            break;
-          }
-          case 'firefly': {
-            const fTick = Math.floor(t * 7);
-            const fOn   = ((fTick * 1013 + fTick * fTick * 997) % 17) < 2;
-            if (fOn) { r = 1.0; g = 1.0; b = 0.53; intens = 1.0 + 0.4 * Math.sin(t * 45); }
-            else     { r = 0;   g = 0.13; b = 0;    intens = 0.04; }
-            break;
-          }
-          case 'fire': {
-            const _c = _bGradColors(['#ff0000','#ff4400','#ff8800','#ffcc00','#ff4400'], t / 0.9);
-            r = _c.r; g = _c.g; b = _c.b;
-            intens = 0.6 + 0.4 * Math.random();
-            break;
-          }
-          case 'waterfall': {
-            const _c = _bGradColors(['#0077bb','#00aaee','#55ccff','#ffffff','#55ccff'], t / 3.5);
-            r = _c.r; g = _c.g; b = _c.b;
-            intens = 0.7 + 0.3 * (0.5 + 0.5 * Math.sin(t * 4.0));
-            break;
-          }
-          case 'falling-petals': {
-            const _c = _bGradColors(['#ffbbcc','#ff88aa','#ffbbdd','#ffffff','#ffaabb'], t / 6);
-            r = _c.r; g = _c.g; b = _c.b;
-            intens = 0.6 + 0.4 * Math.abs(Math.sin(t * 4.5));
-            break;
-          }
-          case 'wave': {
-            const _c = _bGradColors(['#001144','#003388','#0055aa','#0088cc','#003388'], t / 4);
-            r = _c.r; g = _c.g; b = _c.b;
-            intens = 0.6 + 0.4 * (0.5 + 0.5 * Math.sin(t * Math.PI * 0.8));
-            break;
-          }
-          case 'raining': {
-            const _c = _bGradColors(['#3355aa','#4466bb','#6688cc','#4466bb'], t / 3);
-            r = _c.r; g = _c.g; b = _c.b;
-            intens = 0.5 + 0.3 * (0.5 + 0.5 * Math.sin(t * 8.0)) + 0.2 * Math.random();
-            break;
-          }
-          case 'falling-leaves': {
-            const _c = _bGradColors(['#aa3300','#dd6600','#cc8800','#772200','#aa3300'], t / 6);
-            r = _c.r; g = _c.g; b = _c.b;
-            intens = 0.6 + 0.4 * Math.abs(Math.sin(t * 3.8));
-            break;
-          }
-          case 'river': {
-            const _c = _bGradColors(['#005566','#007788','#009999','#44aaaa','#007788'], t / 5);
-            r = _c.r; g = _c.g; b = _c.b;
-            intens = 0.75 + 0.25 * Math.sin(t * 1.5);
-            break;
-          }
-          case 'water-drop': {
-            const wPhase = (t % 1.5) / 1.5;
-            r = 0; g = 0.6; b = 0.93;
-            intens = Math.exp(-wPhase * 5) * 0.95 + 0.05;
-            break;
-          }
-
-          default: break; // solid
+      // Update minimap (builds opponents map from remoteMeshes)
+      if (this.localMesh) {
+        const opponents = {};
+        for (const [id, m] of this.remoteMeshes.entries()) {
+          if (m && m.position) opponents[id] = { model: m };
         }
-
-        mat.emissiveColor.set(r, g, b);
-        this.glowLayer.intensity = intens;
+        updateMinimapPlayers(this.localMesh, opponents);
       }
     });
 
@@ -479,6 +334,16 @@ export class ColyseusBabylonClient {
 
   async loadSceneAssets(options) {
     let trackInfo;
+    let customTrackParsed = null;
+
+    // Check for custom track data from Track Builder
+    if (options.customTrackData) {
+      try {
+        customTrackParsed = typeof options.customTrackData === 'string'
+          ? JSON.parse(options.customTrackData) : options.customTrackData;
+      } catch (_) { /* ignore parse errors */ }
+    }
+
     if (options.gameMode === "battle") {
       trackInfo = resolveArenaAsset(options.trackId);
     } else {
@@ -486,27 +351,47 @@ export class ColyseusBabylonClient {
     }
 
     try {
-      console.log(`[realtime] Loading track models for ${trackInfo.id}...`);
-      const assetPath = trackInfo.arenaPath || trackInfo.trackPath;
-      if (assetPath) {
-        const pathParts = assetPath.split('/');
-        const filename = pathParts.pop();
-        const dir = pathParts.join('/') + '/';
-        const result = await SceneLoader.ImportMeshAsync("", dir, filename, this.scene)
-          .catch((e) => { console.warn(`[realtime] Failed to load ${filename}:`, e); return null; });
-
-        this._createTrackPhysics(result);
-
-        // Load decorations (visual only, no physics)
-        if (trackInfo.decorationsPath) {
-          const decParts = trackInfo.decorationsPath.split('/');
-          const decFilename = decParts.pop();
-          SceneLoader.ImportMeshAsync("", decParts.join('/') + '/', decFilename, this.scene)
-            .catch((e) => console.warn(`[realtime] Decorations load skipped:`, e.message));
+      if (customTrackParsed) {
+        // Build custom track from TrackData JSON
+        console.log('[realtime] Building custom track from TrackData...');
+        this._createFallbackGround();
+        const { generateSegmentGeometry, SEGMENT_TYPES } = await import('../../modules/track-editor.js');
+        for (const seg of (customTrackParsed.segments || [])) {
+          const typeDef = SEGMENT_TYPES.find(t => t.id === seg.type);
+          if (!typeDef) continue;
+          const geom = generateSegmentGeometry(seg.type, seg.position, seg.rotation || 0);
+          const mesh = MeshBuilder.CreateBox('cseg', { width: geom.width, height: geom.height, depth: geom.depth }, this.scene);
+          mesh.position = new Vector3(geom.center.x, geom.center.y, geom.center.z);
+          if (seg.rotation) mesh.rotation.y = seg.rotation;
+          const mat = new StandardMaterial('cseg_mat', this.scene);
+          mat.diffuseColor = new Color3(0.3, 0.5, 0.9);
+          mesh.material = mat;
+          const agg = new PhysicsAggregate(mesh, PhysicsShapeType.BOX, { mass: 0, friction: 0.8 }, this.scene);
+          applyFilterToAggregate(agg, FILTER.TRACK);
         }
       } else {
-        console.warn("[realtime] No track/arena path found — using fallback ground");
-        this._createFallbackGround();
+        console.log(`[realtime] Loading track models for ${trackInfo.id}...`);
+        const assetPath = trackInfo.arenaPath || trackInfo.trackPath;
+        if (assetPath) {
+          const pathParts = assetPath.split('/');
+          const filename = pathParts.pop();
+          const dir = pathParts.join('/') + '/';
+          const result = await SceneLoader.ImportMeshAsync("", dir, filename, this.scene)
+            .catch((e) => { console.warn(`[realtime] Failed to load ${filename}:`, e); return null; });
+
+          this._createTrackPhysics(result);
+
+          // Load decorations (visual only, no physics)
+          if (trackInfo.decorationsPath) {
+            const decParts = trackInfo.decorationsPath.split('/');
+            const decFilename = decParts.pop();
+            SceneLoader.ImportMeshAsync("", decParts.join('/') + '/', decFilename, this.scene)
+              .catch((e) => console.warn(`[realtime] Decorations load skipped:`, e.message));
+          }
+        } else {
+          console.warn("[realtime] No track/arena path found — using fallback ground");
+          this._createFallbackGround();
+        }
       }
     } catch (e) {
       console.error("[realtime] Map loading failed:", e);
@@ -522,7 +407,10 @@ export class ColyseusBabylonClient {
     killPlane._isBoundary = true;
 
     // Save spawn positions from track info for later use
-    const spawnPositions = trackInfo.startPositions || [{ x: 0, y: 5, z: 0 }];
+    const customSpawns = customTrackParsed?.startPositions;
+    const spawnPositions = customSpawns?.length
+      ? customSpawns.map(sp => sp.position || sp)
+      : (trackInfo.startPositions || [{ x: 0, y: 5, z: 0 }]);
     this._spawnPos = spawnPositions[0] || { x: 0, y: 5, z: 0 };
 
     // Per-arena kart scale override (e.g. blockfort needs much smaller karts)
@@ -540,7 +428,9 @@ export class ColyseusBabylonClient {
       const result = await SceneLoader.ImportMeshAsync("", pathParts.join('/') + '/', filename, this.scene);
       this.localMesh = result.meshes[0];
       this.localMesh.name = "local-player";
-      this._createGloUnderglow(options.gloEffect, options.gloColor, options.gloColor2);
+      this._gloKit = createGloUnderglow(this.scene, this.localMesh, {
+        effect: options.gloEffect, color: options.gloColor, color2: options.gloColor2, id: 'local',
+      });
       // Use track's start position (slightly above to let physics settle)
       this.localMesh.position = new Vector3(
         this._spawnPos.x,
@@ -598,58 +488,10 @@ export class ColyseusBabylonClient {
       this.localKartAggregate.body.setMotionType(PhysicsMotionType.STATIC);
       this._kartReady = false;
       this.camera.lockedTarget = this.localMesh;
-      this._createGloUnderglow(options.gloEffect, options.gloColor, options.gloColor2);
+      this._gloKit = createGloUnderglow(this.scene, this.localMesh, {
+        effect: options.gloEffect, color: options.gloColor, color2: options.gloColor2, id: 'local',
+      });
     }
-  }
-
-  /**
-   * Create a dynamic trailing ribbon (TrailMesh) that follows the kart's
-   * rear undercarriage and glows via GlowLayer.  Far more visually appealing
-   * than the previous flat disc — the trail moves with the kart and fades
-   * out using alpha blending.
-   */
-  _createGloUnderglow(effect, color, color2) {
-    const hexColor  = color  || '#ff0080';
-    const hexColor2 = color2 || '#00e5ff';
-    const c1 = Color3.FromHexString(hexColor);
-
-    // Invisible pivot at the rear underside of the kart — this is the point
-    // the TrailMesh traces as the kart moves.
-    const pivot = MeshBuilder.CreateSphere('glo-pivot', { diameter: 0.01, segments: 2 }, this.scene);
-    pivot.isPickable = false;
-    pivot.isVisible  = false;
-    pivot.parent     = this.localMesh;
-    pivot.position.set(0, -0.28, 1.4);  // rear undercarriage
-
-    // TrailMesh: a ribbon that records the last `length` positions of the pivot.
-    // diameter = ribbon width (world-space), length = number of history segments.
-    const trail = new TrailMesh('glo-trail', pivot, this.scene, 0.65, 50, true);
-    trail.isPickable = false;
-
-    const mat = new StandardMaterial('glo-trail-mat', this.scene);
-    mat.emissiveColor    = c1.clone();
-    mat.disableLighting  = true;
-    mat.alpha            = 0.75;
-    mat.backFaceCulling  = false;
-    trail.material       = mat;
-
-    // Only let the GlowLayer illuminate the trail, not the whole scene.
-    this.glowLayer.addIncludedOnlyMesh(trail);
-
-    // Pre-match: trail also hidden until GO
-    trail.isVisible = false;
-
-    this._gloTrailMesh = trail;
-    this._gloTrailMat  = mat;
-    this._gloPivot     = pivot;
-    this._gloEffect    = effect  || 'solid';
-    this._gloColor     = hexColor;
-    this._gloColor2    = hexColor2;
-    this._gloTime      = 0;
-
-    // Clear legacy disc refs in case any code still checks them
-    this._gloDisc = null;
-    this._gloMat  = null;
   }
 
   async connect(options = {}) {
@@ -670,6 +512,14 @@ export class ColyseusBabylonClient {
 
     // Load visual assets before connecting
     await this.loadSceneAssets(joinOptions);
+
+    // Init particle system for drift sparks / boost flames (Task 3.3.4)
+    initParticles(this.scene);
+
+    // Init minimap for race mode
+    if (joinOptions.gameMode !== "battle") {
+      try { createMinimap(joinOptions.trackId || 'test_box', this.scene); } catch (_) {}
+    }
 
     this.room = await this.client.joinOrCreate(this.roomName, joinOptions);
     this._joinOptions = joinOptions;
@@ -777,8 +627,8 @@ export class ColyseusBabylonClient {
         this.localKartAggregate.body.disablePreStep = false;
       }
       this._kartReady = true;
-      // Reveal the GLO trail now
-      if (this._gloTrailMesh) this._gloTrailMesh.isVisible = true;
+      // Reveal the GLO underglow now
+      setGloVisible(this._gloKit, true);
       if (typeof window !== 'undefined' && window.__gloDebug) {
         window.__gloDebug.kartVisible = true;
         window.__gloDebug.matchLive = true;
@@ -868,6 +718,12 @@ export class ColyseusBabylonClient {
       if (this.room && msg.victimId === this.room.sessionId) {
         this.flashShield();
       }
+    });
+
+    // ── Kill feed for battle mode ─────────────────────────────────────────
+    this.room.onMessage("playerKilled", (msg) => {
+      this._addKillFeedEntry(msg.attackerName, msg.victimName, msg.weapon);
+      if (typeof window !== 'undefined' && window.__gloDebug) window.__gloDebug.lastKill = msg;
     });
 
     this.room.onMessage("matchEnd", (msg) => {
@@ -1433,6 +1289,55 @@ export class ColyseusBabylonClient {
 
     let nextVel = new Vector3(currentVel.x, currentVel.y, currentVel.z);
 
+    // ── Mini-turbo drift charge (Task 3.3) ──
+    const MINI_TURBO_CHARGE_RATE = 1.5;
+    const MINI_TURBO_TIER1       = 1.0;
+    const MINI_TURBO_TIER2       = 2.2;
+    const MINI_TURBO_BOOST_T1    = 0.4;
+    const MINI_TURBO_BOOST_T2    = 0.8;
+    const MINI_TURBO_SPEED_MUL   = 1.35;
+
+    const isDrifting = input.brake && input.steer !== 0 && hSpeed > 5;
+    if (isDrifting) {
+      this._driftCharge += MINI_TURBO_CHARGE_RATE * dt;
+    }
+    if (this._wasDrifting && !isDrifting && this._driftCharge > 0) {
+      if (this._driftCharge >= MINI_TURBO_TIER2) {
+        this._miniBoostTimer = MINI_TURBO_BOOST_T2;
+        this._miniBoostTier = 2;
+      } else if (this._driftCharge >= MINI_TURBO_TIER1) {
+        this._miniBoostTimer = MINI_TURBO_BOOST_T1;
+        this._miniBoostTier = 1;
+      }
+      this._driftCharge = 0;
+    }
+    if (!isDrifting && !this._wasDrifting) {
+      this._driftCharge = 0;
+    }
+    this._wasDrifting = isDrifting;
+    if (this._miniBoostTimer > 0) this._miniBoostTimer -= dt;
+    if (this._miniBoostTimer <= 0) { this._miniBoostTimer = 0; this._miniBoostTier = 0; }
+    const boostMul = this._miniBoostTimer > 0 ? MINI_TURBO_SPEED_MUL : 1.0;
+
+    // ── Drift / boost audiovisual feedback (Task 3.3.4) ──
+    const driftTier = isDrifting
+      ? (this._driftCharge >= MINI_TURBO_TIER2 ? 2 : this._driftCharge >= MINI_TURBO_TIER1 ? 1 : 0)
+      : 0;
+    const boostActive = this._miniBoostTimer > 0;
+    if (driftTier > 0 && driftTier !== this._prevDriftTier) playSFX('skid', 0.5);
+    if (boostActive && !this._prevBoostActive) playSFX('boost', 0.7);
+    this._prevDriftTier = driftTier;
+    this._prevBoostActive = boostActive;
+
+    // Update particles (sparks / flames) for local kart
+    if (this.localMesh) {
+      updateParticles(dt, this.localMesh, {
+        isDrifting,
+        sparksLevel: driftTier,
+        isBoosting: boostActive,
+      });
+    }
+
     // 2. ── Acceleration with progressive falloff (quadratic taper near max) ──
     let forwardDir = transform.forward.scale(-1);
     if (forwardDir.lengthSquared() > 0.00001) {
@@ -1441,9 +1346,9 @@ export class ColyseusBabylonClient {
       forwardDir.copyFromFloats(0, 0, 1);
     }
 
-    if (input.throttle > 0 && hSpeed < MAX_SPEED) {
+    if (input.throttle > 0 && hSpeed < MAX_SPEED * boostMul) {
       const falloff = 1 - speedRatio * speedRatio;
-      const accel = ACCEL_FORCE * Math.max(falloff, 0.08) * dt;
+      const accel = ACCEL_FORCE * boostMul * Math.max(falloff, 0.08) * dt;
       nextVel.x += forwardDir.x * accel;
       nextVel.z += forwardDir.z * accel;
     } else if (input.throttle < 0) {
@@ -1595,6 +1500,24 @@ export class ColyseusBabylonClient {
               this.remoteKartAggregates.set(id, remoteAgg);
             } catch (e) { console.warn(`[realtime] Remote kart physics failed for ${id}:`, e); }
 
+            // ── Cache wheel meshes for remote kart spin animation ──
+            const remoteWheels = result.meshes.filter(
+              m => m.name && /wheel/i.test(m.name) && m.getTotalVertices && m.getTotalVertices() > 0
+            );
+            if (remoteWheels.length) this._remoteWheelMeshes.set(id, remoteWheels);
+
+            // ── GLO underglow for remote player ──
+            try {
+              const gloKit = createGloUnderglow(this.scene, realMesh, {
+                effect: player.gloEffect || 'solid',
+                color:  player.gloColor  || '#ff0080',
+                color2: player.gloColor2 || '#00e5ff',
+                id: id,
+              });
+              setGloVisible(gloKit, true);
+              this._remoteGloKits.set(id, gloKit);
+            } catch (e) { console.warn(`[realtime] Remote GLO failed for ${id}:`, e); }
+
             console.log(`[realtime] Loaded remote kart for ${id}`);
           })
           .catch((err) => {
@@ -1617,6 +1540,9 @@ export class ColyseusBabylonClient {
         mesh.dispose();
         const remoteAgg = this.remoteKartAggregates.get(id);
         if (remoteAgg) { remoteAgg.dispose(); this.remoteKartAggregates.delete(id); }
+        const remoteGlo = this._remoteGloKits.get(id);
+        if (remoteGlo) { disposeGloUnderglow(remoteGlo); this._remoteGloKits.delete(id); }
+        this._remoteWheelMeshes.delete(id);
         this.remoteMeshes.delete(id);
         this.loadingPromises.delete(id);
         this._remoteTargets.delete(id);
@@ -1783,6 +1709,15 @@ export class ColyseusBabylonClient {
       overlay.style.opacity = "0";
       setTimeout(() => overlay.remove(), 450);
     });
+    // Camera shake on hit
+    const canvas = document.querySelector("canvas");
+    if (canvas) {
+      canvas.style.transition = "none";
+      canvas.style.transform = "translate(4px, -3px)";
+      setTimeout(() => { canvas.style.transform = "translate(-3px, 2px)"; }, 50);
+      setTimeout(() => { canvas.style.transform = "translate(2px, -1px)"; }, 100);
+      setTimeout(() => { canvas.style.transform = ""; }, 150);
+    }
   }
 
   flashShield() {
@@ -1802,6 +1737,43 @@ export class ColyseusBabylonClient {
       overlay.style.opacity = "0";
       setTimeout(() => overlay.remove(), 550);
     });
+  }
+
+  // ── Kill feed ──────────────────────────────────────────────────────────
+  _addKillFeedEntry(attackerName, victimName, weapon) {
+    if (!this._killFeedEl) {
+      this._killFeedEl = document.createElement("div");
+      Object.assign(this._killFeedEl.style, {
+        position: "fixed", top: "60px", right: "12px",
+        display: "flex", flexDirection: "column", alignItems: "flex-end",
+        gap: "4px", zIndex: "9900", pointerEvents: "none",
+        fontFamily: "Poppins, sans-serif", fontSize: "13px",
+      });
+      document.body.appendChild(this._killFeedEl);
+    }
+    const WEAPON_ICONS = {
+      missile: "🚀", bowling_ball: "🎳", cake: "🎂", plunger: "🪠",
+      bubblegum: "🫧", banana: "🍌", swatter: "🪰", nitro: "💥",
+      parachute: "🪂", anchor: "⚓", zipper: "⚡", shield: "🛡️",
+    };
+    const icon = WEAPON_ICONS[weapon] || "💀";
+    const row = document.createElement("div");
+    Object.assign(row.style, {
+      background: "rgba(0,0,0,0.65)", color: "#fff", padding: "4px 10px",
+      borderRadius: "6px", whiteSpace: "nowrap",
+      transition: "opacity 0.5s", opacity: "1",
+    });
+    row.textContent = `${attackerName} ${icon} ${victimName}`;
+    this._killFeedEl.appendChild(row);
+    // Auto-remove after 5s
+    setTimeout(() => {
+      row.style.opacity = "0";
+      setTimeout(() => row.remove(), 500);
+    }, 5000);
+    // Cap at 6 visible entries
+    while (this._killFeedEl.children.length > 6) {
+      this._killFeedEl.firstChild.remove();
+    }
   }
 
   showEffectOverlay(effectType, duration) {
@@ -1879,6 +1851,8 @@ export class ColyseusBabylonClient {
   dispose() {
     stopEngineSound();
     stopBGM();
+    disposeAudio();
+    disposeParticles();
 
     // Remove keyboard listeners
     if (this._onKeyDown) window.removeEventListener("keydown", this._onKeyDown);
@@ -1897,6 +1871,7 @@ export class ColyseusBabylonClient {
     this.remoteKartAggregates.forEach((agg) => agg.dispose());
     this.remoteKartAggregates.clear();
     this._remoteTargets.clear();
+    this._remoteWheelMeshes.clear();
 
     this.remoteMeshes.forEach((mesh) => mesh.dispose());
     this.remoteMeshes.clear();
@@ -1920,12 +1895,11 @@ export class ColyseusBabylonClient {
       this._lapHudEl.remove();
       this._lapHudEl = null;
     }
-    // Dispose GLO trail resources
-    if (this._gloTrailMesh) { this._gloTrailMesh.dispose(); this._gloTrailMesh = null; }
-    if (this._gloPivot)     { this._gloPivot.dispose();     this._gloPivot = null; }
-    this._gloTrailMat  = null;
-    this._gloDisc      = null;
-    this._gloMat       = null;
+    // Dispose GLO underglow resources
+    disposeGloUnderglow(this._gloKit);
+    this._gloKit = null;
+    for (const kit of this._remoteGloKits.values()) disposeGloUnderglow(kit);
+    this._remoteGloKits.clear();
     this._wheelMeshes  = [];
     document.getElementById('_glo-match-end')?.remove();
 
@@ -1937,44 +1911,4 @@ export class ColyseusBabylonClient {
   }
 }
 
-/**
- * Tiny HSL→RGB helper used by the GLO rainbow effect.
- * h in [0,1], s in [0,1], l in [0,1] → [r, g, b] each in [0,1]
- */
-function _hslToRgb(h, s, l) {
-  let r, g, b;
-  if (s === 0) {
-    r = g = b = l;
-  } else {
-    const hue2rgb = (p, q, t) => {
-      if (t < 0) t += 1;
-      if (t > 1) t -= 1;
-      if (t < 1/6) return p + (q - p) * 6 * t;
-      if (t < 1/2) return q;
-      if (t < 2/3) return p + (q - p) * (2/3 - t) * 6;
-      return p;
-    };
-    const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
-    const p = 2 * l - q;
-    r = hue2rgb(p, q, h + 1/3);
-    g = hue2rgb(p, q, h);
-    b = hue2rgb(p, q, h - 1/3);
-  }
-  return [r, g, b];
-}
 
-/**
- * Smoothly blend through an array of hex colour stops (Babylon Color3 edition).
- * @param {string[]} hexArr  - colour stops
- * @param {number}   t       - normalised time [0, 1) — use elapsed / period
- * @returns {{ r:number, g:number, b:number }}
- */
-function _bGradColors(hexArr, t) {
-  const n = hexArr.length;
-  const s = (((t % 1) + 1) % 1) * n;
-  const i = Math.floor(s) % n;
-  const f = s - Math.floor(s);
-  const a = Color3.FromHexString(hexArr[i]);
-  const bC = Color3.FromHexString(hexArr[(i + 1) % n]);
-  return { r: a.r + (bC.r - a.r) * f, g: a.g + (bC.g - a.g) * f, b: a.b + (bC.b - a.b) * f };
-}

@@ -194,6 +194,53 @@
             </div>
             <p class="battle-hint">All players ready up, then host starts the match.</p>
           </div>
+
+          <!-- Race Settings Panel (hidden unless race mode with bots) -->
+          <div id="race-settings" class="battle-settings hidden">
+            <h3 class="battle-settings-title">RACE SETTINGS</h3>
+            <div class="battle-setting-group">
+              <label for="race-bot-count">AI Opponents</label>
+              <input type="number" id="race-bot-count" value="5" min="0" max="11" />
+            </div>
+            <div class="battle-setting-group">
+              <label for="race-laps">Laps</label>
+              <select id="race-laps">
+                <option value="3" selected>3 Laps</option>
+                <option value="5">5 Laps</option>
+                <option value="7">7 Laps</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Cup Selector (Grand Prix only) -->
+          <div id="cup-selector" class="battle-settings hidden">
+            <h3 class="battle-settings-title">SELECT CUP</h3>
+            <div id="cup-cards" class="cup-cards"></div>
+          </div>
+
+          <div id="gloflux-settings" class="battle-settings hidden">
+            <h3 class="battle-settings-title">GLOFLUX SETTINGS</h3>
+            <div class="battle-setting-group">
+              <label for="gloflux-theme">Wasteland Theme</label>
+              <select id="gloflux-theme">
+                <option value="nuclear_desert" selected>Nuclear Desert</option>
+                <option value="fungal_wastes">Fungal Wastes</option>
+                <option value="frozen_fallout">Frozen Fallout</option>
+                <option value="molten_ruins">Molten Ruins</option>
+              </select>
+            </div>
+            <div class="battle-setting-group">
+              <label for="gloflux-player-cap">Player Cap</label>
+              <select id="gloflux-player-cap">
+                <option value="4">4 Players</option>
+                <option value="6">6 Players</option>
+                <option value="8" selected>8 Players</option>
+                <option value="10">10 Players</option>
+                <option value="12">12 Players</option>
+              </select>
+            </div>
+            <p class="battle-hint">Flux matches are online-only. Host the lobby, ready up, then ignite the start.</p>
+          </div>
         </div>
       </section>
       
@@ -217,22 +264,18 @@
               <i class="fas fa-chevron-right"></i>
             </button>
           </div>
+          <p class="kart-selector-title">RACER NAME</p>
+          <input type="text" id="player-name-input" placeholder="Player Name" maxlength="15">
         </div>
-        
+
         <!-- GLO Underglow Picker -->
         <div id="glo-picker-container" class="glo-picker">
           <p class="glo-picker-title">PICK YOUR GLO</p>
           <div id="glo-carousel" class="glo-carousel"></div>
         </div>
 
-        <!-- Player Name Input -->
-        <div class="player-name-container">
-          <h3>YOUR NAME</h3>
-          <input type="text" id="player-name-input" placeholder="Enter your name" maxlength="15">
-        </div>
-
         <!-- Action Buttons -->
-        <button id="play-btn" class="game-btn play-btn">PLAY GAME</button>
+        <button id="play-btn" class="game-btn play-btn" disabled>PLAY GAME</button>
         <button id="ready-btn" class="game-btn ready-btn hidden">READY UP</button>
         <button id="start-match-btn" class="game-btn start-match-btn hidden">START MATCH</button>
       </section>
@@ -255,6 +298,16 @@
               </div>
               <p id="join-status" class="status-message"></p>
             </div>
+          </div>
+
+          <!-- Import Custom Track Section -->
+          <div class="import-track-section">
+            <p class="import-track-label">CUSTOM TRACK</p>
+            <div class="code-input">
+              <input type="text" id="import-track-code" placeholder="Paste share code" maxlength="65536">
+              <button id="import-track-btn" class="icon-btn join-btn">Import</button>
+            </div>
+            <p id="import-track-status" class="status-message"></p>
           </div>
         </div>
       </section>

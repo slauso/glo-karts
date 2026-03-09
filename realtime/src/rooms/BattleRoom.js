@@ -2,7 +2,9 @@ import { Room } from "@colyseus/core";
 import { BattleState } from "../schema/BattleState.js";
 import { PlayerState } from "../schema/PlayerState.js";
 import { EntityState } from "../schema/EntityState.js";
-import { grantWeapon, handleFireWeapon, tickProjectiles } from "../combat.js";
+import { WEAPONS, grantWeapon, handleFireWeapon, tickProjectiles } from "../combat.js";
+import { RateLimiter, sanitizePosition, isWithinPickupRange, isValidProjectileOrigin } from "../server-guard.js";
+import { log } from "../logger.js";
 
 const TICK_RATE = 1000 / 60;
 const ACCEL = 20;
@@ -28,6 +30,8 @@ export class BattleRoom extends Room {
     this.maxClients = Math.min(Number(options.maxPlayers) || 12, 12);
     this.inputBySession = new Map();
     this.countdownActive = false;
+    // Task 2.2: per-client rate limiter
+    this._rateLimiter = new RateLimiter();
 
     this.onMessage("triggerStart", () => {
       if (this.state.started || this.countdownActive) return;
@@ -66,6 +70,8 @@ export class BattleRoom extends Room {
     });
 
     this.onMessage("input", (client, data) => {
+      // Task 2.2: rate-limit input messages
+      if (!this._rateLimiter.allow(client.sessionId, "input")) return;
       this.inputBySession.set(client.sessionId, {
         seq: Math.max(0, Math.floor(safeNumber(data.seq, 0))),
         throttle: safeUnit(data.throttle, 0),
@@ -82,18 +88,36 @@ export class BattleRoom extends Room {
       });
     });
 
+    // Task 1.3: Server-authoritative damage — ignore client-supplied damage values.
+    // Only accept weapon sub-type to look up canonical damage from the WEAPONS catalogue.
     this.onMessage("hit", (client, data) => {
+      // Task 2.2: rate-limit hit messages
+      if (!this._rateLimiter.allow(client.sessionId, "hit")) return;
       const target = this.state.players.get(String(data.targetId || ""));
       const attacker = this.state.players.get(client.sessionId);
       if (!target || !attacker || !this.state.started) return;
 
-      target.health = Math.max(0, target.health - Number(data.damage || 10));
+      const subType = String(data.subType || data.weaponId || "");
+      const wepDef = WEAPONS[subType];
+      // Default melee damage = 10; cap at highest weapon value (50)
+      const damage = Math.min(wepDef ? wepDef.damage : 10, 50);
+
+      target.health = Math.max(0, target.health - damage);
       if (target.health === 0) {
         attacker.score += 1;
         target.health = 100;
         const spawn = this.getSpawnPoint(this.state.players.size, Math.floor(Math.random() * 12));
         target.x = spawn.x;
         target.z = spawn.z;
+
+        // Broadcast kill event for kill feed
+        this.broadcast("playerKilled", {
+          attackerId: attacker.id,
+          attackerName: attacker.name,
+          victimId: target.id,
+          victimName: target.name,
+          weapon: subType,
+        });
 
         if (this.state.gameType === "ctf") {
           if (attacker.team === "red") this.state.redScore += 1;
@@ -106,11 +130,13 @@ export class BattleRoom extends Room {
     });
 
     this.onMessage("pickupItem", (client, data) => {
+        // Task 2.2 + 2.3: rate-limit and proximity-validate pickups
+        if (!this._rateLimiter.allow(client.sessionId, "pickupItem")) return;
         const entityId = data.entityId;
         const e = this.state.entities.get(entityId);
         const player = this.state.players.get(client.sessionId);
         
-        if (e && e.type === "item_box" && e.active && player) {
+        if (e && e.type === "item_box" && e.active && player && isWithinPickupRange(player, e)) {
             e.active = false;
             e.respawnTimer = 10000; 
             
@@ -121,6 +147,8 @@ export class BattleRoom extends Room {
     });
 
     this.onMessage("fireWeapon", (client) => {
+        // Task 2.2: rate-limit weapon fire
+        if (!this._rateLimiter.allow(client.sessionId, "fireWeapon")) return;
         const player = this.state.players.get(client.sessionId);
         if (!player || !this.state.started) return;
 
@@ -129,6 +157,11 @@ export class BattleRoom extends Room {
 
         if (result.projectile) {
             const proj = result.projectile;
+            // Task 2.3.4: Verify projectile spawn is near owner's authoritative position
+            if (!isValidProjectileOrigin(player, proj)) {
+                this.state.entities.delete(proj.id);
+                return;
+            }
             this.broadcast("projectileFired", {
                 id: proj.id,
                 subType: proj.subType,
@@ -144,6 +177,7 @@ export class BattleRoom extends Room {
 
     this.setSimulationInterval((deltaTime) => this.update(deltaTime), TICK_RATE);
     console.log(`[battle_room] created roomId=${this.roomId} gameType=${state.gameType} scoreLimit=${state.scoreLimit} maxClients=${this.maxClients}`);
+    log('info', 'room_create', { room: 'battle_room', roomId: this.roomId, gameType: state.gameType, scoreLimit: state.scoreLimit, maxClients: this.maxClients });
     
     this.spawnItemBoxes();
   }
@@ -167,6 +201,7 @@ export class BattleRoom extends Room {
         standings,
       });
       this.state.started = false;
+      log('info', 'match_end', { room: 'battle_room', roomId: this.roomId, gameType: this.state.gameType, winner: attacker.name });
       console.log(`[battle_room] deathmatch won by ${attacker.name} (${attacker.score} kills)`);
     }
   }
@@ -212,6 +247,7 @@ export class BattleRoom extends Room {
 
     this.state.players.set(client.sessionId, p);
     console.log(`[battle_room] join sessionId=${client.sessionId} name=${p.name} team=${p.team} players=${this.state.players.size}`);
+    log('info', 'room_join', { room: 'battle_room', roomId: this.roomId, sessionId: client.sessionId, name: p.name, players: this.state.players.size });
     client.send("joined", {
       sessionId: client.sessionId,
       room: this.roomId,
@@ -239,6 +275,8 @@ export class BattleRoom extends Room {
   onLeave(client) {
     this.state.players.delete(client.sessionId);
     this.inputBySession.delete(client.sessionId);
+    this._rateLimiter.removeClient(client.sessionId);
+    log('info', 'room_leave', { room: 'battle_room', roomId: this.roomId, sessionId: client.sessionId, players: this.state.players.size });
     console.log(`[battle_room] leave sessionId=${client.sessionId} players=${this.state.players.size}`);
   }
 
@@ -296,10 +334,14 @@ export class BattleRoom extends Room {
           return;
         }
 
-        // Phase 3: Update directly from client-authoritative Havok physics engine
-        p.x = input.x; 
-        p.y = input.y; 
-        p.z = input.z;
+        // Task 2.1: sanitize position before applying
+        const clamped = sanitizePosition(
+          { x: p.x, y: p.y, z: p.z },
+          { x: input.x, y: input.y, z: input.z }
+        );
+        p.x = clamped.x;
+        p.y = clamped.y;
+        p.z = clamped.z;
         p.rx = input.rx; 
         p.ry = input.ry; 
         p.rz = input.rz; 
@@ -308,12 +350,22 @@ export class BattleRoom extends Room {
       }
     });
 
-    if (this.state.gameType === "ctf") {
+    if (this.state.gameType === "ctf" && this.state.started) {
       if (this.state.redScore >= this.state.scoreLimit || this.state.blueScore >= this.state.scoreLimit) {
+        const winTeam = this.state.redScore > this.state.blueScore ? "red" : "blue";
+        const standings = [];
+        this.state.players.forEach((p) => {
+          standings.push({ sessionId: p.id, name: p.name, score: p.score, team: p.team });
+        });
+        standings.sort((a, b) => b.score - a.score);
         this.broadcast("matchEnd", {
-          winner: this.state.redScore > this.state.blueScore ? "red" : "blue",
+          mode: "battle",
+          gameType: "ctf",
+          winner: winTeam,
+          winReason: `${winTeam} team wins`,
           redScore: this.state.redScore,
           blueScore: this.state.blueScore,
+          standings,
         });
         this.state.started = false;
         this.countdownActive = false;

@@ -11,28 +11,33 @@ export const GAME_MODES = {
   },
 };
 
+import { getTrackRegistry } from './track-data.js';
+
 export const SINGLE_PLAYER_RACE_MODES = {
   quick_race: { id: 'quick_race', label: 'Quick Race' },
   time_attack: { id: 'time_attack', label: 'Time Attack' },
   grand_prix: { id: 'grand_prix', label: 'Grand Prix' },
 };
 
+// ── Single-player cups — Procedural demo course only ───────────────
 export const SINGLE_PLAYER_CUPS = {
   starter: {
     id: 'starter',
-    label: 'Test Cup',
-    description: 'Debug cup with the test box track.',
-    icon: '🧪',
-    theme: 'Debug',
-    trackIds: ['test_box'],
+    label: 'Glo Cup',
+    description: 'Race the procedurally generated Glo Circuit.',
+    icon: '🏁',
+    theme: 'All Levels',
+    trackIds: ['glo_circuit', 'glo_circuit', 'glo_circuit', 'glo_circuit'],
     unlockByCup: null,
   },
 };
 
-export const VERIFIED_RACE_TRACK_IDS = ['test_box'];
+export const VERIFIED_RACE_TRACK_IDS = [
+  'glo_circuit',
+];
 
 export const TIME_ATTACK_TARGETS = {
-  test_box: { id: 'test_box', label: 'Test Box', trackPath: null, scale: 1, startPositions: [{x: 0, y: 2, z: 0}] },
+  glo_circuit: { id: 'glo_circuit', label: 'Glo Circuit', trackPath: null, scale: 1, startPositions: [{x: 0, y: 2, z: 0}] },
 };
 
 export const WEAPON_SETS = {
@@ -58,13 +63,44 @@ export const WEAPON_SETS = {
   },
 };
 
-export const ALL_TRACKS = {
-  test_box: { id: 'test_box', label: 'Test Box', trackPath: null, scale: 1, type: 'procedural', startPositions: [{x: 0, y: 2, z: 0}, {x: 5, y: 2, z: 5}, {x: -5, y: 2, z: -5}, {x: 5, y: 2, z: -5}] },
+// ── Derive ALL_TRACKS & ALL_ARENAS from the authoritative track-data.js registry ──
+// This eliminates the prior duplication where every track/arena ID, label, type,
+// and start position was maintained in two separate data structures.
+// Extra UI-only overrides (kartScale) are applied below.
+
+const _registry = getTrackRegistry();
+
+function _toContentEntry(id, info, overrides = {}) {
+  const start = info.start || { x: 0, y: 2, z: 0 };
+  return {
+    id,
+    label: info.name || id,
+    type: info.type,
+    scale: info.scale || 1,
+    startPositions: [{ x: start.x, y: start.y, z: start.z }],
+    ...overrides,
+  };
+}
+
+const _arenaOverrides = {
+  glo_arena: { startPositions: [{x: 0, y: 2, z: 0}, {x: 15, y: 2, z: 15}, {x: -15, y: 2, z: -15}, {x: 15, y: 2, z: -15}] },
 };
 
-export const ALL_ARENAS = {
-  test_box: { id: 'test_box', label: 'Test Box', type: 'procedural', startPositions: [{x: 0, y: 2, z: 0}, {x: 10, y: 2, z: 10}, {x: -10, y: 2, z: -10}, {x: 10, y: 2, z: -10}] },
+const _trackOverrides = {
+  glo_circuit: { startPositions: [{x: 0, y: 2, z: 0}, {x: 5, y: 2, z: 5}, {x: -5, y: 2, z: -5}, {x: 5, y: 2, z: -5}] },
 };
+
+export const ALL_TRACKS = {};
+export const ALL_ARENAS = {};
+
+for (const [id, info] of Object.entries(_registry)) {
+  const isArena = info.type === 'procedural-arena';
+  if (isArena) {
+    ALL_ARENAS[id] = _toContentEntry(id, info, _arenaOverrides[id]);
+  } else {
+    ALL_TRACKS[id] = _toContentEntry(id, info, _trackOverrides[id]);
+  }
+}
 
 export const ALL_KARTS = {
   default: { id: 'default', label: 'Classic Kart', modelPath: '/models/car.glb', scale: 2.8 },
@@ -86,6 +122,7 @@ export const ALL_KARTS = {
   tux: { id: 'tux', label: 'Anthony', modelPath: '/models/stk/karts/tux/kart.glb', scale: 2.2 },
   wilber: { id: 'wilber', label: 'Zane', modelPath: '/models/stk/karts/wilber/kart.glb', scale: 2.2 },
   xue: { id: 'xue', label: 'Carrie', modelPath: '/models/stk/karts/xue/kart.glb', scale: 2.2 },
+  beagle_2: { id: 'beagle_2', label: 'Beagle', modelPath: '/models/stk/karts/beagle_2/kart.glb', scale: 2.2 },
 };
 
 export function resolveGameMode(modeId) {
@@ -97,11 +134,11 @@ export function resolveWeaponSet(weaponSetId) {
   return WEAPON_SETS[weaponSetId] || fallback;
 }
 
-export function resolveTrackAsset(trackId = 'test_box') {
+export function resolveTrackAsset(trackId = 'glo_circuit') {
   if (ALL_TRACKS[trackId]) {
     return ALL_TRACKS[trackId];
   }
-  return ALL_TRACKS.test_box;
+  return ALL_TRACKS.glo_circuit || ALL_TRACKS.test_box;
 }
 
 export function resolveKartAsset(kartId = 'default') {
@@ -125,11 +162,11 @@ export function getVerifiedRaceTracks() {
     .filter(Boolean);
 }
 
-export function resolvePlayableRaceTrack(trackId = 'map1') {
+export function resolvePlayableRaceTrack(trackId = 'glo_circuit') {
   if (VERIFIED_RACE_TRACK_IDS.includes(trackId) && ALL_TRACKS[trackId]) {
     return trackId;
   }
-  return 'map1';
+  return 'glo_circuit';
 }
 
 export function resolveSinglePlayerCup(cupId = 'starter') {
@@ -140,12 +177,12 @@ export function resolveSinglePlayerRaceMode(modeId = 'quick_race') {
   return SINGLE_PLAYER_RACE_MODES[modeId] || SINGLE_PLAYER_RACE_MODES.quick_race;
 }
 
-export function resolveTimeAttackTargets(trackId = 'map1') {
-  return TIME_ATTACK_TARGETS[trackId] || TIME_ATTACK_TARGETS.map1;
+export function resolveTimeAttackTargets(trackId = 'glo_circuit') {
+  return TIME_ATTACK_TARGETS[trackId] || TIME_ATTACK_TARGETS.glo_circuit;
 }
 
 export function getSinglePlayerCupsInOrder() {
-  return ['starter', 'sunset', 'midnight']
+  return ['starter']
     .map((cupId) => SINGLE_PLAYER_CUPS[cupId])
     .filter(Boolean);
 }
@@ -157,11 +194,51 @@ export function isCupUnlocked(cupId, progressState = {}) {
   return !!unlockSource?.completed;
 }
 
-export function resolveArenaAsset(arenaId = 'test_box') {
+/**
+ * Validate that all asset references in the content registry are well-formed.
+ * Returns { valid: boolean, errors: string[] }.
+ */
+export function validateAssetAvailability() {
+  const errors = [];
+
+  // Validate kart entries have required fields
+  for (const [id, kart] of Object.entries(ALL_KARTS)) {
+    if (!kart.modelPath) errors.push(`Kart '${id}' missing modelPath`);
+    if (typeof kart.scale !== 'number') errors.push(`Kart '${id}' missing numeric scale`);
+  }
+
+  // Validate track entries have required fields
+  for (const [id, track] of Object.entries(ALL_TRACKS)) {
+    if (!track.type) errors.push(`Track '${id}' missing type`);
+    if (!track.startPositions?.length) errors.push(`Track '${id}' missing startPositions`);
+  }
+
+  // Validate arena entries have required fields
+  for (const [id, arena] of Object.entries(ALL_ARENAS)) {
+    if (!arena.type) errors.push(`Arena '${id}' missing type`);
+    if (!arena.startPositions?.length) errors.push(`Arena '${id}' missing startPositions`);
+  }
+
+  // Validate cup tracks exist in ALL_TRACKS
+  for (const [cupId, cup] of Object.entries(SINGLE_PLAYER_CUPS)) {
+    for (const trackId of cup.trackIds) {
+      if (!ALL_TRACKS[trackId]) errors.push(`Cup '${cupId}' references unknown track '${trackId}'`);
+    }
+  }
+
+  // Validate VERIFIED_RACE_TRACK_IDS reference existing tracks
+  for (const id of VERIFIED_RACE_TRACK_IDS) {
+    if (!ALL_TRACKS[id]) errors.push(`VERIFIED_RACE_TRACK_IDS contains unknown track '${id}'`);
+  }
+
+  return { valid: errors.length === 0, errors };
+}
+
+export function resolveArenaAsset(arenaId = 'glo_arena') {
   if (ALL_ARENAS[arenaId]) {
     return ALL_ARENAS[arenaId];
   }
-  return ALL_ARENAS.test_box;
+  return ALL_ARENAS.glo_arena;
 }
 
 

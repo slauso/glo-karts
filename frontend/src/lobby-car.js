@@ -466,14 +466,45 @@ class KartPreview {
         this._enterDir = dir;
         this._enterT = dir !== 0 ? 0 : 1;
         this.kart.rotation.y = this.kartRotation;
+        // Per-kart mesh fixes: UV V-flip and winding reversal keyed by material name
+        const UV_FLIP = { amanda: ['body'] };       // Olivia — body UVs V-flipped
+        const WIND_FLIP = { gavroche: ['gavroche'] }; // James — face mesh winding reversed
+        const uvTargets  = UV_FLIP[id]  || [];
+        const windTargets = WIND_FLIP[id] || [];
         this.kart.traverse(c => {
           if (c.isMesh) {
             c.castShadow = true;
             c.receiveShadow = true;
+            const matName = Array.isArray(c.material)
+              ? c.material[0]?.name : c.material?.name;
             // STK SPM normals are packed 10-10-10-2 and skipped in the pipeline;
             // always recompute from geometry for correct lighting in Three.js.
             if (c.geometry) {
               c.geometry.computeVertexNormals();
+              // Flip V coordinate to correct upside-down textures
+              if (uvTargets.length && matName && uvTargets.some(t => matName.includes(t))) {
+                const uv = c.geometry.getAttribute('uv');
+                if (uv) {
+                  for (let i = 0; i < uv.count; i++) {
+                    uv.setY(i, 1 - uv.getY(i));
+                  }
+                  uv.needsUpdate = true;
+                }
+              }
+              // Reverse triangle winding to flip face direction
+              if (windTargets.length && matName && windTargets.some(t => matName.includes(t))) {
+                const idx = c.geometry.index;
+                if (idx) {
+                  const arr = idx.array;
+                  for (let i = 0; i < arr.length; i += 3) {
+                    const tmp = arr[i + 1];
+                    arr[i + 1] = arr[i + 2];
+                    arr[i + 2] = tmp;
+                  }
+                  idx.needsUpdate = true;
+                  c.geometry.computeVertexNormals();
+                }
+              }
             }
             // STK meshes use Irrlicht's left-handed winding; even after winding
             // reversal in the pipeline, set DoubleSide as a safety net for thin
@@ -879,7 +910,7 @@ class KartPreview {
     const scenesDrum = buildDrum(allEffects, initSceneIdx, {
       label:      'SCENES',
       extraClass: 'glo-drum-row--scenes',
-      fh:         22,
+      fh:         38,
       renderFace: (face, ef) => {
         face.classList.add('glo-drum-face--scenes');
         // Background layer gets the gradient + animation — keep it separate
@@ -917,7 +948,7 @@ class KartPreview {
 
     const colorDrumRow = buildDrum(PALETTE, initColorIdx, {
       label:      'SOLID',
-      fh:         22,
+      fh:         38,
       extraClass: 'glo-drum-row--color glo-drum-row--simple',
       renderFace: (face, hex) => {
         face.classList.add('glo-drum-face--color');
@@ -978,7 +1009,7 @@ class KartPreview {
 
     const c2row = buildDrum(PALETTE, initColor2Idx, {
       label:      '2ND',
-      fh:         22,
+      fh:         38,
       extraClass: 'glo-drum-row--color glo-drum-row--simple glo-c2-row',
       renderFace: (face, hex) => {
         face.classList.add('glo-drum-face--color');

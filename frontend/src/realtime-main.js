@@ -1,6 +1,7 @@
 import { ColyseusBabylonClient } from './modules/realtime/colyseus-babylon-client.js';
 import { resolveKartAsset } from './modules/content-registry.js';
 import { getColyseusEndpoint, shouldUseColyseus } from './modules/realtime/feature-flag.js';
+import { SPRuntimeBridge } from './modules/modes/rebuild/sp-runtime-bridge.js';
 
 const statusEl = document.getElementById('rt-status');
 const canvas = document.getElementById('realtime-canvas');
@@ -124,6 +125,32 @@ async function bootRealtime() {
   const smokeName = params.get('smoke');
   const forceColyseus = config?.multiplayerProvider === 'colyseus';
 
+  // ── SP/Local mode detection ───────────────────────────────
+  // When singlePlayerMode is set in gameConfig, bypass Colyseus and boot
+  // the local SPRuntimeBridge with the rebuilt mode system.
+  if (config?.singlePlayerMode && config?.modeId) {
+    setStatus(`Loading SP mode: ${config.modeId}...`);
+    try {
+      const bridge = new SPRuntimeBridge({
+        modeId: config.modeId,
+        scene: null,      // Will be set by the bridge's Babylon init
+        engine: null,
+        canvas,
+        trackData: null,  // Loaded by mode systems
+        gameConfig: config,
+        difficulty: config.difficulty || 'normal',
+      });
+      await bridge.boot();
+      setStatus(`SP mode active: ${config.modeId}`);
+      window._spBridge = bridge;
+      window.addEventListener('beforeunload', () => bridge.dispose());
+      return;
+    } catch (err) {
+      console.error('[SP] boot failed, falling back to Colyseus:', err);
+      setStatus(`SP boot failed: ${err.message}. Trying multiplayer...`);
+    }
+  }
+
   if (!forceColyseus && !shouldUseColyseus() && !smokeName) {
     setStatus('Realtime provider disabled. Return to lobby and enable Colyseus.');
     return;
@@ -162,9 +189,10 @@ async function bootRealtime() {
     maxPlayers: config?.maxPlayers || 12,
     gameMode: config?.gameMode || 'race',
     gameType: config?.battleType || 'deathmatch',
-    trackId: config?.trackId || 'cocoa_temple',
+    trackId: config?.trackId || 'glo_circuit',
     scoreLimit: config?.scoreLimit || 5,
     partyCode: config?.lobbyCode || '',
+    customTrackData: config?.customTrackData || sessionStorage.getItem('customTrackData') || '',
     ...joinCustomization,
   });
 

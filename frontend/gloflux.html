@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>GLO KARTS - gloFLUX</title>
+    <script src="https://kit.fontawesome.com/1ab8f48e0a.js" crossorigin="anonymous"></script>
+    <script type="module" src="/src/gloflux-main.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Funnel+Sans:ital,wght@0,300..800;1,300..800&family=Poppins:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900&display=swap" rel="stylesheet">
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { width: 100%; height: 100%; overflow: hidden; background: #0a0a0a; }
+      #gloflux-canvas {
+        width: 100%; height: 100%;
+        display: block; touch-action: none;
+      }
+      #rotate-message {
+        display: none; position: fixed; inset: 0;
+        background: #000; color: #4f4; z-index: 10000;
+        font-family: 'Courier New', monospace;
+        justify-content: center; align-items: center; text-align: center;
+      }
+      @media (orientation: portrait) and (max-width: 768px) {
+        #rotate-message { display: flex; }
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Rotate Message -->
+    <div id="rotate-message">
+      <div>
+        <i class="fas fa-sync-alt" style="font-size:3rem;margin-bottom:12px;"></i>
+        <p>Please Rotate to Landscape</p>
+      </div>
+    </div>
+
+    <!-- 3D Canvas -->
+    <canvas id="gloflux-canvas"></canvas>
+
+    <!-- HUD is rendered by glo-flux-hud.js (canvas overlay) -->
+    <!-- Menu is rendered by glo-flux-menu.js (DOM overlay) -->
+  </body>
+</html>

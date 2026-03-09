@@ -1,21 +1,20 @@
 /**
- * babylon-renderer.js — Babylon.js rendering engine for the race/battle game.
+ * babylon-renderer.js — Babylon.js unified rendering + physics engine.
  *
- * Replaces Three.js rendering with Babylon.js while the Havok physics already
- * runs on a separate Babylon.js NullEngine (havok-physics.js).
+ * Creates a SINGLE scene with both WebGL rendering and Havok physics enabled.
+ * This matches the multiplayer architecture (colyseus-babylon-client.js) so that
+ * solo modes have identical physics behavior: scene.render() auto-steps Havok,
+ * the kart's visual mesh IS its physics body, and track colliders live alongside
+ * their rendered geometry.
  *
  * This module manages:
- *   - WebGPU/WebGL engine + canvas
- *   - Scene with PBR lighting, fog, shadows
- *   - ArcRotateCamera for chase-cam
+ *   - WebGL engine + canvas
+ *   - Scene with Havok physics enabled
+ *   - FollowCamera with raycast clip avoidance
+ *   - PBR lighting, fog, shadows
  *   - GLB/GLTF asset loading
  *   - Post-processing (bloom, FXAA)
  *   - Procedural sky
- *
- * Usage:
- *   const bRenderer = await initBabylonRenderer('app');
- *   const carMesh = await bRenderer.loadGLB('/models/stk/karts/tux/tux-kart.glb');
- *   bRenderer.runRenderLoop();
  */
 
 import { Engine } from '@babylonjs/core/Engines/engine';
@@ -26,16 +25,21 @@ import { FollowCamera } from '@babylonjs/core/Cameras/followCamera';
 import { HemisphericLight } from '@babylonjs/core/Lights/hemisphericLight';
 import { DirectionalLight } from '@babylonjs/core/Lights/directionalLight';
 import { ShadowGenerator } from '@babylonjs/core/Lights/Shadows/shadowGenerator';
+import '@babylonjs/core/Lights/Shadows/shadowGeneratorSceneComponent';
 import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder';
 import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial';
 import { PBRMaterial } from '@babylonjs/core/Materials/PBR/pbrMaterial';
 import { SceneLoader } from '@babylonjs/core/Loading/sceneLoader';
 import { DefaultRenderingPipeline } from '@babylonjs/core/PostProcesses/RenderPipeline/Pipelines/defaultRenderingPipeline';
 import { TransformNode } from '@babylonjs/core/Meshes/transformNode';
+import { HavokPlugin } from '@babylonjs/core/Physics/v2/Plugins/havokPlugin';
+import { PhysicsRaycastResult } from '@babylonjs/core/Physics/physicsRaycastResult';
+import HavokPhysics from '@babylonjs/havok';
 
 // Side-effect imports for format support
 import '@babylonjs/loaders/glTF';
 import '@babylonjs/core/Helpers/sceneHelpers';
+import '@babylonjs/core/Physics/joinedPhysicsEngineComponent';
 
 // ── State ───────────────────────────────────────────────────────────────────
 
@@ -46,6 +50,8 @@ let _shadowGen = null;
 let _pipeline = null;
 let _canvas = null;
 let _sunLight = null;
+let _havokPlugin = null;
+let _targetCamRadius = 12;
 
 // ── Initialization ──────────────────────────────────────────────────────────
 
@@ -80,6 +86,24 @@ export async function initBabylonRenderer(canvasId = 'app', opts = {}) {
   // Create scene
   _scene = new Scene(_engine);
   _scene.clearColor = new Color4(0.67, 0.87, 1.0, 1.0); // sky blue
+  _scene.useRightHandedSystem = true;
+
+  // Setup PBR environment lighting (matches multiplayer colyseus-babylon-client)
+  // Provides environment texture (IBL probe) for proper ambient/indirect lighting
+  _scene.createDefaultEnvironment({
+    createSkybox: false,
+    createGround: false,
+    enableGroundShadow: true,
+  });
+
+  // ── Havok Physics ─────────────────────────────────────────────────────
+  const HAVOK_WASM_PATH = `${import.meta.env.BASE_URL}havok/HavokPhysics.wasm`;
+  const hk = await HavokPhysics({
+    locateFile: (path) => (path.endsWith('.wasm') ? HAVOK_WASM_PATH : path),
+  });
+  _havokPlugin = new HavokPlugin(true, hk);
+  _scene.enablePhysics(new Vector3(0, -20, 0), _havokPlugin);
+  console.log('Havok physics enabled in rendering scene');
 
   // Fog
   _scene.fogMode = Scene.FOGMODE_LINEAR;
@@ -108,13 +132,16 @@ export async function initBabylonRenderer(canvasId = 'app', opts = {}) {
   _shadowGen.filteringQuality = ShadowGenerator.QUALITY_MEDIUM;
 
   // ── Camera ────────────────────────────────────────────────────────────
-
-  _camera = new ArcRotateCamera('cam', -Math.PI / 2, Math.PI / 3, 12, Vector3.Zero(), _scene);
+  // FollowCamera matching multiplayer setup for consistent chase-cam feel
+  _camera = new FollowCamera('cam', new Vector3(0, 10, -20), _scene);
+  _camera.radius = 12;
+  _camera.heightOffset = 6;
+  _camera.rotationOffset = 180;
+  _camera.cameraAcceleration = 0.035;
+  _camera.maxCameraSpeed = 12;
   _camera.minZ = 0.1;
   _camera.maxZ = 2000;
-  _camera.lowerRadiusLimit = 5;
-  _camera.upperRadiusLimit = 30;
-  _camera.attachControl(_canvas, false);
+  _targetCamRadius = 12;
 
   // ── Post-processing ───────────────────────────────────────────────────
 
@@ -151,6 +178,37 @@ const renderer = {
   get canvas()      { return _canvas; },
   get shadowGen()   { return _shadowGen; },
   get sunLight()    { return _sunLight; },
+  get havokPlugin() { return _havokPlugin; },
+
+  /** Apply per-track sky colors (fog, clearColor, skybox emissive). */
+  applyTrackSky(trackId) { applyTrackSky(trackId); },
+  setSkyColors(opts) { setSkyColors(opts); },
+
+  /**
+   * Set the FollowCamera's locked target (the kart mesh).
+   * Also registers the raycast camera-clip avoidance callback.
+   * @param {import("@babylonjs/core").AbstractMesh} mesh
+   */
+  setLockedTarget(mesh) {
+    if (!_camera || !mesh) return;
+    _camera.lockedTarget = mesh;
+
+    // Register raycast clip avoidance (runs every frame before render)
+    _scene.registerBeforeRender(() => {
+      if (!mesh || !_havokPlugin || !_camera) return;
+      try {
+        const from = mesh.position.add(new Vector3(0, 1.0, 0));
+        const to   = _camera.position.clone();
+        const hit  = new PhysicsRaycastResult();
+        _havokPlugin.raycast(from, to, hit);
+        if (hit.hasHit && hit.hitDistance < _targetCamRadius - 1.0) {
+          _camera.radius = Math.max(3.5, hit.hitDistance - 0.8);
+        } else if (_camera.radius < _targetCamRadius - 0.05) {
+          _camera.radius = Math.min(_targetCamRadius, _camera.radius + 0.2);
+        }
+      } catch (_) { /* raycast may not be available yet */ }
+    });
+  },
 
   /** Start the render loop. */
   runRenderLoop() {
@@ -247,10 +305,13 @@ const renderer = {
     _camera = null;
     _pipeline = null;
     _shadowGen = null;
+    _havokPlugin = null;
   },
 };
 
 // ── Procedural sky ──────────────────────────────────────────────────────────
+
+let _skybox = null;
 
 function createProceduralSky() {
   const skyMat = new StandardMaterial('skyMat', _scene);
@@ -258,10 +319,45 @@ function createProceduralSky() {
   skyMat.disableLighting = true;
   skyMat.emissiveColor = new Color3(0.67, 0.87, 1.0);
 
-  const skybox = MeshBuilder.CreateSphere('sky', { diameter: 1800, segments: 24 }, _scene);
-  skybox.material = skyMat;
-  skybox.infiniteDistance = true;
-  skybox.renderingGroupId = 0;
+  _skybox = MeshBuilder.CreateSphere('sky', { diameter: 1800, segments: 24 }, _scene);
+  _skybox.material = skyMat;
+  _skybox.infiniteDistance = true;
+  _skybox.renderingGroupId = 0;
+}
+
+/**
+ * Swap the skybox color to match track atmosphere.
+ * Tracks can call this to set a unique sky.
+ * @param {object} opts — { topColor, bottomColor, fogColor }
+ */
+function setSkyColors(opts = {}) {
+  if (!_skybox || !_scene) return;
+  const top = opts.topColor || new Color3(0.67, 0.87, 1.0);
+  const fog = opts.fogColor || top;
+  _skybox.material.emissiveColor = top;
+  _scene.clearColor = new Color4(top.r, top.g, top.b, 1.0);
+  _scene.fogColor = fog;
+}
+
+// ── Track-specific sky presets ──────────────────────────────────────────────
+
+const SKY_PRESETS = {
+  // Procedural demo course — vibrant blue sky
+  glo_circuit:         { topColor: new Color3(0.35, 0.65, 1.0), fogColor: new Color3(0.5, 0.75, 0.95) },
+  glo_arena:           { topColor: new Color3(0.35, 0.65, 1.0), fogColor: new Color3(0.5, 0.75, 0.95) },
+  test_box:            { topColor: new Color3(0.5, 0.72, 1.0), fogColor: new Color3(0.6, 0.8, 1.0) },
+};
+
+/**
+ * Apply a track-specific sky preset.
+ * @param {string} trackId
+ */
+function applyTrackSky(trackId) {
+  const preset = SKY_PRESETS[trackId];
+  if (preset) {
+    setSkyColors(preset);
+  }
+  // Otherwise keep the default sky blue
 }
 
 export default renderer;

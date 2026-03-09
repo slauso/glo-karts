@@ -1,15 +1,12 @@
 // GLO KARTS — Track / Arena Carousel (lobby-track-preview.js)
 // Navigation + thumbnail preview display.
 
-// ── Rosters (mirrors lobby.js STK_TRACKS / STK_ARENAS) ─────────────────────
+import { ALL_TRACKS, ALL_ARENAS } from './modules/content-registry.js';
 
-const STK_TRACKS = [
-  { id: 'test_box', name: 'Test Box' },
-];
+// ── Rosters (derived from content-registry) ─────────────────────────────────
 
-const STK_ARENAS = [
-  { id: 'test_box', name: 'Test Box' },
-];
+const STK_TRACKS = Object.values(ALL_TRACKS).map(t => ({ id: t.id, name: t.label }));
+const STK_ARENAS = Object.values(ALL_ARENAS).map(a => ({ id: a.id, name: a.label }));
 
 function getList(mode) {
   return mode === 'battle' ? STK_ARENAS : STK_TRACKS;

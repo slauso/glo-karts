@@ -7,7 +7,7 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 
 const W = 600, H = 380;
 const params = new URLSearchParams(window.location.search);
-const id   = params.get('id')   || 'cocoa_temple';
+const id   = params.get('id')   || 'glo_circuit';
 const mode = params.get('mode') || 'race';
 
 // ── Renderer ──────────────────────────────────────────────────────────────────

@@ -57,9 +57,9 @@ export async function injectGameConfig(page, cfg = {}) {
     sessionStorage.setItem('gameConfig', JSON.stringify(config));
     sessionStorage.setItem('myPlayerId', 'test-player-001');
     sessionStorage.setItem('selectedKart', config.selectedKart || 'tux');
-    sessionStorage.setItem('gloEffect', 'solid');
-    sessionStorage.setItem('gloColor',  '#ff0080');
-    sessionStorage.setItem('gloColor2', '#00e5ff');
+    sessionStorage.setItem('gloEffect', config.gloEffect || 'solid');
+    sessionStorage.setItem('gloColor',  config.gloColor  || '#ff0080');
+    sessionStorage.setItem('gloColor2', config.gloColor2 || '#00e5ff');
   }, merged);
 }
 

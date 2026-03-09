@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GLO KARTS — Track Builder</title>
+  <link rel="icon" type="image/png" href="/favicon.png" />
+  <link rel="stylesheet" href="src/builder-style.css">
+  <link href="https://fonts.googleapis.com/css2?family=Bungee&family=Exo+2:wght@400;700&display=swap" rel="stylesheet">
+  <script src="https://kit.fontawesome.com/1ab8f48e0a.js" crossorigin="anonymous"></script>
+  <script type="module" src="/src/builder-main.js"></script>
+</head>
+<body>
+  <div class="builder-container">
+    <!-- Top bar -->
+    <header class="builder-header">
+      <a href="index.html" class="builder-back-btn" title="Back to Lobby">
+        <i class="fas fa-arrow-left"></i>
+      </a>
+      <h1 class="builder-title">TRACK BUILDER</h1>
+      <div class="builder-header-actions">
+        <button id="undo-btn" class="builder-tool-btn" title="Undo (Ctrl+Z)">
+          <i class="fas fa-undo"></i>
+        </button>
+        <button id="redo-btn" class="builder-tool-btn" title="Redo (Ctrl+Shift+Z)">
+          <i class="fas fa-redo"></i>
+        </button>
+        <button id="clear-btn" class="builder-tool-btn danger" title="Clear Track">
+          <i class="fas fa-trash"></i>
+        </button>
+      </div>
+    </header>
+
+    <div class="builder-body">
+      <!-- Left toolbar: segment palette -->
+      <aside class="builder-palette">
+        <h3 class="palette-title">ROAD</h3>
+        <div class="palette-group" id="segment-palette"></div>
+
+        <h3 class="palette-title">OBSTACLES</h3>
+        <div class="palette-group" id="obstacle-palette"></div>
+
+        <h3 class="palette-title">MARKERS</h3>
+        <div class="palette-group">
+          <button class="palette-btn" data-tool="start_position" title="Start Position">
+            <span class="palette-icon">🏁</span>
+            <span class="palette-label">Start</span>
+          </button>
+          <button class="palette-btn" data-tool="eraser" title="Eraser">
+            <span class="palette-icon"><i class="fas fa-eraser"></i></span>
+            <span class="palette-label">Eraser</span>
+          </button>
+        </div>
+      </aside>
+
+      <!-- 3D viewport -->
+      <main class="builder-viewport">
+        <canvas id="builder-canvas"></canvas>
+        <div id="builder-status" class="builder-status">Click grid to place segments</div>
+      </main>
+
+      <!-- Right panel: properties & actions -->
+      <aside class="builder-properties">
+        <h3 class="prop-title">TRACK INFO</h3>
+        <div class="prop-group">
+          <label for="track-name">Name</label>
+          <input type="text" id="track-name" value="Untitled Track" maxlength="30" />
+        </div>
+        <div class="prop-group">
+          <label for="track-author">Author</label>
+          <input type="text" id="track-author" value="Anonymous" maxlength="20" />
+        </div>
+        <div class="prop-group prop-stats">
+          <span>Segments: <strong id="stat-segments">0</strong></span>
+          <span>Obstacles: <strong id="stat-obstacles">0</strong></span>
+          <span>Starts: <strong id="stat-starts">0</strong></span>
+        </div>
+
+        <h3 class="prop-title">VALIDATION</h3>
+        <div id="validation-output" class="validation-output">
+          <span class="validation-pending">Place segments to begin</span>
+        </div>
+
+        <div class="builder-actions">
+          <button id="validate-btn" class="builder-action-btn">
+            <i class="fas fa-check-circle"></i> Validate
+          </button>
+          <button id="test-race-btn" class="builder-action-btn accent">
+            <i class="fas fa-flag-checkered"></i> Test Race
+          </button>
+          <button id="test-battle-btn" class="builder-action-btn">
+            <i class="fas fa-crosshairs"></i> Test Battle
+          </button>
+          <button id="export-btn" class="builder-action-btn">
+            <i class="fas fa-download"></i> Export JSON
+          </button>
+          <button id="share-btn" class="builder-action-btn accent">
+            <i class="fas fa-share-alt"></i> Share Track
+          </button>
+          <button id="import-btn" class="builder-action-btn">
+            <i class="fas fa-upload"></i> Import Code
+          </button>
+        </div>
+      </aside>
+    </div>
+  </div>
+
+  <!-- Toast notification -->
+  <div id="builder-toast" class="builder-toast hidden"></div>
+
+  <!-- Import modal -->
+  <div id="import-modal" class="builder-modal hidden">
+    <div class="modal-backdrop"></div>
+    <div class="modal-content">
+      <h3>Import Track</h3>
+      <textarea id="import-code-input" placeholder="Paste share code here..." rows="4"></textarea>
+      <div class="modal-actions">
+        <button id="import-confirm-btn" class="builder-action-btn accent">Import</button>
+        <button id="import-cancel-btn" class="builder-action-btn">Cancel</button>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

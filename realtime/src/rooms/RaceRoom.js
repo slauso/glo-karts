@@ -2,7 +2,9 @@ import { Room } from "@colyseus/core";
 import { RaceState } from "../schema/RaceState.js";
 import { PlayerState } from "../schema/PlayerState.js";
 import { EntityState } from "../schema/EntityState.js";
-import { grantWeapon, handleFireWeapon, tickProjectiles } from "../combat.js";
+import { WEAPONS, grantWeapon, handleFireWeapon, tickProjectiles } from "../combat.js";
+import { RateLimiter, sanitizePosition, isWithinPickupRange, isValidProjectileOrigin } from "../server-guard.js";
+import { log } from "../logger.js";
 
 const TICK_RATE = 1000 / 60;
 const ACCEL = 22;
@@ -30,6 +32,8 @@ export class RaceRoom extends Room {
     this._minLapMs = 15000;
     this.inputBySession = new Map();
     this.countdownActive = false;
+    // Task 2.2: per-client rate limiter
+    this._rateLimiter = new RateLimiter();
 
     this.onMessage("triggerStart", () => {
       if (this.state.started || this.countdownActive) return;
@@ -68,6 +72,8 @@ export class RaceRoom extends Room {
     });
 
     this.onMessage("input", (client, data) => {
+      // Task 2.2: rate-limit input messages
+      if (!this._rateLimiter.allow(client.sessionId, "input")) return;
       this.inputBySession.set(client.sessionId, {
         seq: Math.max(0, Math.floor(safeNumber(data.seq, 0))),
         throttle: safeUnit(data.throttle, 0),
@@ -85,6 +91,8 @@ export class RaceRoom extends Room {
     });
 
     this.onMessage("checkpoint", (client, data) => {
+      // Task 2.2: rate-limit checkpoint messages
+      if (!this._rateLimiter.allow(client.sessionId, "checkpoint")) return;
       if (!this.state.started) return;
       const player = this.state.players.get(client.sessionId);
       if (!player || player.finished) return;
@@ -145,11 +153,13 @@ export class RaceRoom extends Room {
     });
 
     this.onMessage("pickupItem", (client, data) => {
+        // Task 2.2 + 2.3: rate-limit and proximity-validate pickups
+        if (!this._rateLimiter.allow(client.sessionId, "pickupItem")) return;
         const entityId = data.entityId;
         const e = this.state.entities.get(entityId);
         const player = this.state.players.get(client.sessionId);
         
-        if (e && e.type === "item_box" && e.active && player) {
+        if (e && e.type === "item_box" && e.active && player && isWithinPickupRange(player, e)) {
             // "Consume" the item box
             e.active = false;
             e.respawnTimer = 10000; // 10 seconds respawn
@@ -163,6 +173,8 @@ export class RaceRoom extends Room {
     });
 
     this.onMessage("fireWeapon", (client) => {
+        // Task 2.2: rate-limit weapon fire
+        if (!this._rateLimiter.allow(client.sessionId, "fireWeapon")) return;
         const player = this.state.players.get(client.sessionId);
         if (!player || !this.state.started) return;
 
@@ -171,6 +183,11 @@ export class RaceRoom extends Room {
 
         if (result.projectile) {
             const proj = result.projectile;
+            // Task 2.3.4: Verify projectile spawn is near owner's authoritative position
+            if (!isValidProjectileOrigin(player, proj)) {
+                this.state.entities.delete(proj.id);
+                return;
+            }
             this.broadcast("projectileFired", {
                 id: proj.id,
                 subType: proj.subType,
@@ -185,6 +202,7 @@ export class RaceRoom extends Room {
     });
 
     this.setSimulationInterval((deltaTime) => this.update(deltaTime), TICK_RATE);
+    log('info', 'room_create', { room: 'race_room', roomId: this.roomId, track: state.trackId, laps: state.totalLaps, maxClients: this.maxClients });
     console.log(`[race_room] created roomId=${this.roomId} track=${state.trackId} laps=${state.totalLaps} maxClients=${this.maxClients}`);
 
     this.spawnItemBoxes();
@@ -211,6 +229,7 @@ export class RaceRoom extends Room {
 
     this.broadcast("matchEnd", { mode: "race", standings });
     this.state.started = false;
+    log('info', 'match_end', { room: 'race_room', roomId: this.roomId, finishers: standings.length });
     console.log(`[race_room] race ended — ${standings.length} finishers`);
   }
 
@@ -262,14 +281,36 @@ export class RaceRoom extends Room {
     p.z = spawn.z;
 
     this.state.players.set(client.sessionId, p);
+    log('info', 'room_join', { room: 'race_room', roomId: this.roomId, sessionId: client.sessionId, name: p.name, players: this.state.players.size });
     console.log(`[race_room] join sessionId=${client.sessionId} name=${p.name} players=${this.state.players.size}`);
     client.send("joined", { sessionId: client.sessionId, room: this.roomId, mode: "race" });
+
+    // Late-join catchup: sync countdown/live state to late arrivals
+    if (this.state.started) {
+      const serverNow = Date.now();
+      client.send("startSequence", { durationMs: 0, startAt: serverNow, serverNow });
+      client.send("matchLive", { startedAt: serverNow });
+      client.send("lapStarted", { lap: 1, totalLaps: this.state.totalLaps });
+    } else if (this.countdownActive) {
+      const remaining = Math.max(0, (this._countdownStartAt || Date.now()) - Date.now());
+      const serverNow = Date.now();
+      client.send("startSequence", { durationMs: remaining, startAt: serverNow + remaining, serverNow });
+    }
   }
 
   onLeave(client) {
     this.state.players.delete(client.sessionId);
     this.inputBySession.delete(client.sessionId);
+    this._rateLimiter.removeClient(client.sessionId);
+    log('info', 'room_leave', { room: 'race_room', roomId: this.roomId, sessionId: client.sessionId, players: this.state.players.size });
     console.log(`[race_room] leave sessionId=${client.sessionId} players=${this.state.players.size}`);
+
+    // Task 3.4: If everyone remaining has finished, end the race to prevent hangs
+    if (this.state.started && this.state.players.size > 0) {
+      let allFinished = true;
+      this.state.players.forEach((p) => { if (!p.finished) allFinished = false; });
+      if (allFinished) this._endRace();
+    }
   }
 
   getSpawnPoint(maxPlayers, index) {
@@ -326,10 +367,17 @@ export class RaceRoom extends Room {
           return;
         }
 
+        // Task 2.1: movement sanity — reject teleportation & clamp to arena
+        const clamped = sanitizePosition(
+          { x: p.x, y: p.y, z: p.z },
+          { x: input.x, y: input.y, z: input.z }
+        );
+        if (!clamped) return; // teleport detected — keep previous pose
+
         // Phase 3: Update directly from client-authoritative Havok physics engine
-        p.x = input.x; 
-        p.y = input.y; 
-        p.z = input.z;
+        p.x = clamped.x; 
+        p.y = clamped.y; 
+        p.z = clamped.z;
         p.rx = input.rx; 
         p.ry = input.ry; 
         p.rz = input.rz; 

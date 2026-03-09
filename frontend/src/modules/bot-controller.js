@@ -19,7 +19,7 @@ import { TransformNode } from '@babylonjs/core/Meshes/transformNode';
 import { SceneLoader } from '@babylonjs/core/Loading/sceneLoader';
 import '@babylonjs/loaders/glTF';
 import { getDriveline, getStartGrid, getLapCount, getGraph } from './track-data-loader.js';
-import { ALL_KARTS } from './content-registry.js';
+import { ALL_KARTS, resolveKartAsset } from './content-registry.js';
 
 // ── Tuning constants ────────────────────────────────────────────────────────
 
@@ -37,6 +37,10 @@ const BOT_CURVE_THRESHOLD = 0.35; // radians — sharper → brake
 const RUBBER_BAND_BEHIND  = 1.18; // speed multiplier when behind player
 const RUBBER_BAND_AHEAD   = 0.82; // speed multiplier when far ahead
 const RUBBER_BAND_RANGE   = 0.15; // progress fraction threshold
+
+// Bot-player collision
+const BOT_COLLISION_RADIUS = 2.8; // center-to-center distance for bump
+const BOT_BUMP_FORCE       = 6.0; // nudge impulse m/s
 
 // Difficulty tiers (set per-bot to create a spread)
 const DIFFICULTY = [
@@ -101,6 +105,8 @@ export function createRaceBots(scene, trackData, numBots = 7, playerKartId = 'tu
     phMat.alpha = 0.6;
     placeholder.material = phMat;
     placeholder.parent = group;
+    // 13.8.2: placeholder participates in shadows
+    placeholder.receiveShadows = true;
 
     const bot = {
       id: `bot-${i}`,
@@ -315,6 +321,38 @@ export function disposeRaceBots(bots) {
   bots.length = 0;
 }
 
+// ── Bot–player proximity collision ──────────────────────────────────────────
+
+/**
+ * Check all bots for proximity collision with the player kart.
+ * Returns a nudge vector to apply to the player (or null if no collision).
+ *
+ * @param {Array<BotState>} bots
+ * @param {import('@babylonjs/core').Vector3} playerPos  Player kart position
+ * @returns {{ nudge: import('@babylonjs/core').Vector3, botId: string } | null}
+ */
+export function checkBotPlayerCollision(bots, playerPos) {
+  if (!playerPos) return null;
+  for (const bot of bots) {
+    if (bot.raceFinished) continue;
+    const dx = playerPos.x - bot.position.x;
+    const dz = playerPos.z - bot.position.z;
+    const dist = Math.sqrt(dx * dx + dz * dz);
+    if (dist < BOT_COLLISION_RADIUS && dist > 0.01) {
+      const nx = dx / dist;
+      const nz = dz / dist;
+      const overlap = BOT_COLLISION_RADIUS - dist;
+      // Push both apart: player gets a nudge, bot speed briefly drops
+      bot.speed *= 0.85;
+      return {
+        nudge: new Vector3(nx * BOT_BUMP_FORCE * overlap, 0, nz * BOT_BUMP_FORCE * overlap),
+        botId: bot.id,
+      };
+    }
+  }
+  return null;
+}
+
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
 function findNearestQuad(driveline, pos) {
@@ -389,9 +427,7 @@ function getColorForIndex(i) {
 }
 
 function loadBotKartModel(bot, kartId, scene) {
-  const kartInfo = ALL_KARTS[kartId];
-  if (!kartInfo) return;
-
+  const kartInfo = resolveKartAsset(kartId);
   const modelPath = kartInfo.modelPath;
   const lastSlash = modelPath.lastIndexOf('/');
   const dir = modelPath.substring(0, lastSlash + 1);
@@ -402,7 +438,7 @@ function loadBotKartModel(bot, kartId, scene) {
     model.scaling.setAll(kartInfo.scale || 2.2);
     result.meshes.forEach(mesh => {
       if (mesh.getTotalVertices && mesh.getTotalVertices() > 0) {
-        mesh.receiveShadows = false;
+        mesh.receiveShadows = true;
       }
     });
 
@@ -411,8 +447,12 @@ function loadBotKartModel(bot, kartId, scene) {
       bot.placeholder.dispose();
       bot.placeholder = null;
     }
+    // STK kart GLBs face -Z locally; rotate 180° so they face +Z (forward)
+    model.rotation.y = Math.PI;
     model.parent = bot.mesh;
   }).catch((err) => {
-    console.warn(`Failed to load bot kart ${kartId}:`, err.message);
+    console.warn(`Failed to load bot kart ${kartId}, trying default:`, err.message);
+    // Fallback to default kart model
+    if (kartId !== 'default') loadBotKartModel(bot, 'default', scene);
   });
 }

@@ -1,8 +1,47 @@
-# Deployment Guide - Koyeb
+# TwistedKart — Full-Stack Deployment Guide
 
-## Quick Start
+TwistedKart consists of three services that must be deployed and configured together:
 
-This Django backend is configured for Koyeb buildpack deployment.
+| Service | Technology | Default Port | Recommended Host |
+|---------|-----------|-------------|-----------------|
+| **Frontend** | Vite (static) | 5173 (dev) | Vercel |
+| **Backend** | Django + DRF | 8002 (dev) | Koyeb / Railway |
+| **Realtime** | Colyseus + Express | 2567 | Fly.io / Railway / Render |
+
+## Deployment Order
+
+1. **Backend** (Django) — deploy first; no external dependencies
+2. **Realtime** (Colyseus) — deploy second; needs CORS_ORIGIN pointing to frontend
+3. **Frontend** (Vite) — deploy last; needs `VITE_COLYSEUS_URL` pointing to realtime
+
+---
+
+## 1. Frontend (Vercel)
+
+See also: [QUICKSTART_VERCEL.md](QUICKSTART_VERCEL.md), [VERCEL_DEPLOY.md](VERCEL_DEPLOY.md)
+
+### Setup
+- **Root directory**: `frontend`
+- **Framework preset**: Vite
+- **Build command**: `npm run build`
+- **Output directory**: `dist`
+
+### Environment Variables
+
+```bash
+VITE_COLYSEUS_URL=wss://your-realtime-server.fly.dev
+```
+
+### Verification
+- Visit `/` → lobby loads with kart selector
+- Visit `/game` → solo race starts
+- Visit `/battle` → solo battle starts
+- Visit `/realtime` → multiplayer lobby (requires realtime server)
+- Visit `/builder` → Track Builder opens
+
+---
+
+## 2. Backend / Django API (Koyeb)
 
 ### Repository Setup
 - **Work Directory**: `backend`
@@ -75,5 +114,107 @@ venv\Scripts\activate  # Windows
 
 pip install -r requirements.txt
 python manage.py migrate
-python manage.py runserver
+python manage.py runserver 8002
 ```
+
+---
+
+## 3. Realtime / Colyseus WebSocket Server
+
+### Docker Deployment (Recommended)
+
+```bash
+cd realtime
+docker build -t twistedkart-realtime .
+docker run -d -p 2567:2567 \
+  -e NODE_ENV=production \
+  -e CORS_ORIGIN=https://your-frontend.vercel.app \
+  twistedkart-realtime
+```
+
+### Platform Deployment
+
+**Fly.io:**
+```bash
+cd realtime
+fly launch --no-deploy
+# Set env vars
+fly secrets set CORS_ORIGIN=https://your-frontend.vercel.app NODE_ENV=production
+fly deploy
+```
+
+**Render / Railway / Heroku:**
+- Use the `Procfile` in `realtime/`
+- Set root/build directory to `realtime`
+- Set env vars: `CORS_ORIGIN`, `NODE_ENV=production`
+
+### Environment Variables
+
+```bash
+COLYSEUS_PORT=2567        # WebSocket port (default: 2567)
+CORS_ORIGIN=https://...   # Frontend URL for CORS (leave empty for open CORS in dev)
+NODE_ENV=production        # Disables /colyseus monitor endpoint
+```
+
+### Health Check
+
+```
+GET /health → { "ok": true, "rooms": <count>, "uptime": <seconds> }
+```
+
+### Verification
+
+After deployment:
+1. `curl https://your-realtime-server/health` → `{"ok":true, ...}`
+2. In browser, visit frontend `/realtime` → multiplayer lobby should connect
+
+### Local Development
+
+```bash
+cd realtime
+npm install
+node src/index.js
+# Server starts on http://localhost:2567
+```
+
+---
+
+## 4. Django Backend Role (v1.0)
+
+For v1.0, the Django backend is **optional**. The game runs fully with just Frontend + Realtime. The backend provides:
+- Admin panel (Django admin)
+- Future: player profiles, leaderboards, match history
+
+If not using the backend, you only need to deploy Frontend and Realtime.
+
+---
+
+## Local Development (All Services)
+
+Start all three services for local development:
+
+```bash
+# Terminal 1: Frontend
+cd frontend && npm run dev
+# → http://localhost:5173
+
+# Terminal 2: Realtime
+cd realtime && node src/index.js
+# → http://localhost:2567
+
+# Terminal 3: Backend (optional)
+cd backend && python manage.py runserver 8002
+# → http://localhost:8002
+```
+
+Or use VS Code tasks: "Start Backend (Django :8002)" is pre-configured.
+
+---
+
+## Post-Deploy Smoke Checks
+
+1. **Frontend**: Visit `/` — lobby loads, kart selector works
+2. **Frontend**: Visit `/game` — solo race starts with countdown
+3. **Realtime**: `GET /health` → `200 OK`
+4. **Frontend**: Visit `/realtime` — connects to WebSocket, prematch lobby shows
+5. **Backend** (if deployed): Visit `/admin/` — Django admin loads

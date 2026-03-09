@@ -151,6 +151,24 @@ export function endGrandPrix() {
   _onTrackChange = null;
 }
 
+/**
+ * Restore GP state from serialized data (for page-reload resume).
+ * @param {number}   raceIdx   0-based index of current race
+ * @param {Array}    standings Saved standings array from getStandings()
+ */
+export function restoreGrandPrixState(raceIdx, standings) {
+  if (!_active || !_cup) return;
+  _raceIdx = Math.min(raceIdx, _cup.trackIds.length - 1);
+  if (Array.isArray(standings)) {
+    _standings = standings.map(s => ({
+      id: s.id,
+      name: s.name,
+      totalPoints: s.totalPoints || 0,
+      results: Array.isArray(s.results) ? [...s.results] : [],
+    }));
+  }
+}
+
 // ── UI helpers ──────────────────────────────────────────────────────────────
 
 /**

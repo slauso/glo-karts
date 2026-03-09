@@ -9,12 +9,18 @@ import { Color3 } from '@babylonjs/core/Maths/math.color';
 import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder';
 import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial';
 import { PBRMaterial } from '@babylonjs/core/Materials/PBR/pbrMaterial';
+import { PhysicsMotionType } from '@babylonjs/core/Physics/v2/IPhysicsEnginePlugin';
 import "@babylonjs/loaders/glTF";
 import "./style.css";
+
+// ── Error capture (must be early) ───────────────────────────────────────────
+import { initErrorCapture } from './modules/error-capture.js';
+initErrorCapture();
+
 import { initBabylonRenderer } from './modules/babylon-renderer.js';
 import { createVehicle, resetCarPosition } from './modules/babylon-car.js';
-import { initPhysics, updatePhysics, FIXED_PHYSICS_STEP } from './modules/physics.js';
-import { resetKart } from './modules/havok-physics.js';
+import { initPhysics, updatePhysics, FIXED_PHYSICS_STEP, setPhysicsKartRefs } from './modules/physics.js';
+import { resetKart, setKartRefs } from './modules/havok-physics.js';
 import { 
   initMultiplayer, 
   updateMarkers, 
@@ -23,18 +29,28 @@ import {
 } from './modules/multiplayer.js';
 import { loadArena } from './modules/battle/arena.js';
 import { createHealthSystem } from './modules/battle/health.js';
-import { initWeapons, attemptFire, getWeaponDef, hostBroadcastPickups } from './modules/battle/weapons.js';
+import { initWeapons, attemptFire, getWeaponDef, hostBroadcastPickups, predictIntercept } from './modules/battle/weapons.js';
 import {
-  playTrackMusic, playSFX, playWeaponFireSFX,
+  playTrackMusic, playSFX, playWeaponFireSFX, playWeaponHitSFX,
   startEngineSound, updateEnginePitch, stopEngineSound,
-  playCountdownSequence, stopBGM, disposeAudio,
+  playCountdownSequence, stopBGM, disposeAudio, playPostRaceMusic,
 } from './modules/game-audio.js';
-import { initParticles, updateParticles, emitHitBurst } from './modules/babylon-particles.js';
+import { initParticles, updateParticles, emitHitBurst, emitExplosionRing, disposeParticles } from './modules/babylon-particles.js';
+import {
+  triggerScreenShake, updateScreenShake,
+  createDamageVignette, flashDamageVignette,
+  getWeaponIconHTML,
+} from './modules/race-hud.js';
 import { loadTrackData, getNavmesh } from './modules/track-data-loader.js';
+import { publishDebugSnapshot } from './modules/debug-telemetry.js';
 import {
   createBattleBots, updateBattleBots, damageBattleBot,
   getBattleScoreboard, disposeBattleBots,
 } from './modules/battle-bot-controller.js';
+import {
+  initThreeStrikes, onStrikeDamage, isPlayerAlive,
+  getStrikesStatus, disposeThreeStrikes, isThreeStrikesActive,
+} from './modules/modes/three-strikes.js';
 
 console.log('🎮 BATTLE MODE LOADING...');
 
@@ -43,23 +59,26 @@ function getCurrentPlayerId() {
 }
 
 /**
- * Blink the kart model to show invulnerability after a respawn.
+ * Blink the kart model to show invulnerability after a respawn.  (Task 1.1)
  * Toggles mesh visibility 8 times over 1.6 seconds then restores fully visible.
- * @param {THREE.Object3D|null} model - the car root mesh (may be null if not yet loaded)
+ * Uses Babylon.js mesh API (getChildMeshes / isVisible).
+ * @param {import('@babylonjs/core').AbstractMesh|null} model - the car root mesh
  */
 function _doRespawnBlink(model) {
   if (!model) return;
   let count = 0;
   const BLINKS = 8;
   const INTERVAL_MS = 200;
+  const children = model.getChildMeshes ? model.getChildMeshes(false) : [];
   const id = setInterval(() => {
-    model.traverse((child) => {
-      if (child.isMesh) child.visible = count % 2 === 0;
-    });
+    const visible = count % 2 === 0;
+    model.isVisible = visible;
+    for (const child of children) { child.isVisible = visible; }
     count++;
     if (count > BLINKS * 2) {
       clearInterval(id);
-      model.traverse((child) => { if (child.isMesh) child.visible = true; });
+      model.isVisible = true;
+      for (const child of children) { child.isVisible = true; }
     }
   }, INTERVAL_MS);
 }
@@ -74,19 +93,44 @@ try {
   if (savedConfig) {
     gameConfig = JSON.parse(savedConfig);
     
-    // Check if we're the host
+    // Check if we're the host (single-player always acts as host)
     const myPlayerId = getCurrentPlayerId();
-    isHost = gameConfig.players.some(player => player.id === myPlayerId && player.isHost);
+    isHost = !gameConfig?.multiplayer ||
+             (gameConfig?.players?.some(player => player.id === myPlayerId && player.isHost) ?? true);
     
     console.log('Battle config loaded:', gameConfig);
     console.log('Playing as host:', isHost);
     
     // Store player list
-    allPlayers = gameConfig.players;
+    allPlayers = gameConfig?.players || [];
   }
 } catch (e) {
   console.error('Error loading battle config:', e);
 }
+
+// ── Update loading screen with resolved content info ──
+{
+  const sub = document.querySelector('.loading-subtitle');
+  const trackEl = document.getElementById('loading-track');
+  const infoEl = document.getElementById('loading-info');
+  if (sub && gameConfig) {
+    const typeLabels = { deathmatch: 'Deathmatch', ctf: 'Capture the Flag', three_strikes: '3-Strikes Battle' };
+    sub.textContent = typeLabels[gameConfig.battleType] || 'BATTLE MODE';
+  }
+  if (trackEl && gameConfig) {
+    trackEl.textContent = gameConfig.arenaLabel || gameConfig.arenaId || '';
+  }
+  if (infoEl && gameConfig) {
+    const parts = [];
+    const bots = gameConfig.botCount ?? gameConfig.opponents;
+    if (typeof bots === 'number') parts.push(`${bots} Opponents`);
+    if (gameConfig.scoreLimit) parts.push(`Score Limit: ${gameConfig.scoreLimit}`);
+    if (gameConfig.loadout) parts.push(`Loadout: ${gameConfig.loadout}`);
+    if (parts.length) infoEl.textContent = parts.join('  ·  ');
+  }
+}
+
+publishDebugSnapshot(gameConfig);
 
 const useColyseusRealtime = Boolean(gameConfig?.multiplayer)
   && String(gameConfig?.multiplayerProvider || '').toLowerCase() === 'colyseus';
@@ -167,6 +211,7 @@ async function init() {
     camera = bRenderer.camera;
     renderer = bRenderer.engine;
     initParticles(scene); // Initialize particle / VFX pools
+    createDamageVignette(); // STK-style red flash on damage
 
     // Ensure canvas can receive keyboard focus
     bRenderer.canvas.tabIndex = 1;
@@ -180,9 +225,46 @@ async function init() {
 
     // Create arena (modular)
     console.log('Creating arena...');
-  // Support new lobby-driven arenaId field
-  const arenaId = (gameConfig && (gameConfig.arenaId || gameConfig.battleArena)) ? (gameConfig.arenaId || gameConfig.battleArena) : 'test_box';
+  const arenaId = (gameConfig?.arenaId || gameConfig?.battleArena || gameConfig?.trackId || 'test_box');
+
+  // Custom arena from Track Builder (via ?customArena=session)
+  const battleUrlParams = new URLSearchParams(window.location.search);
+  const isCustomArena = battleUrlParams.get('customArena') === 'session';
+
+  if (isCustomArena) {
+    try {
+      const raw = sessionStorage.getItem('customTrackData');
+      if (raw) {
+        const customArenaData = JSON.parse(raw);
+        // Build custom arena: load test_box as base, then overlay custom segments
+        arenaInfo = loadArena(scene, 'test_box');
+        import('./modules/track-editor.js').then(({ SEGMENT_TYPES }) => {
+          if (customArenaData.segments) {
+            for (const seg of customArenaData.segments) {
+              const st = SEGMENT_TYPES[seg.type];
+              const w = st?.width || 10;
+              const l = st?.length || 10;
+              if (window.BABYLON?.MeshBuilder) {
+                const mesh = window.BABYLON.MeshBuilder.CreateBox(`cseg_${seg.id}`, { width: w, height: 0.3, depth: l }, scene);
+                mesh.position.set(seg.position.x, seg.position.y + 0.15, seg.position.z);
+                const mat = new window.BABYLON.StandardMaterial(`csegMat_${seg.id}`, scene);
+                mat.diffuseColor = new window.BABYLON.Color3(0.3, 0.5, 0.9);
+                mesh.material = mat;
+              }
+            }
+          }
+          console.log(`Custom arena built: ${customArenaData.name}`);
+        });
+      } else {
+        arenaInfo = loadArena(scene, arenaId);
+      }
+    } catch (e) {
+      console.warn('Custom arena load failed, using default:', e);
+      arenaInfo = loadArena(scene, arenaId);
+    }
+  } else {
     arenaInfo = loadArena(scene, arenaId);
+  }
     window._battleArenaInfo = arenaInfo; // for debugging
     console.log('✅ Arena created', arenaInfo);
 
@@ -241,22 +323,31 @@ async function init() {
       initCtfMode();
     }
 
+    // 3-Strikes initialization is deferred until after bot creation (below)
+
     // Setup controls
     setupControls();
 
     // Create battle bots for single-player mode
-    if (!gameConfig || !gameConfig.multiplayer || gameConfig.players.length <= 1) {
-      const arenaId = (gameConfig && (gameConfig.arenaId || gameConfig.battleArena))
-        ? (gameConfig.arenaId || gameConfig.battleArena) : 'test_box';
+    if (!gameConfig || !gameConfig.multiplayer || (gameConfig?.players?.length ?? 0) <= 1) {
       const td = await loadTrackData(arenaId, 'arena');
       if (td) {
         battleNavmesh = getNavmesh(td);
         const spawnPos = td.spawnPositions || arenaInfo.spawnPoints.map(p => ({ position: [p.x, p.y, p.z], heading: 0 }));
         if (battleNavmesh) {
           battleBots = createBattleBots(scene, battleNavmesh, spawnPos, 4);
-          console.log(`✅ Created ${battleBots.length} battle bots`);
+          console.log(`Created ${battleBots.length} battle bots`);
         }
       }
+    }
+
+    // Initialize 3-Strikes with all participants (player + bots)
+    if (battleState.battleType === 'three_strikes') {
+      const ids = ['player'];
+      if (battleBots && battleBots.length) {
+        for (const b of battleBots) ids.push(b.kartId || b.id || `bot_${ids.length}`);
+      }
+      initThreeStrikes(ids);
     }
 
     // Initialize multiplayer if needed
@@ -314,6 +405,20 @@ async function createPlayerCar() {
       (loaded) => {
         wheelMeshes = loaded.wheelMeshes;
         carModel = loaded.carModel;
+
+        // ── Wire unified-scene kart refs for physics shims ──
+        const kartAgg = loaded.kartAggregate;
+        if (kartAgg) {
+          setKartRefs(kartAgg.body, carModel);
+          setPhysicsKartRefs(kartAgg.body, carModel);
+          window._kartAggregate = kartAgg;
+        }
+
+        // ── Wire FollowCamera to kart ──
+        if (bRenderer && bRenderer.setLockedTarget) {
+          bRenderer.setLockedTarget(carModel);
+        }
+
         console.log('✅ Player car visuals loaded');
       },
       bRenderer.shadowGen
@@ -377,6 +482,15 @@ function setupControls() {
   
   // Window resize
   window.addEventListener('resize', onWindowResize);
+  window.addEventListener('beforeunload', () => cleanupSoloBattle());
+}
+
+/** Dispose all subsystems for solo battle mode (14.4.1 cross-mode cleanup) */
+function cleanupSoloBattle() {
+  disposeBattleBots();
+  disposeParticles();
+  disposeThreeStrikes();
+  disposeAudio();
 }
 
 function handleWeaponFire() {
@@ -415,22 +529,41 @@ function applySpawnTransform() {
 }
 
 // ----- Health & Respawn (incremental) -----
-function applyDamage(amount) {
+function applyDamage(amount, weaponType) {
   // Hit VFX & SFX on local player
   if (carModel) {
     emitHitBurst(carModel.position, 0xff2222, 15);
-    playSFX('crash');
+    if (weaponType) playWeaponHitSFX(weaponType);
+    else playSFX('crash');
   }
+
+  // 3-Strikes mode: each hit costs one life instead of HP
+  if (battleState.battleType === 'three_strikes' && isThreeStrikesActive()) {
+    const result = onStrikeDamage('player');
+    triggerScreenShake(0.8, 0.4);
+    flashDamageVignette(0.7);
+    if (result.eliminated) {
+      battleState.health = 0;
+      battleState.battleFinished = true;
+    }
+    return;
+  }
+
   // Prefer modular health system if available
   if (healthSystem) {
     const st = healthSystem.damage(amount);
     battleState.health = st.health;
     battleState.invulnerable = !!st.invulnerable;
+    // Screen shake + red vignette on damage
+    triggerScreenShake(Math.min(1, amount / 50), 0.35);
+    flashDamageVignette(Math.min(1, amount / 40));
     return;
   }
   // Fallback simple logic
   if (battleState.invulnerable) return;
   battleState.health = Math.max(0, battleState.health - amount);
+  triggerScreenShake(Math.min(1, amount / 50), 0.35);
+  flashDamageVignette(Math.min(1, amount / 40));
   if (battleState.health <= 0) {
     respawnPlayer();
   }
@@ -484,10 +617,15 @@ function startCountdown() {
       updateCountdownOverlay('GO!');
       setTimeout(removeCountdownOverlay, 600);
 
+      // ── Unfreeze kart physics on GO! ──
+      if (window._kartAggregate) {
+        try {
+          window._kartAggregate.body.setMotionType(PhysicsMotionType.DYNAMIC);
+        } catch (e) { console.warn('Unfreeze kart failed:', e); }
+      }
+
       // Start engine sound & arena BGM
       startEngineSound();
-      const arenaId = (gameConfig && (gameConfig.arenaId || gameConfig.battleArena))
-        ? (gameConfig.arenaId || gameConfig.battleArena) : 'test_box';
       playTrackMusic(arenaId);
     }
   }, 1000);
@@ -580,8 +718,9 @@ function updateBattleUI() {
   const weaponDisplay = document.getElementById('weapon-display');
   if (weaponDisplay) {
     if (battleState.currentWeapon) {
+      const iconHTML = getWeaponIconHTML(battleState.currentWeapon.id, battleState.currentWeapon.icon || '🎯', 36);
       weaponDisplay.innerHTML = `
-        <span class="weapon-icon">${battleState.currentWeapon.icon || '🎯'}</span>
+        <span class="weapon-icon">${iconHTML}</span>
         <span class="weapon-name">${battleState.currentWeapon.name || 'WEAPON'}</span>
       `;
     } else {
@@ -724,6 +863,10 @@ function checkCtfWin() {
   if (!ctfState) return;
   if (ctfState.scores.red >= ctfState.scoreLimit || ctfState.scores.blue >= ctfState.scoreLimit) {
     battleState.battleFinished = true;
+    stopEngineSound();
+    stopBGM();
+    playSFX('race_win');
+    setTimeout(() => playPostRaceMusic(), 2500);
     const winner = ctfState.scores.red > ctfState.scores.blue ? 'RED' : 'BLUE';
     setTimeout(() => alert(`CTF Match Over: ${winner} team wins!`), 50);
   }
@@ -886,13 +1029,44 @@ function animate() {
   // Update battle bots
   if (battleBots.length > 0 && battleNavmesh) {
     updateBattleBots(battleBots, deltaTime, carModel, battleState, battleNavmesh, (bot) => {
-      // Bot fires at player — apply damage if not invulnerable
+      // Bot fires a projectile at player using lead-target prediction
       if (carModel && !battleState.invulnerable) {
         const dist = Vector3.Distance(bot.position, carModel.position);
         if (dist < 20) {
-          const damage = 10 + Math.floor(Math.random() * 15);
-          applyDamage(damage);
-          spawnDamageNumberAt(carModel.position.clone().addInPlace(new Vector3(0, 2, 0)), damage);
+          // Pick a random weapon for the bot
+          const botWeapons = ['bowling', 'plunger', 'cake', 'nitro', 'guided_missile'];
+          const weaponId = botWeapons[Math.floor(Math.random() * botWeapons.length)];
+          const wDef = getWeaponDef(weaponId);
+          if (wDef && wDef.speed > 0 && weaponsSystem) {
+            // Create a temporary mesh-like object for the bot's position/rotation
+            const botFire = { position: bot.position.clone(), rotationQuaternion: null };
+            // Use lead-target prediction: aim where player will be
+            const playerVel = bot._lastPlayerPos
+              ? carModel.position.subtract(bot._lastPlayerPos).scale(1 / Math.max(deltaTime, 0.016))
+              : Vector3.Zero();
+            bot._lastPlayerPos = carModel.position.clone();
+            const aimPoint = predictIntercept(bot.position, carModel.position, playerVel, wDef.speed);
+            const aimDir = aimPoint.subtract(bot.position).normalize();
+            botFire.rotationQuaternion = null;
+            // Fire from bot position toward predicted intercept
+            const startPos = bot.position.clone().addInPlace(new Vector3(0, 0.8, 0));
+            const vel = aimDir.scale(wDef.speed);
+            // Use weaponsSystem.fireFromActor won't work perfectly, so spawn projectile directly
+            if (typeof weaponsSystem.getState === 'function') {
+              const ws = weaponsSystem.getState();
+              const { MeshBuilder: _MB } = { MeshBuilder }; // already imported
+              // We piggyback on the weapons internal spawn by calling fireFromActor with a positioned mesh
+              const fakeMesh = { position: startPos, rotationQuaternion: null };
+              // Give fakeMesh a forward vector that points toward the aim point
+              Object.defineProperty(fakeMesh, '_aimDir', { value: aimDir });
+              weaponsSystem.fireFromActor(fakeMesh, weaponId);
+            }
+          } else {
+            // Fallback: instant damage for zero-speed weapons
+            const damage = 10 + Math.floor(Math.random() * 15);
+            applyDamage(damage);
+            spawnDamageNumberAt(carModel.position.clone().addInPlace(new Vector3(0, 2, 0)), damage);
+          }
         }
       }
       // Bot gets a point for attacking
@@ -909,14 +1083,50 @@ function animate() {
           if (!bot.alive || bot.invulnTimer > 0) continue;
           const d = Vector3.Distance(proj.mesh.position, bot.position);
           if (d < 3.0) {
-            const killed = damageBattleBot(bot, 25 + Math.floor(Math.random() * 15));
+            const weaponDef = getWeaponDef(proj.type);
+            const dmg = (weaponDef?.damage || 25) + Math.floor(Math.random() * 10);
+            const botId = bot.kartId || bot.id || `bot_${battleBots.indexOf(bot)}`;
+            let killed;
+            if (battleState.battleType === 'three_strikes' && isThreeStrikesActive()) {
+              const sr = onStrikeDamage(botId);
+              killed = sr.eliminated;
+              if (killed) damageBattleBot(bot, 9999);
+            } else {
+              killed = damageBattleBot(bot, dmg);
+            }
             if (killed) {
               battleState.score++;
               emitHitBurst(bot.position, 0xff4444, 20);
               playSFX('crash');
             }
-            // Remove projectile
-            proj.mesh.dispose();
+            // Blast radius: damage nearby bots too
+            if (weaponDef?.blastRadius > 0) {
+              emitExplosionRing(proj.mesh.position, weaponDef.color || 0xff6600, weaponDef.blastRadius);
+              for (const otherBot of battleBots) {
+                if (otherBot === bot || !otherBot.alive || otherBot.invulnTimer > 0) continue;
+                const bd = Vector3.Distance(proj.mesh.position, otherBot.position);
+                if (bd < weaponDef.blastRadius) {
+                  const falloff = 1 - (bd / weaponDef.blastRadius);
+                  const splashDmg = Math.max(5, Math.round(falloff * weaponDef.damage * 0.5));
+                  const splashBotId = otherBot.kartId || otherBot.id || `bot_${battleBots.indexOf(otherBot)}`;
+                  let splashKill;
+                  if (battleState.battleType === 'three_strikes' && isThreeStrikesActive()) {
+                    const sr = onStrikeDamage(splashBotId);
+                    splashKill = sr.eliminated;
+                    if (splashKill) damageBattleBot(otherBot, 9999);
+                  } else {
+                    splashKill = damageBattleBot(otherBot, splashDmg);
+                  }
+                  if (splashKill) {
+                    battleState.score++;
+                    emitHitBurst(otherBot.position, 0xff6644, 12);
+                  }
+                }
+              }
+            }
+            // Release trail and return mesh to pool
+            if (proj.trail) proj.trail.emitRate = 0;
+            if (proj.mesh) proj.mesh.setEnabled(false);
             projectiles.splice(pi, 1);
             break;
           }
@@ -932,7 +1142,15 @@ function animate() {
         const d = Vector3.Distance(bot.position, carModel.position);
         if (d < 3.0 && (mySpeedMS > 3 || bot.speed > 3)) {
           const impactDamage = Math.min(25, Math.max(5, Math.round((mySpeedMS + bot.speed) * 1.5)));
-          const killed = damageBattleBot(bot, impactDamage);
+          const collBotId = bot.kartId || bot.id || `bot_${battleBots.indexOf(bot)}`;
+          let killed;
+          if (battleState.battleType === 'three_strikes' && isThreeStrikesActive()) {
+            const sr = onStrikeDamage(collBotId);
+            killed = sr.eliminated;
+            if (killed) damageBattleBot(bot, 9999);
+          } else {
+            killed = damageBattleBot(bot, impactDamage);
+          }
           if (killed) {
             battleState.score++;
             emitHitBurst(bot.position, 0xff4444, 15);
@@ -944,6 +1162,25 @@ function animate() {
       }
     }
   }
+
+  // Three-Strikes win detection — check if player is last standing
+  if (battleState.battleType === 'three_strikes' && !battleState.battleFinished) {
+    const status = getStrikesStatus();
+    if (status.winner) {
+      battleState.battleFinished = true;
+      stopEngineSound();
+      stopBGM();
+      if (status.winner === 'player') {
+        playSFX('race_win');
+        setTimeout(() => playPostRaceMusic(), 2500);
+      } else {
+        playSFX('crash');
+      }
+      const msg = status.winner === 'player' ? '🎈 You Win!' : '💥 Eliminated!';
+      setTimeout(() => alert(msg), 50);
+    }
+  }
+
   // Floating damage numbers animation
   if (typeof updateDamageNumbers === 'function') {
     updateDamageNumbers(deltaTime);
@@ -951,6 +1188,9 @@ function animate() {
 
   // Update particles (drift sparks, boost flames, hit effects)
   updateParticles(deltaTime, carModel, kartState);
+
+  // Screen shake (per-frame)
+  updateScreenShake(deltaTime, document.getElementById('renderCanvas'));
 
   // Render (Babylon.js handles post-processing internally)
   scene.render();
@@ -1117,6 +1357,15 @@ window.flashDamageVisual = function() {
   if (dmgFlashTimer) { clearTimeout(dmgFlashTimer); dmgFlashTimer = null; }
   el.style.opacity = '1';
   dmgFlashTimer = setTimeout(() => { el.style.opacity = '0'; }, 150);
+  // Camera shake on hit
+  const canvas = document.querySelector('canvas');
+  if (canvas) {
+    canvas.style.transition = 'none';
+    canvas.style.transform = 'translate(4px, -3px)';
+    setTimeout(() => { canvas.style.transform = 'translate(-3px, 2px)'; }, 50);
+    setTimeout(() => { canvas.style.transform = 'translate(2px, -1px)'; }, 100);
+    setTimeout(() => { canvas.style.transform = ''; }, 150);
+  }
 };
 // Blink car when local damage happens (hook into onDamageEvent by global exposure)
 window.blinkCarOnDamage = window.blinkCarOnDamage || function(){};

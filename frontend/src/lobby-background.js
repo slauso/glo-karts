@@ -50,7 +50,7 @@ class LobbyBackground {
   }
 
   _syncEffect() {
-    this._effect = sessionStorage.getItem('gloEffect') || 'solid';
+    this._effect = sessionStorage.getItem('gloEffect') || 'falling-petals';
     this._color  = sessionStorage.getItem('gloColor')  || '#ff0080';
     this._color2 = sessionStorage.getItem('gloColor2') || '#00e5ff';
   }

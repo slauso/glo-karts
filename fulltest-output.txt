@@ -1,0 +1,136 @@
+﻿
+Running 204 tests using 1 worker
+
+  Γ£ÿ    1 [chromium-game] ΓÇ║ tests\01-spawn-sequence.spec.js:22:3 ΓÇ║ Spawn Sequence ΓÇ║ kart is hidden before matchLive and visible after (29.4s)
+  Γ£ÿ    2 [chromium-game] ΓÇ║ tests\01-spawn-sequence.spec.js:22:3 ΓÇ║ Spawn Sequence ΓÇ║ kart is hidden before matchLive and visible after (retry #1) (29.3s)
+  Γ£ÿ    3 [chromium-game] ΓÇ║ tests\01-spawn-sequence.spec.js:61:3 ΓÇ║ Spawn Sequence ΓÇ║ kart does not leave spawn area in first 500ms after GO (28.2s)
+  Γ£ÿ    4 [chromium-game] ΓÇ║ tests\01-spawn-sequence.spec.js:61:3 ΓÇ║ Spawn Sequence ΓÇ║ kart does not leave spawn area in first 500ms after GO (retry #1) (28.3s)
+  Γ£ÿ    5 [chromium-game] ΓÇ║ tests\01-spawn-sequence.spec.js:88:3 ΓÇ║ Spawn Sequence ΓÇ║ kart extents match arena kartScale (3.1s)
+  Γ£ÿ    6 [chromium-game] ΓÇ║ tests\01-spawn-sequence.spec.js:88:3 ΓÇ║ Spawn Sequence ΓÇ║ kart extents match arena kartScale (retry #1) (3.5s)
+node.exe : [map-audit] Amalfi Coast NON-VIABLE: zero track physics colliders
+At line:1 char:1
++ & "C:\Users\laptop\scoop\apps\nodejs\current/node.exe" "C:\Users\lapt ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: ([map-audit] Ama...ysics colliders 
+   :String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+  Γ£ô    7 [chromium-game] ΓÇ║ tests\02-map-viability.spec.js:115:5 ΓÇ║ Race Tracks ΓÇö Map Viability ΓÇ║ [race] Amalfi Coast (map1) (2.8s)
+[map-audit] Desert Dunes NON-VIABLE: zero track physics colliders
+  Γ£ô    8 [chromium-game] ΓÇ║ tests\02-map-viability.spec.js:115:5 ΓÇ║ Race Tracks ΓÇö Map Viability ΓÇ║ [race] Desert Dunes (map2) (2.6s)
+[map-audit] Cocoa Temple NON-VIABLE: zero track physics colliders
+  Γ£ô    9 [chromium-game] ΓÇ║ tests\02-map-viability.spec.js:115:5 ΓÇ║ Race Tracks ΓÇö Map Viability ΓÇ║ [race] Cocoa Temple (cocoa_temple) (2.6s)
+[map-audit] Cornfield Xing NON-VIABLE: zero track physics colliders
+  Γ£ô   10 [chromium-game] ΓÇ║ tests\02-map-viability.spec.js:115:5 ΓÇ║ Race Tracks ΓÇö Map Viability ΓÇ║ [race] Cornfield Xing (cornfield_crossing) (2.5s)
+[map-audit] Zen Garden NON-VIABLE: zero track physics colliders
+  Γ£ô   11 [chromium-game] ΓÇ║ tests\02-map-viability.spec.js:115:5 ΓÇ║ Race Tracks ΓÇö Map Viability ΓÇ║ [race] Zen Garden (zengarden) (2.6s)
+[map-audit] Hacienda NON-VIABLE: zero track physics colliders
+  Γ£ô   12 [chromium-game] ΓÇ║ tests\02-map-viability.spec.js:115:5 ΓÇ║ Race Tracks ΓÇö Map Viability ΓÇ║ [race] Hacienda (hacienda) (2.6s)
+[map-audit] Minigolf NON-VIABLE: zero track physics colliders
+  Γ£ô   13 [chromium-game] ΓÇ║ tests\02-map-viability.spec.js:115:5 ΓÇ║ Race Tracks ΓÇö Map Viability ΓÇ║ [race] Minigolf (minigolf) (2.6s)
+[map-audit] Shifting Sands NON-VIABLE: zero track physics colliders
+  Γ£ô   14 [chromium-game] ΓÇ║ tests\02-map-viability.spec.js:115:5 ΓÇ║ Race Tracks ΓÇö Map Viability ΓÇ║ [race] Shifting Sands (sandtrack) (2.7s)
+[map-audit] Snow Peak NON-VIABLE: zero track physics colliders
+  Γ£ô   15 [chromium-game] ΓÇ║ tests\02-map-viability.spec.js:115:5 ΓÇ║ Race Tracks ΓÇö Map Viability ΓÇ║ [race] Snow Peak (snowtuxpeak) (2.6s)
+[map-audit] Around the Lighthouse NON-VIABLE: zero track physics colliders
+  Γ£ô   16 [chromium-game] ΓÇ║ tests\02-map-viability.spec.js:115:5 ΓÇ║ Race Tracks ΓÇö Map Viability ΓÇ║ [race] Around the Lighthouse (lighthouse) (2.6s)
+[map-audit] Oliver's Math Class NON-VIABLE: zero track physics colliders
+  Γ£ô   17 [chromium-game] ΓÇ║ tests\02-map-viability.spec.js:115:5 ΓÇ║ Race Tracks ΓÇö Map Viability ΓÇ║ [race] Oliver's Math Class (olivermath) (2.7s)
+[map-audit] Black Forest NON-VIABLE: zero track physics colliders
+  Γ£ô   18 [chromium-game] ΓÇ║ tests\02-map-viability.spec.js:115:5 ΓÇ║ Race Tracks ΓÇö Map Viability ΓÇ║ [race] Black Forest (black_forest) (2.6s)
+[map-audit] XR591 NON-VIABLE: zero track physics colliders
+  Γ£ô   19 [chromium-game] ΓÇ║ tests\02-map-viability.spec.js:115:5 ΓÇ║ Race Tracks ΓÇö Map Viability ΓÇ║ [race] XR591 (xr591) (2.5s)
+[map-audit] Oasis NON-VIABLE: zero track physics colliders
+  Γ£ô   20 [chromium-game] ΓÇ║ tests\02-map-viability.spec.js:115:5 ΓÇ║ Race Tracks ΓÇö Map Viability ΓÇ║ [race] Oasis (oasis) (2.6s)
+[map-audit] Gran Paradiso Island NON-VIABLE: zero track physics colliders
+  Γ£ô   21 [chromium-game] ΓÇ║ tests\02-map-viability.spec.js:115:5 ΓÇ║ Race Tracks ΓÇö Map Viability ΓÇ║ [race] Gran Paradiso Island (gran_paradiso_island) (2.6s)
+[map-audit] Old Mine NON-VIABLE: zero track physics colliders
+  Γ£ô   22 [chromium-game] ΓÇ║ tests\02-map-viability.spec.js:115:5 ΓÇ║ Race Tracks ΓÇö Map Viability ΓÇ║ [race] Old Mine (mines) (2.6s)
+[map-audit] Northern Resort NON-VIABLE: zero track physics colliders
+  Γ£ô   23 [chromium-game] ΓÇ║ tests\02-map-viability.spec.js:115:5 ΓÇ║ Race Tracks ΓÇö Map Viability ΓÇ║ [race] Northern Resort (snowmountain) (2.3s)
+[map-audit] Antediluvian Abyss NON-VIABLE: zero track physics colliders
+  Γ£ô   24 [chromium-game] ΓÇ║ tests\02-map-viability.spec.js:115:5 ΓÇ║ Race Tracks ΓÇö Map Viability ΓÇ║ [race] Antediluvian Abyss (abyss) (2.6s)
+[map-audit] Volcan Island NON-VIABLE: zero track physics colliders
+  Γ£ô   25 [chromium-game] ΓÇ║ tests\02-map-viability.spec.js:115:5 ΓÇ║ Race Tracks ΓÇö Map Viability ΓÇ║ [race] Volcan Island (volcano_island) (2.5s)
+[map-audit] Ravenbridge Mansion NON-VIABLE: zero track physics colliders
+  Γ£ô   26 [chromium-game] ΓÇ║ tests\02-map-viability.spec.js:115:5 ΓÇ║ Race Tracks ΓÇö Map Viability ΓÇ║ [race] Ravenbridge Mansion (ravenbridge_mansion) (2.6s)
+[map-audit] Block Fort NON-VIABLE: zero track physics colliders
+  Γ£ô   27 [chromium-game] ΓÇ║ tests\02-map-viability.spec.js:163:5 ΓÇ║ Battle Arenas ΓÇö Map Viability ΓÇ║ [battle] Block Fort (blockfort) (2.6s)
+[map-audit] Battle Island NON-VIABLE: zero track physics colliders
+  Γ£ô   28 [chromium-game] ΓÇ║ tests\02-map-viability.spec.js:163:5 ΓÇ║ Battle Arenas ΓÇö Map Viability ΓÇ║ [battle] Battle Island (battleisland) (2.6s)
+[map-audit] Las Dunas Arena NON-VIABLE: zero track physics colliders
+  Γ£ô   29 [chromium-game] ΓÇ║ tests\02-map-viability.spec.js:163:5 ΓÇ║ Battle Arenas ΓÇö Map Viability ΓÇ║ [battle] Las Dunas Arena (lasdunasarena) (2.7s)
+[map-audit] Cave X NON-VIABLE: zero track physics colliders
+  Γ£ô   30 [chromium-game] ΓÇ║ tests\02-map-viability.spec.js:163:5 ΓÇ║ Battle Arenas ΓÇö Map Viability ΓÇ║ [battle] Cave X (cave) (2.6s)
+[map-audit] Pumpkin Park NON-VIABLE: zero track physics colliders
+  Γ£ô   31 [chromium-game] ΓÇ║ tests\02-map-viability.spec.js:163:5 ΓÇ║ Battle Arenas ΓÇö Map Viability ΓÇ║ [battle] Pumpkin Park (pumpkin_park) (2.6s)
+[map-audit] Candela City NON-VIABLE: zero track physics colliders
+  Γ£ô   32 [chromium-game] ΓÇ║ tests\02-map-viability.spec.js:163:5 ΓÇ║ Battle Arenas ΓÇö Map Viability ΓÇ║ [battle] Candela City (arena_candela_city) (2.6s)
+[map-audit] Ancient Colosseum NON-VIABLE: zero track physics colliders
+  Γ£ô   33 [chromium-game] ΓÇ║ tests\02-map-viability.spec.js:163:5 ΓÇ║ Battle Arenas ΓÇö Map Viability ΓÇ║ [battle] Ancient Colosseum (ancient_colosseum_labyrinth) (2.6s)
+[map-audit] The Stadium NON-VIABLE: zero track physics colliders
+  Γ£ô   34 [chromium-game] ΓÇ║ tests\02-map-viability.spec.js:163:5 ΓÇ║ Battle Arenas ΓÇö Map Viability ΓÇ║ [battle] The Stadium (stadium) (2.6s)
+[map-audit] Alien Signal NON-VIABLE: zero track physics colliders
+  Γ£ô   35 [chromium-game] ΓÇ║ tests\02-map-viability.spec.js:163:5 ΓÇ║ Battle Arenas ΓÇö Map Viability ΓÇ║ [battle] Alien Signal (alien_signal) (2.5s)
+[map-audit] Temple NON-VIABLE: zero track physics colliders
+
+[map-audit] Report written to C:\Users\laptop\twistedkart\frontend\tests\reports\map-viability.json
+[map-audit] Viable: 0 / 30
+  Γ£ù Amalfi Coast (map1): zero track physics colliders
+  Γ£ù Desert Dunes (map2): zero track physics colliders
+  Γ£ù Cocoa Temple (cocoa_temple): zero track physics colliders
+  Γ£ù Cornfield Xing (cornfield_crossing): zero track physics colliders
+  Γ£ù Zen Garden (zengarden): zero track physics colliders
+  Γ£ù Hacienda (hacienda): zero track physics colliders
+  Γ£ù Minigolf (minigolf): zero track physics colliders
+  Γ£ù Shifting Sands (sandtrack): zero track physics colliders
+  Γ£ù Snow Peak (snowtuxpeak): zero track physics colliders
+  Γ£ù Around the Lighthouse (lighthouse): zero track physics colliders
+  Γ£ù Oliver's Math Class (olivermath): zero track physics colliders
+  Γ£ù Black Forest (black_forest): zero track physics colliders
+  Γ£ù XR591 (xr591): zero track physics colliders
+  Γ£ù Oasis (oasis): zero track physics colliders
+  Γ£ù Gran Paradiso Island (gran_paradiso_island): zero track physics colliders
+  Γ£ù Old Mine (mines): zero track physics colliders
+  Γ£ù Northern Resort (snowmountain): zero track physics colliders
+  Γ£ù Antediluvian Abyss (abyss): zero track physics colliders
+  Γ£ù Volcan Island (volcano_island): zero track physics colliders
+  Γ£ù Ravenbridge Mansion (ravenbridge_mansion): zero track physics colliders
+  Γ£ù Block Fort (blockfort): zero track physics colliders
+  Γ£ù Battle Island (battleisland): zero track physics colliders
+  Γ£ù Las Dunas Arena (lasdunasarena): zero track physics colliders
+  Γ£ù Cave X (cave): zero track physics colliders
+  Γ£ù Pumpkin Park (pumpkin_park): zero track physics colliders
+  Γ£ù Candela City (arena_candela_city): zero track physics colliders
+  Γ£ù Ancient Colosseum (ancient_colosseum_labyrinth): zero track physics 
+colliders
+  Γ£ù The Stadium (stadium): zero track physics colliders
+  Γ£ù Alien Signal (alien_signal): zero track physics colliders
+  Γ£ù Temple (temple): zero track physics colliders
+  Γ£ô   36 [chromium-game] ΓÇ║ tests\02-map-viability.spec.js:163:5 ΓÇ║ Battle Arenas ΓÇö Map Viability ΓÇ║ [battle] Temple (temple) (2.8s)
+  Γ£ÿ   37 [chromium-game] ΓÇ║ tests\03-pvp-session.spec.js:32:3 ΓÇ║ PvP Battle Session ΓÇ║ 2 players join battle_room and reach matchLive (33.7s)
+  -   38 [chromium-game] ΓÇ║ tests\03-pvp-session.spec.js:94:3 ΓÇ║ PvP Battle Session ΓÇ║ item box pickup grants weapon to local player
+  -   39 [chromium-game] ΓÇ║ tests\03-pvp-session.spec.js:139:3 ΓÇ║ PvP Battle Session ΓÇ║ fire weapon broadcasts projectileFired to both players
+  -   40 [chromium-game] ΓÇ║ tests\03-pvp-session.spec.js:194:3 ΓÇ║ PvP Battle Session ΓÇ║ kart positions stay finite for both players during live play
+  Γ£ÿ   41 [chromium-game] ΓÇ║ tests\03-pvp-session.spec.js:32:3 ΓÇ║ PvP Battle Session ΓÇ║ 2 players join battle_room and reach matchLive (retry #1) (34.3s)
+  -   42 [chromium-game] ΓÇ║ tests\03-pvp-session.spec.js:94:3 ΓÇ║ PvP Battle Session ΓÇ║ item box pickup grants weapon to local player (retry #1)
+  -   43 [chromium-game] ΓÇ║ tests\03-pvp-session.spec.js:139:3 ΓÇ║ PvP Battle Session ΓÇ║ fire weapon broadcasts projectileFired to both players (retry #1)
+  -   44 [chromium-game] ΓÇ║ tests\03-pvp-session.spec.js:194:3 ΓÇ║ PvP Battle Session ΓÇ║ kart positions stay finite for both players during live play (retry #1)
+  Γ£ÿ   45 [chromium-game] ΓÇ║ tests\04-kart-scaling.spec.js:34:5 ΓÇ║ Kart Scaling per Arena ΓÇ║ Block Fort (blockfort) ΓÇö effective kart scale (3.4s)
+  Γ£ÿ   46 [chromium-game] ΓÇ║ tests\04-kart-scaling.spec.js:34:5 ΓÇ║ Kart Scaling per Arena ΓÇ║ Block Fort (blockfort) ΓÇö effective kart scale (retry #1) (3.4s)
+  Γ£ÿ   47 [chromium-game] ΓÇ║ tests\04-kart-scaling.spec.js:34:5 ΓÇ║ Kart Scaling per Arena ΓÇ║ Battle Island (battleisland) ΓÇö effective kart scale (3.5s)
+  Γ£ÿ   48 [chromium-game] ΓÇ║ tests\04-kart-scaling.spec.js:34:5 ΓÇ║ Kart Scaling per Arena ΓÇ║ Battle Island (battleisland) ΓÇö effective kart scale (retry #1) (3.5s)
+  Γ£ÿ   49 [chromium-game] ΓÇ║ tests\04-kart-scaling.spec.js:34:5 ΓÇ║ Kart Scaling per Arena ΓÇ║ Stadium (stadium) ΓÇö effective kart scale (3.5s)
+  Γ£ÿ   50 [chromium-game] ΓÇ║ tests\04-kart-scaling.spec.js:34:5 ΓÇ║ Kart Scaling per Arena ΓÇ║ Stadium (stadium) ΓÇö effective kart scale (retry #1) (3.4s)
+  Γ£ô   51 [chromium-game] ΓÇ║ tests\04-kart-scaling.spec.js:34:5 ΓÇ║ Kart Scaling per Arena ΓÇ║ Cocoa Temple (cocoa_temple) ΓÇö effective kart scale (2.9s)
+  Γ£ô   52 [chromium-game] ΓÇ║ tests\04-kart-scaling.spec.js:34:5 ΓÇ║ Kart Scaling per Arena ΓÇ║ Amalfi Coast (map1) ΓÇö effective kart scale (2.5s)
+  Γ£ô   53 [chromium-game] ΓÇ║ tests\04-kart-scaling.spec.js:86:3 ΓÇ║ Kart Scaling per Arena ΓÇ║ no arena produces a physics box wider than 6 m (8.8s)
+  Γ£ÿ   54 [chromium-game] ΓÇ║ tests\05-prematch-lobby.spec.js:26:3 ΓÇ║ Prematch Lobby ΓÇ║ loading screen shows then prematch lobby appears (23.3s)
+  Γ£ÿ   55 [chromium-game] ΓÇ║ tests\05-prematch-lobby.spec.js:26:3 ΓÇ║ Prematch Lobby ΓÇ║ loading screen shows then prematch lobby appears (retry #1) (23.4s)
+  Γ£ÿ   56 [chromium-game] ΓÇ║ tests\05-prematch-lobby.spec.js:45:3 ΓÇ║ Prematch Lobby ΓÇ║ player card displays correct name and GLO info (23.2s)
+  Γ£ÿ   57 [chromium-game] ΓÇ║ tests\05-prematch-lobby.spec.js:45:3 ΓÇ║ Prematch Lobby ΓÇ║ player card displays correct name and GLO info (retry #1) (23.1s)
+  Γ£ÿ   58 [chromium-game] ΓÇ║ tests\05-prematch-lobby.spec.js:76:3 ΓÇ║ Prematch Lobby ΓÇ║ countdown starts and decrements (23.1s)
+  Γ£ÿ   59 [chromium-game] ΓÇ║ tests\05-prematch-lobby.spec.js:76:3 ΓÇ║ Prematch Lobby ΓÇ║ countdown starts and decrements (retry #1) (23.1s)
+  Γ£ÿ   60 [chromium-game] ΓÇ║ tests\05-prematch-lobby.spec.js:111:3 ΓÇ║ Prematch Lobby ΓÇ║ lobby hides and game canvas visible after matchLive (33.2s)
+  Γ£ÿ   61 [chromium-game] ΓÇ║ tests\05-prematch-lobby.spec.js:111:3 ΓÇ║ Prematch Lobby ΓÇ║ lobby hides and game canvas visible after matchLive (retry #1) (33.2s)
+  Γ£ÿ   62 [chromium-game] ΓÇ║ tests\05-prematch-lobby.spec.js:135:3 ΓÇ║ Prematch Lobby ΓÇ║ full transition flow: load ΓåÆ lobby ΓåÆ countdown ΓåÆ game (23.3s)

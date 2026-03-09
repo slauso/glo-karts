@@ -503,6 +503,7 @@ body::after {
   position: relative;
   min-height: 280px;
   max-height: 780px;
+  padding-bottom: 35%;
   overflow: hidden;
 
   /* Rotating turntable spotlight — tinted by GLO colour */
@@ -708,6 +709,12 @@ body::after {
   border-radius: var(--r-btn);
   margin-top: 3px;
 }
+#play-btn:disabled {
+  opacity: 0.35;
+  filter: saturate(0);
+  cursor: not-allowed;
+  pointer-events: none;
+}
 
 /* Ready button states */
 #ready-btn {
@@ -904,9 +911,42 @@ input[type="text"]:focus, input[type="number"]:focus {
 input::placeholder { color: var(--text-muted); font-size: 0.88rem; }
 #join-code-input { max-width: 100%; }
 
-/* Player name */
-.player-name-container { width: 100%; max-width: 280px; text-align: center; }
-.player-name-container h3, .color-carousel h3 {
+/* Player name — compact field inside kart-selector */
+#player-name-input {
+  width: 80%;
+  max-width: 200px;
+  padding: 5px 10px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  border-radius: 8px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-top-color: rgba(255,255,255,0.18);
+  color: #fff;
+  text-align: center;
+  outline: none;
+  transition: border-color 0.2s, background 0.2s, box-shadow 0.2s;
+  box-shadow: 0 1px 0 rgba(255,255,255,0.04) inset, 0 2px 6px rgba(0,0,0,0.18);
+}
+#player-name-input:focus {
+  background: rgba(255,255,255,0.10);
+  border-color: rgba(var(--glo-rgb), 0.50);
+  box-shadow: 0 0 8px rgba(var(--glo-rgb), 0.15);
+}
+#player-name-input::placeholder {
+  color: var(--text-muted);
+  opacity: 0.5;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  font-size: 0.62rem;
+  font-weight: 600;
+  transition: opacity 0.3s ease;
+}
+#player-name-input.ph-fade::placeholder {
+  opacity: 0;
+}
+.color-carousel h3 {
   font-family: var(--font-ui);
   font-weight: 700;
   font-size: 0.72rem;
@@ -946,6 +986,24 @@ input::placeholder { color: var(--text-muted); font-size: 0.88rem; }
   gap: 8px;
 }
 .join-section { margin-top: 8px; }
+
+/* Import Custom Track */
+.import-track-section {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--lg-border);
+}
+.import-track-label {
+  font-family: var(--font-ui);
+  font-weight: 700;
+  font-size: 0.65rem;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+  text-align: center;
+}
+
 .status-message {
   color: var(--accent);
   font-size: 0.82rem;
@@ -1456,6 +1514,22 @@ input::placeholder { color: var(--text-muted); font-size: 0.88rem; }
 .battle-hint { font-size: 0.78rem; color: var(--text-muted); margin-top: 6px; font-style: italic; }
 .battle-settings.hidden  { display: none; }
 
+/* Cup selector cards (Grand Prix) */
+.cup-cards { display: flex; flex-direction: column; gap: 8px; }
+.cup-card {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 14px; border-radius: 12px; cursor: pointer;
+  background: rgba(255,255,255,0.03); border: 1px solid var(--lg-border);
+  transition: background 0.15s, border-color 0.15s;
+}
+.cup-card:hover { background: rgba(255,255,255,0.07); }
+.cup-card.active { border-color: var(--accent); background: rgba(255,0,128,0.08); }
+.cup-card-icon { font-size: 1.5rem; flex-shrink: 0; }
+.cup-card-info { flex: 1; min-width: 0; }
+.cup-card-name { font-size: 0.9rem; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: #fff; }
+.cup-card-desc { font-size: 0.72rem; color: var(--text-muted); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cup-card-theme { font-size: 0.65rem; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: var(--accent); flex-shrink: 0; }
+
 /* Responsive */
 @media (max-width: 1200px) {
   .left-panel, .right-panel { width: 25%; }
@@ -1570,7 +1644,7 @@ input::placeholder { color: var(--text-muted); font-size: 0.88rem; }
   }
 
   /* Prevent kart-selector from getting too wide */
-  .kart-selector, .glo-picker, .player-name-container {
+  .kart-selector, .glo-picker {
     max-width: 100%;
   }
 
@@ -1593,7 +1667,7 @@ input::placeholder { color: var(--text-muted); font-size: 0.88rem; }
   width: 100%;
   max-width: 320px;
   padding: 8px 12px 10px;
-  margin-top: -96px;
+  margin-top: -164px;
   pointer-events: none;
 }
 .kart-selector > * {
@@ -1946,13 +2020,13 @@ select#battle-max-players option {
 /* Arrow buttons */
 .glo-drum-arrow {
   flex-shrink: 0;
-  width: 30px;
-  height: 30px;
+  width: 44px;
+  height: 44px;
   border-radius: 50%;
   border: 1px solid var(--lg-border);
   background: rgba(255,255,255,0.05);
   color: var(--text-sub);
-  font-size: 1.30rem;
+  font-size: 1.6rem;
   font-weight: 700;
   line-height: 1;
   padding: 0;
@@ -1974,7 +2048,7 @@ select#battle-max-players option {
 .glo-drum-vp {
   flex: 1;
   position: relative;
-  perspective: 380px;
+  perspective: 600px;
   overflow: hidden;
   border-radius: 10px;
   /* top+bottom gradient fades the peeking adjacent faces */
@@ -1999,14 +2073,18 @@ select#battle-max-players option {
 /* Individual face on the drum */
 .glo-drum-face {
   position: absolute;
-  inset: 0;
+  width: 100%;
+  height: 100%;
+  top: 0;
+  left: 0;
   backface-visibility: hidden;
   overflow: hidden;
   border-radius: 10px;
   border: 1px solid rgba(255,255,255,0.10);
   border-top-color: rgba(255,255,255,0.18);
   display: flex;
-  align-items: flex-end;
+  align-items: center;
+  justify-content: center;
   transition: border-color 0.25s, box-shadow 0.25s;
 }
 /* Animated background layer — animations live here, NOT on the face itself */
@@ -2032,19 +2110,17 @@ select#battle-max-players option {
               0 0 0 1px rgba(0,200,255,0.14);
 }
 
-/* Label bar pinned to the bottom of each effect face */
+/* Label bar centered on each effect face */
 .glo-drum-face-lbl {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
+  position: relative;
   z-index: 2;
-  padding: 3px 6px 4px;
-  background: rgba(0,0,0,0.72);
+  width: 100%;
+  padding: 2px 6px;
+  background: rgba(0,0,0,0.55);
   font-family: var(--font-ui);
   font-weight: 700;
-  font-size: 0.56rem;
-  letter-spacing: 0.1px;
+  font-size: 0.72rem;
+  letter-spacing: 0.5px;
   color: #fff;
   text-align: center;
   white-space: nowrap;
@@ -2064,15 +2140,15 @@ select#battle-max-players option {
 /* Scenes faces layout */
 .glo-drum-face--scenes {
   flex-direction: column;
-  align-items: flex-start;
-  justify-content: space-between;
+  align-items: center;
+  justify-content: center;
 }
 
 /* Colour face variant — bar style matching scenes */
 .glo-drum-face--color {
   flex-direction: column;
-  align-items: flex-start;
-  justify-content: space-between;
+  align-items: center;
+  justify-content: center;
   border-color: rgba(0,180,255,0.18);
 }
 
@@ -2093,8 +2169,8 @@ select#battle-max-players option {
 .glo-spectrum {
   flex: 1;
   position: relative;
-  height: 10px;
-  border-radius: 5px;
+  height: 22px;
+  border-radius: 11px;
   background: linear-gradient(to right,
     #f00, #ff8000, #ff0, #80ff00,
     #0f0, #00ff80, #0ff, #0080ff,
@@ -2106,10 +2182,10 @@ select#battle-max-players option {
 .glo-spectrum-thumb {
   position: absolute;
   top: -4px;
-  width: 6px;
+  width: 10px;
   height: calc(100% + 8px);
   background: #fff;
-  border-radius: 3px;
+  border-radius: 5px;
   transform: translateX(-50%);
   box-shadow: 0 0 5px rgba(0,0,0,0.5), 0 0 0 1px rgba(0,0,0,0.25);
   pointer-events: none;
@@ -2253,6 +2329,7 @@ select#battle-max-players option {
   flex-direction: column;
   gap: 6px;
   padding: 8px 14px;
+  margin-top: 32px;
   background: linear-gradient(
     150deg,
     rgba(255,255,255,0.041) 0%,

@@ -5,8 +5,10 @@ import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial';
 import { VertexBuffer } from '@babylonjs/core/Buffers/buffer';
 import { SceneLoader } from '@babylonjs/core/Loading/sceneLoader';
 import "@babylonjs/loaders/glTF";
+import { PhysicsAggregate } from '@babylonjs/core/Physics/v2/physicsAggregate';
+import { PhysicsShapeType } from '@babylonjs/core/Physics/v2/IPhysicsEnginePlugin';
 import { isSTKArena, getTrackModelPath, getTrackScale, getStartPosition } from '../track-data.js';
-import { createTrackCollider, createBoxCollider } from '../havok-physics.js';
+import { FILTER, applyFilterToAggregate } from '../realtime/collision-layers.js';
 
 // Load a battle arena into the scene (Havok physics via havok-physics.js)
 // Returns { spawnPoints: Array<{x,y,z}>, bounds: {width, depth} }
@@ -63,9 +65,8 @@ function loadSTKArena(scene, arenaId) {
 }
 
 function addArenaColliderHavok(meshes, root) {
-  const vertices = [];
-  const indices = [];
-  let indexOffset = 0;
+  const scene = root.getScene();
+  let colliderCount = 0;
 
   root.computeWorldMatrix(true);
 
@@ -74,27 +75,16 @@ function addArenaColliderHavok(meshes, root) {
     const positions = mesh.getVerticesData(VertexBuffer.PositionKind);
     if (!positions) return;
 
-    mesh.computeWorldMatrix(true);
-    const worldMatrix = mesh.getWorldMatrix();
-    const vertexCount = positions.length / 3;
-
-    for (let i = 0; i < vertexCount; i++) {
-      const local = new Vector3(positions[i * 3], positions[i * 3 + 1], positions[i * 3 + 2]);
-      const world = Vector3.TransformCoordinates(local, worldMatrix);
-      vertices.push(world.x, world.y, world.z);
+    try {
+      const agg = new PhysicsAggregate(mesh, PhysicsShapeType.MESH, { mass: 0, friction: 0.8 }, scene);
+      applyFilterToAggregate(agg, FILTER.TRACK);
+      colliderCount++;
+    } catch (e) {
+      console.warn('Arena mesh collider failed:', mesh.name, e.message);
     }
-
-    const meshIndices = mesh.getIndices();
-    if (meshIndices) {
-      for (let i = 0; i < meshIndices.length; i++) indices.push(meshIndices[i] + indexOffset);
-    } else {
-      for (let i = 0; i < vertexCount; i++) indices.push(i + indexOffset);
-    }
-    indexOffset += vertexCount;
   });
 
-  createTrackCollider(new Float32Array(vertices), new Uint32Array(indices), 1.0);
-  console.log(`Arena Havok collider created (${indices.length / 3} triangles)`);
+  console.log(`Arena Havok colliders created (${colliderCount} meshes)`);
 }
 
 function createBoxArena(scene) {
@@ -108,7 +98,11 @@ function createBoxArena(scene) {
   ground.material = groundMat;
   ground.receiveShadows = true;
 
-  createBoxCollider({ x: width / 2, y: 0.5, z: depth / 2 }, { x: 0, y: -0.5, z: 0 }, 0, 0.9);
+  // Unified-scene: PhysicsAggregate on the visual ground mesh
+  try {
+    const groundAgg = new PhysicsAggregate(ground, PhysicsShapeType.BOX, { mass: 0, friction: 0.9 }, scene);
+    applyFilterToAggregate(groundAgg, FILTER.TRACK);
+  } catch (e) { console.warn('Arena ground collider failed:', e); }
 
   const wallMat = new StandardMaterial('arenaWallMat', scene);
   wallMat.diffuseColor = new Color3(1, 0.42, 0.42);
@@ -128,11 +122,11 @@ function createBoxArena(scene) {
     wallMesh.position.copyFromFloats(w.pos[0], w.pos[1], w.pos[2]);
     wallMesh.rotation.y = w.rotY;
     wallMesh.receiveShadows = true;
-    createBoxCollider(
-      { x: w.size[0] / 2, y: w.size[1] / 2, z: w.size[2] / 2 },
-      { x: w.pos[0], y: w.pos[1], z: w.pos[2] },
-      w.rotY, 0.6,
-    );
+    // Unified-scene: PhysicsAggregate on the visual wall mesh
+    try {
+      const wallAgg = new PhysicsAggregate(wallMesh, PhysicsShapeType.BOX, { mass: 0, friction: 0.6 }, scene);
+      applyFilterToAggregate(wallAgg, FILTER.BOUNDARY);
+    } catch (e) { console.warn('Arena wall collider failed:', e); }
   });
 
   const spawnPoints = [];

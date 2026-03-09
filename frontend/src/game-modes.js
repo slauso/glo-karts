@@ -8,12 +8,21 @@
  *  Category   │ Mode              │ Page           │ Status
  * ────────────┼───────────────────┼────────────────┼──────────
  *  solo       │ quick_race        │ game.html      │ ready
- *  solo       │ time_trial        │ game.html      │ planned
- *  solo       │ grand_prix        │ game.html      │ planned
- *  solo       │ free_roam         │ game.html      │ planned
+ *  solo       │ time_trial        │ game.html      │ ready
+ *  solo       │ grand_prix        │ game.html      │ ready
+ *  solo       │ free_roam         │ game.html      │ ready
+ *  solo       │ follow_the_leader │ game.html      │ ready
+ *  solo       │ soccer            │ game.html      │ ready
  *  solo       │ battle_solo       │ battle.html    │ ready
+ *  solo       │ three_strikes     │ battle.html    │ ready
  *  online     │ race_online       │ realtime.html  │ ready
  *  online     │ battle_online     │ realtime.html  │ ready
+ *  local      │ local_2p_race     │ splitscreen.html│ beta
+ *  local      │ local_2p_battle   │ splitscreen.html│ beta
+ *  tools      │ track_builder     │ builder.html   │ ready
+ *  shop       │ marketplace       │ marketplace.html│ beta
+ *  gloflux    │ gloflux_race      │ gloflux.html   │ beta
+ *  gloflux    │ gloflux_arena     │ gloflux.html   │ beta
  * ────────────┴───────────────────┴────────────────┴──────────
  *
  * Adding a new mode:
@@ -23,6 +32,8 @@
  *   3. The lobby UI auto-renders from this registry — no other
  *      file changes needed.
  */
+
+import { buildResolvedModeConfig, resolveModePage } from './modules/single-player-routing.js';
 
 // ── Status enum ────────────────────────────────────────────────
 export const MODE_STATUS = {
@@ -46,6 +57,30 @@ export const CATEGORIES = {
     desc:  'Race or battle with friends in real-time lobbies.',
     icon:  'fa-globe',
   },
+  tools: {
+    id:    'tools',
+    label: 'TOOLS',
+    desc:  'Build and share custom tracks.',
+    icon:  'fa-wrench',
+  },
+  local: {
+    id:    'local',
+    label: 'LOCAL',
+    desc:  'Splitscreen multiplayer on one device.',
+    icon:  'fa-users',
+  },
+  shop: {
+    id:    'shop',
+    label: 'SHOP',
+    desc:  'Browse and purchase add-ons with GLOs tokens.',
+    icon:  'fa-store',
+  },
+  gloflux: {
+    id:    'gloflux',
+    label: 'gloFLUX',
+    desc:  'Symbiotic kart warfare in a post-nuclear wasteland.',
+    icon:  'fa-radiation',
+  },
 };
 
 // ── Mode registry ──────────────────────────────────────────────
@@ -61,15 +96,21 @@ export const MODE_REGISTRY = {
     icon:     'fa-flag-checkered',
     page:     'game.html',
     status:   MODE_STATUS.READY,
+    requiresLobby: false,
     // Which selectors the lobby must show for this mode
     selectors: { track: true, arena: false, battleSettings: false },
     // Fields injected into gameConfig
     buildConfig(lobby) {
       return {
-        gameMode:      'race',
-        trackId:       lobby.selectedMap,
-        isSinglePlayer: true,
-        selectedKart:  sessionStorage.getItem('selectedKart') || 'tux',
+        gameMode:             'race',
+        subMode:              'quick_race',
+        singlePlayerMode:     true,
+        multiplayer:          false,
+        runtimeProvider:      'page-runtime',
+        maxPlayers:           1,
+        botCount:             0,
+        trackId:              lobby.selectedMap || 'test_box',
+        selectedKart:         sessionStorage.getItem('selectedKart') || 'tux',
       };
     },
   },
@@ -82,15 +123,20 @@ export const MODE_REGISTRY = {
     icon:     'fa-stopwatch',
     page:     'game.html',
     status:   MODE_STATUS.READY,
+    requiresLobby: false,
     selectors: { track: true, arena: false, battleSettings: false },
     buildConfig(lobby) {
       return {
-        gameMode:       'race',
-        subMode:        'time_trial',
-        trackId:        lobby.selectedMap,
-        isSinglePlayer: true,
-        noItems:        true,
-        selectedKart:   sessionStorage.getItem('selectedKart') || 'tux',
+        gameMode:             'race',
+        subMode:              'time_trial',
+        singlePlayerMode:     true,
+        multiplayer:          false,
+        runtimeProvider:      'page-runtime',
+        maxPlayers:           1,
+        botCount:             0,
+        trackId:              lobby.selectedMap || 'test_box',
+        noItems:              true,
+        selectedKart:         sessionStorage.getItem('selectedKart') || 'tux',
       };
     },
   },
@@ -103,14 +149,19 @@ export const MODE_REGISTRY = {
     icon:     'fa-trophy',
     page:     'game.html',
     status:   MODE_STATUS.READY,
+    requiresLobby: false,
     selectors: { track: false, arena: false, battleSettings: false, cup: true },
     buildConfig(lobby) {
       return {
-        gameMode:       'race',
-        subMode:        'grand_prix',
-        cupId:          lobby.selectedCup || 'starter',
-        isSinglePlayer: true,
-        selectedKart:   sessionStorage.getItem('selectedKart') || 'tux',
+        gameMode:             'race',
+        subMode:              'grand_prix',
+        singlePlayerMode:     true,
+        multiplayer:          false,
+        runtimeProvider:      'page-runtime',
+        maxPlayers:           1,
+        botCount:             0,
+        cupId:                lobby.selectedCup || 'starter',
+        selectedKart:         sessionStorage.getItem('selectedKart') || 'tux',
       };
     },
   },
@@ -123,20 +174,23 @@ export const MODE_REGISTRY = {
     icon:     'fa-crosshairs',
     page:     'battle.html',
     status:   MODE_STATUS.READY,
+    requiresLobby: false,
     selectors: { track: false, arena: true, battleSettings: true },
     buildConfig(lobby) {
       return {
-        gameMode:        'battle',
-        trackId:         lobby.selectedMap,
-        arenaId:         lobby.selectedMap,
-        battleType:      lobby.selectedBattleType || 'deathmatch',
-        isSinglePlayer:  true,
-        maxPlayers:      lobby.selectedMaxPlayers || 12,
-        botCount:        lobby.selectedBotCount   || 6,
-        loadoutId:       lobby.selectedLoadout    || 'random-all',
-        collisionDamage: !!document.getElementById('battle-collision-damage')?.checked,
-        scoreLimit:      parseInt(document.getElementById('battle-score-limit')?.value || '5', 10) || 5,
-        selectedKart:    sessionStorage.getItem('selectedKart') || 'tux',
+        gameMode:             'battle',
+        singlePlayerMode:     true,
+        multiplayer:          false,
+        runtimeProvider:      'page-runtime',
+        maxPlayers:           1,
+        botCount:             0,
+        trackId:              lobby.selectedMap || 'test_box',
+        arenaId:              lobby.selectedMap || 'test_box',
+        battleType:           lobby.selectedBattleType || 'deathmatch',
+        loadoutId:            lobby.selectedLoadout    || 'random-all',
+        collisionDamage:      !!document.getElementById('battle-collision-damage')?.checked,
+        scoreLimit:           parseInt(document.getElementById('battle-score-limit')?.value || '5', 10) || 5,
+        selectedKart:         sessionStorage.getItem('selectedKart') || 'tux',
       };
     },
   },
@@ -149,16 +203,98 @@ export const MODE_REGISTRY = {
     icon:     'fa-compass',
     page:     'game.html',
     status:   MODE_STATUS.READY,
+    requiresLobby: false,
     selectors: { track: true, arena: false, battleSettings: false },
     buildConfig(lobby) {
       return {
-        gameMode:       'race',
-        subMode:        'free_roam',
-        trackId:        lobby.selectedMap,
-        isSinglePlayer: true,
-        noItems:        true,
-        noOpponents:    true,
-        selectedKart:   sessionStorage.getItem('selectedKart') || 'tux',
+        gameMode:             'race',
+        subMode:              'free_roam',
+        singlePlayerMode:     true,
+        multiplayer:          false,
+        runtimeProvider:      'page-runtime',
+        maxPlayers:           1,
+        botCount:             0,
+        trackId:              lobby.selectedMap || 'test_box',
+        noItems:              true,
+        noOpponents:          true,
+        selectedKart:         sessionStorage.getItem('selectedKart') || 'tux',
+      };
+    },
+  },
+
+  follow_the_leader: {
+    id:       'follow_the_leader',
+    category: 'solo',
+    label:    'Follow the Leader',
+    desc:     'Last-place racer is eliminated every 30 seconds — survive to win!',
+    icon:     'fa-users',
+    page:     'game.html',
+    status:   MODE_STATUS.READY,
+    requiresLobby: false,
+    selectors: { track: true, arena: false, battleSettings: false },
+    buildConfig(lobby) {
+      return {
+        gameMode:             'race',
+        subMode:              'follow_the_leader',
+        singlePlayerMode:     true,
+        multiplayer:          false,
+        runtimeProvider:      'page-runtime',
+        maxPlayers:           1,
+        botCount:             0,
+        trackId:              lobby.selectedMap || 'test_box',
+        selectedKart:         sessionStorage.getItem('selectedKart') || 'tux',
+      };
+    },
+  },
+
+  soccer: {
+    id:       'soccer',
+    category: 'solo',
+    label:    'Soccer',
+    desc:     'Drive the ball into the goal — first to 5 wins!',
+    icon:     'fa-futbol',
+    page:     'game.html',
+    status:   MODE_STATUS.READY,
+    requiresLobby: false,
+    selectors: { track: false, arena: false, battleSettings: false },
+    buildConfig(lobby) {
+      return {
+        gameMode:             'race',
+        subMode:              'soccer',
+        singlePlayerMode:     true,
+        multiplayer:          false,
+        runtimeProvider:      'page-runtime',
+        maxPlayers:           1,
+        botCount:             0,
+        trackId:              lobby.selectedMap || 'test_box',
+        selectedKart:         sessionStorage.getItem('selectedKart') || 'tux',
+      };
+    },
+  },
+
+  three_strikes: {
+    id:       'three_strikes',
+    category: 'solo',
+    label:    '3-Strikes Battle',
+    desc:     'Each hit costs a balloon — lose all 3 and you\'re out!',
+    icon:     'fa-bomb',
+    page:     'battle.html',
+    status:   MODE_STATUS.READY,
+    requiresLobby: false,
+    selectors: { track: false, arena: true, battleSettings: false },
+    buildConfig(lobby) {
+      return {
+        gameMode:             'battle',
+        singlePlayerMode:     true,
+        multiplayer:          false,
+        runtimeProvider:      'page-runtime',
+        maxPlayers:           1,
+        botCount:             0,
+        trackId:              lobby.selectedMap || 'test_box',
+        arenaId:              lobby.selectedMap || 'test_box',
+        battleType:           'three_strikes',
+        loadoutId:            lobby.selectedLoadout    || 'random-all',
+        selectedKart:         sessionStorage.getItem('selectedKart') || 'tux',
       };
     },
   },
@@ -210,6 +346,133 @@ export const MODE_REGISTRY = {
       };
     },
   },
+
+  /* ── Tools ────────────────────────────────────────────── */
+
+  track_builder: {
+    id:       'track_builder',
+    category: 'tools',
+    label:    'Track Builder',
+    desc:     'Build custom tracks and share them with friends.',
+    icon:     'fa-road',
+    page:     'builder.html',
+    status:   MODE_STATUS.READY,
+    selectors: { track: false, arena: false, battleSettings: false },
+    buildConfig() {
+      return { gameMode: 'builder' };
+    },
+  },
+
+  /* ── Local splitscreen ────────────────────────────────── */
+
+  local_2p_race: {
+    id:       'local_2p_race',
+    category: 'local',
+    label:    '2P Race',
+    desc:     'Vertical splitscreen race — WASD vs Arrow keys.',
+    icon:     'fa-columns',
+    page:     'splitscreen.html',
+    status:   MODE_STATUS.BETA,
+    selectors: { track: true, arena: false, battleSettings: false },
+    buildConfig(lobby) {
+      return {
+        gameMode:       'splitscreen_race',
+        trackId:        lobby.selectedMap || 'test_box',
+        isSinglePlayer: false,
+        p1Kart:         sessionStorage.getItem('selectedKart') || 'tux',
+        p2Kart:         'nolok',
+      };
+    },
+  },
+
+  local_2p_battle: {
+    id:       'local_2p_battle',
+    category: 'local',
+    label:    '2P Battle',
+    desc:     'Splitscreen arena combat — WASD vs Arrow keys.',
+    icon:     'fa-columns',
+    page:     'splitscreen.html',
+    status:   MODE_STATUS.BETA,
+    selectors: { track: false, arena: true, battleSettings: false },
+    buildConfig(lobby) {
+      return {
+        gameMode:        'splitscreen_battle',
+        trackId:         lobby.selectedMap || 'test_box',
+        arenaId:         lobby.selectedMap || 'test_box',
+        isSinglePlayer:  false,
+        p1Kart:          sessionStorage.getItem('selectedKart') || 'tux',
+        p2Kart:          'nolok',
+      };
+    },
+  },
+
+  /* ── Marketplace ──────────────────────────────────────── */
+
+  marketplace: {
+    id:       'marketplace',
+    category: 'shop',
+    label:    'Addon Marketplace',
+    desc:     'Browse and purchase karts, tracks, skins, and effects with GLOs.',
+    icon:     'fa-shopping-cart',
+    page:     'marketplace.html',
+    status:   MODE_STATUS.BETA,
+    selectors: { track: false, arena: false, battleSettings: false },
+    buildConfig() {
+      return { gameMode: 'marketplace' };
+    },
+  },
+
+  /* ── gloFLUX — Symbiotic Wasteland Warfare ────────────── */
+
+  gloflux_race: {
+    id:       'gloflux_race',
+    category: 'gloflux',
+    label:    'Flux Race',
+    desc:     '5-lap race through mutating wasteland circuits with symbiotic power-ups.',
+    icon:     'fa-radiation',
+    page:     'gloflux.html',
+    status:   MODE_STATUS.BETA,
+    requiresLobby: true,
+    selectors: { track: false, arena: false, battleSettings: false },
+    buildConfig(lobby) {
+      return {
+        gameMode:         'gloflux',
+        subMode:          'gloflux_race',
+        variant:          'race',
+        arenaTheme:       lobby?.arenaTheme || 'nuclear_desert',
+        maxPlayers:       lobby?.selectedMaxPlayers || 8,
+        singlePlayerMode: false,
+        multiplayer:      true,
+        multiplayerProvider: 'colyseus',
+        selectedKart:     sessionStorage.getItem('selectedKart') || 'tux',
+      };
+    },
+  },
+
+  gloflux_arena: {
+    id:       'gloflux_arena',
+    category: 'gloflux',
+    label:    'Flux Arena',
+    desc:     'Last kart standing in a shrinking post-nuclear wasteland.',
+    icon:     'fa-radiation',
+    page:     'gloflux.html',
+    status:   MODE_STATUS.BETA,
+    requiresLobby: true,
+    selectors: { track: false, arena: false, battleSettings: false },
+    buildConfig(lobby) {
+      return {
+        gameMode:         'gloflux',
+        subMode:          'gloflux_arena',
+        variant:          'arena',
+        arenaTheme:       lobby?.arenaTheme || 'nuclear_desert',
+        maxPlayers:       lobby?.selectedMaxPlayers || 8,
+        singlePlayerMode: false,
+        multiplayer:      true,
+        multiplayerProvider: 'colyseus',
+        selectedKart:     sessionStorage.getItem('selectedKart') || 'tux',
+      };
+    },
+  },
 };
 
 // ── Public helpers ──────────────────────────────────────────────
@@ -239,8 +502,7 @@ export function getCategoryTree(opts) {
 
 /** Resolve the target page for a mode id. */
 export function getPageForMode(modeId) {
-  const mode = MODE_REGISTRY[modeId];
-  return mode ? mode.page : 'index.html';
+  return resolveModePage(modeId);
 }
 
 /** Does this mode require creating/joining an online lobby first? */
@@ -262,7 +524,7 @@ export function buildGameConfig(modeId, lobbyState, players = []) {
   const mode = MODE_REGISTRY[modeId];
   if (!mode) throw new Error(`Unknown game mode: ${modeId}`);
 
-  const base = mode.buildConfig(lobbyState);
+  const base = buildResolvedModeConfig(modeId, lobbyState) || mode.buildConfig(lobbyState);
   return {
     type: 'startGame',
     modeId,

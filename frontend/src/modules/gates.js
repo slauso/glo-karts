@@ -203,13 +203,6 @@ export function showFinishMessage(totalGates, resetCallback) {
   // Set the raceFinished state to true
   window.raceState.raceFinished = true;
   
-  // Hide speedometer
-  const speedometer = document.getElementById('speedometer');
-  if (speedometer) {
-    speedometer.style.opacity = '0';
-    speedometer.style.transition = 'opacity 0.5s ease';
-  }
-  
   // Get race completion time
   const raceTimer = document.querySelector('div[style*="position: absolute"][style*="top: 20px"][style*="left: 50%"]');
   const finalTime = raceTimer ? raceTimer.innerText : "00:00";
