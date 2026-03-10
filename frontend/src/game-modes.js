@@ -10,11 +10,6 @@
  *  solo       │ quick_race        │ game.html      │ ready
  *  solo       │ time_trial        │ game.html      │ ready
  *  solo       │ grand_prix        │ game.html      │ ready
- *  solo       │ free_roam         │ game.html      │ ready
- *  solo       │ follow_the_leader │ game.html      │ ready
- *  solo       │ soccer            │ game.html      │ ready
- *  solo       │ battle_solo       │ battle.html    │ ready
- *  solo       │ three_strikes     │ battle.html    │ ready
  *  online     │ race_online       │ realtime.html  │ ready
  *  online     │ battle_online     │ realtime.html  │ ready
  *  local      │ local_2p_race     │ splitscreen.html│ beta
@@ -59,13 +54,13 @@ export const CATEGORIES = {
   },
   tools: {
     id:    'tools',
-    label: 'TOOLS',
+    label: 'BUILD',
     desc:  'Build and share custom tracks.',
     icon:  'fa-wrench',
   },
   local: {
     id:    'local',
-    label: 'LOCAL',
+    label: 'Split Screen',
     desc:  'Splitscreen multiplayer on one device.',
     icon:  'fa-users',
   },
@@ -87,6 +82,31 @@ export const CATEGORIES = {
 export const MODE_REGISTRY = {
 
   /* ── Solo modes ───────────────────────────────────────────── */
+
+  grand_prix: {
+    id:       'grand_prix',
+    category: 'solo',
+    label:    'Glo Prix',
+    desc:     'Compete in a series of races across curated cups.',
+    icon:     'fa-trophy',
+    page:     'game.html',
+    status:   MODE_STATUS.READY,
+    requiresLobby: false,
+    selectors: { track: false, arena: false, battleSettings: false, cup: true },
+    buildConfig(lobby) {
+      return {
+        gameMode:             'race',
+        subMode:              'grand_prix',
+        singlePlayerMode:     true,
+        multiplayer:          false,
+        runtimeProvider:      'page-runtime',
+        maxPlayers:           1,
+        botCount:             0,
+        cupId:                lobby.selectedCup || 'starter',
+        selectedKart:         sessionStorage.getItem('selectedKart') || 'tux',
+      };
+    },
+  },
 
   quick_race: {
     id:       'quick_race',
@@ -141,165 +161,21 @@ export const MODE_REGISTRY = {
     },
   },
 
-  grand_prix: {
-    id:       'grand_prix',
-    category: 'solo',
-    label:    'Grand Prix',
-    desc:     'Compete in a series of races across curated cups.',
-    icon:     'fa-trophy',
-    page:     'game.html',
-    status:   MODE_STATUS.READY,
-    requiresLobby: false,
-    selectors: { track: false, arena: false, battleSettings: false, cup: true },
-    buildConfig(lobby) {
-      return {
-        gameMode:             'race',
-        subMode:              'grand_prix',
-        singlePlayerMode:     true,
-        multiplayer:          false,
-        runtimeProvider:      'page-runtime',
-        maxPlayers:           1,
-        botCount:             0,
-        cupId:                lobby.selectedCup || 'starter',
-        selectedKart:         sessionStorage.getItem('selectedKart') || 'tux',
-      };
-    },
-  },
-
-  battle_solo: {
-    id:       'battle_solo',
-    category: 'solo',
-    label:    'Battle',
-    desc:     'Arena combat with bots — Deathmatch or Capture the Flag.',
-    icon:     'fa-crosshairs',
-    page:     'battle.html',
-    status:   MODE_STATUS.READY,
-    requiresLobby: false,
-    selectors: { track: false, arena: true, battleSettings: true },
-    buildConfig(lobby) {
-      return {
-        gameMode:             'battle',
-        singlePlayerMode:     true,
-        multiplayer:          false,
-        runtimeProvider:      'page-runtime',
-        maxPlayers:           1,
-        botCount:             0,
-        trackId:              lobby.selectedMap || 'test_box',
-        arenaId:              lobby.selectedMap || 'test_box',
-        battleType:           lobby.selectedBattleType || 'deathmatch',
-        loadoutId:            lobby.selectedLoadout    || 'random-all',
-        collisionDamage:      !!document.getElementById('battle-collision-damage')?.checked,
-        scoreLimit:           parseInt(document.getElementById('battle-score-limit')?.value || '5', 10) || 5,
-        selectedKart:         sessionStorage.getItem('selectedKart') || 'tux',
-      };
-    },
-  },
-
-  free_roam: {
-    id:       'free_roam',
-    category: 'solo',
-    label:    'Free Roam',
-    desc:     'Explore any track with no timer and no opponents.',
-    icon:     'fa-compass',
-    page:     'game.html',
-    status:   MODE_STATUS.READY,
-    requiresLobby: false,
-    selectors: { track: true, arena: false, battleSettings: false },
-    buildConfig(lobby) {
-      return {
-        gameMode:             'race',
-        subMode:              'free_roam',
-        singlePlayerMode:     true,
-        multiplayer:          false,
-        runtimeProvider:      'page-runtime',
-        maxPlayers:           1,
-        botCount:             0,
-        trackId:              lobby.selectedMap || 'test_box',
-        noItems:              true,
-        noOpponents:          true,
-        selectedKart:         sessionStorage.getItem('selectedKart') || 'tux',
-      };
-    },
-  },
-
-  follow_the_leader: {
-    id:       'follow_the_leader',
-    category: 'solo',
-    label:    'Follow the Leader',
-    desc:     'Last-place racer is eliminated every 30 seconds — survive to win!',
-    icon:     'fa-users',
-    page:     'game.html',
-    status:   MODE_STATUS.READY,
-    requiresLobby: false,
-    selectors: { track: true, arena: false, battleSettings: false },
-    buildConfig(lobby) {
-      return {
-        gameMode:             'race',
-        subMode:              'follow_the_leader',
-        singlePlayerMode:     true,
-        multiplayer:          false,
-        runtimeProvider:      'page-runtime',
-        maxPlayers:           1,
-        botCount:             0,
-        trackId:              lobby.selectedMap || 'test_box',
-        selectedKart:         sessionStorage.getItem('selectedKart') || 'tux',
-      };
-    },
-  },
-
-  soccer: {
-    id:       'soccer',
-    category: 'solo',
-    label:    'Soccer',
-    desc:     'Drive the ball into the goal — first to 5 wins!',
-    icon:     'fa-futbol',
-    page:     'game.html',
-    status:   MODE_STATUS.READY,
-    requiresLobby: false,
-    selectors: { track: false, arena: false, battleSettings: false },
-    buildConfig(lobby) {
-      return {
-        gameMode:             'race',
-        subMode:              'soccer',
-        singlePlayerMode:     true,
-        multiplayer:          false,
-        runtimeProvider:      'page-runtime',
-        maxPlayers:           1,
-        botCount:             0,
-        trackId:              lobby.selectedMap || 'test_box',
-        selectedKart:         sessionStorage.getItem('selectedKart') || 'tux',
-      };
-    },
-  },
-
-  three_strikes: {
-    id:       'three_strikes',
-    category: 'solo',
-    label:    '3-Strikes Battle',
-    desc:     'Each hit costs a balloon — lose all 3 and you\'re out!',
-    icon:     'fa-bomb',
-    page:     'battle.html',
-    status:   MODE_STATUS.READY,
-    requiresLobby: false,
-    selectors: { track: false, arena: true, battleSettings: false },
-    buildConfig(lobby) {
-      return {
-        gameMode:             'battle',
-        singlePlayerMode:     true,
-        multiplayer:          false,
-        runtimeProvider:      'page-runtime',
-        maxPlayers:           1,
-        botCount:             0,
-        trackId:              lobby.selectedMap || 'test_box',
-        arenaId:              lobby.selectedMap || 'test_box',
-        battleType:           'three_strikes',
-        loadoutId:            lobby.selectedLoadout    || 'random-all',
-        selectedKart:         sessionStorage.getItem('selectedKart') || 'tux',
-      };
-    },
-  },
-
   /* ── Online modes ─────────────────────────────────────────── */
+
+
+  create_party: {
+    id:       'create_party',
+    category: 'online',
+    label:    'Create Party',
+    desc:     'Create a custom multiplayer lobby and invite friends.',
+    icon:     'fa-users',
+    page:     'lobby.html',
+    status:   MODE_STATUS.READY,
+    selectors: { track: false, arena: false, battleSettings: false },
+    requiresLobby: false,
+    buildConfig(lobby) { return {}; },
+  },
 
   race_online: {
     id:       'race_online',
@@ -364,6 +240,20 @@ export const MODE_REGISTRY = {
   },
 
   /* ── Local splitscreen ────────────────────────────────── */
+
+
+  track_builder: {
+    id:       'track_builder',
+    category: 'tools',
+    label:    'Track Builder',
+    desc:     'Build custom tracks and share them with friends.',
+    icon:     'fa-wrench',
+    page:     'builder.html',
+    status:   MODE_STATUS.READY,
+    selectors: { track: false, arena: false, battleSettings: false },
+    requiresLobby: false,
+    buildConfig(lobby) { return {}; },
+  },
 
   local_2p_race: {
     id:       'local_2p_race',

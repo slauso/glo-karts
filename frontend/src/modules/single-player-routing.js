@@ -7,7 +7,6 @@ import {
 
 const ARENA_MODE_IDS = new Set([
   'battle_solo',
-  'three_strikes',
   'soccer',
   'battle_online',
   'local_2p_battle',
@@ -108,7 +107,6 @@ export function resolveModePage(modeId) {
     case 'soccer':
       return 'game.html';
     case 'battle_solo':
-    case 'three_strikes':
       return 'battle.html';
     case 'local_2p_race':
     case 'local_2p_battle':
@@ -272,27 +270,6 @@ export function buildResolvedModeConfig(modeId, lobbyState = {}) {
       };
     }
 
-    case 'three_strikes': {
-      const { arenaId, fallbackCause } = resolveArenaSelection(lobbyState.selectedMap, modeId);
-      return {
-        gameMode: 'battle',
-        subMode: 'three_strikes',
-        singlePlayerMode: true,
-        multiplayer: false,
-        runtimeProvider: 'page-runtime',
-        maxPlayers: 1,
-        botCount: requestedBotCount ?? 4,
-        trackId: arenaId,
-        arenaId,
-        contentType: 'arena',
-        resolvedContentId: arenaId,
-        fallbackCause,
-        battleType: 'three_strikes',
-        loadoutId: lobbyState.selectedLoadout || 'random-all',
-        selectedKart,
-      };
-    }
-
     case 'race_online':
       return {
         gameMode: 'race',
@@ -371,3 +348,5 @@ export function buildResolvedModeConfig(modeId, lobbyState = {}) {
       return null;
   }
 }
+
+

@@ -14,9 +14,9 @@ export const GAME_MODES = {
 import { getTrackRegistry } from './track-data.js';
 
 export const SINGLE_PLAYER_RACE_MODES = {
-  quick_race: { id: 'quick_race', label: 'Quick Race' },
-  time_attack: { id: 'time_attack', label: 'Time Attack' },
-  grand_prix: { id: 'grand_prix', label: 'Grand Prix' },
+  
+  time_trial: { id: 'time_trial', label: 'Rally' },
+  grand_prix: { id: 'grand_prix', label: 'Glo Prix' },
 };
 
 // ── Single-player cups — Procedural demo course only ───────────────
@@ -173,8 +173,8 @@ export function resolveSinglePlayerCup(cupId = 'starter') {
   return SINGLE_PLAYER_CUPS[cupId] || SINGLE_PLAYER_CUPS.starter;
 }
 
-export function resolveSinglePlayerRaceMode(modeId = 'quick_race') {
-  return SINGLE_PLAYER_RACE_MODES[modeId] || SINGLE_PLAYER_RACE_MODES.quick_race;
+export function resolveSinglePlayerRaceMode(modeId = 'time_trial') {
+  return SINGLE_PLAYER_RACE_MODES[modeId] || SINGLE_PLAYER_RACE_MODES.time_trial;
 }
 
 export function resolveTimeAttackTargets(trackId = 'glo_circuit') {

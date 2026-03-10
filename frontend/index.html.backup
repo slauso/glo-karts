@@ -95,17 +95,30 @@
 
     <!-- Main Content Area -->
     <main class="game-content">
-      <!-- Left Lens Stack -->
-      <section class="lens-stack lens-stack-left">
-        <nav class="lens-nav lens-nav-left">
-          <button class="lens-pill lens-pill-guided active" data-lens="mode" id="left-mode-pill">
-            <span class="lens-pill-main"><i class="fas fa-sliders-h"></i><span>MODE</span></span>
-            <span class="lens-pill-sub">Choose how to play</span>
-          </button>
-        </nav>
-        <div class="lens-deck">
-         <div class="lens-card active" data-lens="mode">
-          <div class="panel-content">
+      <!-- Left Side - Host Controls -->
+      <section class="left-panel">
+        <div class="panel-content">
+          <div id="host-controls">
+            <button id="create-party-btn" class="icon-btn create-btn">Create Party</button>
+            <button id="quick-match-btn" class="icon-btn join-btn">Quick Match</button>
+            <button id="track-builder-btn" class="icon-btn builder-btn" onclick="window.location.href='builder.html'">Track Builder</button>
+
+            <div id="host-info" class="hidden">
+              <!-- Party Code Display -->
+              <div class="code-display">
+                <div class="code-box">
+                  <span id="party-code" class="code">XXXXXX</span>
+                  <button id="copy-code-btn" class="icon-btn">Copy</button>
+                </div>
+                <p class="code-instructions">Share this code with friends</p>
+                <button id="host-stop-btn" class="icon-btn stop-btn">Stop Hosting</button>
+              </div>
+              
+              <!-- Host's Stop Hosting Button -->
+              
+            </div>
+          </div>
+          
           <!-- Game Mode Selector (populated by game-modes.js) -->
           <div class="mode-selector-container">
             <h3 class="mode-selector-title">GAME MODE</h3>
@@ -113,24 +126,8 @@
             <div class="mode-category-tabs" id="mode-category-tabs"></div>
             <!-- Mode cards within selected category -->
             <div class="mode-cards" id="mode-cards"></div>
-            <div id="tool-import-track-section" class="import-track-section hidden">
-              <p class="import-track-label">CUSTOM TRACK</p>
-              <div class="code-input">
-                <input type="text" id="import-track-code" placeholder="Paste share code" maxlength="65536">
-                <button id="import-track-btn" class="icon-btn join-btn">Import</button>
-              </div>
-              <p id="import-track-status" class="status-message"></p>
-            </div>
           </div>
-          <button class="lens-pill lens-pill-guided mode-setup-cta hidden" id="left-setup-cta" type="button">
-            <span class="lens-pill-main"><i class="fas fa-layer-group"></i><span>SETUP</span></span>
-            <span class="lens-pill-sub">More options</span>
-            <span class="lens-pill-cue" aria-hidden="true"><i class="fas fa-arrow-right"></i></span>
-          </button>
-          </div>
-         </div>
-         <div class="lens-card" data-lens="track">
-          <div class="panel-content">
+          
           <div class="map-selector-container">
             <!-- 3D Track Carousel -->
             <div class="track-carousel">
@@ -242,8 +239,6 @@
             </div>
             <p class="battle-hint">Flux matches are online-only. Host the lobby, ready up, then ignite the start.</p>
           </div>
-          </div>
-         </div>
         </div>
       </section>
       
@@ -284,66 +279,38 @@
 
         <!-- Action Buttons -->
         <button id="play-btn" class="game-btn play-btn" disabled>PLAY GAME</button>
-        <div id="play-btn-indicator" class="play-indicator hidden">
-          <span class="play-indicator-dot"></span>
-          <span id="play-indicator-label" class="play-indicator-label">Select a mode</span>
-        </div>
         <button id="ready-btn" class="game-btn ready-btn hidden">READY UP</button>
         <button id="start-match-btn" class="game-btn start-match-btn hidden">START MATCH</button>
       </section>
       
-      <!-- Right Lens Stack -->
-      <section class="lens-stack lens-stack-right">
-        <nav class="lens-nav">
-          <div class="lens-pill lens-pill-join active" data-lens="lobby-join">
-            <div class="lens-pill-join-header"><i class="fas fa-users"></i> LOBBY & JOIN</div>
-            <div class="join-section">
-              <div id="code-input">
-                <div class="code-input lens-pill-code-input">
-                  <input type="text" id="join-code-input" placeholder="Enter lobby code" maxlength="64">
-                  <button id="join-party-btn" class="icon-btn join-btn">Join</button>
-                </div>
-                <p id="join-status" class="status-message"></p>
+      <!-- Right Side - Players List and Join -->
+      <section class="right-panel">
+        <div class="panel-content">
+          <h2 class="panel-title racers-title"><span class="gb-g">G</span><span class="gb-s">L</span><span class="gb-s">O</span><span class="gb-l">B</span><span class="gb-l">B</span><span class="gb-l">Y</span></h2>
+          <div class="players-container">
+            <ul id="player-list" class="player-list"></ul>
+            <div id="ready-count" class="ready-count hidden"></div>
+          </div>
+          
+          <!-- Join Lobby Section -->
+          <div class="join-section">
+            <div id="code-input">
+              <div class="code-input">
+                <input type="text" id="join-code-input" placeholder="Enter lobby code" maxlength="64">
+                <button id="join-party-btn" class="icon-btn join-btn">Join</button>
               </div>
+              <p id="join-status" class="status-message"></p>
             </div>
           </div>
-        </nav>
-        <div class="lens-deck">
-          <div class="lens-card active" data-lens="lobby-join">
-            <div class="panel-content">
-              <h2 class="panel-title racers-title"><span class="gb-g">G</span><span class="gb-s">L</span><span class="gb-s">O</span><span class="gb-l">B</span><span class="gb-l">B</span><span class="gb-l">Y</span></h2>
 
-              <!-- Lobby Dashboard — hidden until a lobby connects -->
-              <div id="host-info" class="lobby-dashboard hidden">
-                <div class="lobby-dash-status-row">
-                  <span id="lobby-connection-badge" class="lobby-state-badge">LOBBY LIVE</span>
-                  <span id="lobby-role-chip" class="lobby-meta-chip">HOST</span>
-                  <span id="lobby-server-chip" class="lobby-meta-chip is-online">ONLINE</span>
-                </div>
-
-                <div class="lobby-dash-code-block">
-                  <span class="lobby-code-label">SHARE THIS CODE</span>
-                  <div class="code-box">
-                    <span id="party-code" class="code">XXXXXX</span>
-                    <button id="copy-code-btn" class="icon-btn">Copy</button>
-                  </div>
-                  <p class="lobby-code-hint">Friends paste this code in "Enter lobby code" to join your party.</p>
-                </div>
-
-                <div class="lobby-dash-meta-row">
-                  <span id="lobby-privacy-chip" class="lobby-meta-chip">PRIVATE</span>
-                  <span id="lobby-player-chip" class="lobby-meta-chip">1 PLAYER</span>
-                </div>
-
-                <p id="lobby-status-detail" class="lobby-status-detail">Waiting for players…</p>
-                <button id="host-stop-btn" class="icon-btn stop-btn">Stop Hosting</button>
-              </div>
-
-              <div class="players-container">
-                <ul id="player-list" class="player-list"></ul>
-                <div id="ready-count" class="ready-count hidden"></div>
-              </div>
+          <!-- Import Custom Track Section -->
+          <div class="import-track-section">
+            <p class="import-track-label">CUSTOM TRACK</p>
+            <div class="code-input">
+              <input type="text" id="import-track-code" placeholder="Paste share code" maxlength="65536">
+              <button id="import-track-btn" class="icon-btn join-btn">Import</button>
             </div>
+            <p id="import-track-status" class="status-message"></p>
           </div>
         </div>
       </section>
@@ -405,5 +372,3 @@
   </script>
 </body>
 </html>
-
-

@@ -107,6 +107,77 @@ function hexToRgb(hex) {
 
 // ── Main class ───────────────────────────────────────────────────
 class KartPreview {
+    // ── Sparkle Particle System ─────────────────────────────
+    _initSparkleParticles() {
+      // Pre-allocate pool
+      for (let i = 0; i < this.sparkleMax; ++i) {
+        const mat = new THREE.SpriteMaterial({
+          color: 0xffffff,
+          opacity: 0,
+          transparent: true,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false,
+        });
+        const sprite = new THREE.Sprite(mat);
+        sprite.scale.set(0.18, 0.18, 1);
+        sprite.position.set(0, 0.1, 0);
+        sprite.visible = false;
+        this.sparklePool.push(sprite);
+        this.scene && this.scene.add(sprite);
+      }
+    }
+
+    _emitSparkleParticle(color) {
+      // Find an available particle
+      const p = this.sparklePool.find(s => !s.visible);
+      if (!p) return;
+      // Emit from under the kart, outward
+      const theta = Math.random() * Math.PI * 2;
+      const r = Math.random() * 0.6 + 0.15;
+      p.position.set(Math.cos(theta) * r, 0.045, Math.sin(theta) * r);
+      // Outward velocity (radial)
+      const speed = 0.11 + Math.random() * 0.07;
+      p.userData = {
+        t: 0,
+        life: 0.28 + Math.random() * 0.13,
+        vx: Math.cos(theta) * speed,
+        vy: 0.03 + Math.random() * 0.01,
+        vz: Math.sin(theta) * speed,
+        fade: 0.7 + Math.random() * 0.3,
+      };
+      p.material.color.copy(color);
+      p.material.opacity = 0.85;
+      p.material.needsUpdate = true;
+      p.scale.setScalar(0.02 + Math.random() * 0.01);
+      p.visible = true;
+      this.sparkleParticles.push(p);
+    }
+
+    _updateSparkleParticles(dt, color) {
+      // Occasionally emit a new sparkle
+      if (Math.random() < dt * 1.5 && this.sparkleParticles.length < this.sparkleMax) {
+        this._emitSparkleParticle(color);
+      }
+      // Animate all visible sparkles
+      for (let i = this.sparkleParticles.length - 1; i >= 0; --i) {
+        const p = this.sparkleParticles[i];
+        if (!p.visible) { this.sparkleParticles.splice(i, 1); continue; }
+        p.userData.t += dt;
+        p.position.x += p.userData.vx * dt;
+        p.position.y += p.userData.vy * dt;
+        p.position.z += p.userData.vz * dt;
+        // Fade out
+        const fade = 1 - (p.userData.t / p.userData.life);
+        p.material.opacity = Math.max(0, fade * p.userData.fade);
+        p.material.needsUpdate = true;
+        p.scale.setScalar((0.02 + Math.sin(p.userData.t * 8) * 0.004) * fade);
+        // Remove if expired
+        if (p.userData.t > p.userData.life) {
+          p.visible = false;
+          this.sparkleParticles.splice(i, 1);
+        }
+      }
+    }
   constructor() {
     this.container = document.getElementById('car-model-container');
     this.scene     = null;
@@ -141,6 +212,70 @@ class KartPreview {
     this._lastFrame    = 0;      // for real delta-time
     this._boundAnimate = this.animate.bind(this); // avoid per-frame alloc
 
+    // Under-glow effect meshes
+    this.pulseRing = null;
+    this.pulseRingTime = 0;
+    this.sparkleParticles = [];
+    this.sparklePool = [];
+    this.sparkleMax = 4;
+    this._initPulseRing = () => {
+      if (this.pulseRing) return;
+
+      // Even thicker ring: inner 0.7, outer 2.7
+      const ringGeo = new THREE.RingGeometry(0.7, 2.7, 80);
+
+      // Create an even softer radial alphaMap for ultra-smooth edges
+      const size = 256;
+      const canvas = document.createElement('canvas');
+      canvas.width = canvas.height = size;
+      const ctx = canvas.getContext('2d');
+      const half = size / 2;
+      // Soften the inner edge and outer edge more
+      const grad = ctx.createRadialGradient(half, half, size * 0.28, half, half, half);
+      grad.addColorStop(0.00, 'rgba(255,255,255,1.0)');
+      grad.addColorStop(0.55, 'rgba(255,255,255,0.5)');
+      grad.addColorStop(0.80, 'rgba(255,255,255,0.08)');
+      grad.addColorStop(1.00, 'rgba(255,255,255,0.0)');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, size, size);
+      const alphaMap = new THREE.CanvasTexture(canvas);
+
+      const ringMat = new THREE.MeshBasicMaterial({
+        color: 0xffffff,
+        transparent: true,
+        opacity: 0,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+        alphaMap: alphaMap,
+      });
+      this.pulseRing = new THREE.Mesh(ringGeo, ringMat);
+      this.pulseRing.rotation.x = -Math.PI / 2;
+      this.pulseRing.position.y = 0.051;
+      this.pulseRing.visible = true;
+      this.scene && this.scene.add(this.pulseRing);
+    };
+    this._initSparkleParticles = () => {
+      if (this.sparklePool.length) return;
+      for (let i = 0; i < this.sparkleMax; ++i) {
+        const mat = new THREE.SpriteMaterial({
+          color: 0xffffff,
+          opacity: 0,
+          transparent: true,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false,
+        });
+        const sprite = new THREE.Sprite(mat);
+        sprite.scale.set(0.03, 0.03, 1);
+        sprite.position.set(0, 0.05, 0);
+        sprite.visible = false;
+        this.sparklePool.push(sprite);
+        this.scene && this.scene.add(sprite);
+      }
+    };
+    // Initialize effect meshes after scene is created
+    setTimeout(() => { this._initPulseRing(); this._initSparkleParticles(); }, 0);
+
     // Swap transition state
     this._exitingKart      = null;
     this._exitingKartScale = 1;
@@ -165,6 +300,9 @@ class KartPreview {
     if (!this.container) return;
 
     this.scene = new THREE.Scene();
+    
+    // Shift the entire 3D scene up by ~15% relative to the fixed camera to clear the background title
+    this.scene.position.y = 0.25; // Lower 10% (0.1 units drop in normalized-ish scope from 0.55) 
 
     // Lighting
     const ambient = new THREE.AmbientLight(0xffffff, 0.7);
@@ -194,7 +332,8 @@ class KartPreview {
     this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.setSize(w, renderH);
-    this.renderer.domElement.style.marginTop = `${-(renderH - h)}px`;
+    // Shift model frame down by aligning top and cropping the bottom instead of the top
+    this.renderer.domElement.style.marginTop = `0px`;
     this.renderer.setClearColor(0x000000, 0);
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -428,6 +567,43 @@ class KartPreview {
       this.glowLight.color.copy(col);
       this.glowLight.intensity = 5.5 * intensity;
     }
+    // Exclude tires from underglow: keep them dark and unaffected
+    if (this._wheels && this._wheels.length > 0) {
+      for (const tire of this._wheels) {
+        if (tire.isTire && tire.material) {
+          tire.material.color.set(0x1a1a1a);
+          if (tire.material.emissive) tire.material.emissive.set(0x000000);
+          tire.material.emissiveIntensity = 0;
+          tire.material.needsUpdate = true;
+        }
+      }
+    }
+
+    // Animate pulse ring
+    this.pulseRingTime += dt;
+    if (this.pulseRing) {
+      // Pulse every 1.5s
+      const cycle = 1.5;
+      let t = (this.pulseRingTime % cycle) / cycle;
+      // Start at kart base, expand outward
+      let scale = 0.7 + t * 2.2;
+      // Fade out as it grows, but start strong
+      let opacity = 0.44 * (1 - t) * (0.7 + 0.6 * (1 - t)) * intensity;
+      this.pulseRing.material.color.copy(col);
+      this.pulseRing.material.opacity = opacity;
+      this.pulseRing.scale.set(scale, scale, scale);
+      // Always position directly below kart
+      this.pulseRing.position.x = 0;
+      this.pulseRing.position.z = 0;
+      this.pulseRing.position.y = 0.051;
+      this.pulseRing.visible = opacity > 0.01;
+    }
+
+    // Animate sparkles
+    this._updateSparkleParticles(dt, col);
+
+    // Update sparkle particles (use main color)
+    this._updateSparkleParticles(dt, col);
   }
 
   // ── Load a kart GLB ──────────────────────────────────────────
@@ -453,14 +629,18 @@ class KartPreview {
         this.kart = gltf.scene;
         const box    = new THREE.Box3().setFromObject(this.kart);
         const size   = box.getSize(new THREE.Vector3());
-        const diag   = size.length(); // bounding-sphere → uniform visual fill
-        const scale  = 1.98 / diag;
+        const diag = size.length(); // Revert back to diagonal for uniform volume fill
+          const scale = 1.6 / diag; // Tweak baseline scale down uniformly
         this.kart.scale.setScalar(scale);
         const box2   = new THREE.Box3().setFromObject(this.kart);
         const center = box2.getCenter(new THREE.Vector3());
         const minY   = box2.min.y;
-        this.kart.position.set(-center.x, -minY + 0.1, -center.z);
-        this._kartBaseY = -minY + 0.1;
+        
+        // Lower kart by 2.5% of its height (size.y)
+        // Lower kart by 7.5% of its height (size.y)
+        const lowerBy = size.y * 0.075;
+        this.kart.position.set(-center.x, (-minY + 0.03) - lowerBy, -center.z);
+        this._kartBaseY = (-minY + 0.03) - lowerBy;
         this._kartBaseX = -center.x;
         this._kartScale = scale;
         this._enterDir = dir;
@@ -550,6 +730,7 @@ class KartPreview {
         roughness: 0.92,
         metalness: 0.0,
         side: THREE.DoubleSide,
+        depthWrite: true,
       });
     }
 
@@ -558,9 +739,12 @@ class KartPreview {
       // Wheels: STK models name them *wheel*, *tire*, *rim*
       if (!skipWheels && node.isMesh && (n.includes('wheel') || n.includes('tire'))) {
         this._wheels.push(node);
-        // Apply uniform rubber look to tire surfaces
+        // Apply uniform rubber look to tire surfaces and flag as tire
         if (n.includes('tire') || n.includes('wheel')) {
           node.material = KartPreview._rubberMat;
+          node.isTire = true;
+          node.receiveShadow = false;
+          node.castShadow = true;
         }
       }
       // Character body: look for common STK character node names
@@ -617,13 +801,22 @@ class KartPreview {
     const renderH = Math.round(h / 0.85);
     this.camera.aspect = w / renderH; this.camera.updateProjectionMatrix();
     this.renderer.setSize(w, renderH);
-    this.renderer.domElement.style.marginTop = `${-(renderH - h)}px`;
+    this.renderer.domElement.style.marginTop = `0px`;
   }
 
   animate() {
     requestAnimationFrame(this._boundAnimate);
     const now = performance.now();
-    const dt = Math.min((now - this._lastFrame) / 1000, 0.05); // real delta, capped
+    // Performance: cap FPS on low-end devices
+    let dt = (now - this._lastFrame) / 1000;
+    // Detect low-power device (basic heuristic)
+    const isLowEnd = (window.deviceMemory && window.deviceMemory <= 4) || (navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 4);
+    if (isLowEnd) {
+      if (dt < 1/33) return requestAnimationFrame(this._boundAnimate); // cap ~30 FPS
+      this.renderer.setPixelRatio(1);
+      this.renderer.shadowMap.enabled = false;
+    }
+    dt = Math.min(dt, 0.05);
     this._lastFrame = now;
     this._showTime += dt;
 
@@ -633,9 +826,9 @@ class KartPreview {
       this.kart.rotation.y = this.kartRotation;
     }
 
-    // Hover bob — subtle float
+    // Remove hover bob — keep kart at base Y
     if (this.kart && this.isInitialized) {
-      this.kart.position.y = this._kartBaseY + Math.sin(this._showTime * 1.8) * 0.04;
+      this.kart.position.y = this._kartBaseY;
     }
 
     // Wheel spin — rotate on local X axis
@@ -1026,3 +1219,10 @@ class KartPreview {
 }
 
 document.addEventListener('DOMContentLoaded', () => { new KartPreview(); });
+
+
+
+
+
+
+

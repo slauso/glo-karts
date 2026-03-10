@@ -88,6 +88,10 @@ function readStorage() {
 // ── Apply to DOM ──────────────────────────────────────────────────────────────
 // Blends from _fadeFrom toward the live target (r,g,b) while fading, then
 // tracks the rendered colour for the next transition snapshot.
+// Only touches the DOM when the final colour actually changes — prevents
+// mass style-recalculation cascades across 100+ --glo-rgb elements.
+let _prevFr = -1, _prevFg = -1, _prevFb = -1;
+
 function applyRgb(r, g, b) {
   let fr = r, fg = g, fb = b;
   if (_fadeElapsed < FADE_DURATION) {
@@ -98,20 +102,29 @@ function applyRgb(r, g, b) {
   } else {
     _fadeFrom = [r, g, b]; // keep current tracked so snapshot is always fresh
   }
-  document.documentElement.style.setProperty('--glo-title-glow', `rgba(${fr},${fg},${fb},0.55)`);
-  // Live-drive button background + glow to match the active GLO colour
-  document.documentElement.style.setProperty('--glo-rgb', `${fr},${fg},${fb}`);
+
+  // Skip DOM writes when colour hasn't changed — avoids unnecessary repaints
+  if (fr === _prevFr && fg === _prevFg && fb === _prevFb) return;
+  _prevFr = fr; _prevFg = fg; _prevFb = fb;
+
+  const s = document.documentElement.style;
+  s.setProperty('--glo-title-glow', `rgba(${fr},${fg},${fb},0.55)`);
+  s.setProperty('--glo-rgb', `${fr},${fg},${fb}`);
   const _dr = Math.round(fr * 0.55), _dg = Math.round(fg * 0.55), _db = Math.round(fb * 0.55);
-  document.documentElement.style.setProperty('--glo-rgb-dark', `${_dr},${_dg},${_db}`);
-  document.documentElement.style.setProperty(
+  s.setProperty('--glo-rgb-dark', `${_dr},${_dg},${_db}`);
+
+  const sr1 = 255 - fr, sg1 = 255 - fg, sb1 = 255 - fb;
+  const sr2 = fg,       sg2 = fb,       sb2 = fr;
+  s.setProperty('--glo-split-1', `${sr1},${sg1},${sb1}`);
+  s.setProperty('--glo-split-2', `${sr2},${sg2},${sb2}`);
+
+  s.setProperty(
     '--glo-accent-live',
     `rgb(${Math.round(fr * 0.28)},${Math.round(fg * 0.28)},${Math.round(fb * 0.28)})`
   );
-  // Keep --accent / --accent-dark / --accent-glow in sync so every var(--accent)
-  // reference in the CSS (mode icons, borders, etc.) tracks the GLO colour live.
-  document.documentElement.style.setProperty('--accent',      `rgb(${fr},${fg},${fb})`);
-  document.documentElement.style.setProperty('--accent-dark', `rgb(${_dr},${_dg},${_db})`);
-  document.documentElement.style.setProperty('--accent-glow', `rgba(${fr},${fg},${fb},0.35)`);
+  s.setProperty('--accent',      `rgb(${fr},${fg},${fb})`);
+  s.setProperty('--accent-dark', `rgb(${_dr},${_dg},${_db})`);
+  s.setProperty('--accent-glow', `rgba(${fr},${fg},${fb},0.35)`);
 }
 
 // ── Per-frame tick ────────────────────────────────────────────────────────────

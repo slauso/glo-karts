@@ -1,6 +1,7 @@
 import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder';
 import { TransformNode } from '@babylonjs/core/Meshes/transformNode';
-import { Vector3, Color3 } from '@babylonjs/core/Maths/math';
+import { Vector3 } from '@babylonjs/core/Maths/math.vector';
+import { Color3 } from '@babylonjs/core/Maths/math.color';
 import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial';
 
 /**
@@ -57,3 +58,4 @@ export class ProceduralSymbioticGen {
     console.log('[SymbioticGen] Psyche Apotheosis active');
   }
 }
+

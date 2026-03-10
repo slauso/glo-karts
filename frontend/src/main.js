@@ -111,7 +111,7 @@ try {
   const trackEl = document.getElementById('loading-track');
   const infoEl = document.getElementById('loading-info');
   if (sub && gameConfig) {
-    const modeLabels = { quick_race: 'Quick Race', time_trial: 'Time Trial', grand_prix: 'Grand Prix', free_roam: 'Free Roam', follow_the_leader: 'Follow the Leader', soccer: 'Soccer' };
+    const modeLabels = { time_trial: 'Rally', grand_prix: 'Glo Prix', free_roam: 'Free Roam' };
     sub.textContent = modeLabels[gameConfig.modeId || gameConfig.mode] || gameConfig.subMode || 'SINGLE PLAYER';
   }
   if (trackEl && gameConfig) {

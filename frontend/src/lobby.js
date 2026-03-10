@@ -57,6 +57,51 @@ function getStoredGlo() {
 }
 
 class RacingLobby {
+    _initLensEngine() {
+      // Apple card effect for all .lens-card, including the new unified lobby-join card
+      const cards = document.querySelectorAll('.lens-card');
+      cards.forEach(card => {
+        let pressing = false;
+        let tiltX = 0, tiltY = 0;
+        let lastRAF = null;
+        const updateTilt = (e) => {
+          const rect = card.getBoundingClientRect();
+          const x = (e.clientX - rect.left) / rect.width;
+          const y = (e.clientY - rect.top) / rect.height;
+          tiltX = (x - 0.5) * 24; // degrees
+          tiltY = (y - 0.5) * 18;
+          card.style.setProperty('--lens-tilt-x', tiltX.toFixed(2));
+          card.style.setProperty('--lens-tilt-y', tiltY.toFixed(2));
+        };
+        const resetTilt = () => {
+          card.style.setProperty('--lens-tilt-x', '0');
+          card.style.setProperty('--lens-tilt-y', '0');
+        };
+        card.addEventListener('mousemove', updateTilt);
+        card.addEventListener('mouseleave', () => {
+          resetTilt();
+          card.classList.remove('lens-pressing');
+        });
+        card.addEventListener('mousedown', () => {
+          pressing = true;
+          card.classList.add('lens-pressing');
+        });
+        card.addEventListener('mouseup', () => {
+          pressing = false;
+          card.classList.remove('lens-pressing');
+        });
+        card.addEventListener('touchstart', () => {
+          pressing = true;
+          card.classList.add('lens-pressing');
+        }, {passive:true});
+        card.addEventListener('touchend', () => {
+          pressing = false;
+          card.classList.remove('lens-pressing');
+        });
+        // Reset tilt on init
+        resetTilt();
+      });
+    }
   constructor() {
     this.realtimeEndpoint = getColyseusEndpoint();
     this.client = new Client(this.realtimeEndpoint);
@@ -69,7 +114,7 @@ class RacingLobby {
     this.isReady = false;
 
     this.selectedMode = DEFAULTS.mode;
-    this.selectedModeId = 'quick_race'; // default mode from game-modes.js
+    this.selectedModeId = 'time_trial'; // default mode from game-modes.js
     this.selectedMap = DEFAULTS.trackId;
     this.selectedBattleType = DEFAULTS.battleType;
     this.selectedMaxPlayers = DEFAULTS.maxPlayers;
@@ -91,6 +136,7 @@ class RacingLobby {
     this.initWeaponLoadout();
     this.populateArenaSelector();
     this.refreshBattleControls();
+    this._initLensEngine();
   }
 
   initUIElements() {
@@ -100,10 +146,19 @@ class RacingLobby {
     this.partyCodeDisplay = document.getElementById('party-code');
     this.copyCodeBtn = document.getElementById('copy-code-btn');
     this.hostStopBtn = document.getElementById('host-stop-btn');
+    this.lobbyConnectionBadge = document.getElementById('lobby-connection-badge');
+    this.lobbyRoleChip = document.getElementById('lobby-role-chip');
+    this.lobbyPrivacyChip = document.getElementById('lobby-privacy-chip');
+    this.lobbyPlayerChip = document.getElementById('lobby-player-chip');
+    this.lobbyServerChip = document.getElementById('lobby-server-chip');
+    this.lobbyStatusDetail = document.getElementById('lobby-status-detail');
+    this.pillJoinHeader = document.querySelector('.lens-pill-join-header');
 
     this.mapSelectorContainer = document.querySelector('.map-selector-container');
     this.playerNameInput = document.getElementById('player-name-input');
     this.playBtn = document.getElementById('play-btn');
+    this.playIndicator = document.getElementById('play-btn-indicator');
+    this.playIndicatorLabel = document.getElementById('play-indicator-label');
     this.readyBtn = document.getElementById('ready-btn');
     this.startMatchBtn = document.getElementById('start-match-btn');
 
@@ -111,11 +166,15 @@ class RacingLobby {
     this.joinPartyBtn = document.getElementById('join-party-btn');
     this.joinStatus = document.getElementById('join-status');
     this.joinSection = document.querySelector('.join-section');
+    this.toolImportTrackSection = document.getElementById('tool-import-track-section');
+    this.leftPanel = document.querySelector('.lens-stack-left');
+    this.leftSetupCta = document.getElementById('left-setup-cta');
+    this.leftModePill = document.getElementById('left-mode-pill') || this.leftPanel?.querySelector('.lens-pill[data-lens="mode"]') || null;
 
     this.playerList = document.getElementById('player-list');
     this.readyCountEl = document.getElementById('ready-count');
-    this.racersTitle = document.querySelector('.right-panel .panel-title');
-    this.rightPanel = document.querySelector('.right-panel');
+    this.racersTitle = document.querySelector('.lens-stack-right .panel-title');
+    this.rightPanel = document.querySelector('.lens-stack-right');
 
     this.playerNameInput.value = '';
     this.playerNameInput.placeholder = this.playerName;
@@ -139,7 +198,13 @@ class RacingLobby {
     this.quickMatchBtn?.addEventListener('click', () => this.quickMatch());
     this.joinPartyBtn?.addEventListener('click', () => this.joinLobbyByCode());
     this.copyCodeBtn?.addEventListener('click', () => this.copyCode());
-    this.hostStopBtn?.addEventListener('click', () => this.leaveLobby(true));
+    this.hostStopBtn?.addEventListener('click', () => {
+      if (this.room) {
+        this.leaveLobby(true);
+      } else {
+        this.resetLobbyState('');
+      }
+    });
 
     this.joinCodeInput?.addEventListener('keydown', (event) => {
       if (event.key === 'Enter') this.joinLobbyByCode();
@@ -153,6 +218,7 @@ class RacingLobby {
     this.playBtn?.addEventListener('click', () => this.onPlayClicked());
     this.readyBtn?.addEventListener('click', () => this.toggleReady());
     this.startMatchBtn?.addEventListener('click', () => this.startMatch());
+    this.leftSetupCta?.addEventListener('click', () => this.leftPanel?._switchLensCard?.('track'));
 
     document.addEventListener('kartChanged', (event) => {
       if (!event.detail?.kartId) return;
@@ -232,6 +298,8 @@ class RacingLobby {
   async createLobby() {
     const privacy = 'private';
     const code = generateLobbyCode();
+    this.currentLobbyCode = code;
+    this._showConnectingState(code);
     try {
       await this.connectLobby('joinOrCreate', {
         lobbyCode: code,
@@ -241,11 +309,14 @@ class RacingLobby {
         ...this.buildPlayerPayload(),
       });
     } catch (error) {
-      this.setJoinStatus(await this.getLobbyErrorMessage(error, 'Create failed'));
+      this._showLobbyError('Connection failed. Diagnosing\u2026');
+      const msg = await this.getLobbyErrorMessage(error, 'Create failed');
+      this._showLobbyError(msg);
     }
   }
 
   async quickMatch() {
+    this._showConnectingState('');
     try {
       await this.connectLobby('joinOrCreate', {
         lobbyCode: '',
@@ -255,7 +326,9 @@ class RacingLobby {
         ...this.buildPlayerPayload(),
       });
     } catch (error) {
-      this.setJoinStatus(await this.getLobbyErrorMessage(error, 'Quick match failed'));
+      this._showLobbyError('Connection failed. Diagnosing\u2026');
+      const msg = await this.getLobbyErrorMessage(error, 'Quick match failed');
+      this._showLobbyError(msg);
     }
   }
 
@@ -406,7 +479,7 @@ class RacingLobby {
       this.currentLobbyPrivacy = payload?.privacy || this.currentLobbyPrivacy;
       this.setJoinStatus(`Connected (${this.currentLobbyPrivacy}).`);
       this.showPartyPanels();
-      if (this.partyCodeDisplay) this.partyCodeDisplay.textContent = this.currentLobbyCode || '------';
+      this.updateLobbyPresence(`Connected (${this.currentLobbyPrivacy}).`);
     });
 
     room.onMessage('countdown', ({ t }) => {
@@ -455,27 +528,113 @@ class RacingLobby {
     this.currentLobbyCode = '';
 
     this.hostInfo?.classList.add('hidden');
-    this.createPartyBtn?.classList.remove('hidden');
-    this.quickMatchBtn?.classList.remove('hidden');
+    this.hostInfo?.classList.remove('is-error');
     this.joinSection?.classList.remove('hidden');
-    this.rightPanel?.classList.remove('lobby-active');
+    // No longer toggling between separate cards; keep unified card visible
+    this.rightPanel?.classList.remove('lobby-active', 'lobby-connecting');
+    if (this.pillJoinHeader) this.pillJoinHeader.innerHTML = '<i class="fas fa-users"></i> LOBBY & JOIN';
 
     this.updatePlayerList();
     this.refreshActionButtons();
     this.refreshBattleControls();
+    this.updateLobbyPresence(statusText);
     this.setJoinStatus(statusText);
   }
 
   showPartyPanels() {
     this.hostInfo?.classList.remove('hidden');
-    this.createPartyBtn?.classList.add('hidden');
-    this.quickMatchBtn?.classList.add('hidden');
+    this.hostInfo?.classList.remove('is-error');
     this.joinSection?.classList.add('hidden');
+    // No longer toggling between separate cards; keep unified card visible
     this.rightPanel?.classList.add('lobby-active');
+    this.rightPanel?.classList.remove('lobby-connecting');
+    if (this.pillJoinHeader) this.pillJoinHeader.innerHTML = '<i class="fas fa-signal"></i> LOBBY ACTIVE';
+    this.updateLobbyPresence();
+  }
+
+  /** Immediately show the lobby dashboard in a "connecting" state */
+  _showConnectingState(code) {
+    this.hostInfo?.classList.remove('hidden');
+    this.hostInfo?.classList.remove('is-error');
+    this.joinSection?.classList.add('hidden');
+    this.rightPanel?.classList.add('lobby-active', 'lobby-connecting');
+    if (this.pillJoinHeader) this.pillJoinHeader.innerHTML = '<i class="fas fa-spinner fa-spin"></i> CONNECTING\u2026';
+
+    if (this.partyCodeDisplay) this.partyCodeDisplay.textContent = code || '\u2014\u2014\u2014';
+    if (this.lobbyConnectionBadge) this.lobbyConnectionBadge.textContent = 'CONNECTING';
+    if (this.lobbyRoleChip) this.lobbyRoleChip.textContent = '\u2014';
+    if (this.lobbyServerChip) {
+      this.lobbyServerChip.textContent = 'CONNECTING';
+      this.lobbyServerChip.classList.remove('is-online');
+    }
+    if (this.lobbyPrivacyChip) this.lobbyPrivacyChip.textContent = 'PRIVATE';
+    if (this.lobbyPlayerChip) this.lobbyPlayerChip.textContent = '\u2014';
+    if (this.lobbyStatusDetail) this.lobbyStatusDetail.textContent = 'Connecting to lobby server\u2026';
+    if (this.hostStopBtn) this.hostStopBtn.textContent = 'Cancel';
+  }
+
+  /** Show the dashboard with an error state after a failed connection */
+  _showLobbyError(message) {
+    this.hostInfo?.classList.remove('hidden');
+    this.hostInfo?.classList.add('is-error');
+    this.rightPanel?.classList.add('lobby-active');
+    this.rightPanel?.classList.remove('lobby-connecting');
+    if (this.pillJoinHeader) this.pillJoinHeader.innerHTML = '<i class="fas fa-exclamation-triangle"></i> CONNECTION FAILED';
+
+    if (this.lobbyConnectionBadge) this.lobbyConnectionBadge.textContent = 'ERROR';
+    if (this.lobbyRoleChip) this.lobbyRoleChip.textContent = 'OFFLINE';
+    if (this.lobbyServerChip) {
+      this.lobbyServerChip.textContent = 'UNREACHABLE';
+      this.lobbyServerChip.classList.remove('is-online');
+    }
+    if (this.lobbyStatusDetail) this.lobbyStatusDetail.textContent = message;
+    if (this.hostStopBtn) this.hostStopBtn.textContent = 'Dismiss';
+    this.setJoinStatus(message);
   }
 
   setJoinStatus(text) {
     if (this.joinStatus) this.joinStatus.textContent = text || '';
+    if (this.room && text) this.updateLobbyPresence(text);
+  }
+
+  updateLobbyPresence(statusText = '') {
+    if (this.partyCodeDisplay) {
+      this.partyCodeDisplay.textContent = this.currentLobbyCode || '------';
+    }
+
+    if (!this.room) {
+      if (this.lobbyConnectionBadge) this.lobbyConnectionBadge.textContent = 'LOBBY IDLE';
+      if (this.lobbyRoleChip) this.lobbyRoleChip.textContent = 'OFFLINE';
+      if (this.lobbyPrivacyChip) this.lobbyPrivacyChip.textContent = 'NO LOBBY';
+      if (this.lobbyPlayerChip) this.lobbyPlayerChip.textContent = '0 PLAYERS';
+      if (this.lobbyServerChip) {
+        this.lobbyServerChip.textContent = 'STANDBY';
+        this.lobbyServerChip.classList.remove('is-online');
+      }
+      if (this.lobbyStatusDetail) {
+        this.lobbyStatusDetail.textContent = statusText || 'Create or join a lobby to see live party status here.';
+      }
+      if (this.hostStopBtn) this.hostStopBtn.textContent = 'Leave Lobby';
+      return;
+    }
+
+    const playerCount = Math.max(this.players.length, 1);
+    const detail = statusText || (this.isHost
+      ? 'Your lobby is live. Share the code and wait for friends to join.'
+      : 'You are connected to an active lobby. Ready up when you are set.');
+
+    if (this.lobbyConnectionBadge) {
+      this.lobbyConnectionBadge.textContent = this.isHost ? 'LOBBY LIVE' : 'CONNECTED';
+    }
+    if (this.lobbyRoleChip) this.lobbyRoleChip.textContent = this.isHost ? 'HOST' : 'MEMBER';
+    if (this.lobbyPrivacyChip) this.lobbyPrivacyChip.textContent = (this.currentLobbyPrivacy || 'private').toUpperCase();
+    if (this.lobbyPlayerChip) this.lobbyPlayerChip.textContent = `${playerCount} PLAYER${playerCount === 1 ? '' : 'S'}`;
+    if (this.lobbyServerChip) {
+      this.lobbyServerChip.textContent = 'SERVER ONLINE';
+      this.lobbyServerChip.classList.add('is-online');
+    }
+    if (this.lobbyStatusDetail) this.lobbyStatusDetail.textContent = detail;
+    if (this.hostStopBtn) this.hostStopBtn.textContent = this.isHost ? 'Stop Hosting' : 'Leave Lobby';
   }
 
   buildPlayerPayload() {
@@ -539,7 +698,13 @@ class RacingLobby {
 
     // Track Builder navigates directly — no game config needed
     if (modeId === 'track_builder') {
-      window.location.href = getPageForMode(modeId);
+      window.location.href = getPageForMode(modeId) || 'builder.html';
+      return;
+    }
+    
+    // Create Party mode directly creates a lobby
+    if (modeId === 'create_party') {
+      this.createLobby();
       return;
     }
 
@@ -643,6 +808,8 @@ class RacingLobby {
       this.readyCountEl.innerHTML = `<span class="ready-fraction">${ready}/${total}</span> ready`;
       this.readyCountEl.classList.toggle('all-ready', ready === total && total > 0);
     }
+
+    this.updateLobbyPresence();
   }
 
   refreshActionButtons() {
@@ -651,9 +818,12 @@ class RacingLobby {
     const readyCount = this.players.filter(p => p.isReady).length;
     const allReady = total > 0 && readyCount === total;
 
-    // PLAY GAME button: visible only when NOT in a lobby
+    // PLAY GAME button + indicator: visible only when NOT in a lobby
     if (this.playBtn) {
       this.playBtn.classList.toggle('hidden', inLobby);
+    }
+    if (this.playIndicator) {
+      this.playIndicator.classList.toggle('hidden', inLobby || this.playBtn?.disabled);
     }
 
     // READY UP button: visible when in lobby (for everyone)
@@ -685,26 +855,126 @@ class RacingLobby {
     }
   }
 
+  /** Update play-button label and the mode indicator chip beneath it */
+  _syncPlayButton(modeEntry, isToolMode, isGloflux) {
+    if (!this.playBtn || this.room) return;
+
+    let icon, label, indicator;
+    switch (this.selectedModeId) {
+      case 'create_party':
+        icon = 'fa-bolt';       label = 'CREATE LOBBY';
+        indicator = 'Private lobby — invite friends';
+        break;
+      case 'race_online':
+        icon = 'fa-globe';      label = 'GO ONLINE';
+        indicator = 'Online Race';
+        break;
+      case 'battle_online':
+        icon = 'fa-globe';      label = 'GO ONLINE';
+        indicator = 'Online Battle';
+        break;
+      case 'track_builder':
+        icon = 'fa-wrench';     label = 'OPEN BUILDER';
+        indicator = 'Track Builder';
+        break;
+      case 'time_trial':
+        icon = 'fa-stopwatch';  label = 'START TIME TRIAL';
+        indicator = 'Solo — no items, pure speed';
+        break;
+      case 'grand_prix':
+        icon = 'fa-trophy';     label = 'START GRAND PRIX';
+        indicator = 'Full cup series';
+        break;
+      case 'quick_race':
+        icon = 'fa-flag-checkered'; label = 'START RACE';
+        indicator = 'Quick race vs AI';
+        break;
+      default:
+        if (isGloflux) {
+          icon = 'fa-atom';     label = 'CREATE FLUX LOBBY';
+          indicator = 'GloFlux session';
+        } else if (modeEntry?.category === 'local') {
+          icon = 'fa-users';    label = 'START LOCAL';
+          indicator = 'Local splitscreen';
+        } else if (modeEntry?.category === 'online') {
+          icon = 'fa-globe';    label = 'GO ONLINE';
+          indicator = modeEntry?.label || 'Multiplayer';
+        } else if (isToolMode) {
+          icon = 'fa-wrench';   label = 'OPEN BUILDER';
+          indicator = modeEntry?.label || 'Tool';
+        } else {
+          icon = 'fa-play';     label = 'PLAY GAME';
+          indicator = modeEntry?.label || '';
+        }
+        break;
+    }
+
+    this.playBtn.innerHTML = `<i class="fas ${icon}"></i> ${label}`;
+
+    // Show indicator chip below button
+    if (this.playIndicator && this.playIndicatorLabel) {
+      const enabled = !this.playBtn.disabled;
+      this.playIndicator.classList.toggle('hidden', !enabled);
+      this.playIndicatorLabel.textContent = indicator;
+    }
+  }
+
+  /** Brief attention-drawing pulse when a mode is selected */
+  _pulsePlayButton() {
+    if (!this.playBtn) return;
+    this.playBtn.classList.remove('play-attention');
+    void this.playBtn.offsetWidth;
+    this.playBtn.classList.add('play-attention');
+  }
+
+  _getLeftSetupState() {
+    const modeEntry = getMode(this.selectedModeId);
+    const showBattle = !!(modeEntry?.selectors?.battleSettings);
+    const isGloflux = modeEntry?.id === 'gloflux' || modeEntry?.id?.startsWith('gloflux_');
+    const isCup = usesCupSelection(this.selectedModeId);
+    const showTrack = usesTrackSelection(this.selectedModeId) || usesArenaSelection(this.selectedModeId);
+    const isRaceWithBots = usesTrackSelection(this.selectedModeId) && !isCup
+      && this.selectedModeId !== 'time_trial' && this.selectedModeId !== 'free_roam';
+
+    return {
+      showBattle,
+      isGloflux,
+      isCup,
+      showTrack,
+      isRaceWithBots,
+      showSetupCard: showTrack || showBattle || isCup || isGloflux,
+    };
+  }
+
+  _syncLeftPanelPills() {
+    if (!this.leftPanel) return;
+    this._updateLeftSetupPill(this._getLeftSetupState());
+  }
+
   refreshBattleControls() {
     const battleSettings = document.getElementById('battle-settings');
     const raceSettings = document.getElementById('race-settings');
     const cupSelector = document.getElementById('cup-selector');
     const glofluxSettings = document.getElementById('gloflux-settings');
     const modeEntry = getMode(this.selectedModeId);
-    const showBattle = !!(modeEntry?.selectors?.battleSettings);
+    const { showBattle, isGloflux, isCup, showTrack, isRaceWithBots, showSetupCard } = this._getLeftSetupState();
     const isToolMode = modeEntry?.category === 'tools';
-    const isGloflux = modeEntry?.category === 'gloflux';
     const isShop = modeEntry?.category === 'shop';
-    const isCup = usesCupSelection(this.selectedModeId);
-    const showTrack = usesTrackSelection(this.selectedModeId) || usesArenaSelection(this.selectedModeId);
-    const isRaceWithBots = usesTrackSelection(this.selectedModeId) && !isCup
-      && this.selectedModeId !== 'time_trial' && this.selectedModeId !== 'free_roam';
 
     // Panel visibility
     battleSettings?.classList.toggle('hidden', !showBattle);
     raceSettings?.classList.toggle('hidden', !isRaceWithBots);
     cupSelector?.classList.toggle('hidden', !isCup);
     glofluxSettings?.classList.toggle('hidden', !isGloflux);
+    this.toolImportTrackSection?.classList.toggle('hidden', !isToolMode);
+    this.leftSetupCta?.classList.toggle('hidden', !showSetupCard);
+    this._syncLeftPanelPills();
+
+    const leftSwitchCard = this.leftPanel?._switchLensCard;
+    const activeLeftCard = this.leftPanel?.querySelector('.lens-card.active')?.dataset.lens;
+    if (!showSetupCard && activeLeftCard === 'track') {
+      leftSwitchCard?.('mode');
+    }
 
     // Hide track/map selector for modes that don't need it
     const hideMap = isToolMode || isGloflux || isShop || isCup;
@@ -727,10 +997,8 @@ class RacingLobby {
     const carModel = document.getElementById('car-model-container');
     if (carModel) carModel.classList.toggle('hidden', hideKart);
 
-    // Update PLAY button text for tools
-    if (this.playBtn && !this.room) {
-      this.playBtn.textContent = isToolMode ? 'OPEN BUILDER' : (isGloflux ? 'CREATE FLUX LOBBY' : 'PLAY GAME');
-    }
+    // Sync the play button label, icon and indicator
+    this._syncPlayButton(modeEntry, isToolMode, isGloflux);
 
     // Action buttons are handled by refreshActionButtons()
     this.refreshActionButtons();
@@ -745,7 +1013,7 @@ class RacingLobby {
         this.selectedModeId = state.modeId;
       } else {
         this.selectedModeId = state.gameMode === 'gloflux'
-          ? (state.modeId || 'gloflux_arena')
+          ? (state.modeId || 'gloflux')
           : (serverIsBattle ? 'battle_online' : 'race_online');
       }
       this.selectedMode = state.gameMode || (serverIsBattle ? 'battle' : 'race');
@@ -770,9 +1038,18 @@ class RacingLobby {
 
     const battleTypeEl = document.getElementById('battle-type-select');
     if (battleTypeEl && battleTypeEl.value !== this.selectedBattleType) battleTypeEl.value = this.selectedBattleType;
+    this._syncGlassDropdown(battleTypeEl);
 
     const maxPlayersEl = document.getElementById('battle-max-players');
     if (maxPlayersEl) maxPlayersEl.value = String(this.selectedMaxPlayers);
+    this._syncGlassDropdown(maxPlayersEl);
+
+    const glofluxMaxPlayersEl = document.getElementById('gloflux-player-cap');
+    if (glofluxMaxPlayersEl) glofluxMaxPlayersEl.value = String(this.selectedMaxPlayers);
+    this._syncGlassDropdown(glofluxMaxPlayersEl);
+
+    const glofluxThemeEl = document.getElementById('gloflux-theme');
+    this._syncGlassDropdown(glofluxThemeEl);
 
     if (this.partyCodeDisplay) {
       this.partyCodeDisplay.textContent = state.lobbyCode || this.currentLobbyCode || '------';
@@ -857,7 +1134,11 @@ class RacingLobby {
         const tab = document.createElement('button');
         tab.className = `mode-cat-tab${cat.id === this._activeCategory() ? ' active' : ''}`;
         tab.setAttribute('data-cat', cat.id);
-        tab.innerHTML = `<i class="fas ${cat.icon}"></i><span>${cat.label}</span>`;
+        tab.title = cat.desc || cat.label;
+        tab.innerHTML = `
+          <span class="mode-cat-tab-icon"><i class="fas ${cat.icon}"></i></span>
+          <span class="mode-cat-tab-label">${cat.label}</span>
+        `;
         tab.addEventListener('click', () => this._selectCategory(cat.id));
         tabsContainer.appendChild(tab);
       });
@@ -888,6 +1169,9 @@ class RacingLobby {
       this.selectedBotCount = Number.isFinite(parsed) ? Math.max(0, Math.min(11, parsed)) : 0;
       botCountEl.value = String(this.selectedBotCount);
     });
+
+    this._initGlassDropdown(battleTypeEl);
+    this._initGlassDropdown(maxPlayersEl);
   }
 
   /** Which category is active based on selectedModeId */
@@ -911,6 +1195,7 @@ class RacingLobby {
       if (first) this._selectMode(first.id);
     }
 
+    this.leftPanel?._switchLensCard?.('mode');
     this._renderModeCards();
   }
 
@@ -935,10 +1220,71 @@ class RacingLobby {
     if (window.__trackPreview && this.selectedMap) {
       window.__trackPreview.setById(this.selectedMap);
     }
+    this.leftPanel?._switchLensCard?.('mode');
     this.refreshBattleControls();
     this._renderModeCards();
-    if (this.playBtn) this.playBtn.disabled = false;
+    if (this.playBtn) {
+      this.playBtn.disabled = false;
+      this._pulsePlayButton();
+    }
     this.sendSettingsUpdate();
+  }
+
+  _updateLeftSetupPill({ showSetupCard, showTrack, showBattle, isCup, isGloflux, isRaceWithBots }) {
+    if (!this.leftSetupCta) return;
+
+    let icon = 'fa-layer-group';
+    let label = 'SETUP';
+    let hint = 'More options';
+
+    if (isCup) {
+      icon = 'fa-trophy';
+      label = 'CUP';
+      hint = 'Choose a race series';
+    } else if (showBattle || isGloflux || isRaceWithBots) {
+      icon = 'fa-sliders-h';
+      label = 'SETUP';
+      hint = isGloflux ? 'Tune match rules' : 'Adjust game options';
+    } else if (usesArenaSelection(this.selectedModeId)) {
+      icon = 'fa-vector-square';
+      label = 'ARENA';
+      hint = 'Pick a battleground';
+    } else if (showTrack) {
+      icon = 'fa-road';
+      label = 'TRACK';
+      hint = 'Pick your course';
+    }
+
+    this.leftSetupCta.innerHTML = `
+      <span class="lens-pill-main"><i class="fas ${icon}"></i><span>${label}</span></span>
+      <span class="lens-pill-sub">${hint}</span>
+      <span class="lens-pill-cue" aria-hidden="true"><i class="fas fa-arrow-right"></i></span>
+    `;
+
+    const activeLeftCard = this.leftPanel?.querySelector('.lens-card.active')?.dataset.lens;
+    const promptSetup = showSetupCard && activeLeftCard !== 'track';
+    this.leftSetupCta.classList.toggle('lens-pill-prompt', promptSetup);
+    this._updateLeftModePill({ showSetupCard, activeLeftCard });
+  }
+
+  _updateLeftModePill({ showSetupCard, activeLeftCard }) {
+    if (!this.leftModePill) return;
+
+    const isReturnState = showSetupCard && activeLeftCard === 'track';
+
+    this.leftModePill.innerHTML = isReturnState
+      ? `
+        <span class="lens-pill-main"><i class="fas fa-arrow-left"></i><span>BACK</span></span>
+        <span class="lens-pill-sub">Return to game modes</span>
+        <span class="lens-pill-cue lens-pill-cue-left" aria-hidden="true"><i class="fas fa-arrow-left"></i></span>
+      `
+      : `
+        <span class="lens-pill-main"><i class="fas fa-sliders-h"></i><span>MODE</span></span>
+        <span class="lens-pill-sub">Choose how to play</span>
+      `;
+
+    this.leftModePill.classList.toggle('lens-pill-return', isReturnState);
+    this.leftModePill.classList.toggle('lens-pill-prompt', isReturnState);
   }
 
   _renderModeCards() {
@@ -970,6 +1316,7 @@ class RacingLobby {
         <div class="mode-card-icon"><i class="fas ${mode.icon}"></i></div>
         <div class="mode-card-info">
           <div class="mode-card-label">${mode.label}</div>
+          <div class="mode-card-desc">${mode.desc || ''}</div>
         </div>
         ${badgeHTML}
       `;
@@ -1020,6 +1367,8 @@ class RacingLobby {
     lapsEl?.addEventListener('change', () => {
       this.selectedLaps = parseInt(lapsEl.value || '3', 10);
     });
+
+    this._initGlassDropdown(lapsEl);
   }
 
   initGlofluxSettings() {
@@ -1035,8 +1384,104 @@ class RacingLobby {
       const parsed = parseInt(maxPlayersEl.value || '8', 10);
       this.selectedMaxPlayers = Number.isFinite(parsed) ? Math.max(2, Math.min(12, parsed)) : 8;
       maxPlayersEl.value = String(this.selectedMaxPlayers);
+      this._syncGlassDropdown(maxPlayersEl);
       this.sendSettingsUpdate();
     });
+
+    this._initGlassDropdown(themeEl);
+    this._initGlassDropdown(maxPlayersEl);
+  }
+
+  _initGlassDropdown(selectEl) {
+    if (!selectEl || selectEl.dataset.glassDropdownInitialized === 'true') return;
+
+    const wrapper = document.createElement('div');
+    wrapper.className = 'glass-dropdown';
+
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'glass-dropdown-button';
+    button.setAttribute('aria-haspopup', 'listbox');
+    button.setAttribute('aria-expanded', 'false');
+
+    const value = document.createElement('span');
+    value.className = 'glass-dropdown-value';
+
+    const arrow = document.createElement('span');
+    arrow.className = 'glass-dropdown-arrow';
+    arrow.setAttribute('aria-hidden', 'true');
+    arrow.innerHTML = '<i class="fas fa-chevron-down"></i>';
+
+    button.appendChild(value);
+    button.appendChild(arrow);
+
+    const content = document.createElement('div');
+    content.className = 'glass-dropdown-content';
+    content.setAttribute('role', 'listbox');
+    content.setAttribute('aria-label', selectEl.getAttribute('aria-label') || selectEl.id || 'Options');
+
+    wrapper.appendChild(button);
+    wrapper.appendChild(content);
+    selectEl.insertAdjacentElement('afterend', wrapper);
+    selectEl.classList.add('hidden');
+    selectEl.tabIndex = -1;
+    selectEl.setAttribute('aria-hidden', 'true');
+    selectEl.dataset.glassDropdownInitialized = 'true';
+
+    const sync = () => {
+      const selectedOption = selectEl.options?.[selectEl.selectedIndex] || null;
+      value.textContent = selectedOption?.textContent?.trim() || '';
+      content.querySelectorAll('.glass-dropdown-option').forEach((option) => {
+        option.classList.toggle('selected', option.getAttribute('data-value') === selectEl.value);
+      });
+    };
+
+    content.innerHTML = '';
+    [...selectEl.options].forEach((option) => {
+      const item = document.createElement('button');
+      item.type = 'button';
+      item.className = 'glass-dropdown-option';
+      item.setAttribute('data-value', option.value);
+      item.setAttribute('role', 'option');
+      item.textContent = option.textContent || option.value;
+      item.addEventListener('click', () => {
+        selectEl.value = option.value;
+        selectEl.dispatchEvent(new Event('change', { bubbles: true }));
+        wrapper.classList.remove('open');
+        button.setAttribute('aria-expanded', 'false');
+        sync();
+      });
+      content.appendChild(item);
+    });
+
+    button.addEventListener('click', (event) => {
+      event.stopPropagation();
+      const willOpen = !wrapper.classList.contains('open');
+      document.querySelectorAll('.glass-dropdown.open').forEach((openDropdown) => {
+        if (openDropdown !== wrapper) {
+          openDropdown.classList.remove('open');
+          openDropdown.querySelector('.glass-dropdown-button')?.setAttribute('aria-expanded', 'false');
+        }
+      });
+      wrapper.classList.toggle('open', willOpen);
+      button.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
+    });
+
+    document.addEventListener('click', () => {
+      wrapper.classList.remove('open');
+      button.setAttribute('aria-expanded', 'false');
+    });
+
+    selectEl.addEventListener('change', sync);
+    selectEl._syncGlassDropdown = sync;
+    sync();
+  }
+
+  _syncGlassDropdown(selectOrId) {
+    const selectEl = typeof selectOrId === 'string'
+      ? document.getElementById(selectOrId)
+      : selectOrId;
+    selectEl?._syncGlassDropdown?.();
   }
 
   populateArenaSelector() {
@@ -1077,6 +1522,208 @@ class RacingLobby {
         this.sendSettingsUpdate();
       });
       row.appendChild(btn);
+    });
+  }
+
+  /* ═══════════════════════════════════════════════════
+     LENS ENGINE — 3D tilt, press-down, spring-bounce
+     card switching inspired by Apple App Store cards
+  ═══════════════════════════════════════════════════ */
+  _initLensEngine() {
+    const stacks = document.querySelectorAll('.lens-stack');
+    stacks.forEach(stack => {
+      const deck = stack.querySelector('.lens-deck');
+      const cards = [...stack.querySelectorAll('.lens-card')];
+      const pills = [...stack.querySelectorAll('.lens-pill[data-lens]')];
+      if (!deck || cards.length < 2) return;
+
+      // Init: first card active, rest peek
+      cards.forEach((c, i) => {
+        if (i === 0) { c.classList.add('active'); c.classList.remove('peek'); }
+        else { c.classList.remove('active'); c.classList.add('peek'); }
+      });
+
+      // Switch card function with spring animation
+      const switchCard = (targetLens) => {
+        const current = stack.querySelector('.lens-card.active');
+        const target = stack.querySelector(`.lens-card[data-lens="${targetLens}"]`);
+        if (!target || target === current) return;
+
+        // Animate current out
+        if (current) {
+          current.classList.remove('active', 'lens-pressing');
+          current.classList.add('lens-leaving');
+          current.style.removeProperty('--lens-tilt-x');
+          current.style.removeProperty('--lens-tilt-y');
+          current.addEventListener('animationend', () => {
+            current.classList.remove('lens-leaving');
+            current.classList.add('peek');
+          }, { once: true });
+        }
+
+        // Animate target in
+        target.classList.remove('peek');
+        target.classList.add('active', 'lens-entering');
+        target.addEventListener('animationend', () => {
+          target.classList.remove('lens-entering');
+        }, { once: true });
+
+        // Update pills
+        pills.forEach(p => p.classList.toggle('active', p.dataset.lens === targetLens));
+
+        if (stack === this.leftPanel) {
+          this._syncLeftPanelPills();
+        }
+      };
+
+      stack._switchLensCard = switchCard;
+
+      // Pill click
+      pills.forEach(pill => {
+        pill.addEventListener('click', () => switchCard(pill.dataset.lens));
+      });
+
+      // Peek card click
+      cards.forEach(card => {
+        card.addEventListener('click', (e) => {
+          if (card.classList.contains('peek')) {
+            e.stopPropagation();
+            switchCard(card.dataset.lens);
+          }
+        });
+      });
+
+      // 3D tilt on mouse move (active card only)
+      deck.addEventListener('mousemove', (e) => {
+        const active = stack.querySelector('.lens-card.active');
+        if (!active) return;
+        const rect = deck.getBoundingClientRect();
+        const x = (e.clientX - rect.left) / rect.width;
+        const y = (e.clientY - rect.top) / rect.height;
+        const tiltX = (x - 0.5) * 12;  // -6 to +6 degrees
+        const tiltY = (y - 0.5) * -8;  // -4 to +4 degrees
+        active.style.setProperty('--lens-tilt-x', tiltX);
+        active.style.setProperty('--lens-tilt-y', tiltY);
+      });
+
+      // Reset tilt on mouse leave
+      deck.addEventListener('mouseleave', () => {
+        const active = stack.querySelector('.lens-card.active');
+        if (!active) return;
+        active.style.setProperty('--lens-tilt-x', 0);
+        active.style.setProperty('--lens-tilt-y', 0);
+      });
+
+      // Press-down on mousedown (Apple App Store feel)
+      deck.addEventListener('mousedown', (e) => {
+        const active = stack.querySelector('.lens-card.active');
+        if (!active || !active.contains(e.target)) return;
+        if (e.target.closest('button, input, select, a, .kart-nav-btn, .mode-card, .cup-card, .glo-swatch, .weapon-loadout-btn, .icon-btn, .lens-pill')) return;
+        active.classList.add('lens-pressing');
+      });
+
+      const releasePressing = () => {
+        const active = stack.querySelector('.lens-card.active.lens-pressing');
+        if (active) active.classList.remove('lens-pressing');
+      };
+      deck.addEventListener('mouseup', releasePressing);
+      deck.addEventListener('mouseleave', releasePressing);
+
+      // Touch support for mobile
+      deck.addEventListener('touchstart', (e) => {
+        const active = stack.querySelector('.lens-card.active');
+        if (!active || !active.contains(e.target)) return;
+        if (e.target.closest('button, input, select, a')) return;
+        active.classList.add('lens-pressing');
+      }, { passive: true });
+
+      deck.addEventListener('touchend', releasePressing, { passive: true });
+      deck.addEventListener('touchcancel', releasePressing, { passive: true });
+    });
+
+    // ─── Center panel 3D tilt + parallax ───
+    this._initCenterCardEngine();
+
+    // ─── GLO ripple on all button clicks ───
+    this._initGloRipple();
+  }
+
+  /* Center panel — 3D perspective tilt following mouse,
+     with parallax child layers and press-down response */
+  _initCenterCardEngine() {
+    const cp = document.querySelector('.center-panel');
+    if (!cp) return;
+
+    // Use the game-content as the perspective origin so tilt looks right
+    const parent = cp.parentElement;
+    if (parent) parent.style.perspective = '1200px';
+
+    // 3D tilt on mouse move
+    cp.addEventListener('mousemove', (e) => {
+      const rect = cp.getBoundingClientRect();
+      const x = (e.clientX - rect.left) / rect.width;
+      const y = (e.clientY - rect.top) / rect.height;
+      const tiltX = (x - 0.5) * 6;   // ±3 degrees
+      const tiltY = (y - 0.5) * -5;  // ±2.5 degrees
+      cp.style.setProperty('--cp-tilt-x', tiltX);
+      cp.style.setProperty('--cp-tilt-y', tiltY);
+    });
+
+    // Reset tilt on leave with smooth spring-back
+    cp.addEventListener('mouseleave', () => {
+      cp.style.setProperty('--cp-tilt-x', 0);
+      cp.style.setProperty('--cp-tilt-y', 0);
+      cp.style.setProperty('--cp-press', 0);
+    });
+
+    // Press-down on center panel body
+    cp.addEventListener('mousedown', (e) => {
+      // Don't press-down when clicking interactive elements
+      if (e.target.closest('button, input, select, a, .kart-nav-btn, .glo-swatch, .glo-drum-row')) return;
+      cp.style.setProperty('--cp-press', 1);
+      cp.style.transition = 'transform 0.10s ease';
+    });
+
+    const releaseCenter = () => {
+      cp.style.setProperty('--cp-press', 0);
+      cp.style.transition = 'transform 0.35s cubic-bezier(0.34,1.56,0.64,1)';
+    };
+    cp.addEventListener('mouseup', releaseCenter);
+    cp.addEventListener('mouseleave', releaseCenter);
+
+    // Touch press-down for center panel
+    cp.addEventListener('touchstart', (e) => {
+      if (e.target.closest('button, input, select, a')) return;
+      cp.style.setProperty('--cp-press', 1);
+      cp.style.transition = 'transform 0.10s ease';
+    }, { passive: true });
+    cp.addEventListener('touchend', releaseCenter, { passive: true });
+    cp.addEventListener('touchcancel', releaseCenter, { passive: true });
+  }
+
+  /* GLO ripple — spawns a radial glow wave on button clicks,
+     giving each interaction a physical "energy pulse" feel */
+  _initGloRipple() {
+    const selector = 'button, .mode-card, .mode-cat-tab, .cup-card, .lens-pill, .weapon-loadout-btn, .kart-nav-btn';
+    document.addEventListener('click', (e) => {
+      const target = e.target.closest(selector);
+      if (!target) return;
+
+      // Find the nearest panel-level container to position the ripple
+      const container = target.closest('.lens-card, .center-panel');
+      if (!container) return;
+
+      const rect = container.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      const size = Math.max(rect.width, rect.height) * 0.5;
+
+      const ripple = document.createElement('div');
+      ripple.className = 'glo-ripple';
+      ripple.style.cssText = `width:${size}px;height:${size}px;left:${x - size / 2}px;top:${y - size / 2}px;`;
+
+      container.appendChild(ripple);
+      ripple.addEventListener('animationend', () => ripple.remove(), { once: true });
     });
   }
 }

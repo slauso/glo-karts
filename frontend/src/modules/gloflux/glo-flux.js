@@ -22,6 +22,10 @@ import { FollowCamera } from '@babylonjs/core/Cameras/followCamera';
 import { Color3 } from '@babylonjs/core/Maths/math.color';
 import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial';
 
+import HavokPhysics from '@babylonjs/havok';
+import { HavokPlugin } from '@babylonjs/core/Physics/v2/Plugins/havokPlugin';
+import '@babylonjs/core/Physics/joinedPhysicsEngineComponent';
+
 import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder';
 
 import { drawPower, activatePower, tickPowers, createPowerState, awardEchoShards, getDominantFamily } from './glo-flux-powers.js';
@@ -31,6 +35,10 @@ import { createMutationState, infectKart, computeDeformedPositions, applyMutatio
 import { createVFXState, requestPowerVFX, releasePowerVFX, tickPostProcess, queuePostProcess, getApocalypseBurstVFX, disposeVFX } from './glo-flux-vfx.js';
 import { createHUDState, updateSurge, updatePowerSlots, updateCombo, updateMutation, updateHealth, updateRace, addKillFeedEntry, updateRadar, renderHUD, resizeHUD, disposeHUD } from './glo-flux-hud.js';
 import { createMenuState, mountMenu, hideMenu, disposeMenu } from './glo-flux-menu.js';
+import { PhysicsAggregate } from '@babylonjs/core/Physics/v2/physicsAggregate';
+import { PhysicsShapeType } from '@babylonjs/core/Physics/v2/IPhysicsEnginePlugin';
+import { FILTER, applyFilterToAggregate } from '../realtime/collision-layers.js';
+import { applyKartDriving, createDriftState } from '../kart-physics.js';
 import { createBotFleet, tickBots, disposeBots } from './glo-flux-ai.js';
 
 // ── Game States ─────────────────────────────────────────────────────────────
@@ -133,12 +141,12 @@ export function bootGloFlux(canvas, preConfig = null, options = {}) {
 
   // ── Lighting (wasteland mood) ───────────────────────────────────────────
   const hemi = new HemisphericLight('gf_hemi', new Vector3(0, 1, 0), orch.scene);
-  hemi.intensity = 0.4;
+  hemi.intensity = 0.8;
   hemi.diffuse = new Color3(0.8, 0.9, 0.6);
   hemi.groundColor = new Color3(0.2, 0.15, 0.1);
 
   const dir = new DirectionalLight('gf_dir', new Vector3(-0.5, -1, 0.3), orch.scene);
-  dir.intensity = 0.6;
+  dir.intensity = 1.2;
   dir.diffuse = new Color3(1, 0.85, 0.5);
 
   // ── Camera ──────────────────────────────────────────────────────────────
@@ -177,6 +185,7 @@ export function bootGloFlux(canvas, preConfig = null, options = {}) {
   });
 
   return {
+    _orch: orch,
     startMatch() {
       orch.state = GLOFLUX_STATE.FLUX_ACTIVE;
       orch.countdownRemain = 0;
@@ -197,7 +206,18 @@ export function bootGloFlux(canvas, preConfig = null, options = {}) {
 
 // ── Loading ─────────────────────────────────────────────────────────────────
 
-function startLoading(orch) {
+function startLoading(orch) { window.__useRealPhysics = true;
+  const HAVOK_WASM_PATH = `${import.meta.env.BASE_URL}havok/HavokPhysics.wasm`;
+  HavokPhysics({ locateFile: (path) => (path.endsWith(".wasm") ? HAVOK_WASM_PATH : path) }).then((hk) => {
+    const gravityVector = new Vector3(0, -9.81, 0);
+    const physicsPlugin = new HavokPlugin(true, hk);
+    orch.scene.enablePhysics(gravityVector, physicsPlugin);
+    console.log("[gloFLUX] Havok Physics initialized.");
+    _continueLoading(orch);
+  });
+}
+
+function _continueLoading(orch) {
   const cfg = orch.config;
   const variant = cfg.variant === 'race' ? ARENA_VARIANT.RACE : ARENA_VARIANT.ARENA;
 
@@ -229,14 +249,14 @@ function startLoading(orch) {
   }
 
   // Spawn local player
-  const localPlayer = createPlayer(orch, orch.localPlayerId, arenaData.spawnPoints[0] || new Vector3(0, 2, 0));
+  const localPlayer = createPlayer(orch, orch.localPlayerId, arenaData.spawnPositions[0] || new Vector3(0, 2, 0));
   orch.players.push(localPlayer);
   orch.camera.lockedTarget = localPlayer.mesh;
 
   // Spawn bots
   const botCount = cfg.botCount || 5;
   for (let i = 0; i < botCount; i++) {
-    const spawnPos = arenaData.spawnPoints[(i + 1) % arenaData.spawnPoints.length] || new Vector3(i * 4, 2, i * 4);
+    const spawnPos = arenaData.spawnPositions[(i + 1) % arenaData.spawnPositions.length] || new Vector3(i * 4, 2, i * 4);
     const bot = createPlayer(orch, `bot_${i}`, spawnPos);
     bot.isBot = true;
     orch.players.push(bot);
@@ -256,8 +276,8 @@ function startLoading(orch) {
 function createPlayer(orch, id, position, meta = {}) {
   // Placeholder mesh — real kart loading happens in platform wiring
   const mesh = MeshBuilder.CreateBox(`kart_${id}`, { width: 1.2, height: 0.6, depth: 2 }, orch.scene);
-  mesh.position = position.clone();
-  mesh.position.y = position.y ?? 0.8;
+  mesh.position = new Vector3(position.x, position.y, position.z);
+  mesh.position.y = (position.y ?? 0.8) + 15;
 
   const material = new StandardMaterial(`kart_mat_${id}`, orch.scene);
   try {
@@ -271,7 +291,7 @@ function createPlayer(orch, id, position, meta = {}) {
   return {
     id,
     mesh,
-    physics: null, // attached by kart-physics after full wiring
+    physics: window.__useRealPhysics ? (()=>{ const a = new PhysicsAggregate(mesh, PhysicsShapeType.BOX, { mass: 800, friction: 0.8, restitution: 0.1, extents: new Vector3(1.8,0.5,3.2) }, orch.scene); a.body.setMassProperties({ inertia: new Vector3(0,500,0) }); applyFilterToAggregate(a, FILTER.KART); return a; })() : null, driftState: createDriftState(), input: {forward:false,reverse:false,left:false,right:false,brake:false},
     powerState: createPowerState(),
     surgeState: createSurgeState(),
     mutationState: createMutationState(),
@@ -367,6 +387,12 @@ function tickFluxActive(orch, dt, now) {
 
     // Tick surge
     const surgeResult = tickSurge(p.surgeState, dt, now);
+      if (p.physics && p.alive) {
+        let input = p.isBot ? p.input : orch.input;
+        const steer = input.left && !input.right ? -1 : (input.right && !input.left ? 1 : 0);
+        const accel = input.forward && !input.reverse ? 1 : (input.reverse ? -1 : 0);
+        applyKartDriving(p.physics.body, p.mesh, { accelerate: accel, steer, brake: input.brake }, dt, p.driftState, { spdMult: 1, strMult: 1 });
+      }
     if (surgeResult.tier >= 4 && !surgeResult.isBursting) {
       // Can trigger apocalypse — check on next tick
       orch.state = GLOFLUX_STATE.SURGE_CHECK;
@@ -640,9 +666,9 @@ function countPlacement(orch, player) {
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
 function getActivePowersForHUD(powerState) {
-  return Object.entries(powerState.active).map(([id, data]) => ({
-    powerId: id,
-    family: data.family,
-    expiresAt: data.expiresAt,
+  return powerState.activePowers.map(p => ({
+    powerId: p.powerId,
+    family: p.family || 'unknown',
+    expiresAt: p.startTime + p.remaining * 1000,
   }));
 }

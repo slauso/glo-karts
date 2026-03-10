@@ -31,7 +31,7 @@ test.describe('Phase 18 — Glo Flux Multiplayer Mode (Procedural Symbiotic Apoc
 
     const data = await page.evaluate(async () => {
       const { ProceduralSymbioticGen } = await import('/src/modules/procedural-symbiotic-gen.js');
-      const BABYLON = await import('@babylonjs/core');
+      const BABYLON = await import('/src/modules/test-helper.js');
       
       // Setup headless test scene
       const engine = new BABYLON.NullEngine();
@@ -56,3 +56,5 @@ test.describe('Phase 18 — Glo Flux Multiplayer Mode (Procedural Symbiotic Apoc
     expect(data.wellIsMesh).toBe(true);
   });
 });
+
+

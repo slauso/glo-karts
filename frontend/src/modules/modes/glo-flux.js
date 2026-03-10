@@ -1,7 +1,7 @@
 import { Scene } from '@babylonjs/core/scene';
 import { Vector3 } from '@babylonjs/core/Maths/math.vector';
 import { generateDemoArena } from '../procedural-demo-course.js';
-import { showMessage } from '../ui/toast.js';
+const showMessage = (msg) => console.log(msg);
 
 export class GloFluxMode {
   constructor(engine, scene, networkClient) {
@@ -76,3 +76,4 @@ export class GloFluxMode {
     this.scene.onBeforeRenderObservable.removeCallback(this.update.bind(this));
   }
 }
+

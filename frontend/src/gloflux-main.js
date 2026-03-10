@@ -9,6 +9,7 @@
 import { bootGloFlux } from './modules/gloflux/glo-flux.js';
 import { createGloFluxClient } from './modules/gloflux/glo-flux-network.js';
 import { getColyseusEndpoint } from './modules/realtime/feature-flag.js';
+import * as prematchLobby from './modules/realtime/prematch-lobby.js';
 import { publishDebugSnapshot } from './modules/debug-telemetry.js';
 
 const canvas = document.getElementById('gloflux-canvas');
@@ -46,7 +47,29 @@ if (!canvas) {
         });
         await networkClient.connect(colyseusClient);
         console.log('[gloFLUX] Connected to multiplayer room');
-      } catch (err) {
+                    const mockState = { players: networkClient.players };
+          prematchLobby.show(mockState, networkClient.sessionId, preConfig);
+          
+          networkClient.on('playerJoin', () => prematchLobby.updatePlayers(mockState, networkClient.sessionId));
+          networkClient.on('playerLeave', () => prematchLobby.updatePlayers(mockState, networkClient.sessionId));
+
+          networkClient.on('countdown', (msg) => {
+              console.log('Countdown', msg);
+              prematchLobby.startCountdown(msg.durationMs / 1000);
+          });
+
+          networkClient.on('matchLive', () => {
+               console.log('Match live!');
+               prematchLobby.hide();
+          });
+
+          // Trigger start automatically for now
+          setTimeout(() => {
+              if (networkClient && networkClient.triggerStart) {
+                  console.log('Triggering start!');
+                  networkClient.triggerStart();
+              }
+          }, 4000);      } catch (err) {
         console.error('[gloFLUX] Multiplayer connection failed, falling back to solo:', err.message);
         networkClient = null;
         if (preConfig) preConfig.multiplayer = false;
