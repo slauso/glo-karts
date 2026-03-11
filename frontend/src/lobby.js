@@ -2,9 +2,8 @@ import { Client } from 'colyseus.js';
 import { getColyseusEndpoint } from './modules/realtime/feature-flag.js';
 import {
   MODE_STATUS,
-  CATEGORIES,
   MODE_REGISTRY,
-  getCategoryTree,
+  getVisibleModes,
   getPageForMode,
   requiresLobby,
   isPlayable,
@@ -16,9 +15,7 @@ import {
   getSelectableContentList,
   usesArenaSelection,
   usesTrackSelection,
-  usesCupSelection,
 } from './modules/single-player-routing.js';
-import { SINGLE_PLAYER_CUPS } from './modules/content-registry.js';
 
 const DEFAULTS = {
   mode: 'race',
@@ -57,51 +54,51 @@ function getStoredGlo() {
 }
 
 class RacingLobby {
-    _initLensEngine() {
-      // Apple card effect for all .lens-card, including the new unified lobby-join card
-      const cards = document.querySelectorAll('.lens-card');
-      cards.forEach(card => {
-        let pressing = false;
-        let tiltX = 0, tiltY = 0;
-        let lastRAF = null;
-        const updateTilt = (e) => {
-          const rect = card.getBoundingClientRect();
-          const x = (e.clientX - rect.left) / rect.width;
-          const y = (e.clientY - rect.top) / rect.height;
-          tiltX = (x - 0.5) * 24; // degrees
-          tiltY = (y - 0.5) * 18;
-          card.style.setProperty('--lens-tilt-x', tiltX.toFixed(2));
-          card.style.setProperty('--lens-tilt-y', tiltY.toFixed(2));
-        };
-        const resetTilt = () => {
-          card.style.setProperty('--lens-tilt-x', '0');
-          card.style.setProperty('--lens-tilt-y', '0');
-        };
-        card.addEventListener('mousemove', updateTilt);
-        card.addEventListener('mouseleave', () => {
-          resetTilt();
-          card.classList.remove('lens-pressing');
-        });
-        card.addEventListener('mousedown', () => {
-          pressing = true;
-          card.classList.add('lens-pressing');
-        });
-        card.addEventListener('mouseup', () => {
-          pressing = false;
-          card.classList.remove('lens-pressing');
-        });
-        card.addEventListener('touchstart', () => {
-          pressing = true;
-          card.classList.add('lens-pressing');
-        }, {passive:true});
-        card.addEventListener('touchend', () => {
-          pressing = false;
-          card.classList.remove('lens-pressing');
-        });
-        // Reset tilt on init
+  _initLensEngine() {
+    // Apple card effect for all .lens-card, including the new unified lobby-join card
+    const cards = document.querySelectorAll('.lens-card');
+    cards.forEach(card => {
+      let pressing = false;
+      let tiltX = 0, tiltY = 0;
+      let lastRAF = null;
+      const updateTilt = (e) => {
+        const rect = card.getBoundingClientRect();
+        const x = (e.clientX - rect.left) / rect.width;
+        const y = (e.clientY - rect.top) / rect.height;
+        tiltX = (x - 0.5) * 24;
+        tiltY = (y - 0.5) * 18;
+        card.style.setProperty('--lens-tilt-x', tiltX.toFixed(2));
+        card.style.setProperty('--lens-tilt-y', tiltY.toFixed(2));
+      };
+      const resetTilt = () => {
+        card.style.setProperty('--lens-tilt-x', '0');
+        card.style.setProperty('--lens-tilt-y', '0');
+      };
+      card.addEventListener('mousemove', updateTilt);
+      card.addEventListener('mouseleave', () => {
         resetTilt();
+        card.classList.remove('lens-pressing');
       });
-    }
+      card.addEventListener('mousedown', () => {
+        pressing = true;
+        card.classList.add('lens-pressing');
+      });
+      card.addEventListener('mouseup', () => {
+        pressing = false;
+        card.classList.remove('lens-pressing');
+      });
+      card.addEventListener('touchstart', () => {
+        pressing = true;
+        card.classList.add('lens-pressing');
+      }, { passive: true });
+      card.addEventListener('touchend', () => {
+        pressing = false;
+        card.classList.remove('lens-pressing');
+      });
+      resetTilt();
+    });
+  }
+
   constructor() {
     this.realtimeEndpoint = getColyseusEndpoint();
     this.client = new Client(this.realtimeEndpoint);
@@ -114,7 +111,7 @@ class RacingLobby {
     this.isReady = false;
 
     this.selectedMode = DEFAULTS.mode;
-    this.selectedModeId = 'time_trial'; // default mode from game-modes.js
+    this.selectedModeId = null;
     this.selectedMap = DEFAULTS.trackId;
     this.selectedBattleType = DEFAULTS.battleType;
     this.selectedMaxPlayers = DEFAULTS.maxPlayers;
@@ -122,6 +119,7 @@ class RacingLobby {
     this.selectedLoadout = DEFAULTS.loadoutId;
     this.selectedCup = 'starter';
     this.selectedGlofluxTheme = 'nuclear_desert';
+    this.splitScreenType = 'race';
 
     this.currentLobbyCode = '';
     this.currentLobbyPrivacy = 'private';
@@ -130,7 +128,6 @@ class RacingLobby {
     this.attachEventListeners();
     this.initMapSelector();
     this.initModeSelector();
-    this.initCupSelector();
     this.initRaceSettings();
     this.initGlofluxSettings();
     this.initWeaponLoadout();
@@ -166,10 +163,8 @@ class RacingLobby {
     this.joinPartyBtn = document.getElementById('join-party-btn');
     this.joinStatus = document.getElementById('join-status');
     this.joinSection = document.querySelector('.join-section');
-    this.toolImportTrackSection = document.getElementById('tool-import-track-section');
-    this.leftPanel = document.querySelector('.lens-stack-left');
-    this.leftSetupCta = document.getElementById('left-setup-cta');
-    this.leftModePill = document.getElementById('left-mode-pill') || this.leftPanel?.querySelector('.lens-pill[data-lens="mode"]') || null;
+    this.modeSelectorContainer = document.querySelector('.mode-selector-container');
+    this.inlineSetup = document.getElementById('inline-setup');
 
     this.playerList = document.getElementById('player-list');
     this.readyCountEl = document.getElementById('ready-count');
@@ -218,7 +213,6 @@ class RacingLobby {
     this.playBtn?.addEventListener('click', () => this.onPlayClicked());
     this.readyBtn?.addEventListener('click', () => this.toggleReady());
     this.startMatchBtn?.addEventListener('click', () => this.startMatch());
-    this.leftSetupCta?.addEventListener('click', () => this.leftPanel?._switchLensCard?.('track'));
 
     document.addEventListener('kartChanged', (event) => {
       if (!event.detail?.kartId) return;
@@ -860,56 +854,44 @@ class RacingLobby {
     if (!this.playBtn || this.room) return;
 
     let icon, label, indicator;
+    if (!this.selectedModeId) {
+      icon = 'fa-hand-pointer';
+      label = 'SELECT MODE';
+      indicator = 'Choose a game mode first';
+      this.playBtn.innerHTML = `<i class="fas ${icon}"></i> ${label}`;
+      if (this.playIndicator && this.playIndicatorLabel) {
+        this.playIndicator.classList.add('hidden');
+        this.playIndicatorLabel.textContent = indicator;
+      }
+      return;
+    }
+
     switch (this.selectedModeId) {
-      case 'create_party':
-        icon = 'fa-bolt';       label = 'CREATE LOBBY';
-        indicator = 'Private lobby — invite friends';
-        break;
-      case 'race_online':
-        icon = 'fa-globe';      label = 'GO ONLINE';
-        indicator = 'Online Race';
-        break;
       case 'battle_online':
         icon = 'fa-globe';      label = 'GO ONLINE';
-        indicator = 'Online Battle';
-        break;
-      case 'track_builder':
-        icon = 'fa-wrench';     label = 'OPEN BUILDER';
-        indicator = 'Track Builder';
-        break;
-      case 'time_trial':
-        icon = 'fa-stopwatch';  label = 'START TIME TRIAL';
-        indicator = 'Solo — no items, pure speed';
-        break;
-      case 'grand_prix':
-        icon = 'fa-trophy';     label = 'START GRAND PRIX';
-        indicator = 'Full cup series';
+        indicator = 'Click to find a match';
         break;
       case 'quick_race':
         icon = 'fa-flag-checkered'; label = 'START RACE';
-        indicator = 'Quick race vs AI';
+        indicator = 'Click to race';
+        break;
+      case 'local_2p_race':
+      case 'local_2p_battle':
+        icon = 'fa-columns';    label = 'START SPLIT SCREEN';
+        indicator = 'Click to start';
         break;
       default:
         if (isGloflux) {
           icon = 'fa-atom';     label = 'CREATE FLUX LOBBY';
-          indicator = 'GloFlux session';
-        } else if (modeEntry?.category === 'local') {
-          icon = 'fa-users';    label = 'START LOCAL';
-          indicator = 'Local splitscreen';
-        } else if (modeEntry?.category === 'online') {
-          icon = 'fa-globe';    label = 'GO ONLINE';
-          indicator = modeEntry?.label || 'Multiplayer';
-        } else if (isToolMode) {
-          icon = 'fa-wrench';   label = 'OPEN BUILDER';
-          indicator = modeEntry?.label || 'Tool';
+          indicator = 'Click to create';
         } else {
           icon = 'fa-play';     label = 'PLAY GAME';
-          indicator = modeEntry?.label || '';
+          indicator = 'Click to play';
         }
         break;
     }
 
-    this.playBtn.innerHTML = `<i class="fas ${icon}"></i> ${label}`;
+    this.playBtn.innerHTML = `<i class="fas ${icon}"></i> ${label} <i class="fas fa-chevron-right play-btn-arrow"></i>`;
 
     // Show indicator chip below button
     if (this.playIndicator && this.playIndicatorLabel) {
@@ -931,74 +913,55 @@ class RacingLobby {
     const modeEntry = getMode(this.selectedModeId);
     const showBattle = !!(modeEntry?.selectors?.battleSettings);
     const isGloflux = modeEntry?.id === 'gloflux' || modeEntry?.id?.startsWith('gloflux_');
-    const isCup = usesCupSelection(this.selectedModeId);
+    const isSplitScreen = modeEntry?.id === 'local_2p_race' || modeEntry?.id === 'local_2p_battle';
     const showTrack = usesTrackSelection(this.selectedModeId) || usesArenaSelection(this.selectedModeId);
-    const isRaceWithBots = usesTrackSelection(this.selectedModeId) && !isCup
-      && this.selectedModeId !== 'time_trial' && this.selectedModeId !== 'free_roam';
+    const isRaceWithBots = usesTrackSelection(this.selectedModeId)
+      && this.selectedModeId !== 'time_trial' && this.selectedModeId !== 'free_roam'
+      && !isSplitScreen;
 
     return {
       showBattle,
       isGloflux,
-      isCup,
+      isSplitScreen,
       showTrack,
       isRaceWithBots,
-      showSetupCard: showTrack || showBattle || isCup || isGloflux,
+      showSetup: showTrack || showBattle || isGloflux || isSplitScreen,
     };
-  }
-
-  _syncLeftPanelPills() {
-    if (!this.leftPanel) return;
-    this._updateLeftSetupPill(this._getLeftSetupState());
   }
 
   refreshBattleControls() {
     const battleSettings = document.getElementById('battle-settings');
     const raceSettings = document.getElementById('race-settings');
-    const cupSelector = document.getElementById('cup-selector');
     const glofluxSettings = document.getElementById('gloflux-settings');
+    const splitscreenSettings = document.getElementById('splitscreen-settings');
     const modeEntry = getMode(this.selectedModeId);
-    const { showBattle, isGloflux, isCup, showTrack, isRaceWithBots, showSetupCard } = this._getLeftSetupState();
-    const isToolMode = modeEntry?.category === 'tools';
-    const isShop = modeEntry?.category === 'shop';
+    const { showBattle, isGloflux, isSplitScreen, showTrack, isRaceWithBots, showSetup } = this._getLeftSetupState();
+    const hasModeSelection = !!modeEntry;
+
+    // Show/hide the inline setup section
+    if (this.inlineSetup) {
+      this.inlineSetup.classList.toggle('hidden', !hasModeSelection || !showSetup);
+    }
 
     // Panel visibility
     battleSettings?.classList.toggle('hidden', !showBattle);
     raceSettings?.classList.toggle('hidden', !isRaceWithBots);
-    cupSelector?.classList.toggle('hidden', !isCup);
     glofluxSettings?.classList.toggle('hidden', !isGloflux);
-    this.toolImportTrackSection?.classList.toggle('hidden', !isToolMode);
-    this.leftSetupCta?.classList.toggle('hidden', !showSetupCard);
-    this._syncLeftPanelPills();
-
-    const leftSwitchCard = this.leftPanel?._switchLensCard;
-    const activeLeftCard = this.leftPanel?.querySelector('.lens-card.active')?.dataset.lens;
-    if (!showSetupCard && activeLeftCard === 'track') {
-      leftSwitchCard?.('mode');
-    }
+    splitscreenSettings?.classList.toggle('hidden', !isSplitScreen);
 
     // Hide track/map selector for modes that don't need it
-    const hideMap = isToolMode || isGloflux || isShop || isCup;
     if (this.mapSelectorContainer) {
-      this.mapSelectorContainer.classList.toggle('hidden', hideMap);
+      this.mapSelectorContainer.classList.toggle('hidden', !showTrack);
     }
 
     // Update track carousel title for battle vs race
     const carouselTitle = document.querySelector('.track-carousel-title');
-    if (carouselTitle && !hideMap) {
+    if (carouselTitle && showTrack) {
       carouselTitle.textContent = usesArenaSelection(this.selectedModeId) ? 'SELECT ARENA' : 'SELECT TRACK';
     }
 
-    // Hide kart/glo pickers for non-game modes
-    const hideKart = isToolMode || isShop;
-    const kartSelector = document.querySelector('.kart-selector');
-    if (kartSelector) kartSelector.classList.toggle('hidden', hideKart);
-    const gloPicker = document.getElementById('glo-picker-container');
-    if (gloPicker) gloPicker.classList.toggle('hidden', hideKart);
-    const carModel = document.getElementById('car-model-container');
-    if (carModel) carModel.classList.toggle('hidden', hideKart);
-
     // Sync the play button label, icon and indicator
-    this._syncPlayButton(modeEntry, isToolMode, isGloflux);
+    this._syncPlayButton(modeEntry, false, isGloflux);
 
     // Action buttons are handled by refreshActionButtons()
     this.refreshActionButtons();
@@ -1020,7 +983,7 @@ class RacingLobby {
     }
 
     // Re-render mode selector UI
-    this._selectCategory(this._activeCategory());
+    this._renderModeCards();
 
     const mapName = document.querySelector('.selected-map-name');
     const selectedTrack = getSelectableContentList(this.selectedModeId).find((t) => t.id === this.selectedMap);
@@ -1118,40 +1081,14 @@ class RacingLobby {
   }
 
   initModeSelector() {
-    // ── Build category tabs + mode cards from game-modes.js ──
-    const tabsContainer = document.getElementById('mode-category-tabs');
     const cardsContainer = document.getElementById('mode-cards');
     const battleTypeEl = document.getElementById('battle-type-select');
     const maxPlayersEl = document.getElementById('battle-max-players');
     const botCountEl = document.getElementById('battle-bot-count');
 
-    const tree = getCategoryTree();
-
-    // Render category tabs
-    if (tabsContainer) {
-      tabsContainer.innerHTML = '';
-      tree.forEach((cat) => {
-        const tab = document.createElement('button');
-        tab.className = `mode-cat-tab${cat.id === this._activeCategory() ? ' active' : ''}`;
-        tab.setAttribute('data-cat', cat.id);
-        tab.title = cat.desc || cat.label;
-        tab.innerHTML = `
-          <span class="mode-cat-tab-icon"><i class="fas ${cat.icon}"></i></span>
-          <span class="mode-cat-tab-label">${cat.label}</span>
-        `;
-        tab.addEventListener('click', () => this._selectCategory(cat.id));
-        tabsContainer.appendChild(tab);
-      });
-    }
-
     this._renderModeCards();
 
-    // Enable play button for the default-selected mode
-    if (this.playBtn && isPlayable(this.selectedModeId)) {
-      this.playBtn.disabled = false;
-    }
-
-    // Battle settings listeners (unchanged)
+    // Battle settings listeners
     battleTypeEl?.addEventListener('change', () => {
       this.selectedBattleType = battleTypeEl.value === 'ctf' ? 'ctf' : 'deathmatch';
       this.sendSettingsUpdate();
@@ -1172,36 +1109,33 @@ class RacingLobby {
 
     this._initGlassDropdown(battleTypeEl);
     this._initGlassDropdown(maxPlayersEl);
-  }
 
-  /** Which category is active based on selectedModeId */
-  _activeCategory() {
-    const mode = getMode(this.selectedModeId);
-    return mode ? mode.category : 'solo';
-  }
-
-  _selectCategory(catId) {
-    // highlight tab
-    document.querySelectorAll('.mode-cat-tab').forEach((tab) => {
-      tab.classList.toggle('active', tab.getAttribute('data-cat') === catId);
+    // Split screen type listener
+    const splitTypeEl = document.getElementById('split-type-select');
+    splitTypeEl?.addEventListener('change', () => {
+      this.splitScreenType = splitTypeEl.value;
+      // Swap track vs arena carousel
+      if (window.__trackPreview) {
+        window.__trackPreview.setMode(splitTypeEl.value === 'battle' ? 'battle' : 'race');
+      }
+      this._rebuildMapDropdown();
+      const carouselTitle = document.querySelector('.track-carousel-title');
+      if (carouselTitle) {
+        carouselTitle.textContent = splitTypeEl.value === 'battle' ? 'SELECT ARENA' : 'SELECT TRACK';
+      }
     });
-
-    // If the current mode isn't in this category, pick the first playable one
-    const mode = getMode(this.selectedModeId);
-    if (!mode || mode.category !== catId) {
-      const tree = getCategoryTree();
-      const cat = tree.find(c => c.id === catId);
-      const first = cat?.modes.find(m => isPlayable(m.id)) || cat?.modes[0];
-      if (first) this._selectMode(first.id);
-    }
-
-    this.leftPanel?._switchLensCard?.('mode');
-    this._renderModeCards();
+    this._initGlassDropdown(splitTypeEl);
   }
 
   _selectMode(modeId) {
     const mode = getMode(modeId);
     if (!mode || !isPlayable(modeId)) return;
+
+    // Collapse initial big-card state on first mode selection
+    const leftPanel = document.querySelector('.simplified-left-panel');
+    if (leftPanel?.classList.contains('mode-initial')) {
+      leftPanel.classList.remove('mode-initial');
+    }
 
     this.selectedModeId = modeId;
 
@@ -1220,7 +1154,6 @@ class RacingLobby {
     if (window.__trackPreview && this.selectedMap) {
       window.__trackPreview.setById(this.selectedMap);
     }
-    this.leftPanel?._switchLensCard?.('mode');
     this.refreshBattleControls();
     this._renderModeCards();
     if (this.playBtn) {
@@ -1230,85 +1163,30 @@ class RacingLobby {
     this.sendSettingsUpdate();
   }
 
-  _updateLeftSetupPill({ showSetupCard, showTrack, showBattle, isCup, isGloflux, isRaceWithBots }) {
-    if (!this.leftSetupCta) return;
-
-    let icon = 'fa-layer-group';
-    let label = 'SETUP';
-    let hint = 'More options';
-
-    if (isCup) {
-      icon = 'fa-trophy';
-      label = 'CUP';
-      hint = 'Choose a race series';
-    } else if (showBattle || isGloflux || isRaceWithBots) {
-      icon = 'fa-sliders-h';
-      label = 'SETUP';
-      hint = isGloflux ? 'Tune match rules' : 'Adjust game options';
-    } else if (usesArenaSelection(this.selectedModeId)) {
-      icon = 'fa-vector-square';
-      label = 'ARENA';
-      hint = 'Pick a battleground';
-    } else if (showTrack) {
-      icon = 'fa-road';
-      label = 'TRACK';
-      hint = 'Pick your course';
-    }
-
-    this.leftSetupCta.innerHTML = `
-      <span class="lens-pill-main"><i class="fas ${icon}"></i><span>${label}</span></span>
-      <span class="lens-pill-sub">${hint}</span>
-      <span class="lens-pill-cue" aria-hidden="true"><i class="fas fa-arrow-right"></i></span>
-    `;
-
-    const activeLeftCard = this.leftPanel?.querySelector('.lens-card.active')?.dataset.lens;
-    const promptSetup = showSetupCard && activeLeftCard !== 'track';
-    this.leftSetupCta.classList.toggle('lens-pill-prompt', promptSetup);
-    this._updateLeftModePill({ showSetupCard, activeLeftCard });
-  }
-
-  _updateLeftModePill({ showSetupCard, activeLeftCard }) {
-    if (!this.leftModePill) return;
-
-    const isReturnState = showSetupCard && activeLeftCard === 'track';
-
-    this.leftModePill.innerHTML = isReturnState
-      ? `
-        <span class="lens-pill-main"><i class="fas fa-arrow-left"></i><span>BACK</span></span>
-        <span class="lens-pill-sub">Return to game modes</span>
-        <span class="lens-pill-cue lens-pill-cue-left" aria-hidden="true"><i class="fas fa-arrow-left"></i></span>
-      `
-      : `
-        <span class="lens-pill-main"><i class="fas fa-sliders-h"></i><span>MODE</span></span>
-        <span class="lens-pill-sub">Choose how to play</span>
-      `;
-
-    this.leftModePill.classList.toggle('lens-pill-return', isReturnState);
-    this.leftModePill.classList.toggle('lens-pill-prompt', isReturnState);
-  }
-
   _renderModeCards() {
     const cardsContainer = document.getElementById('mode-cards');
     if (!cardsContainer) return;
 
-    const catId = this._activeCategory();
-    const tree = getCategoryTree();
-    const cat = tree.find(c => c.id === catId);
-    if (!cat) return;
+    const modes = getVisibleModes();
+    const leftPanel = document.querySelector('.simplified-left-panel');
+    const isInitial = leftPanel?.classList.contains('mode-initial');
+
+    // In initial landing state, append track_builder as 5th tile
+    const allModes = [...modes];
+    if (isInitial) {
+      const builder = getMode('track_builder');
+      if (builder) allModes.push(builder);
+    }
 
     cardsContainer.innerHTML = '';
-    cat.modes.forEach((mode) => {
-      const playable = isPlayable(mode.id);
+    allModes.forEach((mode) => {
       const card = document.createElement('div');
       card.className = 'mode-card';
       if (mode.id === this.selectedModeId) card.classList.add('active');
-      if (!playable) card.classList.add('disabled');
       card.setAttribute('data-mode-id', mode.id);
 
       let badgeHTML = '';
-      if (mode.status === MODE_STATUS.PLANNED) {
-        badgeHTML = '<span class="mode-card-badge coming-soon">SOON</span>';
-      } else if (mode.status === MODE_STATUS.BETA) {
+      if (mode.status === MODE_STATUS.BETA) {
         badgeHTML = '<span class="mode-card-badge beta">BETA</span>';
       }
 
@@ -1316,41 +1194,16 @@ class RacingLobby {
         <div class="mode-card-icon"><i class="fas ${mode.icon}"></i></div>
         <div class="mode-card-info">
           <div class="mode-card-label">${mode.label}</div>
-          <div class="mode-card-desc">${mode.desc || ''}</div>
         </div>
         ${badgeHTML}
       `;
 
-      if (playable) {
+      if (mode.page && mode.category === 'tools') {
+        card.addEventListener('click', () => { window.location.href = mode.page; });
+      } else {
         card.addEventListener('click', () => this._selectMode(mode.id));
       }
       cardsContainer.appendChild(card);
-    });
-  }
-
-  initCupSelector() {
-    const container = document.getElementById('cup-cards');
-    if (!container) return;
-    container.innerHTML = '';
-
-    Object.values(SINGLE_PLAYER_CUPS).forEach((cup) => {
-      const card = document.createElement('div');
-      card.className = `cup-card${cup.id === this.selectedCup ? ' active' : ''}`;
-      card.setAttribute('data-cup', cup.id);
-      card.innerHTML = `
-        <span class="cup-card-icon">${cup.icon}</span>
-        <div class="cup-card-info">
-          <div class="cup-card-name">${cup.label}</div>
-          <div class="cup-card-desc">${cup.description}</div>
-        </div>
-        <span class="cup-card-theme">${cup.theme}</span>
-      `;
-      card.addEventListener('click', () => {
-        this.selectedCup = cup.id;
-        container.querySelectorAll('.cup-card').forEach((c) => c.classList.remove('active'));
-        card.classList.add('active');
-      });
-      container.appendChild(card);
     });
   }
 
@@ -1570,10 +1423,6 @@ class RacingLobby {
 
         // Update pills
         pills.forEach(p => p.classList.toggle('active', p.dataset.lens === targetLens));
-
-        if (stack === this.leftPanel) {
-          this._syncLeftPanelPills();
-        }
       };
 
       stack._switchLensCard = switchCard;

@@ -301,8 +301,8 @@ class KartPreview {
 
     this.scene = new THREE.Scene();
     
-    // Shift the entire 3D scene up by ~15% relative to the fixed camera to clear the background title
-    this.scene.position.y = 0.25; // Lower 10% (0.1 units drop in normalized-ish scope from 0.55) 
+    // Shift the entire 3D scene down ~20% from previous position
+    this.scene.position.y = -0.05;
 
     // Lighting
     const ambient = new THREE.AmbientLight(0xffffff, 0.7);
@@ -324,7 +324,7 @@ class KartPreview {
     const w = this.container.clientWidth  || 400;
     const h = this.container.clientHeight || 300;
     const renderH = Math.round(h / 0.85);          // render taller, crop top 15%
-    this.camera = new THREE.PerspectiveCamera(28, w / renderH, 0.1, 200);
+    this.camera = new THREE.PerspectiveCamera(23.3, w / renderH, 0.1, 200);
     this.camera.position.set(0, 2.38, 5.25);
     this.camera.lookAt(0, 0.28, 0);
 

@@ -95,155 +95,137 @@
 
     <!-- Main Content Area -->
     <main class="game-content">
-      <!-- Left Lens Stack -->
+      <!-- Left Panel — Simplified: Mode + Setup all-in-one -->
       <section class="lens-stack lens-stack-left">
-        <nav class="lens-nav lens-nav-left">
-          <button class="lens-pill lens-pill-guided active" data-lens="mode" id="left-mode-pill">
-            <span class="lens-pill-main"><i class="fas fa-sliders-h"></i><span>MODE</span></span>
-            <span class="lens-pill-sub">Choose how to play</span>
-          </button>
-        </nav>
-        <div class="lens-deck">
-         <div class="lens-card active" data-lens="mode">
-          <div class="panel-content">
-          <!-- Game Mode Selector (populated by game-modes.js) -->
+        <div class="panel-content simplified-left-panel mode-initial">
+          <!-- Game Mode Selector — 3 modes as horizontal cards -->
           <div class="mode-selector-container">
             <h3 class="mode-selector-title">GAME MODE</h3>
-            <!-- Category tabs: SOLO / ONLINE -->
-            <div class="mode-category-tabs" id="mode-category-tabs"></div>
-            <!-- Mode cards within selected category -->
-            <div class="mode-cards" id="mode-cards"></div>
-            <div id="tool-import-track-section" class="import-track-section hidden">
-              <p class="import-track-label">CUSTOM TRACK</p>
-              <div class="code-input">
-                <input type="text" id="import-track-code" placeholder="Paste share code" maxlength="65536">
-                <button id="import-track-btn" class="icon-btn join-btn">Import</button>
-              </div>
-              <p id="import-track-status" class="status-message"></p>
-            </div>
+            <div class="mode-cards mode-cards-row" id="mode-cards"></div>
           </div>
-          <button class="lens-pill lens-pill-guided mode-setup-cta hidden" id="left-setup-cta" type="button">
-            <span class="lens-pill-main"><i class="fas fa-layer-group"></i><span>SETUP</span></span>
-            <span class="lens-pill-sub">More options</span>
-            <span class="lens-pill-cue" aria-hidden="true"><i class="fas fa-arrow-right"></i></span>
-          </button>
-          </div>
-         </div>
-         <div class="lens-card" data-lens="track">
-          <div class="panel-content">
-          <div class="map-selector-container">
-            <!-- 3D Track Carousel -->
-            <div class="track-carousel">
-              <div id="track-preview-container" class="track-preview-box">
-                <img id="track-preview-thumb" class="track-preview-thumb" alt="Track preview" />
-              </div>
-              <p class="track-carousel-title">SELECT TRACK</p>
-              <div class="track-nav-row">
-                <button id="track-prev-btn" class="kart-nav-btn" aria-label="Previous track">
-                  <i class="fas fa-chevron-left"></i>
-                </button>
-                <div class="track-name-display">
-                  <span id="track-carousel-name">Pompeii Ruins</span>
-                  <span id="track-carousel-index" class="track-carousel-index">1 / 3</span>
+
+          <!-- Inline Setup Section — appears below mode cards when a mode is selected -->
+          <div id="inline-setup" class="inline-setup hidden">
+
+            <!-- Track / Arena Carousel -->
+            <div class="map-selector-container">
+              <div class="track-carousel">
+                <div id="track-preview-container" class="track-preview-box">
+                  <img id="track-preview-thumb" class="track-preview-thumb" alt="Track preview" />
                 </div>
-                <button id="track-next-btn" class="kart-nav-btn" aria-label="Next track">
-                  <i class="fas fa-chevron-right"></i>
-                </button>
+                <p class="track-carousel-title">SELECT TRACK</p>
+                <div class="track-nav-row">
+                  <button id="track-prev-btn" class="kart-nav-btn" aria-label="Previous track">
+                    <i class="fas fa-chevron-left"></i>
+                  </button>
+                  <div class="track-name-display">
+                    <span id="track-carousel-name">Pompeii Ruins</span>
+                    <span id="track-carousel-index" class="track-carousel-index">1 / 3</span>
+                  </div>
+                  <button id="track-next-btn" class="kart-nav-btn" aria-label="Next track">
+                    <i class="fas fa-chevron-right"></i>
+                  </button>
+                </div>
+              </div>
+              <div class="map-dropdown" style="display:none">
+                <span class="selected-map-name">Pompeii Ruins</span>
+                <div class="dropdown-content" id="track-dropdown-options"></div>
               </div>
             </div>
-            <!-- Hidden dropdown kept for lobby.js sync (not displayed) -->
-            <div class="map-dropdown" style="display:none">
-              <span class="selected-map-name">Pompeii Ruins</span>
-              <div class="dropdown-content" id="track-dropdown-options"></div>
-            </div>
-          </div>
-          <!-- Battle Settings Panel (hidden unless battle mode) -->
-          <div id="battle-settings" class="battle-settings hidden">
-            <h3 class="battle-settings-title">BATTLE SETTINGS</h3>
-            <div class="battle-setting-group">
-              <label for="battle-type-select">Game Type</label>
-              <select id="battle-type-select">
-                <option value="deathmatch" selected>Deathmatch</option>
-                <option value="ctf">Capture The Flag</option>
-              </select>
-            </div>
-            <!-- Arena selector is handled by the track carousel when in battle mode -->
-            <input type="hidden" id="battle-arena-select" value="battleisland" />
-            <div class="battle-setting-group">
-              <label for="battle-max-players">Player Cap</label>
-              <select id="battle-max-players">
-                <option value="12" selected>12 Players</option>
-              </select>
-            </div>
-            <div class="battle-setting-group">
-              <label for="battle-bot-count">Bots (solo only)</label>
-              <input type="number" id="battle-bot-count" value="6" min="0" max="11" />
-            </div>
-            <div class="battle-setting-group">
-              <label class="battle-settings-title">WEAPON LOADOUT</label>
-              <div id="weapon-loadout-row" class="weapon-loadout-row"></div>
-            </div>
-            <div class="battle-setting-group">
-              <label class="toggle-label">
-                <input type="checkbox" id="battle-collision-damage" checked>
-                <span>Collision Damage</span>
-              </label>
-            </div>
-            <div class="battle-setting-group">
-              <label for="battle-score-limit">Score / KOs to Win</label>
-              <input type="number" id="battle-score-limit" value="5" min="1" max="50" />
-            </div>
-            <p class="battle-hint">All players ready up, then host starts the match.</p>
-          </div>
 
-          <!-- Race Settings Panel (hidden unless race mode with bots) -->
-          <div id="race-settings" class="battle-settings hidden">
-            <h3 class="battle-settings-title">RACE SETTINGS</h3>
-            <div class="battle-setting-group">
-              <label for="race-bot-count">AI Opponents</label>
-              <input type="number" id="race-bot-count" value="5" min="0" max="11" />
+            <!-- Race Settings (Quick Race) -->
+            <div id="race-settings" class="battle-settings hidden">
+              <h3 class="battle-settings-title">RACE SETTINGS</h3>
+              <div class="battle-setting-group">
+                <label for="race-bot-count">AI Opponents</label>
+                <input type="number" id="race-bot-count" value="5" min="0" max="11" />
+              </div>
+              <div class="battle-setting-group">
+                <label for="race-laps">Laps</label>
+                <select id="race-laps">
+                  <option value="3" selected>3 Laps</option>
+                  <option value="5">5 Laps</option>
+                  <option value="7">7 Laps</option>
+                </select>
+              </div>
             </div>
-            <div class="battle-setting-group">
-              <label for="race-laps">Laps</label>
-              <select id="race-laps">
-                <option value="3" selected>3 Laps</option>
-                <option value="5">5 Laps</option>
-                <option value="7">7 Laps</option>
-              </select>
-            </div>
-          </div>
 
-          <!-- Cup Selector (Grand Prix only) -->
-          <div id="cup-selector" class="battle-settings hidden">
-            <h3 class="battle-settings-title">SELECT CUP</h3>
-            <div id="cup-cards" class="cup-cards"></div>
-          </div>
+            <!-- Battle Settings (Online Battle) -->
+            <div id="battle-settings" class="battle-settings hidden">
+              <h3 class="battle-settings-title">BATTLE SETTINGS</h3>
+              <div class="battle-setting-group">
+                <label for="battle-type-select">Game Type</label>
+                <select id="battle-type-select">
+                  <option value="deathmatch" selected>Deathmatch</option>
+                  <option value="ctf">Capture The Flag</option>
+                </select>
+              </div>
+              <input type="hidden" id="battle-arena-select" value="battleisland" />
+              <div class="battle-setting-group">
+                <label for="battle-max-players">Player Cap</label>
+                <select id="battle-max-players">
+                  <option value="12" selected>12 Players</option>
+                </select>
+              </div>
+              <div class="battle-setting-group">
+                <label for="battle-bot-count">Bots (solo only)</label>
+                <input type="number" id="battle-bot-count" value="6" min="0" max="11" />
+              </div>
+              <div class="battle-setting-group">
+                <label class="battle-settings-title">WEAPON LOADOUT</label>
+                <div id="weapon-loadout-row" class="weapon-loadout-row"></div>
+              </div>
+              <div class="battle-setting-group">
+                <label class="toggle-label">
+                  <input type="checkbox" id="battle-collision-damage" checked>
+                  <span>Collision Damage</span>
+                </label>
+              </div>
+              <div class="battle-setting-group">
+                <label for="battle-score-limit">Score / KOs to Win</label>
+                <input type="number" id="battle-score-limit" value="5" min="1" max="50" />
+              </div>
+              <p class="battle-hint">All players ready up, then host starts the match.</p>
+            </div>
 
-          <div id="gloflux-settings" class="battle-settings hidden">
-            <h3 class="battle-settings-title">GLOFLUX SETTINGS</h3>
-            <div class="battle-setting-group">
-              <label for="gloflux-theme">Wasteland Theme</label>
-              <select id="gloflux-theme">
-                <option value="nuclear_desert" selected>Nuclear Desert</option>
-                <option value="fungal_wastes">Fungal Wastes</option>
-                <option value="frozen_fallout">Frozen Fallout</option>
-                <option value="molten_ruins">Molten Ruins</option>
-              </select>
+            <!-- GloFLUX Settings -->
+            <div id="gloflux-settings" class="battle-settings hidden">
+              <h3 class="battle-settings-title">GLOFLUX SETTINGS</h3>
+              <div class="battle-setting-group">
+                <label for="gloflux-theme">Wasteland Theme</label>
+                <select id="gloflux-theme">
+                  <option value="nuclear_desert" selected>Nuclear Desert</option>
+                  <option value="fungal_wastes">Fungal Wastes</option>
+                  <option value="frozen_fallout">Frozen Fallout</option>
+                  <option value="molten_ruins">Molten Ruins</option>
+                </select>
+              </div>
+              <div class="battle-setting-group">
+                <label for="gloflux-player-cap">Player Cap</label>
+                <select id="gloflux-player-cap">
+                  <option value="4">4 Players</option>
+                  <option value="6">6 Players</option>
+                  <option value="8" selected>8 Players</option>
+                  <option value="10">10 Players</option>
+                  <option value="12">12 Players</option>
+                </select>
+              </div>
+              <p class="battle-hint">Flux matches are online-only. Host the lobby, ready up, then ignite the start.</p>
             </div>
-            <div class="battle-setting-group">
-              <label for="gloflux-player-cap">Player Cap</label>
-              <select id="gloflux-player-cap">
-                <option value="4">4 Players</option>
-                <option value="6">6 Players</option>
-                <option value="8" selected>8 Players</option>
-                <option value="10">10 Players</option>
-                <option value="12">12 Players</option>
-              </select>
+
+            <!-- Split Screen Settings -->
+            <div id="splitscreen-settings" class="battle-settings hidden">
+              <h3 class="battle-settings-title">SPLIT SCREEN</h3>
+              <div class="battle-setting-group">
+                <label for="split-type-select">Mode</label>
+                <select id="split-type-select">
+                  <option value="race" selected>Race</option>
+                  <option value="battle">Battle</option>
+                </select>
+              </div>
+              <p class="battle-hint">WASD vs Arrow Keys — vertical splitscreen.</p>
             </div>
-            <p class="battle-hint">Flux matches are online-only. Host the lobby, ready up, then ignite the start.</p>
           </div>
-          </div>
-         </div>
         </div>
       </section>
       
@@ -251,35 +233,38 @@
       <section class="center-panel">
         <!-- Title Background Area -->
         <header class="game-header-bg">
-          <h1 class="game-title pt-bg">GLO<br/>KARTS</h1>
+          <h1 class="game-title pt-bg">GLO KARTS</h1>
         </header>
 
         <!-- 3D Car Model -->
         <div id="car-model-container"></div>
         
-        <!-- Kart Character Selector -->
-        <div class="kart-selector">
-          <p class="kart-selector-title">SELECT KART</p>
-          <div class="kart-nav-row">
-            <button id="kart-prev-btn" class="kart-nav-btn" aria-label="Previous kart">
-              <i class="fas fa-chevron-left"></i>
-            </button>
-            <div class="kart-name-display">
-              <span id="kart-name">Tux</span>
-              <span id="kart-index" class="kart-index">1 / 18</span>
+        <!-- Kart & GLO Controls Row -->
+        <div class="kart-glo-row">
+          <!-- Kart Character Selector -->
+          <div class="kart-selector">
+            <p class="kart-selector-title">SELECT KART</p>
+            <div class="kart-nav-row">
+              <button id="kart-prev-btn" class="kart-nav-btn" aria-label="Previous kart">
+                <i class="fas fa-chevron-left"></i>
+              </button>
+              <div class="kart-name-display">
+                <span id="kart-name">Tux</span>
+                <span id="kart-index" class="kart-index">1 / 18</span>
+              </div>
+              <button id="kart-next-btn" class="kart-nav-btn" aria-label="Next kart">
+                <i class="fas fa-chevron-right"></i>
+              </button>
             </div>
-            <button id="kart-next-btn" class="kart-nav-btn" aria-label="Next kart">
-              <i class="fas fa-chevron-right"></i>
-            </button>
+            <p class="kart-selector-title">RACER NAME</p>
+            <input type="text" id="player-name-input" placeholder="Enter Your Name" maxlength="15">
           </div>
-          <p class="kart-selector-title">RACER NAME</p>
-          <input type="text" id="player-name-input" placeholder="Player Name" maxlength="15">
-        </div>
 
-        <!-- GLO Underglow Picker -->
-        <div id="glo-picker-container" class="glo-picker">
-          <p class="glo-picker-title">PICK YOUR GLO</p>
-          <div id="glo-carousel" class="glo-carousel"></div>
+          <!-- GLO Underglow Picker -->
+          <div id="glo-picker-container" class="glo-picker">
+            <p class="glo-picker-title">PICK YOUR GLO</p>
+            <div id="glo-carousel" class="glo-carousel"></div>
+          </div>
         </div>
 
         <!-- Action Buttons -->
@@ -315,27 +300,13 @@
 
               <!-- Lobby Dashboard — hidden until a lobby connects -->
               <div id="host-info" class="lobby-dashboard hidden">
-                <div class="lobby-dash-status-row">
-                  <span id="lobby-connection-badge" class="lobby-state-badge">LOBBY LIVE</span>
-                  <span id="lobby-role-chip" class="lobby-meta-chip">HOST</span>
-                  <span id="lobby-server-chip" class="lobby-meta-chip is-online">ONLINE</span>
-                </div>
-
                 <div class="lobby-dash-code-block">
-                  <span class="lobby-code-label">SHARE THIS CODE</span>
                   <div class="code-box">
                     <span id="party-code" class="code">XXXXXX</span>
                     <button id="copy-code-btn" class="icon-btn">Copy</button>
                   </div>
-                  <p class="lobby-code-hint">Friends paste this code in "Enter lobby code" to join your party.</p>
                 </div>
 
-                <div class="lobby-dash-meta-row">
-                  <span id="lobby-privacy-chip" class="lobby-meta-chip">PRIVATE</span>
-                  <span id="lobby-player-chip" class="lobby-meta-chip">1 PLAYER</span>
-                </div>
-
-                <p id="lobby-status-detail" class="lobby-status-detail">Waiting for players…</p>
                 <button id="host-stop-btn" class="icon-btn stop-btn">Stop Hosting</button>
               </div>
 

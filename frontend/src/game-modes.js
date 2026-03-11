@@ -90,7 +90,7 @@ export const MODE_REGISTRY = {
     desc:     'Compete in a series of races across curated cups.',
     icon:     'fa-trophy',
     page:     'game.html',
-    status:   MODE_STATUS.READY,
+    status:   MODE_STATUS.HIDDEN,
     requiresLobby: false,
     selectors: { track: false, arena: false, battleSettings: false, cup: true },
     buildConfig(lobby) {
@@ -142,7 +142,7 @@ export const MODE_REGISTRY = {
     desc:     'Race alone against the clock — no items, pure speed.',
     icon:     'fa-stopwatch',
     page:     'game.html',
-    status:   MODE_STATUS.READY,
+    status:   MODE_STATUS.HIDDEN,
     requiresLobby: false,
     selectors: { track: true, arena: false, battleSettings: false },
     buildConfig(lobby) {
@@ -171,7 +171,7 @@ export const MODE_REGISTRY = {
     desc:     'Create a custom multiplayer lobby and invite friends.',
     icon:     'fa-users',
     page:     'lobby.html',
-    status:   MODE_STATUS.READY,
+    status:   MODE_STATUS.HIDDEN,
     selectors: { track: false, arena: false, battleSettings: false },
     requiresLobby: false,
     buildConfig(lobby) { return {}; },
@@ -184,7 +184,7 @@ export const MODE_REGISTRY = {
     desc:     'Create or join a lobby and race live against friends.',
     icon:     'fa-flag-checkered',
     page:     'realtime.html',
-    status:   MODE_STATUS.READY,
+    status:   MODE_STATUS.HIDDEN,
     selectors: { track: true, arena: false, battleSettings: false },
     requiresLobby: true,
     buildConfig(lobby) {
@@ -232,7 +232,7 @@ export const MODE_REGISTRY = {
     desc:     'Build custom tracks and share them with friends.',
     icon:     'fa-road',
     page:     'builder.html',
-    status:   MODE_STATUS.READY,
+    status:   MODE_STATUS.HIDDEN,
     selectors: { track: false, arena: false, battleSettings: false },
     buildConfig() {
       return { gameMode: 'builder' };
@@ -249,7 +249,7 @@ export const MODE_REGISTRY = {
     desc:     'Build custom tracks and share them with friends.',
     icon:     'fa-wrench',
     page:     'builder.html',
-    status:   MODE_STATUS.READY,
+    status:   MODE_STATUS.HIDDEN,
     selectors: { track: false, arena: false, battleSettings: false },
     requiresLobby: false,
     buildConfig(lobby) { return {}; },
@@ -258,16 +258,17 @@ export const MODE_REGISTRY = {
   local_2p_race: {
     id:       'local_2p_race',
     category: 'local',
-    label:    '2P Race',
-    desc:     'Vertical splitscreen race — WASD vs Arrow keys.',
+    label:    'Split Screen',
     icon:     'fa-columns',
     page:     'splitscreen.html',
-    status:   MODE_STATUS.BETA,
+    status:   MODE_STATUS.READY,
     selectors: { track: true, arena: false, battleSettings: false },
     buildConfig(lobby) {
+      const subType = lobby?.splitScreenType || 'race';
       return {
-        gameMode:       'splitscreen_race',
+        gameMode:       subType === 'battle' ? 'splitscreen_battle' : 'splitscreen_race',
         trackId:        lobby.selectedMap || 'test_box',
+        arenaId:        subType === 'battle' ? (lobby.selectedMap || 'test_box') : undefined,
         isSinglePlayer: false,
         p1Kart:         sessionStorage.getItem('selectedKart') || 'tux',
         p2Kart:         'nolok',
@@ -282,7 +283,7 @@ export const MODE_REGISTRY = {
     desc:     'Splitscreen arena combat — WASD vs Arrow keys.',
     icon:     'fa-columns',
     page:     'splitscreen.html',
-    status:   MODE_STATUS.BETA,
+    status:   MODE_STATUS.HIDDEN,
     selectors: { track: false, arena: true, battleSettings: false },
     buildConfig(lobby) {
       return {
@@ -305,7 +306,7 @@ export const MODE_REGISTRY = {
     desc:     'Browse and purchase karts, tracks, skins, and effects with GLOs.',
     icon:     'fa-shopping-cart',
     page:     'marketplace.html',
-    status:   MODE_STATUS.BETA,
+    status:   MODE_STATUS.HIDDEN,
     selectors: { track: false, arena: false, battleSettings: false },
     buildConfig() {
       return { gameMode: 'marketplace' };
@@ -317,8 +318,7 @@ export const MODE_REGISTRY = {
   gloflux_race: {
     id:       'gloflux_race',
     category: 'gloflux',
-    label:    'Flux Race',
-    desc:     '5-lap race through mutating wasteland circuits with symbiotic power-ups.',
+    label:    'GLOFLUX',
     icon:     'fa-radiation',
     page:     'gloflux.html',
     status:   MODE_STATUS.BETA,
@@ -346,7 +346,7 @@ export const MODE_REGISTRY = {
     desc:     'Last kart standing in a shrinking post-nuclear wasteland.',
     icon:     'fa-radiation',
     page:     'gloflux.html',
-    status:   MODE_STATUS.BETA,
+    status:   MODE_STATUS.HIDDEN,
     requiresLobby: true,
     selectors: { track: false, arena: false, battleSettings: false },
     buildConfig(lobby) {
@@ -366,6 +366,14 @@ export const MODE_REGISTRY = {
 };
 
 // ── Public helpers ──────────────────────────────────────────────
+
+/** The three visible modes after radical simplification. */
+const VISIBLE_MODE_IDS = ['quick_race', 'battle_online', 'local_2p_race', 'gloflux_race'];
+
+/** Flat list of the three playable modes (no categories needed). */
+export function getVisibleModes() {
+  return VISIBLE_MODE_IDS.map(id => MODE_REGISTRY[id]).filter(Boolean);
+}
 
 /** Get a mode entry by id. */
 export function getMode(modeId) {
