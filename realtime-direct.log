@@ -1,0 +1,40 @@
+{"ts":"2026-03-22T05:08:03.059Z","level":"info","event":"server_start","port":2567,"env":"development"}
+
+       ___      _
+      / __\___ | |_   _ ___  ___ _   _ ___
+     / /  / _ \| | | | / __|/ _ \ | | / __|
+    / /__| (_) | | |_| \__ \  __/ |_| \__ \
+    \____/\___/|_|\__, |___/\___|\__,_|___/
+                  |___/
+
+     · Multiplayer Framework for Node.js ·
+
+💖 Consider becoming a Sponsor on GitHub → https://github.com/sponsors/endel
+🌟 Give us a star on GitHub → https://github.com/colyseus/colyseus
+☁️  Deploy and scale your project on Colyseus Cloud → https://cloud.colyseus.io
+
+
+[battle_room] created roomId=3hSVqY890 gameType=deathmatch scoreLimit=10 maxClients=2 patchRateMs=17
+{"ts":"2026-03-22T05:08:31.533Z","level":"info","event":"room_create","room":"battle_room","roomId":"3hSVqY890","gameType":"deathmatch","scoreLimit":10,"maxClients":2,"patchRateMs":16.666666666666668,"staleInputMs":500,"authoritative":true}
+[battle_room] join sessionId=rL7_NxM0W name=Player team=red players=1
+{"ts":"2026-03-22T05:08:31.617Z","level":"info","event":"room_join","room":"battle_room","roomId":"3hSVqY890","sessionId":"rL7_NxM0W","name":"Player","players":1}
+{"ts":"2026-03-22T05:08:34.033Z","level":"info","event":"battle_ready","room":"battle_room","roomId":"3hSVqY890","sessionId":"rL7_NxM0W","readyCount":0,"players":1}
+[battle_room] join sessionId=kgr50lAVY name=Player team=blue players=2
+{"ts":"2026-03-22T05:08:34.850Z","level":"info","event":"room_join","room":"battle_room","roomId":"3hSVqY890","sessionId":"kgr50lAVY","name":"Player","players":2}
+{"ts":"2026-03-22T05:08:37.682Z","level":"info","event":"battle_ready","room":"battle_room","roomId":"3hSVqY890","sessionId":"kgr50lAVY","readyCount":1,"players":2}
+{"ts":"2026-03-22T05:09:30.138Z","level":"info","event":"room_leave","room":"battle_room","roomId":"3hSVqY890","sessionId":"kgr50lAVY","players":1}
+[battle_room] leave sessionId=kgr50lAVY players=1
+{"ts":"2026-03-22T05:09:30.153Z","level":"info","event":"room_leave","room":"battle_room","roomId":"3hSVqY890","sessionId":"rL7_NxM0W","players":0}
+[battle_room] leave sessionId=rL7_NxM0W players=0
+[battle_room] created roomId=X_nxy5O_a gameType=deathmatch scoreLimit=10 maxClients=2 patchRateMs=17
+{"ts":"2026-03-22T05:09:36.499Z","level":"info","event":"room_create","room":"battle_room","roomId":"X_nxy5O_a","gameType":"deathmatch","scoreLimit":10,"maxClients":2,"patchRateMs":16.666666666666668,"staleInputMs":500,"authoritative":true}
+[battle_room] join sessionId=z9g4a0ieJ name=Player team=red players=1
+{"ts":"2026-03-22T05:09:36.601Z","level":"info","event":"room_join","room":"battle_room","roomId":"X_nxy5O_a","sessionId":"z9g4a0ieJ","name":"Player","players":1}
+{"ts":"2026-03-22T05:09:39.113Z","level":"info","event":"battle_ready","room":"battle_room","roomId":"X_nxy5O_a","sessionId":"z9g4a0ieJ","readyCount":0,"players":1}
+[battle_room] join sessionId=EpBOxJzOd name=Player team=blue players=2
+{"ts":"2026-03-22T05:09:40.047Z","level":"info","event":"room_join","room":"battle_room","roomId":"X_nxy5O_a","sessionId":"EpBOxJzOd","name":"Player","players":2}
+{"ts":"2026-03-22T05:09:42.787Z","level":"info","event":"battle_ready","room":"battle_room","roomId":"X_nxy5O_a","sessionId":"EpBOxJzOd","readyCount":1,"players":2}
+{"ts":"2026-03-22T05:11:07.614Z","level":"info","event":"room_leave","room":"battle_room","roomId":"X_nxy5O_a","sessionId":"EpBOxJzOd","players":1}
+[battle_room] leave sessionId=EpBOxJzOd players=1
+{"ts":"2026-03-22T05:11:07.637Z","level":"info","event":"room_leave","room":"battle_room","roomId":"X_nxy5O_a","sessionId":"z9g4a0ieJ","players":0}
+[battle_room] leave sessionId=z9g4a0ieJ players=0
