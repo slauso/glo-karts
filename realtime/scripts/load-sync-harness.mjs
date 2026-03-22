@@ -29,8 +29,8 @@ const scenarios = (process.env.SYNC_HARNESS_COUNTS || '2,6,12')
   .map((value) => Number(value.trim()))
   .filter((value) => Number.isFinite(value) && value >= 2);
 
-const ANOMALY_WEAPON_ROTATION = ['pirateleportation', 'mirror_realm', 'phase_shift', 'memory_leak', 'weather_dominion'];
-const ANOMALY_EFFECT_TYPES = new Set(['mirror', 'phased', 'memory_leak', 'arena_fog', 'arena_rain']);
+const ANOMALY_WEAPON_ROTATION = ['pirateleportation', 'mirror_realm', 'phase_shift', 'gravity_well', 'weather_dominion'];
+const ANOMALY_EFFECT_TYPES = new Set(['mirror', 'phased', 'arena_fog', 'arena_rain']);
 const BATTLE_TEST_WEAPON_ROTATION = [...BATTLE_WEAPON_POOL];
 const BATTLE_OFFENSE_ROTATION = ['lightning_bolt', 'rock_barrage', 'fireball', 'ice_lance', 'wind_slash', 'super_nova', 'toxic_spread', 'tornado'];
 const BATTLE_DEFENSE_ROTATION = ['shield', 'phase_shift', 'mirror_realm', 'ludicrous_mode', 'toxic_cloud', 'weather_dominion'];

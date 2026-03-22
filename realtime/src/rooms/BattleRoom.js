@@ -25,8 +25,8 @@ import {
 } from "../realtime-sync.js";
 
 const TICK_RATE = getSimulationIntervalMs();
-const ANOMALY_WEAPONS = new Set(["pirateleportation", "mirror_realm", "phase_shift", "memory_leak", "gravity_well", "weather_dominion"]);
-const ANOMALY_EFFECTS = new Set(["mirror", "phase_shift_swap", "memory_leak", "arena_fog", "arena_rain"]);
+const ANOMALY_WEAPONS = new Set(["pirateleportation", "mirror_realm", "phase_shift", "gravity_well", "weather_dominion"]);
+const ANOMALY_EFFECTS = new Set(["mirror", "phase_shift_swap", "arena_fog", "arena_rain"]);
 const ARENA_SURFACE_Y = {
   test_box: 0.6,
   glo_arena: 0.35,
@@ -48,7 +48,9 @@ export class BattleRoom extends Room {
     this._matchEnded = false;
     this._joinedAtBySession = new Map();
     // Task 2.2: per-client rate limiter
-    this._rateLimiter = new RateLimiter();
+    this._rateLimiter = new RateLimiter({
+      fireWeapon: { max: 40, windowMs: 1000 },
+    });
     this._allowDebugControls = process.env.NODE_ENV !== "production";
 
     state.syncPatchRateMs = Number(syncConfig.patchRateMs || 0);
@@ -69,6 +71,7 @@ export class BattleRoom extends Room {
     this._lastKilledBy = new Map();
     this._firstBloodDone = false;
     this._kartCrashCooldownUntil = new Map();
+    this._debugRespawnPending = new Set();
 
     this.onMessage("triggerStart", () => {
       this._evaluateCountdownStart("triggerStart");
@@ -238,11 +241,48 @@ export class BattleRoom extends Room {
         }
     });
 
+    this.onMessage("debugRespawn", (client) => {
+      if (!this._allowDebugControls || !this.state.started) return;
+      const player = this.state.players.get(client.sessionId);
+      if (!player || this._debugRespawnPending.has(client.sessionId)) return;
+
+      const spawn = this.getSpawnPoint(this.state.players.size, Math.floor(Math.random() * 12));
+      this._debugRespawnPending.add(client.sessionId);
+      this.broadcast("playerDied", {
+        victimId: player.id,
+        attackerId: "",
+        attackerName: "Arena",
+        weapon: "debug_respawn",
+        spawnX: spawn.x,
+        spawnY: this._spawnY,
+        spawnZ: spawn.z,
+      });
+
+      this.clock.setTimeout(() => {
+        this._debugRespawnPending.delete(client.sessionId);
+        const livePlayer = this.state.players.get(client.sessionId);
+        if (!livePlayer || !this.state.started) return;
+        this._invulnUntil.set(livePlayer.id, Date.now() + 2000);
+        this._resetPlayerForRespawn(livePlayer, spawn);
+      }, 2500);
+    });
+
     this.onMessage("debugGrantWeapon", (client, data = {}) => {
       if (!this._allowDebugControls) return;
       const targetId = String(data.targetId || client.sessionId);
       const weaponId = String(data.weaponId || "");
       const target = this.state.players.get(targetId);
+
+      // Allow clearing the weapon slot
+      if (target && weaponId === '__clear__') {
+        target.weapon2 = "";
+        target.ammo2 = 0;
+        target.fireCooldown2 = 0;
+        const targetClient = this.clients.find((entry) => entry.sessionId === targetId);
+        targetClient?.send("itemReceived", { slot: "secondary", weapon: "", ammo: 0, category: "", cooldownMs: 0, effect: '', description: '' });
+        return;
+      }
+
       const weaponDef = WEAPONS[weaponId];
       if (!target || !weaponDef) return;
 
@@ -349,6 +389,22 @@ export class BattleRoom extends Room {
     return [playerAId, playerBId].sort().join(":");
   }
 
+  _resetPlayerForRespawn(player, spawn) {
+    if (!player || !spawn) return;
+    initializeAuthoritativeKart(player, { x: spawn.x, y: this._spawnY, z: spawn.z });
+    player.health = 100;
+    player.weapon = "glo_burst";
+    player.ammo = WEAPONS.glo_burst.ammo;
+    player.fireCooldown = 0;
+    player.overheat = 0;
+    player.overheated = false;
+    player.weapon2 = "";
+    player.ammo2 = 0;
+    player.fireCooldown2 = 0;
+    player.weapon3 = "";
+    player.ammo3 = 0;
+  }
+
   _applyBattleDamage(victim, damage, context = {}) {
     const amount = Math.max(0, Number(damage) || 0);
     const attacker = context.attackerId ? this.state.players.get(context.attackerId) : null;
@@ -388,13 +444,7 @@ export class BattleRoom extends Room {
     }
 
     const spawn = this.getSpawnPoint(this.state.players.size, Math.floor(Math.random() * 12));
-    initializeAuthoritativeKart(victim, { x: spawn.x, y: this._spawnY, z: spawn.z });
-    victim.health = 100;
-    victim.weapon = "glo_burst";
-    victim.ammo = WEAPONS.glo_burst.ammo;
-    victim.fireCooldown = 0;
-    victim.overheat = 0;
-    victim.overheated = false;
+    this._resetPlayerForRespawn(victim, spawn);
 
     const isFirstBlood = !this._firstBloodDone;
     if (isFirstBlood) this._firstBloodDone = true;

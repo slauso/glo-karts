@@ -45,7 +45,9 @@ export class RaceRoom extends Room {
     this.staleInputMs = syncConfig.staleInputMs || REALTIME_SYNC_DEFAULTS.staleInputMs;
     this.countdownDurationMs = getRealtimeCountdownMs(options);
     // Task 2.2: per-client rate limiter
-    this._rateLimiter = new RateLimiter();
+    this._rateLimiter = new RateLimiter({
+      fireWeapon: { max: 40, windowMs: 1000 },
+    });
     this._kartCrashCooldownUntil = new Map();
 
     this.onMessage("triggerStart", () => {

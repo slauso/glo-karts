@@ -1,0 +1,23 @@
+Error: listen EADDRINUSE: address already in use :::2567
+    at Server.setupListenHandle [as _listen2] (node:net:2016:16)
+    at listenInCluster (node:net:2073:12)
+    at Server.listen (node:net:2178:7)
+    at WebSocketTransport.listen (file:///C:/Users/laptop/twistedkart/realtime/node_modules/@colyseus/ws-transport/build/WebSocketTransport.mjs:37:17)
+    at file:///C:/Users/laptop/twistedkart/realtime/node_modules/@colyseus/core/build/Server.mjs:73:22
+    at new Promise (<anonymous>)
+    at Server.listen (file:///C:/Users/laptop/twistedkart/realtime/node_modules/@colyseus/core/build/Server.mjs:71:12)
+{"ts":"2026-03-22T04:17:15.182Z","level":"error","event":"unhandled_rejection","message":"Error: listen EADDRINUSE: address already in use :::2567"}
+Error: listen EADDRINUSE: address already in use :::2567
+    at Server.setupListenHandle [as _listen2] (node:net:2016:16)
+    at listenInCluster (node:net:2073:12)
+    at Server.listen (node:net:2178:7)
+    at WebSocketTransport.listen (file:///C:/Users/laptop/twistedkart/realtime/node_modules/@colyseus/ws-transport/build/WebSocketTransport.mjs:37:17)
+    at file:///C:/Users/laptop/twistedkart/realtime/node_modules/@colyseus/core/build/Server.mjs:73:22
+    at new Promise (<anonymous>)
+    at Server.listen (file:///C:/Users/laptop/twistedkart/realtime/node_modules/@colyseus/core/build/Server.mjs:71:12) {
+  code: 'EADDRINUSE',
+  errno: -4091,
+  syscall: 'listen',
+  address: '::',
+  port: 2567
+}

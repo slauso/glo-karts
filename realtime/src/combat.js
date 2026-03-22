@@ -263,17 +263,6 @@ export const WEAPONS = {
     effectDuration: 0,
     desc: "Swaps positions with another live rival in the arena.",
   },
-  memory_leak: {
-    category: "utility",
-    speed: 0,
-    damage: 0,
-    lifespan: 0,
-    cooldown: 1450,
-    ammo: 1,
-    effect: "memory_leak",
-    effectDuration: 0,
-    desc: "Steals the nearest rival's held weapon and ammo.",
-  },
   gravity_well: {
     category: "zone",
     speed: 0,
@@ -282,8 +271,8 @@ export const WEAPONS = {
     cooldown: 1550,
     ammo: 1,
     spawnOffset: 5.5,
-    radius: 12,
-    singularityRadius: 12,
+    radius: 10,
+    singularityRadius: 10,
     pullStrength: 24,
     damageTickMs: 200,
     desc: "Creates a lingering singularity that drags nearby rivals inward.",
@@ -337,7 +326,7 @@ export const WEAPONS = {
     damage: 34,
     lifespan: 3000,
     cooldown: 430,
-    ammo: 1,
+    ammo: 3,
     gravity: 0,
     bounces: 0,
     collisionRadius: 2.5,
@@ -354,6 +343,7 @@ export const WEAPONS = {
     ammo: 1,
     gravity: 0,
     bounces: 0,
+    floorAnchored: true,
     pullRadius: 16,
     pullStrength: 34,
     damageTickMs: 200,
@@ -370,8 +360,8 @@ export const WEAPONS = {
     cooldown: 1250,
     ammo: 1,
     spawnOffset: 1.75,
-    radius: 18,
-    singularityRadius: 18,
+    radius: 12,
+    singularityRadius: 12,
     detonateAtMs: 3000,
     desc: "Final Fusion — drop a timed fusion bomb that detonates in a mushroom-cloud blast",
   },
@@ -469,7 +459,7 @@ export const WEAPONS = {
     speed: 110,
     damage: 2,
     lifespan: 240,
-    cooldown: 32,
+    cooldown: 60,
     ammo: 180,
     gravity: 0,
     bounces: 0,
@@ -477,6 +467,8 @@ export const WEAPONS = {
     continuous: true,
     isDefaultWeapon: true,
     heatPerShot: 0.85,
+    warmupMs: 90,
+    warmupResetMs: 200,
     streamLength: 18,
     streamSpread: 0.08,
     streamSpreadGrowth: 0.22,
@@ -487,7 +479,7 @@ export const WEAPONS = {
 const WEAPON_KEYS = Object.keys(WEAPONS);
 export const BATTLE_WEAPON_POOL = [
   "ludicrous_mode", "shield",
-  "pirateleportation", "mirror_realm", "phase_shift", "memory_leak", "gravity_well", "weather_dominion",
+  "pirateleportation", "mirror_realm", "phase_shift", "gravity_well", "weather_dominion",
   "missile", "missile",
   "fireball", "fireball",
   "toxic_spread", "toxic_spread",
@@ -513,7 +505,7 @@ const BACK_WEIGHTS = {
   bowling_ball: 3, cake: 3, missile: 4, nitro: 3, plunger: 2,
   bubblegum: 1, banana: 1, swatter: 2, parachute: 1, anchor: 2,
   ludicrous_mode: 4, shield: 2,
-  pirateleportation: 2, mirror_realm: 1, phase_shift: 1, memory_leak: 1, gravity_well: 1, weather_dominion: 1,
+  pirateleportation: 2, mirror_realm: 1, phase_shift: 1, gravity_well: 1, weather_dominion: 1,
   fireball: 3, toxic_spread: 2, ice_lance: 3, tornado: 2,
   super_nova: 2, rock_barrage: 3, lightning_bolt: 2, wind_slash: 2, toxic_cloud: 1,
   glow_thrower: 3, glo_burst: 0,
@@ -522,7 +514,7 @@ const MID_WEIGHTS = {
   bowling_ball: 3, cake: 2, missile: 2, nitro: 2, plunger: 2,
   bubblegum: 3, banana: 3, swatter: 2, parachute: 2, anchor: 2,
   ludicrous_mode: 1, shield: 2,
-  pirateleportation: 2, mirror_realm: 0.35, phase_shift: 0.45, memory_leak: 0.35, gravity_well: 0.35, weather_dominion: 0.35,
+  pirateleportation: 2, mirror_realm: 0.35, phase_shift: 0.45, gravity_well: 0.35, weather_dominion: 0.35,
   fireball: 4, toxic_spread: 3, ice_lance: 4, tornado: 3,
   super_nova: 2, rock_barrage: 3, lightning_bolt: 3, wind_slash: 4, toxic_cloud: 1,
   glow_thrower: 3, glo_burst: 0,
@@ -531,7 +523,7 @@ const FRONT_WEIGHTS = {
   bowling_ball: 1, cake: 1, missile: 1, nitro: 1, plunger: 1,
   bubblegum: 4, banana: 5, swatter: 1, parachute: 3, anchor: 3,
   ludicrous_mode: 1, shield: 4,
-  pirateleportation: 1, mirror_realm: 2, phase_shift: 2, memory_leak: 1, gravity_well: 1, weather_dominion: 1,
+  pirateleportation: 1, mirror_realm: 2, phase_shift: 2, gravity_well: 1, weather_dominion: 1,
   fireball: 1, toxic_spread: 1, ice_lance: 1, tornado: 1,
   super_nova: 1, rock_barrage: 1, lightning_bolt: 1, wind_slash: 1, toxic_cloud: 2,
   glow_thrower: 1, glo_burst: 0,
@@ -543,7 +535,6 @@ const BATTLE_PICKUP_WEIGHTS = {
   pirateleportation: 1.4,
   mirror_realm: 0.2,
   phase_shift: 0.2,
-  memory_leak: 0.35,
   gravity_well: 0.35,
   weather_dominion: 0.35,
   missile: 3.0,
@@ -663,6 +654,24 @@ export function handleFireWeapon(player, entitiesMap, playersMap, context = {}) 
   const def = WEAPONS[wepId];
   if (!def) return null;
   const fireInput = context.fireInput || null;
+  const now = Date.now();
+
+  if (slot === "primary" && def.isDefaultWeapon && fireInput?.warmupComplete !== true) {
+    const warmupMs = Math.max(0, Number(def.warmupMs || 0));
+    const warmupResetMs = Math.max(warmupMs, Number(def.warmupResetMs || warmupMs || 0));
+    const lastPrimaryShotAt = Number(player._primaryShotAt || 0);
+    const primarySpinUpAt = Number(player._primarySpinUpAt || 0);
+    const needsWarmup = warmupMs > 0 && (!lastPrimaryShotAt || (now - lastPrimaryShotAt) > warmupResetMs);
+    if (needsWarmup) {
+      if (!primarySpinUpAt || now >= (primarySpinUpAt + warmupResetMs)) {
+        player._primarySpinUpAt = now;
+        return null;
+      }
+      if ((now - primarySpinUpAt) < warmupMs) {
+        return null;
+      }
+    }
+  }
 
   const result = { projectile: null, effectApplied: null, instantHits: [] };
 
@@ -754,25 +763,6 @@ export function handleFireWeapon(player, entitiesMap, playersMap, context = {}) 
         clearHeldPickupSlot(victim, heldPickup.slot);
         result.effectApplied = {
           type: "pirateleportation",
-          target: victim.id,
-          attackerId: player.id,
-          stolenWeapon,
-        };
-      }
-      return result;
-    }
-
-    if (wepId === "memory_leak") {
-      const victim = findNearestRival(player, playersMap, (candidate) => !!getHeldPickupSlot(candidate));
-      const stolenPickup = victim ? getHeldPickupSlot(victim) : null;
-      const stolenWeapon = stolenPickup?.weapon || "";
-      const stolenAmmo = stolenPickup?.ammo || 0;
-      consumeAmmo(player, def, slot);
-      if (victim && stolenPickup) {
-        storeHeldPickupWeapon(player, stolenWeapon, stolenAmmo);
-        clearHeldPickupSlot(victim, stolenPickup.slot);
-        result.effectApplied = {
-          type: "memory_leak",
           target: victim.id,
           attackerId: player.id,
           stolenWeapon,
@@ -961,7 +951,25 @@ export function handleFireWeapon(player, entitiesMap, playersMap, context = {}) 
   }
 
   // ── Projectile (forward-fired) ───────────────────────────────────────
-  const fwd = resolveFireVector(player, fireInput);
+  let fwd = resolveFireVector(player, fireInput);
+  if (def.floorAnchored) {
+    const planarLength = Math.sqrt(fwd.x * fwd.x + fwd.z * fwd.z);
+    if (planarLength > 0.001) {
+      fwd = {
+        x: fwd.x / planarLength,
+        y: 0,
+        z: fwd.z / planarLength,
+      };
+    } else {
+      const flatFallback = quatForward(player.rx, player.ry, player.rz, player.rw);
+      const flatLength = Math.sqrt(flatFallback.x * flatFallback.x + flatFallback.z * flatFallback.z) || 1;
+      fwd = {
+        x: flatFallback.x / flatLength,
+        y: 0,
+        z: flatFallback.z / flatLength,
+      };
+    }
+  }
   const id = `proj_${player.id.slice(0, 4)}_${++_projectileCounter}`;
 
   const ent = new EntityState();
@@ -976,11 +984,11 @@ export function handleFireWeapon(player, entitiesMap, playersMap, context = {}) 
   const SPAWN_OFFSET = 3.5;
   const projectileOrigin = resolveProjectileOrigin(player, fireInput, fwd, SPAWN_OFFSET, 1.0);
   ent.x = projectileOrigin.x;
-  ent.y = projectileOrigin.y;
+  ent.y = def.floorAnchored ? Math.max(floorSafeY(player.y), projectileOrigin.y) : projectileOrigin.y;
   ent.z = projectileOrigin.z;
 
   ent.vx = fwd.x * def.speed;
-  ent.vy = def.gravity ? Math.max(fwd.y * def.speed, 8) : fwd.y * def.speed;
+  ent.vy = def.floorAnchored ? 0 : (def.gravity ? Math.max(fwd.y * def.speed, 8) : fwd.y * def.speed);
   ent.vz = fwd.z * def.speed;
 
   ent.rx = player.rx;
@@ -1096,6 +1104,10 @@ function applyStreamSpread(forward, def = {}) {
   };
 }
 
+function floorSafeY(playerY) {
+  return Math.max(0.95, Number(playerY || 0) - 1.0);
+}
+
 export function tickProjectiles(entitiesMap, playersMap, deltaTime, floorY = 0.35) {
   const dt = deltaTime / 1000;
   const hits = [];
@@ -1111,6 +1123,8 @@ export function tickProjectiles(entitiesMap, playersMap, deltaTime, floorY = 0.3
 
     // Tornado — moves forward and pulls nearby karts
     if (e.subType === "tornado") {
+      e.y = Math.max(floorY + 0.42, e.y);
+      e.vy = 0;
       const pullR = def?.pullRadius || 10;
       const pullRSq = pullR * pullR;
       playersMap.forEach((p) => {
@@ -1521,6 +1535,8 @@ function consumeAmmo(player, def, slot = "primary") {
     // Primary glo_burst — overheat instead of ammo depletion
     player.ammo -= 1;
     player.fireCooldown = def.cooldown;
+    player._primaryShotAt = Date.now();
+    player._primarySpinUpAt = player._primaryShotAt;
     // Add heat per shot (100 ammo → each shot adds ~1.4 heat)
     player.overheat = Math.min(100, (player.overheat || 0) + Number(def.heatPerShot || 1.4));
     if (player.overheat >= 100) {
