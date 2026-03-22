@@ -14,6 +14,25 @@ GLO KARTS consists of three services that must be deployed and configured togeth
 2. **Realtime** (Colyseus) — deploy second; needs CORS_ORIGIN pointing to frontend
 3. **Frontend** (Vite) — deploy last; needs `VITE_COLYSEUS_URL` pointing to realtime
 
+## Render Blueprint
+
+The repo root includes a `render.yaml` Blueprint that provisions:
+
+- `glo-karts-frontend` as a static site from `frontend/`
+- `glo-karts-realtime` as a Node web service from `realtime/`
+- `glo-karts-backend` as a Python web service from `backend/`
+- `glo-karts-db` as a managed PostgreSQL instance
+
+For production, the Blueprint intentionally leaves the following values as Render prompts so you can supply your final public domains during the first sync:
+
+- `VITE_COLYSEUS_URL`
+- `CORS_ORIGIN`
+- `CORS_ALLOWED_ORIGINS`
+- `ALLOWED_HOSTS`
+- `REALTIME_HEALTH_URL`
+
+If you deploy first on temporary Render subdomains and later add custom domains, update those environment variables in the Render dashboard and redeploy the affected services.
+
 ---
 
 ## 1. Frontend (Vercel)

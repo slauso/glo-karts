@@ -121,6 +121,17 @@ Default local endpoints:
 - Realtime: `ws://localhost:2567`
 - Django: `http://localhost:8002`
 
+## Render Deployment
+
+- The repo root now includes a `render.yaml` blueprint for the frontend, realtime server, backend, and a managed Postgres database.
+- During the first Blueprint sync, Render will prompt for domain-specific values that should use your final production domains instead of temporary `onrender.com` defaults:
+   - `VITE_COLYSEUS_URL`
+   - `CORS_ORIGIN`
+   - `CORS_ALLOWED_ORIGINS`
+   - `ALLOWED_HOSTS`
+   - `REALTIME_HEALTH_URL`
+- If you launch with temporary Render subdomains first, update those values again after you attach your real custom domains.
+
 ## Verification Baseline
 
 Current minimum must-pass checks for the surfaced battle shell:
