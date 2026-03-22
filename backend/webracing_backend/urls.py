@@ -18,6 +18,7 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import path
 from django.http import JsonResponse
+import os
 
 def api_root(request):
     """Root endpoint showing API information"""
@@ -26,7 +27,7 @@ def api_root(request):
         'version': '1.0',
         'endpoints': {
             'admin': '/admin/',
-            'realtime_health': 'http://localhost:2567/health'
+            'realtime_health': os.environ.get('REALTIME_HEALTH_URL', 'http://localhost:2567/health')
         },
         'status': 'running'
     })

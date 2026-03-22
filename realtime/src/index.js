@@ -10,7 +10,7 @@ import { LobbyRoom } from "./rooms/LobbyRoom.js";
 import { GloFluxRoom } from "./rooms/GloFluxRoom.js";
 import { log } from "./logger.js";
 
-const port = Number(process.env.COLYSEUS_PORT || 2567);
+const port = Number(process.env.PORT || process.env.COLYSEUS_PORT || 2567);
 const app = express();
 
 // Task 2.4: Restrict CORS in production — only allow configured origin.

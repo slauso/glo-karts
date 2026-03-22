@@ -1,0 +1,81 @@
+services:
+  - type: web
+    runtime: node
+    name: glo-karts-realtime
+    rootDir: realtime
+    plan: starter
+    region: oregon
+    autoDeployTrigger: commit
+    buildCommand: npm install
+    startCommand: npm run start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: CORS_ORIGIN
+        value: https://glo-karts-frontend.onrender.com
+
+  - type: web
+    runtime: python
+    name: glo-karts-backend
+    rootDir: backend
+    plan: starter
+    region: oregon
+    autoDeployTrigger: commit
+    buildCommand: chmod +x build.sh && ./build.sh
+    startCommand: gunicorn webracing_backend.wsgi --bind 0.0.0.0:$PORT
+    healthCheckPath: /
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DEBUG
+        value: "False"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: glo-karts-db
+          property: connectionString
+      - key: ALLOWED_HOSTS
+        value: glo-karts-backend.onrender.com,localhost,127.0.0.1
+      - key: CORS_ALLOWED_ORIGINS
+        value: https://glo-karts-frontend.onrender.com
+      - key: REALTIME_HEALTH_URL
+        value: https://glo-karts-realtime.onrender.com/health
+
+  - type: web
+    runtime: static
+    name: glo-karts-frontend
+    rootDir: frontend
+    buildCommand: npm install && npm run build
+    staticPublishPath: ./dist
+    autoDeployTrigger: commit
+    envVars:
+      - key: VITE_USE_COLYSEUS
+        value: "true"
+      - key: VITE_COLYSEUS_URL
+        value: wss://glo-karts-realtime.onrender.com
+    routes:
+      - type: rewrite
+        source: /realtime
+        destination: /realtime.html
+      - type: rewrite
+        source: /battle
+        destination: /battle.html
+      - type: rewrite
+        source: /game
+        destination: /game.html
+      - type: rewrite
+        source: /builder
+        destination: /builder.html
+      - type: rewrite
+        source: /gloflux
+        destination: /gloflux.html
+
+databases:
+  - name: glo-karts-db
+    plan: basic-256mb
+    region: oregon
+    databaseName: glo_karts
+    user: glo_karts
+    postgresMajorVersion: "17"
