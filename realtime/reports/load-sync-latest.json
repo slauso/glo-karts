@@ -1,0 +1,110 @@
+{
+  "label": "browser-pass",
+  "generatedAt": "2026-03-12T17:37:29.898Z",
+  "endpoint": "ws://127.0.0.1:2567",
+  "roomName": "battle_room",
+  "liveDurationMs": 12000,
+  "scenarios": [
+    2,
+    6,
+    12
+  ],
+  "results": [
+    {
+      "players": 2,
+      "roomName": "battle_room",
+      "endpoint": "ws://127.0.0.1:2567",
+      "patchBytes": {
+        "avg": 112.85,
+        "p95": 135,
+        "max": 234,
+        "samples": 1043
+      },
+      "fullStateBytes": {
+        "avg": 755.5,
+        "max": 832,
+        "samples": 2
+      },
+      "rttMs": {
+        "avg": 0.92,
+        "p95": 2,
+        "max": 2,
+        "samples": 24
+      },
+      "serverMetrics": {
+        "avgTickDriftMs": 8.98,
+        "avgInputAgeMs": 37.11,
+        "maxInputAgeMs": 66,
+        "staleInputDrops": 0,
+        "outOfOrderInputDrops": 0,
+        "patchRateMs": 16.67,
+        "authoritative": true,
+        "samples": 12
+      }
+    },
+    {
+      "players": 6,
+      "roomName": "battle_room",
+      "endpoint": "ws://127.0.0.1:2567",
+      "patchBytes": {
+        "avg": 298.66,
+        "p95": 342,
+        "max": 832,
+        "samples": 2534
+      },
+      "fullStateBytes": {
+        "avg": 1059.17,
+        "max": 1442,
+        "samples": 6
+      },
+      "rttMs": {
+        "avg": 0.43,
+        "p95": 1,
+        "max": 2,
+        "samples": 72
+      },
+      "serverMetrics": {
+        "avgTickDriftMs": 7.28,
+        "avgInputAgeMs": 35.52,
+        "maxInputAgeMs": 64,
+        "staleInputDrops": 0,
+        "outOfOrderInputDrops": 0,
+        "patchRateMs": 22.22,
+        "authoritative": true,
+        "samples": 12
+      }
+    },
+    {
+      "players": 12,
+      "roomName": "battle_room",
+      "endpoint": "ws://127.0.0.1:2567",
+      "patchBytes": {
+        "avg": 568.1,
+        "p95": 639,
+        "max": 2217,
+        "samples": 3442
+      },
+      "fullStateBytes": {
+        "avg": 1521.67,
+        "max": 2372,
+        "samples": 12
+      },
+      "rttMs": {
+        "avg": 1.26,
+        "p95": 3,
+        "max": 7,
+        "samples": 144
+      },
+      "serverMetrics": {
+        "avgTickDriftMs": 7.09,
+        "avgInputAgeMs": 36.69,
+        "maxInputAgeMs": 64,
+        "staleInputDrops": 0,
+        "outOfOrderInputDrops": 0,
+        "patchRateMs": 33.33,
+        "authoritative": true,
+        "samples": 12
+      }
+    }
+  ]
+}

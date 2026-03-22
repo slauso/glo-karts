@@ -8,7 +8,6 @@ export class LobbyState extends Schema {
     this.privacy = "private";
     this.gameMode = "race";
     this.modeId = "race_online";
-    this.singlePlayerMode = false;
     this.trackId = "test_box";
     this.arenaId = "test_box";
     this.arenaTheme = "nuclear_desert";
@@ -25,7 +24,6 @@ type("string")(LobbyState.prototype, "lobbyCode");
 type("string")(LobbyState.prototype, "privacy");
 type("string")(LobbyState.prototype, "gameMode");
 type("string")(LobbyState.prototype, "modeId");
-type("boolean")(LobbyState.prototype, "singlePlayerMode");
 type("string")(LobbyState.prototype, "trackId");
 type("string")(LobbyState.prototype, "arenaId");
 type("string")(LobbyState.prototype, "arenaTheme");

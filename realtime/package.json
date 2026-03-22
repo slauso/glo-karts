@@ -5,13 +5,17 @@
   "type": "module",
   "scripts": {
     "dev": "node --watch src/index.js",
-    "start": "node src/index.js"
+    "start": "node src/index.js",
+    "load:sync": "node scripts/load-sync-harness.mjs",
+    "load:sync:export": "node scripts/load-sync-harness.mjs --json=reports/load-sync-latest.json --csv=reports/load-sync-latest.csv",
+    "load:sync:diff": "node scripts/load-sync-diff.mjs"
   },
   "dependencies": {
     "@colyseus/core": "^0.16.24",
     "@colyseus/monitor": "^0.16.7",
     "@colyseus/schema": "^3.0.76",
     "@colyseus/ws-transport": "^0.16.5",
+    "colyseus.js": "^0.16.22",
     "cors": "^2.8.5",
     "express": "^4.19.2",
     "zod": "^4.3.6"

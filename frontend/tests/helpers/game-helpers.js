@@ -15,6 +15,7 @@ export const isCriticalError = (msg) =>
   !msg.includes('net::') &&
   !msg.includes('favicon') &&
   !msg.includes('404') &&
+  !msg.includes('403') &&
   !msg.includes('Failed to fetch') &&
   !msg.includes('Havok') &&
   !msg.includes('ResizeObserver') &&
@@ -29,7 +30,7 @@ export const isCriticalError = (msg) =>
 /** Default config for battle-mode tests */
 export const BATTLE_CONFIG = {
   gameMode:    'battle',
-  trackId:     'battleisland',
+  trackId:     'glo_arena',
   battleType:  'deathmatch',
   maxPlayers:  2,
   scoreLimit:  5,
@@ -39,7 +40,7 @@ export const BATTLE_CONFIG = {
 /** Default config for race-mode tests */
 export const RACE_CONFIG = {
   gameMode:    'race',
-  trackId:     'cocoa_temple',
+  trackId:     'test_box',
   maxPlayers:  2,
   selectedKart: 'tux',
 };
@@ -55,7 +56,7 @@ export async function injectGameConfig(page, cfg = {}) {
   const merged = { ...BATTLE_CONFIG, ...cfg };
   await page.addInitScript((config) => {
     sessionStorage.setItem('gameConfig', JSON.stringify(config));
-    sessionStorage.setItem('myPlayerId', 'test-player-001');
+    sessionStorage.setItem('myPlayerId', config.testPlayerId || `test-player-${Date.now()}-${Math.floor(Math.random() * 100000)}`);
     sessionStorage.setItem('selectedKart', config.selectedKart || 'tux');
     sessionStorage.setItem('gloEffect', config.gloEffect || 'solid');
     sessionStorage.setItem('gloColor',  config.gloColor  || '#ff0080');
@@ -111,12 +112,23 @@ export async function teleportKart(page, pos) {
   await page.evaluate((p) => {
     const c = window.__gloClient;
     if (!c?.localMesh) return;
+    const body = c.localKartAggregate?.body;
+    // Teleport the mesh
     c.localMesh.position.set(p.x, p.y, p.z);
-    if (c.localKartAggregate?.body) {
-      c.localKartAggregate.body.setLinearVelocity({ x: 0, y: 0, z: 0 });
-      c.localKartAggregate.body.setAngularVelocity({ x: 0, y: 0, z: 0 });
+    if (body) {
+      // Tell Havok physics to sync body FROM mesh position next pre-step
+      body.disablePreStep = false;
+      body.setLinearVelocity({ x: 0, y: 0, z: 0 });
+      body.setAngularVelocity({ x: 0, y: 0, z: 0 });
     }
   }, pos);
+  // Wait one physics frame for the body to sync from the mesh
+  await page.waitForTimeout(100);
+  // Re-enable physics-driven mesh (body drives mesh position again)
+  await page.evaluate(() => {
+    const body = window.__gloClient?.localKartAggregate?.body;
+    if (body) body.disablePreStep = true;
+  });
 }
 
 /**
@@ -149,4 +161,140 @@ export async function waitForMatchLive(pages, timeout = 30_000) {
   await Promise.all(
     pages.map((p) => waitForDebug(p, (d) => d.matchLive === true, timeout)),
   );
+}
+
+export async function debugGrantWeapon(page, weaponId, targetId = null, ammo = null) {
+  await page.evaluate(({ weaponId: nextWeaponId, targetId: nextTargetId, ammo: nextAmmo }) => {
+    const room = window.__gloClient?.room;
+    if (!room) return;
+    room.send('debugGrantWeapon', {
+      weaponId: nextWeaponId,
+      targetId: nextTargetId,
+      ammo: nextAmmo,
+    });
+  }, { weaponId, targetId, ammo });
+}
+
+export async function debugTeleportAuthoritative(page, pos, targetId = null) {
+  await page.evaluate(({ pos: nextPos, targetId: nextTargetId }) => {
+    const room = window.__gloClient?.room;
+    if (!room) return;
+    room.send('debugTeleport', {
+      targetId: nextTargetId,
+      x: nextPos.x,
+      y: nextPos.y,
+      z: nextPos.z,
+      heading: nextPos.heading,
+    });
+  }, { pos, targetId });
+}
+
+export async function getSessionId(page) {
+  return page.evaluate(() => window.__gloDebug?.sessionId || null);
+}
+
+export async function getRoomId(page) {
+  return page.evaluate(() => window.__gloDebug?.roomId || window.__gloClient?.room?.id || null);
+}
+
+export async function waitForAuthoritativePosition(page, playerId, expected, tolerance = 0.75, timeout = 5_000) {
+  await page.waitForFunction(
+    ({ targetId, targetPos, toleranceRadius }) => {
+      const players = window.__gloClient?.authoritativeState?.players;
+      if (!players) return false;
+      const player = players.get?.(targetId);
+      if (!player) return false;
+      const dx = Number(player.x || 0) - Number(targetPos.x || 0);
+      const dy = Number(player.y || 0) - Number(targetPos.y || 0);
+      const dz = Number(player.z || 0) - Number(targetPos.z || 0);
+      return (dx * dx + dy * dy + dz * dz) <= (toleranceRadius * toleranceRadius);
+    },
+    {
+      targetId: playerId,
+      targetPos: expected,
+      toleranceRadius: tolerance,
+    },
+    { timeout },
+  );
+}
+
+export async function getProjectileSubTypes(page) {
+  return page.evaluate(() => {
+    const entities = window.__gloClient?.authoritativeState?.entities;
+    if (!entities) return [];
+    const result = [];
+    for (const [, entity] of entities.entries()) {
+      if (entity.type === 'projectile' && entity.active) result.push(entity.subType);
+    }
+    return result;
+  });
+}
+
+export async function getActiveProjectiles(page) {
+  return page.evaluate(() => {
+    const entities = window.__gloClient?.authoritativeState?.entities;
+    if (!entities) return [];
+    const result = [];
+    for (const [, entity] of entities.entries()) {
+      if (entity.type !== 'projectile' || !entity.active) continue;
+      result.push({
+        id: entity.id,
+        ownerId: entity.ownerId,
+        subType: entity.subType,
+        x: entity.x,
+        y: entity.y,
+        z: entity.z,
+      });
+    }
+    return result;
+  });
+}
+
+export async function getAuthoritativePlayerState(page, playerId) {
+  return page.evaluate((targetId) => {
+    const players = window.__gloClient?.authoritativeState?.players;
+    if (!players) return null;
+    let player = players.get?.(targetId) || null;
+    if (!player && players.forEach) {
+      players.forEach((candidate) => {
+        if (!player && candidate?.id === targetId) player = candidate;
+      });
+    }
+    if (!player) return null;
+    return {
+      id: player.id,
+      x: player.x,
+      y: player.y,
+      z: player.z,
+      weapon: player.weapon,
+      ammo: player.ammo,
+      fireCooldown: player.fireCooldown,
+      weapon2: player.weapon2,
+      ammo2: player.ammo2,
+      fireCooldown2: player.fireCooldown2,
+      weapon3: player.weapon3,
+      ammo3: player.ammo3,
+      effectType: player.effectType,
+      effectTimer: player.effectTimer,
+      shielded: player.shielded,
+      shieldHP: player.shieldHP,
+      reflectProjectiles: player.reflectProjectiles,
+      phased: player.phased,
+      speedMultiplier: player.speedMultiplier,
+      steerMultiplier: player.steerMultiplier,
+      health: player.health,
+    };
+  }, playerId);
+}
+
+export async function fireCurrentWeapon(page, slot = 'secondary') {
+  await page.evaluate((s) => {
+    const client = window.__gloClient;
+    const room = client?.room;
+    if (!room) return;
+    const payload = typeof client?._buildFirePayload === 'function'
+      ? client._buildFirePayload(s)
+      : {};
+    room.send('fireWeapon', { ...payload, slot: s });
+  }, slot);
 }

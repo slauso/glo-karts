@@ -92,6 +92,21 @@ const WASTELAND_THEMES = {
     skyColor: new Color3(0.15, 0.05, 0.02),
     fogDensity: 0.02,
   },
+  // 20.21 — expanded content depth
+  void_rift: {
+    groundColor: new Color3(0.05, 0.02, 0.12),
+    rubbleColor: new Color3(0.1, 0.05, 0.18),
+    hazardColor: new Color3(0.6, 0.0, 1.0),
+    skyColor: new Color3(0.03, 0.01, 0.08),
+    fogDensity: 0.03,
+  },
+  coral_overgrowth: {
+    groundColor: new Color3(0.15, 0.18, 0.12),
+    rubbleColor: new Color3(0.22, 0.28, 0.15),
+    hazardColor: new Color3(0.9, 0.2, 0.4),
+    skyColor: new Color3(0.06, 0.1, 0.06),
+    fogDensity: 0.018,
+  },
 };
 const THEME_NAMES = Object.keys(WASTELAND_THEMES);
 

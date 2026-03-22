@@ -7,6 +7,8 @@ import { Texture } from '@babylonjs/core/Materials/Textures/texture';
 import { ParticleSystem } from '@babylonjs/core/Particles/particleSystem';
 import { createWeaponModel, createPickupRingModel } from './weapon-models.js';
 import { EXTREME_WEAPONS } from '../procedural-models.js';
+import { attachProjectileRotation, applyEnhancedTrail, initHavokPhysics, getHavokPlugin } from './weapon-fx-enhance.js';
+import { poolScale, scaleParticles, scaleTrail, maxPhysicsBodies, maxProjectiles } from '../perf-tier.js';
 
 /*
  * GLO KARTS — Weapons System (Enhanced PvP)
@@ -25,6 +27,10 @@ import { EXTREME_WEAPONS } from '../procedural-models.js';
 
 // ── Weapon catalogue ────────────────────────────────────────────────────────
 export const WEAPON_TYPES = {
+  // Expose for dev/test menus
+  if (typeof window !== 'undefined') {
+    window.WEAPON_TYPES = WEAPON_TYPES;
+  }
   bowling: {
     id: 'bowling', name: 'BOWLING BALL', icon: '/textures/items/bowling-icon.png',
     color: 0xaaddff, damage: 40, speed: 28, radius: 0.55, lifetime: 6, bounces: 3,
@@ -164,7 +170,84 @@ export const WEAPON_TYPES = {
     color: 0x8899aa, damage: 25, speed: 12, radius: 3.0, lifetime: 6.0, bounces: 0,
     drag: 0.995, gravity: 0, blastRadius: 6, blastForce: 18,
     homing: false, seekForce: 0, seekCone: 0,
+    pullRadius: 18, pullForce: 9.0, spinForce: 3.5,
     desc: 'Wandering tornado scoops up karts', extreme: true,
+  },
+
+  // ── Wizard-Masters Elemental Weapons ────────────────────────────────
+  fireball: {
+    id: 'fireball', name: 'FIREBALL', icon: '/textures/battle/icons/skill_fire.png',
+    color: 0xff6600, damage: 35, speed: 32, radius: 0.6, lifetime: 4.5, bounces: 0,
+    drag: 0.999, gravity: 0, blastRadius: 4, blastForce: 10,
+    homing: false, seekForce: 0, seekCone: 0,
+    desc: 'Blazing fireball with lingering burn damage', element: 'fire',
+  },
+  toxic_spread: {
+    id: 'toxic_spread', name: 'TOXIC SPREAD', icon: '/textures/battle/icons/skill_toxic.png',
+    color: 0x44ff22, damage: 18, speed: 26, radius: 0.4, lifetime: 3.5, bounces: 0,
+    drag: 0.998, gravity: 0, blastRadius: 3, blastForce: 4,
+    homing: false, seekForce: 0, seekCone: 0,
+    desc: 'Three toxic projectiles in a fan — leave poison puddles', element: 'toxic',
+    spreadCount: 3, spreadAngle: 0.17,
+  },
+  ice_lance: {
+    id: 'ice_lance', name: 'ICE LANCE', icon: '/textures/battle/icons/skill_ice_arrow.png',
+    color: 0x66ccff, damage: 28, speed: 55, radius: 0.35, lifetime: 3.0, bounces: 0,
+    ammo: 3,
+    drag: 1, gravity: 0, blastRadius: 2, blastForce: 6,
+    homing: false, seekForce: 0, seekCone: 0,
+    desc: 'Fast ice shard that freezes on contact', element: 'ice',
+  },
+  tornado: {
+    id: 'tornado', name: 'TORNADO', icon: '/textures/battle/icons/skill_wind_tornado.png',
+    color: 0x88ccdd, damage: 22, speed: 14, radius: 2.5, lifetime: 6.0, bounces: 0,
+    drag: 0.998, gravity: 0, blastRadius: 6, blastForce: 18,
+    homing: false, seekForce: 0, seekCone: 0,
+    pullRadius: 15, pullForce: 7.0, spinForce: 2.8,
+    desc: 'Slow-moving tornado that pulls and spins out karts', element: 'wind',
+  },
+  super_nova: {
+    id: 'super_nova', name: 'SUPER NOVA', icon: '/textures/battle/icons/skill_super_nova.png',
+    color: 0xff8800, damage: 45, speed: 0, radius: 1.5, lifetime: 3.5, bounces: 0,
+    drag: 1, gravity: 0, blastRadius: 15, blastForce: 20,
+    homing: false, seekForce: 0, seekCone: 0,
+    desc: 'Expanding ring of fire that scorches everyone in range', element: 'fire',
+  },
+  rock_barrage: {
+    id: 'rock_barrage', name: 'ROCK BARRAGE', icon: '/textures/battle/icons/skill_rock.png',
+    color: 0x886644, damage: 30, speed: 22, radius: 0.55, lifetime: 4.0, bounces: 1,
+    drag: 0.99, gravity: -8, blastRadius: 4, blastForce: 12,
+    homing: false, seekForce: 0, seekCone: 0,
+    desc: 'Two heavy rocks lobbed in a dual arc', element: 'earth',
+    spreadCount: 2, spreadAngle: 0.08,
+  },
+  lightning_bolt: {
+    id: 'lightning_bolt', name: 'LIGHTNING BOLT', icon: '/textures/battle/icons/skill_light_strike.png',
+    color: 0xeeeeff, damage: 42, speed: 200, radius: 0.5, lifetime: 0.8, bounces: 0,
+    drag: 1, gravity: 0, blastRadius: 3, blastForce: 10,
+    homing: false, seekForce: 0, seekCone: 0,
+    desc: 'Near-instant lightning strike — stuns on hit', element: 'light',
+  },
+  wind_slash: {
+    id: 'wind_slash', name: 'WIND SLASH', icon: '/textures/battle/icons/skill_wind_slash.png',
+    color: 0xaaddbb, damage: 20, speed: 42, radius: 0.8, lifetime: 2.0, bounces: 0,
+    drag: 0.99, gravity: 0, blastRadius: 2, blastForce: 14,
+    homing: false, seekForce: 0, seekCone: 0,
+    desc: 'Quick wind blade — pushes targets back on hit', element: 'wind',
+  },
+  toxic_cloud: {
+    id: 'toxic_cloud', name: 'TOXIC CLOUD', icon: '/textures/battle/icons/skill_toxic_cloud.png',
+    color: 0x33aa11, damage: 8, speed: 0, radius: 1.0, lifetime: 7.5, bounces: 0,
+    drag: 1, gravity: 0, blastRadius: 10, blastForce: 0,
+    homing: false, seekForce: 0, seekCone: 0,
+    desc: 'Lingers in place dealing damage over time to all inside', element: 'toxic',
+  },
+  final_fission: {
+    id: 'final_fission', name: 'FINAL FISSION', icon: '/textures/battle/icons/skill_super_nova.png',
+    color: 0xffeedd, damage: 80, speed: 0, radius: 2.0, lifetime: 5.0, bounces: 0,
+    drag: 1, gravity: 0, blastRadius: 25, blastForce: 40,
+    homing: false, seekForce: 0, seekCone: 0,
+    desc: 'Nuclear fission detonation — obliterates everything in range', element: 'fire',
   },
 };
 
@@ -208,7 +291,7 @@ export const WEAPON_LOADOUTS = {
     desc: 'Rare devastating weapons with awe-inspiring effects',
     pool: ['shockwave_cannon', 'thunderstrike', 'black_hole', 'meteor_swarm',
            'frost_nova', 'emp_pulse', 'gravity_flip', 'inferno_trail',
-           'plasma_railgun', 'vortex_tornado'],
+           'plasma_railgun', 'vortex_tornado', 'final_fission'],
     spawnInterval: 10000,
     maxPickups: 3,
   },
@@ -219,6 +302,28 @@ export const WEAPON_LOADOUTS = {
     spawnInterval: 6000,
     maxPickups: 6,
   },
+  'elemental': {
+    id: 'elemental', name: 'Elemental',
+    desc: 'Wizard-Masters elemental spells only',
+    pool: ['fireball', 'toxic_spread', 'ice_lance', 'tornado', 'super_nova',
+           'rock_barrage', 'lightning_bolt', 'wind_slash', 'toxic_cloud'],
+    spawnInterval: 5000,
+    maxPickups: 6,
+  },
+  'fire-and-ice': {
+    id: 'fire-and-ice', name: 'Fire & Ice',
+    desc: 'Elemental duel — fire vs ice weapons',
+    pool: ['fireball', 'super_nova', 'ice_lance', 'frost_nova'],
+    spawnInterval: 5000,
+    maxPickups: 5,
+  },
+  'full-arsenal': {
+    id: 'full-arsenal', name: 'Full Arsenal',
+    desc: 'Every weapon from kart classics to wizard spells',
+    pool: [...Object.keys(WEAPON_TYPES)],
+    spawnInterval: 5000,
+    maxPickups: 7,
+  },
 };
 
 // ── Config ──────────────────────────────────────────────────────────────────
@@ -226,9 +331,11 @@ const DEFAULT_SPAWN_INTERVAL = 7000;
 const DEFAULT_MAX_PICKUPS    = 5;
 const PICKUP_RADIUS          = 2.8;
 const CAR_HIT_RADIUS         = 2.6;
-const POOL_SIZE              = 80;       // pre-allocated projectile meshes
-const TRAIL_POOL_SIZE        = 50;       // pooled trail particle emitters
+const POOL_SIZE              = 40;       // pre-allocated projectile meshes (base)
+const TRAIL_POOL_SIZE        = 30;       // pooled trail particle emitters (base)
 const PARTICLE_TEXTURE_URL   = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==';
+const CLAIM_COOLDOWN_TTL     = 5000;
+const PICKUP_SYNC_SOFT_CAP_MULTIPLIER = 2;
 
 // ── Internal state ──────────────────────────────────────────────────────────
 const state = {
@@ -241,6 +348,25 @@ const state = {
   lastSpawn: 0,
   projectiles: [],
 };
+
+// Physics body tracking
+let _physicsBodyCount = 0;
+let _PhysicsAggregate = null;  // lazy-loaded
+let _PhysicsShapeType = null;  // lazy-loaded
+
+async function _loadPhysicsModules() {
+  if (_PhysicsAggregate) return;
+  try {
+    const [aggMod, shapeMod] = await Promise.all([
+      import('@babylonjs/core/Physics/v2/physicsAggregate'),
+      import('@babylonjs/core/Physics/v2/IPhysicsEnginePlugin'),
+    ]);
+    _PhysicsAggregate = aggMod.PhysicsAggregate;
+    _PhysicsShapeType = shapeMod.PhysicsShapeType;
+  } catch (e) {
+    console.warn('[Weapons] Physics modules unavailable:', e.message);
+  }
+}
 
 // ── Projectile mesh pool ────────────────────────────────────────────────────
 const meshPool = [];          // dormant meshes available for reuse
@@ -256,7 +382,7 @@ function initMeshPool(scene) {
     _modelTemplates[typeId] = template;
   }
   // Pre-fill pool with generic spheres that will be swapped at acquire time
-  for (let i = 0; i < POOL_SIZE; i++) {
+  for (let i = 0; i < Math.round(POOL_SIZE * poolScale()); i++) {
     const mesh = MeshBuilder.CreateSphere('poolProj_' + i, { diameter: 1, segments: 10 }, scene);
     const mat = new StandardMaterial('poolProjMat_' + i, scene);
     mat.alpha = 0.92;
@@ -318,8 +444,8 @@ const trailPool = [];       // dormant trail emitters
 const trailActive = [];     // active trail emitters
 
 function initTrailPool(scene) {
-  for (let i = 0; i < TRAIL_POOL_SIZE; i++) {
-    const ps = new ParticleSystem('trail_' + i, 30, scene);
+  for (let i = 0; i < Math.round(TRAIL_POOL_SIZE * poolScale()); i++) {
+    const ps = new ParticleSystem('trail_' + i, scaleParticles(30), scene);
     ps.particleTexture = new Texture(PARTICLE_TEXTURE_URL, scene);
     ps.emitRate = 0;
     ps.minLifeTime = 0.15;
@@ -347,7 +473,7 @@ function acquireTrail(color, emitter) {
   ps.color2 = new Color4(r, g, b, 0.4);
   ps.colorDead = new Color4(r * 0.3, g * 0.3, b * 0.3, 0);
   ps.emitter = emitter;
-  ps.emitRate = 25;
+  ps.emitRate = scaleTrail(25);
   trailActive.push(ps);
   return ps;
 }
@@ -392,6 +518,13 @@ export function initWeapons(opts) {
   initMeshPool(state.scene);
   initTrailPool(state.scene);
 
+  // Reset physics state for new session
+  _physicsBodyCount = 0;
+
+  // Initialize Havok physics + preload PhysicsAggregate (non-blocking)
+  initHavokPhysics(state.scene).catch(() => {});
+  _loadPhysicsModules().catch(() => {});
+
   console.log('[Weapons] Init. host:', state.isHost, 'loadout:', state.loadout.name, 'pool:', POOL_SIZE);
   return {
     getState: ()             => state,
@@ -407,17 +540,41 @@ export function initWeapons(opts) {
 export function hostBroadcastPickups() { broadcastPickups(); }
 
 export function applyRemotePickups(list, scene) {
-  state.pickups.forEach(p => { if (p.mesh) p.mesh.dispose(); });
-  state.pickups = [];
-  list.forEach(item => {
-    const mesh = makePickupMesh(item.type || 'bowling');
-    const arr = item.position;
-    mesh.position.copyFromFloats(arr[0], arr[1], arr[2]);
-    state.pickups.push({ id: item.id, type: item.type, mesh });
+  const existing = new Map(state.pickups.map((pickup) => [pickup.id, pickup]));
+  const next = [];
+  const softCap = Math.max(
+    DEFAULT_MAX_PICKUPS,
+    Math.ceil((state.loadout?.maxPickups || DEFAULT_MAX_PICKUPS) * PICKUP_SYNC_SOFT_CAP_MULTIPLIER),
+  );
+
+  list.slice(0, softCap).forEach((item) => {
+    const arr = item.position || [0, 0.8, 0];
+    let entry = existing.get(item.id);
+    if (!entry || entry.type !== item.type || !entry.mesh || entry.mesh.isDisposed?.()) {
+      entry?.mesh?.dispose();
+      entry = { id: item.id, type: item.type, mesh: makePickupMesh(item.type || 'bowling') };
+    }
+    entry.type = item.type;
+    entry.mesh.position.copyFromFloats(arr[0], arr[1], arr[2]);
+    next.push(entry);
+    existing.delete(item.id);
   });
+
+  existing.forEach((pickup) => {
+    try { pickup.mesh?.dispose(); } catch (_) {}
+  });
+  state.pickups = next;
 }
 
 export function addRemoteProjectile(data, scene) {
+  if (state.projectiles.length >= maxProjectiles()) {
+    const oldestRemoteIdx = state.projectiles.findIndex((projectile) => projectile.remote);
+    if (oldestRemoteIdx >= 0) {
+      destroyProj(oldestRemoteIdx);
+    } else {
+      return;
+    }
+  }
   const mesh = makeProjMesh(data.type);
   const arr = data.position;
   mesh.position.copyFromFloats(arr[0], arr[1], arr[2]);
@@ -512,6 +669,12 @@ function broadcastPickups() {
 
 // ── Collection ──────────────────────────────────────────────────────────────
 const claimCooldown = new Map();
+function pruneClaimCooldown(now) {
+  for (const [pickupId, claimTime] of claimCooldown) {
+    if ((now - claimTime) > CLAIM_COOLDOWN_TTL) claimCooldown.delete(pickupId);
+  }
+}
+
 function collectPickups(playerCar, battleState) {
   if (!playerCar) return;
   const pos = playerCar.position;
@@ -523,7 +686,8 @@ function collectPickups(playerCar, battleState) {
     if (Math.hypot(dx, dz) > PICKUP_RADIUS) continue;
     if (state.isHost) {
       if (!battleState.currentWeapon) {
-        battleState.currentWeapon = WEAPON_TYPES[p.type];
+        battleState.currentWeapon = { ...WEAPON_TYPES[p.type] };
+        battleState.currentWeapon.ammo = Math.max(1, Number(WEAPON_TYPES[p.type]?.ammo || 1));
         playSfx('/audio/sfx/grab_collectable.ogg');
         updateWeaponHUD(battleState.currentWeapon);
       }
@@ -532,6 +696,7 @@ function collectPickups(playerCar, battleState) {
       broadcastPickups();
     } else {
       const now = performance.now();
+      pruneClaimCooldown(now);
       if ((now - (claimCooldown.get(p.id)||0)) > 800) {
         claimCooldown.set(p.id, now);
         try { state.multiplayerState?.playerConnections?.[0]?.send({ type: 'pickupClaim', id: p.id }); } catch(e){}
@@ -553,8 +718,14 @@ function fireWeapon(playerCar, battleState) {
     spawnProjectile(playerCar, w);
   }
   playSfx('/audio/sfx/shoot.ogg');
-  battleState.currentWeapon = null;
-  updateWeaponHUD(null);
+  const remainingAmmo = Math.max(0, Number(w.ammo || 1) - 1);
+  if (remainingAmmo > 0) {
+    battleState.currentWeapon = { ...w, ammo: remainingAmmo };
+    updateWeaponHUD(battleState.currentWeapon);
+  } else {
+    battleState.currentWeapon = null;
+    updateWeaponHUD(null);
+  }
 }
 
 function fireFromActor(actorMesh, weaponId = 'bowling') {
@@ -584,6 +755,11 @@ function spawnProjectile(actorMesh, weapon) {
 }
 
 function spawnProjectileAt(pos, vel, weapon) {
+  // Enforce hard projectile cap to prevent runaway accumulation
+  if (state.projectiles.length >= maxProjectiles()) {
+    // Destroy oldest projectile to make room
+    destroyProj(0);
+  }
   const mesh = makeProjMesh(weapon.id);
   mesh.position.copyFrom(pos);
   const def = WEAPON_TYPES[weapon.id] || {};
@@ -591,11 +767,40 @@ function spawnProjectileAt(pos, vel, weapon) {
   let trail = null;
   if (weapon.speed > 0) {
     trail = acquireTrail(def.color || 0xffffff, mesh);
+    if (trail) applyEnhancedTrail(trail, weapon.id);
   }
+  // Attach per-weapon rotation animation (batch system — returns unregister callback)
+  const disposeRotation = attachProjectileRotation(mesh, weapon.id);
+
+  // Attach physics body if Havok is available and within budget
+  let physicsBody = null;
+  if (_PhysicsAggregate && _PhysicsShapeType && getHavokPlugin()
+      && _physicsBodyCount < maxPhysicsBodies() && weapon.speed > 0) {
+    try {
+      const aggregate = new _PhysicsAggregate(
+        mesh, _PhysicsShapeType.SPHERE,
+        { mass: 1.0, restitution: 0.3, friction: 0.2 },
+        state.scene,
+      );
+      // Apply initial velocity as linear impulse
+      const body = aggregate.body;
+      body.setLinearVelocity(vel);
+      // Disable gravity for weapons that don't use it
+      if (!def.gravity) {
+        body.setGravityFactor(0);
+      }
+      physicsBody = aggregate;
+      _physicsBodyCount++;
+    } catch {
+      // Physics attach failed — fallback to manual movement
+    }
+  }
+
   const proj = {
     id: gid('pr'), type: weapon.id, mesh, velocity: vel.clone(),
     birth: performance.now(), damage: weapon.damage,
-    bounces: weapon.bounces || 0, trail,
+    bounces: weapon.bounces || 0, trail, physicsBody,
+    _disposeRotation: disposeRotation,
   };
   state.projectiles.push(proj);
   broadcastProjSpawn(proj);
@@ -630,47 +835,77 @@ function getForward(mesh) {
 }
 
 // ── Projectile update (enhanced) ────────────────────────────────────────────
+let _homingFrame = 0; // throttle homing search to every 3rd frame
+const _tmpSeekDir = new Vector3();
+const _tmpCurrentDir = new Vector3();
+const _tmpBlastDir = new Vector3();
+
 function updateProjectiles(dt, playerCar, battleState) {
   const now = performance.now();
+  _homingFrame++;
+  const doHoming = (_homingFrame % 3) === 0; // only search every 3 frames
   for (let i = state.projectiles.length - 1; i >= 0; i--) {
     const p = state.projectiles[i];
     const def = WEAPON_TYPES[p.type] || {};
 
-    // ── Homing / seeking ────────────────────────────────────────────────
-    if (def.homing && def.seekForce > 0 && !p.remote) {
+    // ── Homing / seeking (throttled to every 3 frames) ──────────────────
+    if (doHoming && def.homing && def.seekForce > 0 && !p.remote) {
       const target = findNearestEnemy(p.mesh.position);
       if (target) {
-        const toTarget = target.subtract(p.mesh.position).normalize();
-        const currentDir = p.velocity.normalizeToNew();
+        target.subtractToRef(p.mesh.position, _tmpSeekDir);
+        if (_tmpSeekDir.lengthSquared() <= 0.0001) continue;
+        _tmpSeekDir.normalize();
+        p.velocity.normalizeToRef(_tmpCurrentDir);
         // Only seek if target is within the seek cone (dot product check)
-        const dot = Vector3.Dot(currentDir, toTarget);
+        const dot = Vector3.Dot(_tmpCurrentDir, _tmpSeekDir);
         if (dot > def.seekCone) {
-          // Smooth pursuit: lerp velocity direction toward target
-          const seekVec = toTarget.scale(def.seekForce * dt);
-          p.velocity.addInPlace(seekVec);
-          // Maintain speed (re-normalize to original magnitude)
-          const currentSpeed = p.velocity.length();
-          if (currentSpeed > 0) {
-            p.velocity.normalize().scaleInPlace(Math.min(currentSpeed, def.speed * 1.2));
+          const seekStrength = def.seekForce * dt * 3;
+          if (p.physicsBody && p.physicsBody.body) {
+            // Apply seeking as impulse (scaled by 3 to compensate for throttle)
+            p.physicsBody.body.applyImpulse(_tmpSeekDir.scale(seekStrength), p.mesh.position);
+          } else {
+            // Smooth pursuit: lerp velocity direction toward target
+            p.velocity.x += _tmpSeekDir.x * seekStrength;
+            p.velocity.y += _tmpSeekDir.y * seekStrength;
+            p.velocity.z += _tmpSeekDir.z * seekStrength;
+            // Maintain speed (re-normalize to original magnitude)
+            const currentSpeed = p.velocity.length();
+            if (currentSpeed > 0) {
+              p.velocity.normalize().scaleInPlace(Math.min(currentSpeed, def.speed * 1.2));
+            }
           }
         }
       }
     }
 
     // ── Per-weapon gravity ──────────────────────────────────────────────
-    if (def.gravity) {
+    if (def.gravity && !p.physicsBody) {
       p.velocity.y += def.gravity * dt;
     }
 
     // ── Per-weapon drag ─────────────────────────────────────────────────
-    if (def.drag && def.drag < 1) {
+    if (def.drag && def.drag < 1 && !p.physicsBody) {
       p.velocity.scaleInPlace(Math.pow(def.drag, dt * 60));
     }
 
-    // ── Position update ──────────────────────────────────────────────────
-    p.mesh.position.x += p.velocity.x * dt;
-    p.mesh.position.y += p.velocity.y * dt;
-    p.mesh.position.z += p.velocity.z * dt;
+    // ── Tornado gravitational pull — continuous suction on nearby karts ──
+    if (def.pullRadius > 0 && def.pullForce > 0) {
+      _applyTornadoPull(p.mesh.position, def.pullRadius, def.pullForce, def.spinForce || 0, dt, playerCar);
+    }
+
+    // ── Position update — physics-driven or manual ───────────────────────
+    if (p.physicsBody && p.physicsBody.body) {
+      // Read velocity from physics engine for sync
+      const physVel = p.physicsBody.body.getLinearVelocity();
+      if (physVel) {
+        p.velocity.copyFrom(physVel);
+      }
+      // Position is updated by the physics engine automatically
+    } else {
+      p.mesh.position.x += p.velocity.x * dt;
+      p.mesh.position.y += p.velocity.y * dt;
+      p.mesh.position.z += p.velocity.z * dt;
+    }
 
     // Ground bounce
     if (p.mesh.position.y < 0.3 && p.bounces > 0) {
@@ -688,11 +923,14 @@ function findNearestEnemy(fromPos) {
   const ms = state.multiplayerState;
   const opps = ms?.opponentCars || {};
   let nearest = null;
-  let minDist = Infinity;
+  let minDistSq = Infinity;
   Object.values(opps).forEach(opp => {
     if (!opp.model?.visible) return;
-    const d = Vector3.Distance(opp.model.position, fromPos);
-    if (d < minDist) { minDist = d; nearest = opp.model.position; }
+    const dx = opp.model.position.x - fromPos.x;
+    const dy = opp.model.position.y - fromPos.y;
+    const dz = opp.model.position.z - fromPos.z;
+    const distSq = dx * dx + dy * dy + dz * dz;
+    if (distSq < minDistSq) { minDistSq = distSq; nearest = opp.model.position; }
   });
   return nearest;
 }
@@ -708,7 +946,10 @@ function checkHits(proj, projIdx) {
 
   Object.entries(opps).forEach(([pid, opp]) => {
     if (!opp.model?.visible) return;
-    if (Vector3.Distance(opp.model.position, pp) <= hitRadius)
+    const dx = opp.model.position.x - pp.x;
+    const dy = opp.model.position.y - pp.y;
+    const dz = opp.model.position.z - pp.z;
+    if ((dx * dx + dy * dy + dz * dz) <= (hitRadius * hitRadius))
       victims.push(pid);
   });
 
@@ -726,21 +967,94 @@ function checkHits(proj, projIdx) {
   }
 }
 
+// ── Tornado gravitational pull — continuous suction on nearby karts ──────────
+const _tmpPull = new Vector3();
+const _tmpTangent = new Vector3();
+function _applyTornadoPull(center, radius, force, spinForce, dt, playerCar) {
+  const ms = state.multiplayerState;
+  const opps = ms?.opponentCars || {};
+  const scaledDt = Math.min(dt, 0.033); // cap to avoid tunneling on lag spikes
+
+  // Helper: apply pull + tangential spin to a position
+  const _pullTarget = (pos) => {
+    const dx = center.x - pos.x;
+    const dz = center.z - pos.z;
+    const distSq = dx * dx + dz * dz;
+    const dist = Math.sqrt(distSq);
+    if (dist < 0.5 || dist > radius) return null;
+
+    // Inverse-distance falloff (clamped near center to avoid singularity)
+    const falloff = 1.0 - (dist / radius);
+    const strength = force * falloff * falloff; // quadratic for natural tornado feel
+
+    // Radial pull toward center
+    _tmpPull.set(dx / dist, 0, dz / dist);
+    _tmpPull.scaleInPlace(strength * scaledDt);
+
+    // Tangential spin component (perpendicular to radial, counter-clockwise)
+    if (spinForce > 0) {
+      _tmpTangent.set(-dz / dist, 0, dx / dist);
+      _tmpTangent.scaleInPlace(spinForce * falloff * scaledDt);
+      _tmpPull.addInPlace(_tmpTangent);
+    }
+
+    // Slight upward lift near center
+    if (dist < radius * 0.35) {
+      _tmpPull.y += 1.5 * falloff * scaledDt;
+    }
+
+    return _tmpPull;
+  };
+
+  // Pull opponents
+  Object.values(opps).forEach(opp => {
+    if (!opp.model?.visible) return;
+    const pull = _pullTarget(opp.model.position);
+    if (!pull) return;
+    if (opp.model.physicsBody && typeof opp.model.physicsBody.applyImpulse === 'function') {
+      opp.model.physicsBody.applyImpulse(pull.scale(0.6), opp.model.position);
+    } else {
+      opp.model.position.addInPlace(pull.scale(0.12));
+    }
+  });
+
+  // Pull local player (if not the shooter — check if projectile is not remote)
+  if (playerCar) {
+    const pull = _pullTarget(playerCar.position);
+    if (pull) {
+      if (playerCar.physicsBody && typeof playerCar.physicsBody.applyImpulse === 'function') {
+        playerCar.physicsBody.applyImpulse(pull.scale(0.4), playerCar.position);
+      } else {
+        playerCar.position.addInPlace(pull.scale(0.08));
+      }
+    }
+  }
+}
+
 // ── Explosion radial force ──────────────────────────────────────────────────
 function applyBlastForce(center, radius, force, alreadyHitIds) {
   const ms = state.multiplayerState;
   const opps = ms?.opponentCars || {};
+  const radiusSq = radius * radius;
 
   // Apply to all cars in blast radius (including those not directly hit for splash damage)
   Object.entries(opps).forEach(([pid, opp]) => {
     if (!opp.model?.visible) return;
-    const dist = Vector3.Distance(opp.model.position, center);
-    if (dist > radius) return;
+    const dx = opp.model.position.x - center.x;
+    const dy = opp.model.position.y - center.y;
+    const dz = opp.model.position.z - center.z;
+    const distSq = dx * dx + dy * dy + dz * dz;
+    if (distSq > radiusSq) return;
+    const dist = Math.sqrt(distSq);
 
     // Falloff: force decreases linearly with distance
     const falloff = 1 - (dist / radius);
-    const pushDir = opp.model.position.subtract(center).normalize();
-    const impulse = pushDir.scale(force * falloff);
+    if (dist > 0.0001) {
+      _tmpBlastDir.set(dx / dist, dy / dist, dz / dist);
+    } else {
+      _tmpBlastDir.set(0, 1, 0);
+    }
+    const impulse = _tmpBlastDir.scale(force * falloff);
 
     // Apply impulse to physics body if available
     if (opp.model.physicsBody && typeof opp.model.physicsBody.applyImpulse === 'function') {
@@ -759,9 +1073,28 @@ function applyBlastForce(center, radius, force, alreadyHitIds) {
 }
 
 function destroyProj(i) {
+  if (i < 0 || i >= state.projectiles.length) return;
   const p = state.projectiles[i];
   // Release trail particle emitter back to pool
   if (p.trail) releaseTrail(p.trail);
+  // Dispose model-owned particle systems (fireball trail, glow_thrower streams, etc.)
+  if (p.mesh?.metadata) {
+    const md = p.mesh.metadata;
+    for (const key of ['trailPS', 'sparksPS', 'dripsPS']) {
+      if (md[key]) { try { md[key].stop(); md[key].dispose(); } catch {} }
+    }
+    // Remove super_nova expand observer
+    if (md.expandObserver && state.scene) {
+      try { state.scene.onBeforeRenderObservable.remove(md.expandObserver); } catch {}
+    }
+  }
+  // Unregister rotation batch entry
+  if (p._disposeRotation) { try { p._disposeRotation(); } catch {} }
+  // Dispose physics aggregate if present
+  if (p.physicsBody) {
+    try { p.physicsBody.dispose(); } catch {}
+    _physicsBodyCount = Math.max(0, _physicsBodyCount - 1);
+  }
   // Release mesh back to pool instead of disposing
   if (p.mesh) releasePoolMesh(p.mesh);
   state.projectiles.splice(i, 1);

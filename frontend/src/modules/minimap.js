@@ -13,13 +13,46 @@ const minimap = {
   scale: 1,
   offsetX: 0,
   offsetY: 0,
-  mapId: 'map1', // Default map ID
+  mapId: 'test_box', // Default map ID
   worldScale: 8,  // Track world scale (8 for custom maps, 1 for STK)
+  // Battle mode fields
+  battleMode: false,
+  aabb: null,          // { min:{x,z}, max:{x,z} }
+  itemPositions: null,  // [{x,z}, ...]
+  _lastUpdateMs: 0,     // throttle at ~10 fps
 };
+
+function styleMinimapCanvas(battleMode = false) {
+  if (!minimap.canvas) return;
+  Object.assign(minimap.canvas.style, battleMode ? {
+    position: 'absolute',
+    top: '98px',
+    right: '22px',
+    width: `${minimap.size}px`,
+    height: `${minimap.size}px`,
+    background: 'radial-gradient(circle at 30% 24%, rgba(255,255,255,0.12), rgba(16,22,34,0.7) 42%, rgba(8,10,16,0.88) 100%)',
+    border: '1px solid rgba(228,236,255,0.18)',
+    borderRadius: '24px',
+    boxShadow: '0 18px 48px rgba(0,0,0,0.32), inset 0 1px 0 rgba(255,255,255,0.12)',
+    zIndex: '1000',
+    backdropFilter: 'blur(14px)',
+    WebkitBackdropFilter: 'blur(14px)',
+  } : {
+    position: 'absolute',
+    top: '20px',
+    right: '20px',
+    width: `${minimap.size}px`,
+    height: `${minimap.size}px`,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    borderRadius: '10px',
+    boxShadow: '0 0 10px rgba(0, 0, 0, 0.5)',
+    zIndex: '1000',
+  });
+}
 
 // Create the minimap canvas
 export function createMinimap(mapId, scene) {
-  // Use provided mapId or default to map1
+  // Use provided mapId or default to test_box
   if (mapId) {
     minimap.mapId = mapId;
   }
@@ -33,17 +66,7 @@ export function createMinimap(mapId, scene) {
   minimap.canvas.id = 'minimap';
   minimap.canvas.width = minimap.size;
   minimap.canvas.height = minimap.size;
-  
-  // Style the canvas
-  minimap.canvas.style.position = 'absolute';
-  minimap.canvas.style.top = '20px';
-  minimap.canvas.style.right = '20px';
-  minimap.canvas.style.width = `${minimap.size}px`;
-  minimap.canvas.style.height = `${minimap.size}px`;
-  minimap.canvas.style.backgroundColor = 'rgba(0, 0, 0, 0.5)';
-  minimap.canvas.style.borderRadius = '10px';
-  minimap.canvas.style.boxShadow = '0 0 10px rgba(0, 0, 0, 0.5)';
-  minimap.canvas.style.zIndex = '1000';
+  styleMinimapCanvas(false);
   
   // Get drawing context
   minimap.ctx = minimap.canvas.getContext('2d');
@@ -310,5 +333,174 @@ export function updateMinimapPlayers(localPlayer, opponents) {
     minimap.ctx.arc(x, y, 4, 0, Math.PI * 2);
     minimap.ctx.fillStyle = 'rgba(43, 118, 199, 1)';
     minimap.ctx.fill();
+  }
+}
+
+// ───────────────────────────────────────────────
+// Battle minimap support
+// ───────────────────────────────────────────────
+
+/**
+ * Create/initialise the minimap in battle mode.
+ * Instead of a track outline curve we render the arena AABB rectangle.
+ * @param {string} mapId
+ * @param {{ min:{x:number,z:number}, max:{x:number,z:number} }} aabb
+ * @param {{ x:number, z:number }[]} [itemPositions]
+ */
+export function createBattleMinimap(mapId, aabb, itemPositions) {
+  if (minimap.canvas) return; // already created
+
+  minimap.mapId = mapId;
+  minimap.battleMode = true;
+  minimap.size = 168;
+  minimap.worldScale = 1; // battle uses raw world coords
+  minimap.aabb = aabb;
+  minimap.itemPositions = itemPositions || [];
+
+  // Create canvas (same style as race minimap)
+  minimap.canvas = document.createElement('canvas');
+  minimap.canvas.id = 'minimap';
+  minimap.canvas.width = minimap.size;
+  minimap.canvas.height = minimap.size;
+  styleMinimapCanvas(true);
+  minimap.ctx = minimap.canvas.getContext('2d');
+  document.body.appendChild(minimap.canvas);
+
+  // Compute scale/offset from AABB so the rectangle fills the canvas with padding
+  const pad = 20;
+  const availW = minimap.size - pad * 2;
+  const arenaW = aabb.max.x - aabb.min.x;
+  const arenaD = aabb.max.z - aabb.min.z;
+  const sx = availW / (arenaW || 1);
+  const sz = availW / (arenaD || 1);
+  minimap.scale = Math.min(sx, sz);
+  const cx = (aabb.min.x + aabb.max.x) / 2;
+  const cz = (aabb.min.z + aabb.max.z) / 2;
+  minimap.offsetX = minimap.size / 2 - cx * minimap.scale;
+  minimap.offsetY = minimap.size / 2 - cz * minimap.scale;
+
+  // Mark trackData as non-null so updateMinimapPlayers path works
+  minimap.trackData = [];
+
+  drawBattleArena();
+  console.log(`[minimap] Battle minimap created for ${mapId}`);
+}
+
+/** Draw the static arena rectangle + item dots */
+function drawBattleArena() {
+  if (!minimap.ctx || !minimap.aabb) return;
+  const ctx = minimap.ctx;
+  ctx.clearRect(0, 0, minimap.size, minimap.size);
+  const gradient = ctx.createLinearGradient(0, 0, minimap.size, minimap.size);
+  gradient.addColorStop(0, 'rgba(92, 235, 255, 0.10)');
+  gradient.addColorStop(0.5, 'rgba(18, 28, 42, 0.16)');
+  gradient.addColorStop(1, 'rgba(255, 94, 176, 0.11)');
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, minimap.size, minimap.size);
+
+  // Arena boundary rectangle
+  const tl = worldToMinimap(minimap.aabb.min.x, minimap.aabb.min.z);
+  const br = worldToMinimap(minimap.aabb.max.x, minimap.aabb.max.z);
+  const w = br.x - tl.x;
+  const h = br.y - tl.y;
+
+  const sweep = ((performance.now() * 0.08) % (w + 36)) - 18;
+  ctx.fillStyle = 'rgba(160, 212, 255, 0.05)';
+  ctx.fillRect(tl.x, tl.y, w, h);
+  ctx.strokeStyle = 'rgba(232, 240, 255, 0.4)';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(tl.x, tl.y, w, h);
+  ctx.strokeStyle = 'rgba(96, 214, 255, 0.12)';
+  ctx.lineWidth = 1;
+  for (let i = 1; i < 4; i++) {
+    const x = tl.x + (w * i / 4);
+    const y = tl.y + (h * i / 4);
+    ctx.beginPath();
+    ctx.moveTo(x, tl.y);
+    ctx.lineTo(x, tl.y + h);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(tl.x, y);
+    ctx.lineTo(tl.x + w, y);
+    ctx.stroke();
+  }
+  ctx.fillStyle = 'rgba(120, 228, 255, 0.12)';
+  ctx.fillRect(tl.x + sweep, tl.y, 14, h);
+
+  // Item positions — small yellow dots
+  if (minimap.itemPositions) {
+    for (const it of minimap.itemPositions) {
+      const { x, y } = worldToMinimap(it.x, it.z);
+      ctx.beginPath();
+      ctx.arc(x, y, 4, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(255, 230, 132, 0.12)';
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(x, y, 2.5, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(255, 220, 92, 0.86)';
+      ctx.fill();
+    }
+  }
+}
+
+/**
+ * Update battle minimap with player blips.
+ * @param {object} localMesh      Babylon mesh for local kart
+ * @param {string} localSessionId Session ID of local player
+ * @param {Map<string, object>} remoteMeshes  sessionId→mesh
+ * @param {object} [colyseusPlayers] room.state.players (for team colour)
+ */
+export function updateBattleMinimapPlayers(localMesh, localSessionId, remoteMeshes, colyseusPlayers) {
+  if (!minimap.ctx || !minimap.battleMode) return;
+
+  // Throttle to ~10 fps
+  const now = performance.now();
+  if (now - minimap._lastUpdateMs < 100) return;
+  minimap._lastUpdateMs = now;
+
+  // Redraw static elements
+  drawBattleArena();
+
+  const ctx = minimap.ctx;
+
+  // Remote players — red (or blue for team-mates)
+  const localTeam = colyseusPlayers?.get?.(localSessionId)?.team;
+  if (remoteMeshes) {
+    for (const [sid, mesh] of remoteMeshes.entries()) {
+      if (!mesh?.position) continue;
+      const { x, y } = worldToMinimap(mesh.position.x, mesh.position.z);
+      const pState = colyseusPlayers?.get?.(sid);
+      const sameTeam = localTeam != null && pState?.team === localTeam;
+      ctx.beginPath();
+      ctx.arc(x, y, 6, 0, Math.PI * 2);
+      ctx.fillStyle = sameTeam ? 'rgba(80, 160, 255, 0.16)' : 'rgba(255, 86, 110, 0.16)';
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(x, y, 4, 0, Math.PI * 2);
+      ctx.fillStyle = sameTeam ? 'rgba(80, 160, 255, 0.9)' : 'rgba(255, 70, 70, 0.9)';
+      ctx.fill();
+    }
+  }
+
+  // Local player — green with white outline
+  if (localMesh) {
+    const { x, y } = worldToMinimap(localMesh.position.x, localMesh.position.z);
+    ctx.beginPath();
+    ctx.arc(x, y, 7, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255,255,255,0.18)';
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(x, y, 4, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(92, 245, 208, 1)';
+    ctx.fill();
+    const forward = localMesh.forward || null;
+    if (forward) {
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.lineTo(x + forward.x * 10, y + forward.z * 10);
+      ctx.strokeStyle = 'rgba(235, 248, 255, 0.88)';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+    }
   }
 }

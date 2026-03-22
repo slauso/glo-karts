@@ -1,0 +1,46 @@
+
+> GLOKarts-realtime@0.1.0 start
+> node src/index.js
+
+{"ts":"2026-03-19T18:01:01.708Z","level":"info","event":"server_start","port":2567,"env":"development"}
+
+       ___      _
+      / __\___ | |_   _ ___  ___ _   _ ___
+     / /  / _ \| | | | / __|/ _ \ | | / __|
+    / /__| (_) | | |_| \__ \  __/ |_| \__ \
+    \____/\___/|_|\__, |___/\___|\__,_|___/
+                  |___/
+
+     · Multiplayer Framework for Node.js ·
+
+💖 Consider becoming a Sponsor on GitHub → https://github.com/sponsors/endel
+🌟 Give us a star on GitHub → https://github.com/colyseus/colyseus
+☁️  Deploy and scale your project on Colyseus Cloud → https://cloud.colyseus.io
+
+
+[battle_room] created roomId=wQO3dZUJZ gameType=deathmatch scoreLimit=5 maxClients=2 patchRateMs=17
+{"ts":"2026-03-19T18:01:21.859Z","level":"info","event":"room_create","room":"battle_room","roomId":"wQO3dZUJZ","gameType":"deathmatch","scoreLimit":5,"maxClients":2,"patchRateMs":16.666666666666668,"staleInputMs":500,"authoritative":true}
+[battle_room] join sessionId=t7riIH-vy name=Player team=red players=1
+{"ts":"2026-03-19T18:01:22.291Z","level":"info","event":"room_join","room":"battle_room","roomId":"wQO3dZUJZ","sessionId":"t7riIH-vy","name":"Player","players":1}
+{"ts":"2026-03-19T18:01:25.248Z","level":"info","event":"battle_ready","room":"battle_room","roomId":"wQO3dZUJZ","sessionId":"t7riIH-vy","readyCount":0,"players":1}
+[battle_room] join sessionId=ZRDeYAem6 name=Player team=blue players=2
+{"ts":"2026-03-19T18:01:29.235Z","level":"info","event":"room_join","room":"battle_room","roomId":"wQO3dZUJZ","sessionId":"ZRDeYAem6","name":"Player","players":2}
+{"ts":"2026-03-19T18:01:34.225Z","level":"info","event":"battle_ready","room":"battle_room","roomId":"wQO3dZUJZ","sessionId":"ZRDeYAem6","readyCount":1,"players":2}
+{"ts":"2026-03-19T18:02:23.669Z","level":"info","event":"room_leave","room":"battle_room","roomId":"wQO3dZUJZ","sessionId":"t7riIH-vy","players":1}
+[battle_room] leave sessionId=t7riIH-vy players=1
+{"ts":"2026-03-19T18:02:26.334Z","level":"info","event":"room_leave","room":"battle_room","roomId":"wQO3dZUJZ","sessionId":"ZRDeYAem6","players":0}
+[battle_room] leave sessionId=ZRDeYAem6 players=0
+[battle_room] created roomId=P34aNyNPd gameType=deathmatch scoreLimit=5 maxClients=2 patchRateMs=17
+{"ts":"2026-03-19T18:02:31.036Z","level":"info","event":"room_create","room":"battle_room","roomId":"P34aNyNPd","gameType":"deathmatch","scoreLimit":5,"maxClients":2,"patchRateMs":16.666666666666668,"staleInputMs":500,"authoritative":true}
+[battle_room] join sessionId=KZBmvjC4X name=Player team=red players=1
+{"ts":"2026-03-19T18:02:31.393Z","level":"info","event":"room_join","room":"battle_room","roomId":"P34aNyNPd","sessionId":"KZBmvjC4X","name":"Player","players":1}
+{"ts":"2026-03-19T18:02:33.859Z","level":"info","event":"battle_ready","room":"battle_room","roomId":"P34aNyNPd","sessionId":"KZBmvjC4X","readyCount":0,"players":1}
+[battle_room] join sessionId=odoK2ABOv name=Player team=blue players=2
+{"ts":"2026-03-19T18:02:37.564Z","level":"info","event":"room_join","room":"battle_room","roomId":"P34aNyNPd","sessionId":"odoK2ABOv","name":"Player","players":2}
+{"ts":"2026-03-19T18:02:42.309Z","level":"info","event":"battle_ready","room":"battle_room","roomId":"P34aNyNPd","sessionId":"odoK2ABOv","readyCount":1,"players":2}
+{"ts":"2026-03-19T18:03:20.893Z","level":"info","event":"room_leave","room":"battle_room","roomId":"P34aNyNPd","sessionId":"KZBmvjC4X","players":1}
+[battle_room] leave sessionId=KZBmvjC4X players=1
+{"ts":"2026-03-19T18:03:23.588Z","level":"info","event":"room_leave","room":"battle_room","roomId":"P34aNyNPd","sessionId":"odoK2ABOv","players":0}
+[battle_room] leave sessionId=odoK2ABOv players=0
+
+C:\Users\laptop\twistedkart\realtime>

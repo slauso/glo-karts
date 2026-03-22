@@ -60,7 +60,7 @@ body {
   color: var(--text-sub);
   text-decoration: none;
   font-size: 1.2rem;
-  padding: 6px 10px;
+  padding: 12px 16px;
   border-radius: var(--r-btn);
   transition: color 0.2s, background 0.2s;
 }
@@ -87,7 +87,7 @@ body {
   background: var(--lg-surface);
   border: 1px solid var(--lg-border);
   color: var(--text-sub);
-  padding: 6px 12px;
+  padding: 12px 16px;
   border-radius: var(--r-btn);
   cursor: pointer;
   font-size: 0.9rem;
@@ -241,7 +241,7 @@ body {
   border: 1px solid var(--lg-border);
   border-radius: var(--r-btn);
   color: var(--text);
-  padding: 6px 10px;
+  padding: 12px 16px;
   font-family: var(--font-ui);
   font-size: 0.85rem;
   outline: none;

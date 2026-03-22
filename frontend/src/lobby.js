@@ -7,26 +7,52 @@ import {
   getPageForMode,
   requiresLobby,
   isPlayable,
-  buildGameConfig,
   getMode,
 } from './game-modes.js';
 import {
-  getLegacyModeFamily,
-  getSelectableContentList,
-  usesArenaSelection,
-  usesTrackSelection,
-} from './modules/single-player-routing.js';
+  ALL_ARENAS,
+  ALL_TRACKS,
+  CUSTOM_TRACK_ID,
+} from './modules/content-registry.js';
 
 const DEFAULTS = {
-  mode: 'race',
+  mode: 'battle',
   battleType: 'deathmatch',
   maxPlayers: 12,
-  botCount: 6,
+  botCount: 0,
   loadoutId: 'random-all',
   scoreLimit: 5,
-  arenaId: 'test_box',
-  trackId: 'test_box',
+  arenaId: 'glo_arena',
+  trackId: 'glo_arena',
 };
+
+function getLegacyModeFamily(modeId) {
+  if (modeId === 'battle_online') return 'battle';
+  if (modeId === 'gloflux_race' || modeId === 'gloflux_arena') return 'gloflux';
+  return 'race';
+}
+
+function usesArenaSelection(modeId) {
+  return !!getMode(modeId)?.selectors?.arena;
+}
+
+function usesTrackSelection(modeId) {
+  return !!getMode(modeId)?.selectors?.track;
+}
+
+function getSelectableContentList(modeId) {
+  if (usesArenaSelection(modeId)) {
+    return Object.values(ALL_ARENAS).map((entry) => ({ id: entry.id, name: entry.label }));
+  }
+
+  if (usesTrackSelection(modeId)) {
+    return Object.values(ALL_TRACKS)
+      .filter((entry) => entry.id !== CUSTOM_TRACK_ID)
+      .map((entry) => ({ id: entry.id, name: entry.label }));
+  }
+
+  return [];
+}
 
 function normalizeLobbyCode(raw) {
   return String(raw || '').trim().replace(/\s+/g, '-').toUpperCase();
@@ -112,7 +138,7 @@ class RacingLobby {
 
     this.selectedMode = DEFAULTS.mode;
     this.selectedModeId = null;
-    this.selectedMap = DEFAULTS.trackId;
+    this.selectedMap = DEFAULTS.arenaId;
     this.selectedBattleType = DEFAULTS.battleType;
     this.selectedMaxPlayers = DEFAULTS.maxPlayers;
     this.selectedBotCount = DEFAULTS.botCount;
@@ -210,6 +236,9 @@ class RacingLobby {
       this.sendPlayerUpdate();
     });
 
+    const backBtn = document.getElementById('back-to-modes-btn');
+    backBtn?.addEventListener('click', () => this.resetToModeSelection());
+
     this.playBtn?.addEventListener('click', () => this.onPlayClicked());
     this.readyBtn?.addEventListener('click', () => this.toggleReady());
     this.startMatchBtn?.addEventListener('click', () => this.startMatch());
@@ -278,8 +307,9 @@ class RacingLobby {
       try {
         const trackData = JSON.parse(json);
         saveCustomTrack(trackData);
+        sessionStorage.setItem('customTrackData', json);
         if (status) {
-          status.textContent = `Imported: ${trackData.name || 'Custom Track'}`;
+          status.textContent = `Imported: ${trackData.name || 'Custom Track'} (saved for builder only)`;
           status.style.color = '#44ff88';
         }
         if (input) input.value = '';
@@ -294,36 +324,63 @@ class RacingLobby {
     const code = generateLobbyCode();
     this.currentLobbyCode = code;
     this._showConnectingState(code);
-    try {
-      await this.connectLobby('joinOrCreate', {
-        lobbyCode: code,
-        privacy,
-        gameMode: this.selectedMode,
-        ...this.buildSettingsPayload(),
-        ...this.buildPlayerPayload(),
-      });
-    } catch (error) {
-      this._showLobbyError('Connection failed. Diagnosing\u2026');
-      const msg = await this.getLobbyErrorMessage(error, 'Create failed');
-      this._showLobbyError(msg);
+
+    const maxRetries = 2;
+    let lastError = null;
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        if (attempt > 0) {
+          console.log(`[lobby] Retry ${attempt}/${maxRetries} connecting to lobby...`);
+          if (this.lobbyStatusDetail) this.lobbyStatusDetail.textContent = `Retrying (${attempt}/${maxRetries})\u2026`;
+          await new Promise(r => setTimeout(r, 1200 * attempt));
+        }
+        await this.connectLobby('joinOrCreate', {
+          lobbyCode: code,
+          privacy,
+          gameMode: this.selectedMode,
+          ...this.buildSettingsPayload(),
+          ...this.buildPlayerPayload(),
+        });
+        return; // success
+      } catch (error) {
+        lastError = error;
+        console.warn(`[lobby] Attempt ${attempt + 1} failed:`, error?.message || error);
+        if (attempt === maxRetries) break;
+      }
     }
+    this._showLobbyError('Connection failed. Diagnosing\u2026');
+    const msg = await this.getLobbyErrorMessage(lastError, 'Create failed');
+    this._showLobbyError(msg);
   }
 
   async quickMatch() {
     this._showConnectingState('');
-    try {
-      await this.connectLobby('joinOrCreate', {
-        lobbyCode: '',
-        privacy: 'open',
-        gameMode: this.selectedMode,
-        ...this.buildSettingsPayload(),
-        ...this.buildPlayerPayload(),
-      });
-    } catch (error) {
-      this._showLobbyError('Connection failed. Diagnosing\u2026');
-      const msg = await this.getLobbyErrorMessage(error, 'Quick match failed');
-      this._showLobbyError(msg);
+    const maxRetries = 2;
+    let lastError = null;
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        if (attempt > 0) {
+          console.log(`[lobby] Quick match retry ${attempt}/${maxRetries}...`);
+          if (this.lobbyStatusDetail) this.lobbyStatusDetail.textContent = `Retrying (${attempt}/${maxRetries})\u2026`;
+          await new Promise(r => setTimeout(r, 1200 * attempt));
+        }
+        await this.connectLobby('joinOrCreate', {
+          lobbyCode: '',
+          privacy: 'open',
+          gameMode: this.selectedMode,
+          ...this.buildSettingsPayload(),
+          ...this.buildPlayerPayload(),
+        });
+        return; // success
+      } catch (error) {
+        lastError = error;
+        console.warn(`[lobby] Quick match attempt ${attempt + 1} failed:`, error?.message || error);
+        if (attempt === maxRetries) break;
+      }
     }
+    this._showLobbyError('Connection failed. Diagnosing\u2026');
+    const msg = await this.getLobbyErrorMessage(lastError, 'Quick match failed');
+    this._showLobbyError(msg);
   }
 
   async joinLobbyByCode() {
@@ -644,21 +701,22 @@ class RacingLobby {
   }
 
   buildSettingsPayload() {
-    const modeEntry = getMode(this.selectedModeId);
-    const isSoloMode = modeEntry?.category === 'solo';
+    const customTrackData = this.selectedMap === CUSTOM_TRACK_ID
+      ? sessionStorage.getItem('customTrackData') || ''
+      : '';
 
     return {
       modeId: this.selectedModeId,
-      singlePlayerMode: isSoloMode,
       trackId: this.selectedMap,
-      arenaId: document.getElementById('battle-arena-select')?.value || DEFAULTS.arenaId,
+      arenaId: this.selectedMap || DEFAULTS.arenaId,
       arenaTheme: this.selectedGlofluxTheme,
       battleType: this.selectedBattleType,
-      maxPlayers: isSoloMode ? 1 : this.selectedMaxPlayers,
+      maxPlayers: this.selectedMaxPlayers,
       scoreLimit: parseInt(document.getElementById('battle-score-limit')?.value || '5', 10) || 5,
       loadoutId: this.selectedLoadout,
       collisionDamage: !!document.getElementById('battle-collision-damage')?.checked,
       botCount: this.selectedBotCount,
+      customTrackData,
     };
   }
 
@@ -707,35 +765,9 @@ class RacingLobby {
       if (requiresLobby(modeId)) {
         // Auto-create a lobby when hitting PLAY GAME on an online mode
         this.createLobby();
-        return;
       }
-      this.startSinglePlayerGame();
       return;
     }
-  }
-
-  getGamePage({ multiplayer = false } = {}) {
-    // Use the mode registry for routing
-    if (multiplayer) return getPageForMode(this.selectedModeId) || 'realtime.html';
-    return getPageForMode(this.selectedModeId) || 'game.html';
-  }
-
-  startSinglePlayerGame() {
-    const lobbyState = {
-      selectedMap: this.selectedMap,
-      selectedBattleType: this.selectedBattleType,
-      selectedMaxPlayers: this.selectedMaxPlayers,
-      selectedBotCount: this.selectedBotCount,
-      selectedLoadout: this.selectedLoadout,
-      selectedCup: this.selectedCup || 'starter',
-      playerId: this.playerId,
-      playerName: this.playerName,
-    };
-
-    const gameConfig = buildGameConfig(this.selectedModeId, lobbyState);
-
-    sessionStorage.setItem('gameConfig', JSON.stringify(gameConfig));
-    window.location.href = getPageForMode(this.selectedModeId);
   }
 
   copyCode() {
@@ -868,17 +900,8 @@ class RacingLobby {
 
     switch (this.selectedModeId) {
       case 'battle_online':
-        icon = 'fa-globe';      label = 'GO ONLINE';
-        indicator = 'Click to find a match';
-        break;
-      case 'quick_race':
-        icon = 'fa-flag-checkered'; label = 'START RACE';
-        indicator = 'Click to race';
-        break;
-      case 'local_2p_race':
-      case 'local_2p_battle':
-        icon = 'fa-columns';    label = 'START SPLIT SCREEN';
-        indicator = 'Click to start';
+        icon = 'fa-crosshairs'; label = 'CREATE BATTLE LOBBY';
+        indicator = 'Click to host an online battle';
         break;
       default:
         if (isGloflux) {
@@ -913,19 +936,14 @@ class RacingLobby {
     const modeEntry = getMode(this.selectedModeId);
     const showBattle = !!(modeEntry?.selectors?.battleSettings);
     const isGloflux = modeEntry?.id === 'gloflux' || modeEntry?.id?.startsWith('gloflux_');
-    const isSplitScreen = modeEntry?.id === 'local_2p_race' || modeEntry?.id === 'local_2p_battle';
     const showTrack = usesTrackSelection(this.selectedModeId) || usesArenaSelection(this.selectedModeId);
-    const isRaceWithBots = usesTrackSelection(this.selectedModeId)
-      && this.selectedModeId !== 'time_trial' && this.selectedModeId !== 'free_roam'
-      && !isSplitScreen;
 
     return {
       showBattle,
       isGloflux,
-      isSplitScreen,
       showTrack,
-      isRaceWithBots,
-      showSetup: showTrack || showBattle || isGloflux || isSplitScreen,
+      isRaceWithBots: false,
+      showSetup: showTrack || showBattle || isGloflux,
     };
   }
 
@@ -933,9 +951,8 @@ class RacingLobby {
     const battleSettings = document.getElementById('battle-settings');
     const raceSettings = document.getElementById('race-settings');
     const glofluxSettings = document.getElementById('gloflux-settings');
-    const splitscreenSettings = document.getElementById('splitscreen-settings');
     const modeEntry = getMode(this.selectedModeId);
-    const { showBattle, isGloflux, isSplitScreen, showTrack, isRaceWithBots, showSetup } = this._getLeftSetupState();
+    const { showBattle, isGloflux, showTrack, isRaceWithBots, showSetup } = this._getLeftSetupState();
     const hasModeSelection = !!modeEntry;
 
     // Show/hide the inline setup section
@@ -947,8 +964,6 @@ class RacingLobby {
     battleSettings?.classList.toggle('hidden', !showBattle);
     raceSettings?.classList.toggle('hidden', !isRaceWithBots);
     glofluxSettings?.classList.toggle('hidden', !isGloflux);
-    splitscreenSettings?.classList.toggle('hidden', !isSplitScreen);
-
     // Hide track/map selector for modes that don't need it
     if (this.mapSelectorContainer) {
       this.mapSelectorContainer.classList.toggle('hidden', !showTrack);
@@ -972,13 +987,9 @@ class RacingLobby {
     const serverIsBattle = state.gameMode === 'battle';
     // If we're in a lobby, derive the modeId from server state
     if (this.room) {
-      if (state.singlePlayerMode && state.modeId) {
-        this.selectedModeId = state.modeId;
-      } else {
-        this.selectedModeId = state.gameMode === 'gloflux'
-          ? (state.modeId || 'gloflux')
-          : (serverIsBattle ? 'battle_online' : 'race_online');
-      }
+      this.selectedModeId = state.gameMode === 'gloflux'
+        ? (state.modeId || 'gloflux')
+        : (serverIsBattle ? 'battle_online' : 'race_online');
       this.selectedMode = state.gameMode || (serverIsBattle ? 'battle' : 'race');
     }
 
@@ -1110,21 +1121,6 @@ class RacingLobby {
     this._initGlassDropdown(battleTypeEl);
     this._initGlassDropdown(maxPlayersEl);
 
-    // Split screen type listener
-    const splitTypeEl = document.getElementById('split-type-select');
-    splitTypeEl?.addEventListener('change', () => {
-      this.splitScreenType = splitTypeEl.value;
-      // Swap track vs arena carousel
-      if (window.__trackPreview) {
-        window.__trackPreview.setMode(splitTypeEl.value === 'battle' ? 'battle' : 'race');
-      }
-      this._rebuildMapDropdown();
-      const carouselTitle = document.querySelector('.track-carousel-title');
-      if (carouselTitle) {
-        carouselTitle.textContent = splitTypeEl.value === 'battle' ? 'SELECT ARENA' : 'SELECT TRACK';
-      }
-    });
-    this._initGlassDropdown(splitTypeEl);
   }
 
   _selectMode(modeId) {
@@ -1135,6 +1131,11 @@ class RacingLobby {
     const leftPanel = document.querySelector('.simplified-left-panel');
     if (leftPanel?.classList.contains('mode-initial')) {
       leftPanel.classList.remove('mode-initial');
+    }
+
+    const activeModeTitle = document.getElementById('active-mode-title');
+    if (activeModeTitle) {
+      activeModeTitle.textContent = mode.label;
     }
 
     this.selectedModeId = modeId;
@@ -1163,6 +1164,32 @@ class RacingLobby {
     this.sendSettingsUpdate();
   }
 
+  resetToModeSelection() {
+    const leftPanel = document.querySelector('.simplified-left-panel');
+    if (leftPanel) {
+      leftPanel.classList.add('mode-initial');
+    }
+    
+    this.selectedModeId = null;
+    this.selectedMode = null;
+    
+    if (this.playBtn) {
+      this.playBtn.disabled = true;
+      if (this.playIndicator) {
+        this.playIndicator.classList.remove('hidden');
+        if (this.playIndicatorLabel) this.playIndicatorLabel.textContent = 'Select a mode';
+        const dot = this.playIndicator.querySelector('.play-indicator-dot');
+        if (dot) {
+          dot.style.background = '#888';
+          dot.style.boxShadow = 'none';
+        }
+      }
+    }
+    
+    this.refreshBattleControls();
+    this._renderModeCards();
+  }
+
   _renderModeCards() {
     const cardsContainer = document.getElementById('mode-cards');
     if (!cardsContainer) return;
@@ -1171,15 +1198,8 @@ class RacingLobby {
     const leftPanel = document.querySelector('.simplified-left-panel');
     const isInitial = leftPanel?.classList.contains('mode-initial');
 
-    // In initial landing state, append track_builder as 5th tile
-    const allModes = [...modes];
-    if (isInitial) {
-      const builder = getMode('track_builder');
-      if (builder) allModes.push(builder);
-    }
-
     cardsContainer.innerHTML = '';
-    allModes.forEach((mode) => {
+    modes.forEach((mode) => {
       const card = document.createElement('div');
       card.className = 'mode-card';
       if (mode.id === this.selectedModeId) card.classList.add('active');

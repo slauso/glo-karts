@@ -1,5 +1,15 @@
 import { defineConfig, devices } from '@playwright/test';
 
+const baseURL = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:5173';
+const webServer = process.env.PLAYWRIGHT_BASE_URL
+  ? undefined
+  : {
+      command: 'npm run dev -- --host 127.0.0.1 --port 5173',
+      url: baseURL,
+      reuseExistingServer: true,
+      timeout: 30_000,
+    };
+
 /**
  * GLO KARTS — Playwright Configuration
  *
@@ -41,7 +51,7 @@ export default defineConfig({
   ],
 
   use: {
-    baseURL:            'http://localhost:5173',
+    baseURL,
     headless:           true,
     screenshot:         'only-on-failure',
     video:              'retain-on-failure',
@@ -63,6 +73,10 @@ export default defineConfig({
             '--enable-gpu-rasterization',
             '--enable-zero-copy',
             '--disable-software-rasterizer',
+            '--disable-background-timer-throttling',
+            '--disable-backgrounding-occluded-windows',
+            '--disable-renderer-backgrounding',
+            '--disable-features=CalculateNativeWinOcclusion',
             '--enable-features=SharedArrayBuffer',
             '--no-sandbox',
           ],
@@ -72,10 +86,5 @@ export default defineConfig({
   ],
 
   // Re-use the already-running Vite dev server (started by run-tests.ps1 / task)
-  webServer: {
-    command:             'npm run dev',
-    url:                 'http://localhost:5173',
-    reuseExistingServer: true,
-    timeout:             30_000,
-  },
+  webServer,
 });

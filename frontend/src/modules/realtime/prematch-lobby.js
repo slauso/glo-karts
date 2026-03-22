@@ -22,11 +22,28 @@ import { resolveKartAsset } from '../content-registry.js';
 // Three.js loaded lazily to avoid bundling 500+ kB into the realtime entry
 let THREE = null;
 let GLTFLoader = null;
+let _threeLoadPromise = null;
 async function _loadThree() {
-  if (THREE) return;
-  THREE = await import('three');
-  const loaders = await import('three/examples/jsm/loaders/GLTFLoader.js');
-  GLTFLoader = loaders.GLTFLoader;
+  if (THREE && GLTFLoader) return;
+  if (_threeLoadPromise) {
+    await _threeLoadPromise;
+    return;
+  }
+
+  _threeLoadPromise = (async () => {
+    const [threeModule, loaders] = await Promise.all([
+      import('three'),
+      import('three/examples/jsm/loaders/GLTFLoader.js'),
+    ]);
+    THREE = threeModule;
+    GLTFLoader = loaders.GLTFLoader;
+  })();
+
+  try {
+    await _threeLoadPromise;
+  } finally {
+    _threeLoadPromise = null;
+  }
 }
 
 // ── Module state ────────────────────────────────────────────────────────────
@@ -371,6 +388,22 @@ export function startCountdown(seconds = 10) {
       el.style.textShadow = '0 0 40px rgba(255,64,64,0.7), 0 4px 20px rgba(0,0,0,0.5)';
     }
   }, 1000);
+}
+
+export function cancelCountdown(label = 'WAITING') {
+  if (_disposed) return;
+  const el = _getEl('pm-countdown');
+  if (!el) return;
+
+  if (_countdownInterval) {
+    clearInterval(_countdownInterval);
+    _countdownInterval = null;
+  }
+
+  el.textContent = label;
+  el.style.color = '';
+  el.style.textShadow = '';
+  el.classList.remove('pulse');
 }
 
 /**

@@ -13,6 +13,8 @@ export const GAME_MODES = {
 
 import { getTrackRegistry } from './track-data.js';
 
+export const CUSTOM_TRACK_ID = 'custom_import';
+
 export const SINGLE_PLAYER_RACE_MODES = {
   
   time_trial: { id: 'time_trial', label: 'Rally' },
@@ -24,20 +26,20 @@ export const SINGLE_PLAYER_CUPS = {
   starter: {
     id: 'starter',
     label: 'Glo Cup',
-    description: 'Race the procedurally generated Glo Circuit.',
+    description: 'Race the verified procedural Test Box course.',
     icon: '🏁',
     theme: 'All Levels',
-    trackIds: ['glo_circuit', 'glo_circuit', 'glo_circuit', 'glo_circuit'],
+    trackIds: ['test_box', 'test_box', 'test_box', 'test_box'],
     unlockByCup: null,
   },
 };
 
 export const VERIFIED_RACE_TRACK_IDS = [
-  'glo_circuit',
+  'test_box',
 ];
 
 export const TIME_ATTACK_TARGETS = {
-  glo_circuit: { id: 'glo_circuit', label: 'Glo Circuit', trackPath: null, scale: 1, startPositions: [{x: 0, y: 2, z: 0}] },
+  test_box: { id: 'test_box', label: 'Test Box', trackPath: null, scale: 1, startPositions: [{x: 0, y: 2, z: 0}] },
 };
 
 export const WEAPON_SETS = {
@@ -72,35 +74,66 @@ const _registry = getTrackRegistry();
 
 function _toContentEntry(id, info, overrides = {}) {
   const start = info.start || { x: 0, y: 2, z: 0 };
-  return {
+  const entry = {
     id,
     label: info.name || id,
     type: info.type,
     scale: info.scale || 1,
     startPositions: [{ x: start.x, y: start.y, z: start.z }],
-    ...overrides,
   };
+  if (info.arenaPath) entry.arenaPath = info.arenaPath;
+  if (info.trackPath) entry.trackPath = info.trackPath;
+  if (info.kartScale) entry.kartScale = info.kartScale;
+  return { ...entry, ...overrides };
 }
 
 const _arenaOverrides = {
-  glo_arena: { startPositions: [{x: 0, y: 2, z: 0}, {x: 15, y: 2, z: 15}, {x: -15, y: 2, z: -15}, {x: 15, y: 2, z: -15}] },
+  glo_arena: {
+    startPositions: [
+      { x: 54.568, y: 5.123, z: 5.124, heading: 3.1416 },
+      { x: 47.143, y: 5.123, z: 32.834, heading: 3.6652 },
+      { x: 26.859, y: 5.123, z: 53.119, heading: 4.1888 },
+      { x: -0.851, y: 5.123, z: 60.544, heading: 4.7124 },
+      { x: -28.561, y: 5.123, z: 53.119, heading: 5.236 },
+      { x: -48.846, y: 5.123, z: 32.834, heading: 5.7596 },
+      { x: -56.271, y: 5.123, z: 5.124, heading: 6.2832 },
+      { x: -48.846, y: 5.123, z: -22.586, heading: 6.8068 },
+      { x: -28.561, y: 5.123, z: -42.87, heading: 7.3304 },
+      { x: -0.851, y: 5.123, z: -50.295, heading: 7.854 },
+      { x: 26.859, y: 5.123, z: -42.87, heading: 8.3776 },
+      { x: 47.143, y: 5.123, z: -22.586, heading: 8.9012 },
+    ],
+  },
+
 };
 
 const _trackOverrides = {
-  glo_circuit: { startPositions: [{x: 0, y: 2, z: 0}, {x: 5, y: 2, z: 5}, {x: -5, y: 2, z: -5}, {x: 5, y: 2, z: -5}] },
+  test_box: { startPositions: [
+    {x: 20, y: 1, z: 0}, {x: -20, y: 1, z: 0}, {x: 0, y: 1, z: 20}, {x: 0, y: 1, z: -20},
+    {x: 14, y: 1, z: 14}, {x: -14, y: 1, z: -14}, {x: 14, y: 1, z: -14}, {x: -14, y: 1, z: 14},
+    {x: 0, y: 1, z: 0}, {x: 10, y: 1, z: -10}, {x: -10, y: 1, z: 10}, {x: -10, y: 1, z: -10},
+  ] },
 };
 
 export const ALL_TRACKS = {};
 export const ALL_ARENAS = {};
 
 for (const [id, info] of Object.entries(_registry)) {
-  const isArena = info.type === 'procedural-arena';
+  const isArena = info.type === 'procedural-arena' || info.type === 'stk-arena';
   if (isArena) {
     ALL_ARENAS[id] = _toContentEntry(id, info, _arenaOverrides[id]);
   } else {
     ALL_TRACKS[id] = _toContentEntry(id, info, _trackOverrides[id]);
   }
 }
+
+ALL_TRACKS[CUSTOM_TRACK_ID] = {
+  id: CUSTOM_TRACK_ID,
+  label: 'Imported Track',
+  type: 'custom',
+  scale: 1,
+  startPositions: [{ x: 0, y: 2, z: 0 }],
+};
 
 export const ALL_KARTS = {
   default: { id: 'default', label: 'Classic Kart', modelPath: '/models/car.glb', scale: 2.8 },
@@ -125,6 +158,31 @@ export const ALL_KARTS = {
   beagle_2: { id: 'beagle_2', label: 'Beagle', modelPath: '/models/stk/karts/beagle_2/kart.glb', scale: 2.2 },
 };
 
+// ── Weight classes (21.36) ──────────────────────────────────────────────────
+// light = nimble (higher steer, lower mass), medium = balanced, heavy = tanky (lower steer, higher mass/health)
+export const KART_WEIGHT_CLASSES = {
+  default: 'medium',
+  adiumy: 'light', amanda: 'medium', beastie: 'heavy', emule: 'medium',
+  gavroche: 'light', gnu: 'heavy', hexley: 'medium', kiki: 'light',
+  konqi: 'heavy', nolok: 'heavy', pidgin: 'light', puffy: 'medium',
+  sara_the_racer: 'light', sara_the_wizard: 'medium', suzanne: 'medium',
+  tux: 'medium', wilber: 'heavy', xue: 'light', beagle_2: 'medium',
+};
+
+export const WEIGHT_CLASS_STATS = {
+  light:  { speedMul: 1.05, steerMul: 1.2, healthMul: 0.85, massMul: 0.8 },
+  medium: { speedMul: 1.00, steerMul: 1.0, healthMul: 1.00, massMul: 1.0 },
+  heavy:  { speedMul: 0.92, steerMul: 0.8, healthMul: 1.20, massMul: 1.3 },
+};
+
+export function getWeightClass(kartId) {
+  return KART_WEIGHT_CLASSES[kartId] || 'medium';
+}
+
+export function getWeightStats(kartId) {
+  return WEIGHT_CLASS_STATS[getWeightClass(kartId)];
+}
+
 export function resolveGameMode(modeId) {
   return GAME_MODES[modeId] || GAME_MODES.race;
 }
@@ -134,11 +192,15 @@ export function resolveWeaponSet(weaponSetId) {
   return WEAPON_SETS[weaponSetId] || fallback;
 }
 
-export function resolveTrackAsset(trackId = 'glo_circuit') {
+export function resolveTrackAsset(trackId = 'test_box') {
   if (ALL_TRACKS[trackId]) {
     return ALL_TRACKS[trackId];
   }
-  return ALL_TRACKS.glo_circuit || ALL_TRACKS.test_box;
+  return ALL_TRACKS.test_box;
+}
+
+export function isCustomTrackId(trackId) {
+  return trackId === CUSTOM_TRACK_ID;
 }
 
 export function resolveKartAsset(kartId = 'default') {
@@ -162,11 +224,11 @@ export function getVerifiedRaceTracks() {
     .filter(Boolean);
 }
 
-export function resolvePlayableRaceTrack(trackId = 'glo_circuit') {
-  if (VERIFIED_RACE_TRACK_IDS.includes(trackId) && ALL_TRACKS[trackId]) {
+export function resolvePlayableRaceTrack(trackId = 'test_box') {
+  if (trackId && ALL_TRACKS[trackId]) {
     return trackId;
   }
-  return 'glo_circuit';
+  return 'test_box';
 }
 
 export function resolveSinglePlayerCup(cupId = 'starter') {
@@ -177,8 +239,8 @@ export function resolveSinglePlayerRaceMode(modeId = 'time_trial') {
   return SINGLE_PLAYER_RACE_MODES[modeId] || SINGLE_PLAYER_RACE_MODES.time_trial;
 }
 
-export function resolveTimeAttackTargets(trackId = 'glo_circuit') {
-  return TIME_ATTACK_TARGETS[trackId] || TIME_ATTACK_TARGETS.glo_circuit;
+export function resolveTimeAttackTargets(trackId = 'test_box') {
+  return TIME_ATTACK_TARGETS[trackId] || TIME_ATTACK_TARGETS.test_box;
 }
 
 export function getSinglePlayerCupsInOrder() {

@@ -342,8 +342,6 @@ function setSkyColors(opts = {}) {
 // ── Track-specific sky presets ──────────────────────────────────────────────
 
 const SKY_PRESETS = {
-  // Procedural demo course — vibrant blue sky
-  glo_circuit:         { topColor: new Color3(0.35, 0.65, 1.0), fogColor: new Color3(0.5, 0.75, 0.95) },
   glo_arena:           { topColor: new Color3(0.35, 0.65, 1.0), fogColor: new Color3(0.5, 0.75, 0.95) },
   test_box:            { topColor: new Color3(0.5, 0.72, 1.0), fogColor: new Color3(0.6, 0.8, 1.0) },
 };

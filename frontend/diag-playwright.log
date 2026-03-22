@@ -1,0 +1,38 @@
+diag-start
+P1 console error Failed to load resource: the server responded with a status of 403 ()
+P1 console warning [.WebGL-0x68c40124f100]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels
+P1 console warning [realtime] Creating debug arena (100×100, flat floor + 4 walls)
+P1 console warning [.WebGL-0x68c40124f100]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels
+P1 console warning [.WebGL-0x68c40124f100]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels
+P1 console warning [.WebGL-0x68c40124f100]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels (this message will no longer repeat)
+P1 console warning [weapon-fx-enhance] Pipeline setup failed (WebGL1?): Cannot set properties of undefined (setting 'vignetteWeight')
+P2 console error Failed to load resource: the server responded with a status of 403 ()
+P2 console warning [realtime] Creating debug arena (100×100, flat floor + 4 walls)
+P2 console warning [weapon-fx-enhance] Pipeline setup failed (WebGL1?): Cannot set properties of undefined (setting 'vignetteWeight')
+P1 console error WebSocket is already in CLOSING or CLOSED state.
+TICK 0 P1 {"roomJoined":false,"matchLive":false,"playerCount":0,"sessionId":null} P2 {"roomJoined":false,"matchLive":false,"playerCount":0,"sessionId":null}
+P2 console error WebSocket is already in CLOSING or CLOSED state.
+TICK 1 P1 {"roomJoined":true,"matchLive":false,"playerCount":0,"roomId":null,"sessionId":"4pWU13rzW"} P2 {"roomJoined":true,"matchLive":false,"playerCount":0,"roomId":null,"sessionId":"Ab8T9pNwQ"}
+TICK 2 P1 {"roomJoined":true,"matchLive":false,"playerCount":0,"roomId":null,"sessionId":"4pWU13rzW"} P2 {"roomJoined":true,"matchLive":false,"playerCount":0,"roomId":null,"sessionId":"Ab8T9pNwQ"}
+TICK 3 P1 {"roomJoined":true,"matchLive":false,"playerCount":0,"roomId":null,"sessionId":"4pWU13rzW"} P2 {"roomJoined":true,"matchLive":false,"playerCount":0,"roomId":null,"sessionId":"Ab8T9pNwQ"}
+TICK 4 P1 {"roomJoined":true,"matchLive":false,"playerCount":0,"roomId":null,"sessionId":"4pWU13rzW"} P2 {"roomJoined":true,"matchLive":false,"playerCount":0,"roomId":null,"sessionId":"Ab8T9pNwQ"}
+TICK 5 P1 {"roomJoined":true,"matchLive":false,"playerCount":0,"roomId":null,"sessionId":"4pWU13rzW"} P2 {"roomJoined":true,"matchLive":false,"playerCount":0,"roomId":null,"sessionId":"Ab8T9pNwQ"}
+diag-end
+diag-start
+P1 console error Failed to load resource: the server responded with a status of 403 ()
+P1 console warning [.WebGL-0x645401aa9b00]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels
+P1 console warning [realtime] Creating debug arena (100×100, flat floor + 4 walls)
+P1 console warning [.WebGL-0x645401aa9b00]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels
+P1 console warning [.WebGL-0x645401aa9b00]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels
+P1 console warning [.WebGL-0x645401aa9b00]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels (this message will no longer repeat)
+P1 console warning [weapon-fx-enhance] Pipeline setup failed (WebGL1?): Cannot set properties of undefined (setting 'vignetteWeight')
+P2 console error Failed to load resource: the server responded with a status of 403 ()
+P2 console warning [realtime] Creating debug arena (100×100, flat floor + 4 walls)
+P2 console warning [weapon-fx-enhance] Pipeline setup failed (WebGL1?): Cannot set properties of undefined (setting 'vignetteWeight')
+TICK 0 P1 {"roomJoined":true,"matchLive":false,"playerCount":2,"readyCount":1,"readyRequiredCount":2,"roomId":null,"sessionId":"Yir81MUO9"} P2 {"roomJoined":true,"matchLive":false,"playerCount":0,"roomId":null,"sessionId":"tI-xx_ZMO"}
+TICK 1 P1 {"roomJoined":true,"matchLive":false,"playerCount":2,"readyCount":2,"readyRequiredCount":2,"roomId":null,"sessionId":"Yir81MUO9"} P2 {"roomJoined":true,"matchLive":false,"playerCount":2,"readyCount":2,"readyRequiredCount":2,"roomId":null,"sessionId":"tI-xx_ZMO"}
+TICK 2 P1 {"roomJoined":true,"matchLive":true,"playerCount":2,"readyCount":2,"readyRequiredCount":2,"roomId":null,"sessionId":"Yir81MUO9"} P2 {"roomJoined":true,"matchLive":true,"playerCount":2,"readyCount":2,"readyRequiredCount":2,"roomId":null,"sessionId":"tI-xx_ZMO"}
+TICK 3 P1 {"roomJoined":true,"matchLive":true,"playerCount":2,"readyCount":2,"readyRequiredCount":2,"roomId":null,"sessionId":"Yir81MUO9"} P2 {"roomJoined":true,"matchLive":true,"playerCount":2,"readyCount":2,"readyRequiredCount":2,"roomId":null,"sessionId":"tI-xx_ZMO"}
+TICK 4 P1 {"roomJoined":true,"matchLive":true,"playerCount":2,"readyCount":2,"readyRequiredCount":2,"roomId":null,"sessionId":"Yir81MUO9"} P2 {"roomJoined":true,"matchLive":true,"playerCount":2,"readyCount":2,"readyRequiredCount":2,"roomId":null,"sessionId":"tI-xx_ZMO"}
+TICK 5 P1 {"roomJoined":true,"matchLive":true,"playerCount":2,"readyCount":2,"readyRequiredCount":2,"roomId":null,"sessionId":"Yir81MUO9"} P2 {"roomJoined":true,"matchLive":true,"playerCount":2,"readyCount":2,"readyRequiredCount":2,"roomId":null,"sessionId":"tI-xx_ZMO"}
+diag-end

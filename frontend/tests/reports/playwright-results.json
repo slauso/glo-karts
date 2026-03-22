@@ -64,106 +64,124 @@
     "version": "1.58.2",
     "workers": 1,
     "webServer": {
-      "command": "npm run dev",
-      "url": "http://localhost:5173",
+      "command": "npm run dev -- --host 127.0.0.1 --port 5173",
+      "url": "http://127.0.0.1:5173",
       "reuseExistingServer": true,
       "timeout": 30000
     }
   },
   "suites": [
     {
-      "title": "26-glo-flux.spec.js",
-      "file": "26-glo-flux.spec.js",
+      "title": "49-input-soak-multiplayer.spec.js",
+      "file": "49-input-soak-multiplayer.spec.js",
       "column": 0,
       "line": 0,
-      "specs": [],
-      "suites": [
+      "specs": [
         {
-          "title": "Phase 18 — Glo Flux Multiplayer Mode (Procedural Symbiotic Apocalypse)",
-          "file": "26-glo-flux.spec.js",
-          "line": 5,
-          "column": 6,
-          "specs": [
+          "title": "two-window soak keeps controls responsive through weapon spam and respawns",
+          "ok": false,
+          "tags": [],
+          "tests": [
             {
-              "title": "Glo Flux state machine and core procedural gen are exported and valid",
-              "ok": true,
-              "tags": [],
-              "tests": [
+              "timeout": 300000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-game",
+              "projectName": "chromium-game",
+              "results": [
                 {
-                  "timeout": 90000,
-                  "annotations": [],
-                  "expectedStatus": "passed",
-                  "projectId": "chromium-game",
-                  "projectName": "chromium-game",
-                  "results": [
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "failed",
+                  "duration": 92339,
+                  "error": {
+                    "message": "Error: P1 final FPS should stay alive\n\n\u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBeGreaterThan\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m\n\nExpected: > \u001b[32m15\u001b[39m\nReceived:   \u001b[31m14.604936468568745\u001b[39m",
+                    "stack": "Error: P1 final FPS should stay alive\n\n\u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBeGreaterThan\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m\n\nExpected: > \u001b[32m15\u001b[39m\nReceived:   \u001b[31m14.604936468568745\u001b[39m\n    at C:\\Users\\laptop\\twistedkart\\frontend\\tests\\49-input-soak-multiplayer.spec.js:201:58",
+                    "location": {
+                      "file": "C:\\Users\\laptop\\twistedkart\\frontend\\tests\\49-input-soak-multiplayer.spec.js",
+                      "column": 58,
+                      "line": 201
+                    },
+                    "snippet": "\u001b[0m \u001b[90m 199 |\u001b[39m     expect(final1\u001b[33m.\u001b[39mpendingInputs\u001b[33m,\u001b[39m \u001b[32m'P1 final pending inputs'\u001b[39m)\u001b[33m.\u001b[39mtoBeLessThanOrEqual(\u001b[35m24\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m 200 |\u001b[39m     expect(final2\u001b[33m.\u001b[39mpendingInputs\u001b[33m,\u001b[39m \u001b[32m'P2 final pending inputs'\u001b[39m)\u001b[33m.\u001b[39mtoBeLessThanOrEqual(\u001b[35m24\u001b[39m)\u001b[33m;\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 201 |\u001b[39m     expect(final1\u001b[33m.\u001b[39mfps\u001b[33m,\u001b[39m \u001b[32m'P1 final FPS should stay alive'\u001b[39m)\u001b[33m.\u001b[39mtoBeGreaterThan(\u001b[35m15\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m     |\u001b[39m                                                          \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 202 |\u001b[39m     expect(final2\u001b[33m.\u001b[39mfps\u001b[33m,\u001b[39m \u001b[32m'P2 final FPS should stay alive'\u001b[39m)\u001b[33m.\u001b[39mtoBeGreaterThan(\u001b[35m15\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m 203 |\u001b[39m\n \u001b[90m 204 |\u001b[39m     \u001b[36mconst\u001b[39m crit1 \u001b[33m=\u001b[39m errors1\u001b[33m.\u001b[39mfilter(isCriticalError)\u001b[33m;\u001b[39m\u001b[0m"
+                  },
+                  "errors": [
                     {
-                      "workerIndex": 0,
-                      "parallelIndex": 0,
-                      "status": "passed",
-                      "duration": 5127,
-                      "errors": [],
-                      "stdout": [],
-                      "stderr": [],
-                      "retry": 0,
-                      "startTime": "2026-03-09T02:36:40.198Z",
-                      "annotations": [],
-                      "attachments": []
+                      "location": {
+                        "file": "C:\\Users\\laptop\\twistedkart\\frontend\\tests\\49-input-soak-multiplayer.spec.js",
+                        "column": 58,
+                        "line": 201
+                      },
+                      "message": "Error: P1 final FPS should stay alive\n\n\u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBeGreaterThan\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m\n\nExpected: > \u001b[32m15\u001b[39m\nReceived:   \u001b[31m14.604936468568745\u001b[39m\n\n  199 |     expect(final1.pendingInputs, 'P1 final pending inputs').toBeLessThanOrEqual(24);\n  200 |     expect(final2.pendingInputs, 'P2 final pending inputs').toBeLessThanOrEqual(24);\n> 201 |     expect(final1.fps, 'P1 final FPS should stay alive').toBeGreaterThan(15);\n      |                                                          ^\n  202 |     expect(final2.fps, 'P2 final FPS should stay alive').toBeGreaterThan(15);\n  203 |\n  204 |     const crit1 = errors1.filter(isCriticalError);\n    at C:\\Users\\laptop\\twistedkart\\frontend\\tests\\49-input-soak-multiplayer.spec.js:201:58"
                     }
                   ],
-                  "status": "expected"
-                }
-              ],
-              "id": "0cc2493d17b9365ed809-e2f5141bca0996117423",
-              "file": "26-glo-flux.spec.js",
-              "line": 7,
-              "column": 3
-            },
-            {
-              "title": "Glo Flux power-up families generate 100% procedurally (zero assets)",
-              "ok": true,
-              "tags": [],
-              "tests": [
-                {
-                  "timeout": 90000,
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-03-22T05:16:31.295Z",
                   "annotations": [],
-                  "expectedStatus": "passed",
-                  "projectId": "chromium-game",
-                  "projectName": "chromium-game",
-                  "results": [
+                  "attachments": [],
+                  "errorLocation": {
+                    "file": "C:\\Users\\laptop\\twistedkart\\frontend\\tests\\49-input-soak-multiplayer.spec.js",
+                    "column": 58,
+                    "line": 201
+                  }
+                },
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "failed",
+                  "duration": 59045,
+                  "error": {
+                    "message": "Error: P1 cycle 3 should still move after burst\n\n\u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBeGreaterThan\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m\n\nExpected: > \u001b[32m1.4\u001b[39m\nReceived:   \u001b[31m1.3140104483098616\u001b[39m",
+                    "stack": "Error: P1 cycle 3 should still move after burst\n\n\u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBeGreaterThan\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m\n\nExpected: > \u001b[32m1.4\u001b[39m\nReceived:   \u001b[31m1.3140104483098616\u001b[39m\n    at runControlBurst (C:\\Users\\laptop\\twistedkart\\frontend\\tests\\49-input-soak-multiplayer.spec.js:130:59)\n    at C:\\Users\\laptop\\twistedkart\\frontend\\tests\\49-input-soak-multiplayer.spec.js:176:23",
+                    "location": {
+                      "file": "C:\\Users\\laptop\\twistedkart\\frontend\\tests\\49-input-soak-multiplayer.spec.js",
+                      "column": 59,
+                      "line": 130
+                    },
+                    "snippet": "\u001b[0m \u001b[90m 128 |\u001b[39m   expect(after\u001b[33m.\u001b[39mmatchLive\u001b[33m,\u001b[39m \u001b[32m`${label} stays live`\u001b[39m)\u001b[33m.\u001b[39mtoBe(\u001b[36mtrue\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m 129 |\u001b[39m   expect(after\u001b[33m.\u001b[39mkartVisible\u001b[33m,\u001b[39m \u001b[32m`${label} kart stays visible`\u001b[39m)\u001b[33m.\u001b[39mtoBe(\u001b[36mtrue\u001b[39m)\u001b[33m;\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 130 |\u001b[39m   expect(moved\u001b[33m,\u001b[39m \u001b[32m`${label} should still move after burst`\u001b[39m)\u001b[33m.\u001b[39mtoBeGreaterThan(\u001b[35m1.4\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m     |\u001b[39m                                                           \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 131 |\u001b[39m   expect(after\u001b[33m.\u001b[39mpendingInputs\u001b[33m,\u001b[39m \u001b[32m`${label} pending inputs should drain`\u001b[39m)\u001b[33m.\u001b[39mtoBeLessThanOrEqual(\u001b[35m64\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m 132 |\u001b[39m   expect(after\u001b[33m.\u001b[39mackSeq\u001b[33m,\u001b[39m \u001b[32m`${label} ack sequence should not regress`\u001b[39m)\u001b[33m.\u001b[39mtoBeGreaterThanOrEqual(before\u001b[33m.\u001b[39mackSeq)\u001b[33m;\u001b[39m\n \u001b[90m 133 |\u001b[39m   expect(after\u001b[33m.\u001b[39minputSeq\u001b[33m,\u001b[39m \u001b[32m`${label} input sequence should advance`\u001b[39m)\u001b[33m.\u001b[39mtoBeGreaterThan(before\u001b[33m.\u001b[39minputSeq)\u001b[33m;\u001b[39m\u001b[0m"
+                  },
+                  "errors": [
                     {
-                      "workerIndex": 0,
-                      "parallelIndex": 0,
-                      "status": "passed",
-                      "duration": 5015,
-                      "errors": [],
-                      "stdout": [],
-                      "stderr": [],
-                      "retry": 0,
-                      "startTime": "2026-03-09T02:36:45.436Z",
-                      "annotations": [],
-                      "attachments": []
+                      "location": {
+                        "file": "C:\\Users\\laptop\\twistedkart\\frontend\\tests\\49-input-soak-multiplayer.spec.js",
+                        "column": 59,
+                        "line": 130
+                      },
+                      "message": "Error: P1 cycle 3 should still move after burst\n\n\u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBeGreaterThan\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m\n\nExpected: > \u001b[32m1.4\u001b[39m\nReceived:   \u001b[31m1.3140104483098616\u001b[39m\n\n  128 |   expect(after.matchLive, `${label} stays live`).toBe(true);\n  129 |   expect(after.kartVisible, `${label} kart stays visible`).toBe(true);\n> 130 |   expect(moved, `${label} should still move after burst`).toBeGreaterThan(1.4);\n      |                                                           ^\n  131 |   expect(after.pendingInputs, `${label} pending inputs should drain`).toBeLessThanOrEqual(64);\n  132 |   expect(after.ackSeq, `${label} ack sequence should not regress`).toBeGreaterThanOrEqual(before.ackSeq);\n  133 |   expect(after.inputSeq, `${label} input sequence should advance`).toBeGreaterThan(before.inputSeq);\n    at runControlBurst (C:\\Users\\laptop\\twistedkart\\frontend\\tests\\49-input-soak-multiplayer.spec.js:130:59)\n    at C:\\Users\\laptop\\twistedkart\\frontend\\tests\\49-input-soak-multiplayer.spec.js:176:23"
                     }
                   ],
-                  "status": "expected"
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 1,
+                  "startTime": "2026-03-22T05:18:08.399Z",
+                  "annotations": [],
+                  "attachments": [],
+                  "errorLocation": {
+                    "file": "C:\\Users\\laptop\\twistedkart\\frontend\\tests\\49-input-soak-multiplayer.spec.js",
+                    "column": 59,
+                    "line": 130
+                  }
                 }
               ],
-              "id": "0cc2493d17b9365ed809-d7c99288ec83621cfee2",
-              "file": "26-glo-flux.spec.js",
-              "line": 29,
-              "column": 3
+              "status": "unexpected"
             }
-          ]
+          ],
+          "id": "16672088a4a3b551dd7f-6ec11a320387b4a2e7ba",
+          "file": "49-input-soak-multiplayer.spec.js",
+          "line": 146,
+          "column": 1
         }
       ]
     }
   ],
   "errors": [],
   "stats": {
-    "startTime": "2026-03-09T02:36:38.762Z",
-    "duration": 12370.984,
-    "expected": 2,
+    "startTime": "2026-03-22T05:16:30.069Z",
+    "duration": 160324.94,
+    "expected": 0,
     "skipped": 0,
-    "unexpected": 0,
+    "unexpected": 1,
     "flaky": 0
   }
 }

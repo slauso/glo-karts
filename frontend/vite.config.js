@@ -1,17 +1,25 @@
 import { defineConfig } from 'vite';
 
 export default defineConfig({
+  optimizeDeps: {
+    include: [
+      '@babylonjs/core',
+      '@babylonjs/loaders/glTF',
+      '@babylonjs/havok',
+      '@babylonjs/core/Physics/joinedPhysicsEngineComponent',
+      '@babylonjs/core/Shaders/particles.vertex',
+      '@babylonjs/core/Shaders/particles.fragment',
+    ],
+  },
   build: {
     rollupOptions: {
       input: {
         main: 'index.html',
-        game: 'game.html',
-        battle: 'battle.html',
         realtime: 'realtime.html',
         builder: 'builder.html',
-        splitscreen: 'splitscreen.html',
         marketplace: 'marketplace.html',
-        gloflux: 'gloflux.html'
+        gloflux: 'gloflux.html',
+        fps: 'fps.html'
       },
       output: {
         manualChunks: {

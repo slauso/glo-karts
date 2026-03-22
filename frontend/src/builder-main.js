@@ -428,25 +428,11 @@ function initActions() {
   });
 
   document.getElementById('test-race-btn')?.addEventListener('click', () => {
-    const result = editor.validateTrack();
-    if (!result.valid) {
-      showToast('Fix validation errors before testing');
-      return;
-    }
-    const json = editor.exportTrack();
-    sessionStorage.setItem('customTrackData', json);
-    window.location.href = 'game.html?customTrack=session';
+    showToast('Single-player preview has been removed. Use the builder for authoring only.');
   });
 
   document.getElementById('test-battle-btn')?.addEventListener('click', () => {
-    const result = editor.validateTrack();
-    if (!result.valid) {
-      showToast('Fix validation errors before testing');
-      return;
-    }
-    const json = editor.exportTrack();
-    sessionStorage.setItem('customTrackData', json);
-    window.location.href = 'battle.html?customArena=session';
+    showToast('Single-player arena preview has been removed. Use the multiplayer shell for battle work.');
   });
 
   document.getElementById('export-btn')?.addEventListener('click', () => {

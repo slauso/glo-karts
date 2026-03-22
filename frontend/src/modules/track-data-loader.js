@@ -6,11 +6,136 @@
  */
 
 import { getAddonParams, getTrackInfo } from './track-data.js';
+import { CUSTOM_TRACK_ID } from './content-registry.js';
 import { generateTrackDataOnly } from './procedural-track-gen.js';
 import { generateArenaDataOnly } from './procedural-arena-gen.js';
-import { generateDemoCourseDataOnly, generateDemoArenaDataOnly } from './procedural-demo-course.js';
+import { generateDemoArenaDataOnly } from './procedural-demo-course.js';
+import { SEGMENT_TYPES } from './track-editor.js';
+import { currentMapDefinition } from './babylon-track.js';
 
 const cache = {};
+
+function readImportedCustomTrack() {
+  try {
+    const raw = sessionStorage.getItem('customTrackData');
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function toPointArray(source = []) {
+  return source
+    .map((entry) => entry?.position || entry)
+    .filter((point) => point && Number.isFinite(point.x) && Number.isFinite(point.z));
+}
+
+function expandLoopPoints(points, defaultWidth = 12) {
+  if (points.length === 0) return [];
+  if (points.length === 1) {
+    return [{ center: [points[0].x, points[0].y || 0, points[0].z], width: defaultWidth }];
+  }
+
+  const expanded = [];
+  for (let index = 0; index < points.length; index += 1) {
+    const current = points[index];
+    const next = points[(index + 1) % points.length];
+    const subdivisions = 4;
+    for (let step = 0; step < subdivisions; step += 1) {
+      const t = step / subdivisions;
+      expanded.push({
+        center: [
+          current.x + (next.x - current.x) * t,
+          (current.y || 0) + ((next.y || 0) - (current.y || 0)) * t,
+          current.z + (next.z - current.z) * t,
+        ],
+        width: current.width || defaultWidth,
+      });
+    }
+  }
+  return expanded;
+}
+
+function findNearestQuadIndex(driveline, point) {
+  let bestIndex = 0;
+  let bestDistance = Number.POSITIVE_INFINITY;
+
+  for (let index = 0; index < driveline.length; index += 1) {
+    const center = driveline[index].center;
+    const dx = center[0] - point.x;
+    const dz = center[2] - point.z;
+    const distance = dx * dx + dz * dz;
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      bestIndex = index;
+    }
+  }
+
+  return bestIndex;
+}
+
+function convertCustomTrackData(customTrack) {
+  const checkpointPoints = toPointArray(customTrack?.checkpoints);
+  const segmentPoints = (customTrack?.segments || [])
+    .filter((segment) => segment?.position)
+    .map((segment) => ({
+      x: segment.position.x,
+      y: segment.position.y || 0,
+      z: segment.position.z,
+      width: SEGMENT_TYPES[segment.type]?.width || 12,
+    }));
+  const sourcePoints = checkpointPoints.length >= 3 ? checkpointPoints : segmentPoints;
+
+  if (!sourcePoints.length) {
+    return buildFallbackTrackData('test_box', 'track');
+  }
+
+  const averageWidth = segmentPoints.length
+    ? segmentPoints.reduce((sum, point) => sum + (point.width || 12), 0) / segmentPoints.length
+    : 12;
+  const driveline = expandLoopPoints(sourcePoints, averageWidth);
+
+  const checkpoints = (checkpointPoints.length ? checkpointPoints : sourcePoints.filter((_, index) => index % Math.max(1, Math.floor(sourcePoints.length / 4)) === 0))
+    .map((point, checkpointIndex) => {
+      const quadIndex = findNearestQuadIndex(driveline, point);
+      return {
+        quadIndex,
+        isLapLine: checkpointIndex === 0,
+        center: driveline[quadIndex].center,
+        width: point.width || driveline[quadIndex].width || averageWidth,
+      };
+    });
+
+  const startPositions = Array.isArray(customTrack?.startPositions) && customTrack.startPositions.length
+    ? customTrack.startPositions.map((spawn) => ({
+        position: [spawn.position.x, spawn.position.y, spawn.position.z],
+        heading: spawn.heading || 0,
+      }))
+    : [{ position: [sourcePoints[0].x, (sourcePoints[0].y || 0) + 1, sourcePoints[0].z], heading: 0 }];
+
+  const items = Array.isArray(customTrack?.obstacles)
+    ? customTrack.obstacles
+        .filter((obstacle) => obstacle?.position)
+        .map((obstacle) => ({
+          type: obstacle.type === 'boost_pad' ? 'nitro' : 'item',
+          position: [obstacle.position.x, obstacle.position.y || 0.5, obstacle.position.z],
+          heading: 0,
+        }))
+    : [];
+
+  return {
+    name: customTrack?.name || 'Imported Track',
+    driveline,
+    checkpoints,
+    startPositions,
+    items,
+    laps: 3,
+    graph: {
+      mainLoop: [0, driveline.length],
+      shortcuts: [],
+    },
+  };
+}
 
 function buildLoopPoints(mapId, type) {
   const info = getTrackInfo(mapId);
@@ -143,9 +268,6 @@ function buildArenaFallback(mapId) {
 function buildFallbackTrackData(mapId, type) {
   // Demo course generators (procedural-demo-course.js) for the primary tracks
   try {
-    if (mapId === 'glo_circuit') {
-      return generateDemoCourseDataOnly(3);
-    }
     if (mapId === 'glo_arena') {
       return generateDemoArenaDataOnly();
     }
@@ -183,6 +305,12 @@ function buildFallbackTrackData(mapId, type) {
     console.warn(`[track-data] Procedural data gen failed for "${mapId}", using legacy fallback:`, e.message);
   }
 
+  // Use the auto-generated map definition if available
+  if (currentMapDefinition) {
+    console.warn(`[track-data] Using auto-generated MapDefinition for "${mapId}"`);
+    return currentMapDefinition;
+  }
+
   // Legacy fallback
   return type === 'arena' ? buildArenaFallback(mapId) : buildRaceFallback(mapId);
 }
@@ -194,6 +322,13 @@ function buildFallbackTrackData(mapId, type) {
 export async function loadTrackData(mapId, type = 'track') {
   const cacheKey = `${type}:${mapId}`;
   if (cache[cacheKey]) return cache[cacheKey];
+
+  if (type === 'track' && mapId === CUSTOM_TRACK_ID) {
+    const importedTrack = readImportedCustomTrack();
+    const data = convertCustomTrackData(importedTrack);
+    cache[cacheKey] = data;
+    return data;
+  }
 
   const basePath = type === 'arena'
     ? `/models/stk/arenas/${mapId}/track-data.json`

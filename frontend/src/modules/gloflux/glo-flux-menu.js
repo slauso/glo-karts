@@ -42,6 +42,8 @@ const ARENA_PRESETS = [
   { id: 'fungal_wastes',   label: 'Fungal Wastes',   threat: 4, desc: 'Living fungal networks reclaim the highways.' },
   { id: 'frozen_fallout',  label: 'Frozen Fallout',   threat: 2, desc: 'Sub-zero wastelands blanketed in radioactive snow.' },
   { id: 'molten_ruins',    label: 'Molten Ruins',     threat: 5, desc: 'Collapsed reactors feeding rivers of magma.' },
+  { id: 'void_rift',       label: 'Void Rift',        threat: 5, desc: 'Reality tears where the boundary collapsed.' },
+  { id: 'coral_overgrowth',label: 'Coral Overgrowth', threat: 3, desc: 'Mutated reefs engulf the ruins. Spore visibility low.' },
   { id: 'random',          label: '??? RANDOM ???',    threat: 0, desc: 'Let the wasteland decide.' },
 ];
 
@@ -308,8 +310,7 @@ function buildGloFluxConfig(state) {
     botCount: state.botCount,
     maxPlayers: state.maxPlayers,
     selectedKart: state.selectedKart || sessionStorage.getItem('selectedKart') || 'tux',
-    singlePlayerMode: true,
-    multiplayer: false,
+    multiplayer: true,
   };
 }
 

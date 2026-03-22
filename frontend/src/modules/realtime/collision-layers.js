@@ -13,14 +13,16 @@
 
 // ── Layer Bits ──────────────────────────────────────────────────────────────
 export const LAYER = {
-  NONE:       0x0000,
-  TRACK:      0x0001,   // Ground, walls, static scenery
-  KART:       0x0002,   // All karts (local + remote)
-  ITEM_BOX:   0x0004,   // Pickup item boxes  (trigger volumes)
-  PROJECTILE: 0x0008,   // Fired projectiles   (trigger volumes)
-  TRAP:       0x0010,   // Placed traps: bubblegum, banana (trigger volumes)
-  BOUNDARY:   0x0020,   // Kill planes, OOB barriers
-  ALL:        0xFFFF,
+  NONE:        0x0000,
+  TRACK:       0x0001,   // Ground, walls, static scenery
+  KART:        0x0002,   // All karts (local + remote)
+  ITEM_BOX:    0x0004,   // Pickup item boxes  (trigger volumes)
+  PROJECTILE:  0x0008,   // Fired projectiles   (trigger volumes)
+  TRAP:        0x0010,   // Placed traps: bubblegum, banana (trigger volumes)
+  BOUNDARY:    0x0020,   // Kill planes, OOB barriers
+  DEBRIS:      0x0040,   // (22.6) Kill explosion debris — bounces off track only
+  EFFECT_ZONE: 0x0080,   // (22.6) AoE damage zones — triggers on kart only
+  ALL:         0xFFFF,
 };
 
 // ── Prebuilt Filter Presets ─────────────────────────────────────────────────
@@ -61,6 +63,18 @@ export const FILTER = {
   /** Out-of-bounds / kill-plane barrier */
   BOUNDARY: {
     filterMembershipMask: LAYER.BOUNDARY,
+    filterCollideMask:    LAYER.KART,
+  },
+
+  /** (22.6) Kill explosion debris — physics-driven, bounces off track geometry */
+  DEBRIS: {
+    filterMembershipMask: LAYER.DEBRIS,
+    filterCollideMask:    LAYER.TRACK,
+  },
+
+  /** (22.6) AoE damage zone trigger — only interacts with karts */
+  EFFECT_ZONE: {
+    filterMembershipMask: LAYER.EFFECT_ZONE,
     filterCollideMask:    LAYER.KART,
   },
 };

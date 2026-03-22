@@ -1,0 +1,58 @@
+{
+  "label": "anomaly-smoke",
+  "generatedAt": "2026-03-12T22:32:57.261Z",
+  "endpoint": "ws://127.0.0.1:2567",
+  "roomName": "battle_room",
+  "liveDurationMs": 4000,
+  "scenarios": [
+    2
+  ],
+  "results": [
+    {
+      "players": 2,
+      "roomName": "battle_room",
+      "endpoint": "ws://127.0.0.1:2567",
+      "patchBytes": {
+        "avg": 101.38,
+        "p95": 135,
+        "max": 248,
+        "samples": 414
+      },
+      "fullStateBytes": {
+        "avg": 765.5,
+        "max": 844,
+        "samples": 2
+      },
+      "rttMs": {
+        "avg": 0.75,
+        "p95": 1,
+        "max": 1,
+        "samples": 8
+      },
+      "serverMetrics": {
+        "avgTickDriftMs": 8.72,
+        "avgInputAgeMs": 40.16,
+        "maxInputAgeMs": 65,
+        "staleInputDrops": 0,
+        "outOfOrderInputDrops": 0,
+        "anomalyProjectilesFired": 0,
+        "anomalyProjectileHits": 0,
+        "anomalyEffectsApplied": 2,
+        "arenaEffectsApplied": 0,
+        "apocalypseBursts": 0,
+        "patchRateMs": 16.67,
+        "authoritative": true,
+        "samples": 4
+      },
+      "anomalyEvents": {
+        "total": 4,
+        "payloadBytes": 216,
+        "projectileFired": 0,
+        "projectileHit": 0,
+        "effectApplied": 4,
+        "arenaEffectApplied": 0,
+        "apocalypseTriggered": 0
+      }
+    }
+  ]
+}

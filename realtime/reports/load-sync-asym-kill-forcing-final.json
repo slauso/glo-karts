@@ -1,0 +1,166 @@
+{
+  "label": "asym-kill-forcing-final",
+  "generatedAt": "2026-03-15T16:13:19.822Z",
+  "endpoint": "ws://127.0.0.1:2567",
+  "roomName": "battle_room",
+  "liveDurationMs": 45000,
+  "scenarios": [
+    2
+  ],
+  "results": [
+    {
+      "players": 2,
+      "roomName": "battle_room",
+      "endpoint": "ws://127.0.0.1:2567",
+      "patchBytes": {
+        "avg": 115.6,
+        "p95": 171,
+        "max": 304,
+        "samples": 3555
+      },
+      "fullStateBytes": {
+        "avg": 797.5,
+        "max": 876,
+        "samples": 2
+      },
+      "rttMs": {
+        "avg": 0.47,
+        "p95": 1,
+        "max": 1,
+        "samples": 90
+      },
+      "serverMetrics": {
+        "avgTickDriftMs": 10.56,
+        "avgInputAgeMs": 40.23,
+        "maxInputAgeMs": 64,
+        "staleInputDrops": 0,
+        "outOfOrderInputDrops": 0,
+        "anomalyProjectilesFired": 5,
+        "anomalyProjectileHits": 5,
+        "anomalyEffectsApplied": 20,
+        "arenaEffectsApplied": 5,
+        "apocalypseBursts": 0,
+        "anomalyCoreCollections": 0,
+        "anomalyChainBursts": 0,
+        "patchRateMs": 16.67,
+        "authoritative": true,
+        "samples": 45
+      },
+      "battleMetrics": {
+        "pickups": 65,
+        "shotsFired": 16,
+        "hitsLanded": 11,
+        "damageDealt": 346,
+        "damageTaken": 346,
+        "kills": 3,
+        "deaths": 3,
+        "eliminations": 0,
+        "effectsApplied": 18,
+        "effectsTaken": 23,
+        "shieldsBlocked": 0,
+        "shotsBlocked": 0,
+        "pickupWeapons": {
+          "super_nova": 7,
+          "tornado": 8,
+          "weather_dominion": 6,
+          "lightning_bolt": 5,
+          "gravity_well": 5,
+          "rock_barrage": 7,
+          "mirror_realm": 7,
+          "ice_lance": 5,
+          "phase_shift": 7,
+          "memory_leak": 5,
+          "shield": 1,
+          "toxic_cloud": 1,
+          "zipper": 1
+        },
+        "weaponShots": {
+          "super_nova": 1,
+          "tornado": 4,
+          "lightning_bolt": 4,
+          "gravity_well": 5,
+          "rock_barrage": 2
+        },
+        "weaponHits": {
+          "lightning_bolt": 2,
+          "gravity_well": 5,
+          "tornado": 3,
+          "rock_barrage": 1
+        }
+      },
+      "clientSummaries": [
+        {
+          "index": 0,
+          "role": "predator",
+          "pickups": 56,
+          "shotsFired": 16,
+          "hitsLanded": 11,
+          "damageDealt": 346,
+          "damageTaken": 120,
+          "kills": 3,
+          "deaths": 1,
+          "effectsApplied": 18,
+          "effectsTaken": 15,
+          "pickupWeapons": {
+            "super_nova": 6,
+            "tornado": 8,
+            "weather_dominion": 5,
+            "lightning_bolt": 5,
+            "gravity_well": 5,
+            "rock_barrage": 7,
+            "mirror_realm": 5,
+            "ice_lance": 5,
+            "phase_shift": 5,
+            "memory_leak": 5
+          },
+          "weaponShots": {
+            "super_nova": 1,
+            "tornado": 4,
+            "lightning_bolt": 4,
+            "gravity_well": 5,
+            "rock_barrage": 2
+          },
+          "weaponHits": {
+            "lightning_bolt": 2,
+            "gravity_well": 5,
+            "tornado": 3,
+            "rock_barrage": 1
+          }
+        },
+        {
+          "index": 1,
+          "role": "prey",
+          "pickups": 9,
+          "shotsFired": 0,
+          "hitsLanded": 0,
+          "damageDealt": 0,
+          "damageTaken": 226,
+          "kills": 0,
+          "deaths": 2,
+          "effectsApplied": 0,
+          "effectsTaken": 8,
+          "pickupWeapons": {
+            "phase_shift": 2,
+            "super_nova": 1,
+            "mirror_realm": 2,
+            "shield": 1,
+            "weather_dominion": 1,
+            "toxic_cloud": 1,
+            "zipper": 1
+          },
+          "weaponShots": {},
+          "weaponHits": {}
+        }
+      ],
+      "anomalyEvents": {
+        "total": 70,
+        "payloadBytes": 6672,
+        "projectileFired": 10,
+        "projectileHit": 10,
+        "effectApplied": 40,
+        "arenaEffectApplied": 10,
+        "apocalypseTriggered": 0
+      }
+    }
+  ]
+}

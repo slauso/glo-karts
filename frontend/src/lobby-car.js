@@ -31,7 +31,6 @@ const GLO_EFFECTS = [
   { id: 'pulse',          label: 'Pulse',            category: 'Classic',         desc: 'Breathes in and out' },
   { id: 'strobe',         label: 'Strobe',           category: 'Classic',         desc: 'Fast flash' },
   { id: 'rainbow',        label: 'Rainbow Cycle',    category: 'Classic',         desc: 'HSL hue rotation' },
-  { id: 'two-color',      label: 'Two-Color',        category: 'Classic',         desc: 'Alternates between two colours' },
   { id: 'chase',          label: 'Chase',            category: 'Classic',         desc: 'Running light sweep' },
   // ── Warm & Sky ─────────────────────────────────────────────────
   { id: 'sunrise',        label: 'Sunrise',          category: 'Warm & Sky',      desc: 'Warm dawn rising from deep purple to gold' },
@@ -67,6 +66,48 @@ let gloColor   = sessionStorage.getItem('gloColor')   || DEFAULT_GLO_COLOR;
 let gloColor2  = sessionStorage.getItem('gloColor2')  || DEFAULT_GLO_COLOR2;
 let gloEffect  = sessionStorage.getItem('gloEffect')  || DEFAULT_GLO_EFFECT;
 
+if (gloEffect === 'two-color') {
+  gloEffect = DEFAULT_GLO_EFFECT;
+  sessionStorage.setItem('gloEffect', gloEffect);
+}
+
+function snapHexToPalette(hex, palette) {
+  const normalizedHex = typeof hex === 'string' ? hex.toLowerCase() : '';
+  if (palette.some((color) => color.toLowerCase() === normalizedHex)) {
+    return hex;
+  }
+
+  const parseHex = (value) => {
+    const clean = value.replace('#', '');
+    if (clean.length !== 6) return null;
+    return [
+      parseInt(clean.slice(0, 2), 16),
+      parseInt(clean.slice(2, 4), 16),
+      parseInt(clean.slice(4, 6), 16),
+    ];
+  };
+
+  const target = parseHex(normalizedHex);
+  if (!target) return DEFAULT_GLO_COLOR;
+
+  let bestColor = palette[0];
+  let bestDistance = Number.POSITIVE_INFINITY;
+
+  for (const color of palette) {
+    const candidate = parseHex(color.toLowerCase());
+    if (!candidate) continue;
+    const distance =
+      (candidate[0] - target[0]) ** 2 +
+      (candidate[1] - target[1]) ** 2 +
+      (candidate[2] - target[2]) ** 2;
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      bestColor = color;
+    }
+  }
+
+  return bestColor;
+}
 function saveGlo() {
   sessionStorage.setItem('gloColor',  gloColor);
   sessionStorage.setItem('gloColor2', gloColor2);
@@ -75,12 +116,20 @@ function saveGlo() {
   document.dispatchEvent(new CustomEvent('gloChanged'));
 }
 
-// ── Colour palette for the quick-swatch row ──────────────────────
+// ── Colour palette for the GLO picker drum ───────────────────────
 const PALETTE = [
-  '#ff0080','#ff4400','#ff9900','#ffee00',
-  '#00ff44','#00e5ff','#3399ff','#9933ff',
-  '#ff33cc','#ffffff','#888888','#000000',
+  '#ff004f', '#ff0080', '#ff2d55', '#ff4fa3',
+  '#ff3b30', '#ff5e3a', '#ff6f00', '#ff9500',
+  '#ffb000', '#ffd60a', '#fff27a', '#d4ff00',
+  '#8cff00', '#32d74b', '#00ff88', '#00c853',
+  '#00e5ff', '#00c2ff', '#0a84ff', '#3399ff',
+  '#5e5ce6', '#7c4dff', '#9933ff', '#bf5af2',
+  '#ff33cc', '#ff66d9', '#ffffff', '#c7c7cc',
+  '#8e8e93', '#636366', '#2c2c2e', '#000000',
 ];
+
+gloColor = snapHexToPalette(gloColor, PALETTE);
+sessionStorage.setItem('gloColor', gloColor);
 
 // ── Three.js helpers ─────────────────────────────────────────────
 
@@ -630,7 +679,7 @@ class KartPreview {
         const box    = new THREE.Box3().setFromObject(this.kart);
         const size   = box.getSize(new THREE.Vector3());
         const diag = size.length(); // Revert back to diagonal for uniform volume fill
-          const scale = 1.6 / diag; // Tweak baseline scale down uniformly
+          const scale = 2.112 / diag; // Increase visible kart size by an additional 10% without moving the preview frame
         this.kart.scale.setScalar(scale);
         const box2   = new THREE.Box3().setFromObject(this.kart);
         const center = box2.getCenter(new THREE.Vector3());
@@ -919,7 +968,6 @@ class KartPreview {
       'pulse':          'linear-gradient(135deg,#ff0080,#cc0060)',
       'strobe':         'linear-gradient(90deg,#fff 50%,#111 50%)',
       'rainbow':        'linear-gradient(90deg,#f00,#ff8c00,#ff0,#0f0,#0ff,#00f,#f0f)',
-      'two-color':      'linear-gradient(135deg,#ff0080 50%,#00e5ff 50%)',
       'chase':          'linear-gradient(90deg,rgba(255,0,128,0.1),#ff0080 50%,rgba(255,0,128,0.1))',
       'sunrise':        'linear-gradient(135deg,#3a0060,#e67300,#ffd700)',
       'sunset':         'linear-gradient(135deg,#ff6600,#ff0080,#7700cc)',
@@ -952,35 +1000,6 @@ class KartPreview {
       'fire':         'glo-anim-flicker',
       'firefly':      'glo-anim-flicker',
     };
-    const PALETTE = [
-      '#ff0080','#ff4400','#ff9900','#ffee00',
-      '#00ff88','#00e5ff','#3399ff','#9933ff',
-      '#ff33cc','#ffffff','#777777','#000000',
-    ];
-
-    // ── Colour helpers ────────────────────────────────────────────
-    function hslToHex(h) {
-      const l = 0.5, a = Math.min(l, 1 - l);
-      const f = n => {
-        const k = (n + h / 30) % 12;
-        return l - a * Math.max(Math.min(k - 3, 9 - k, 1), -1);
-      };
-      const toH = x => Math.round(x * 255).toString(16).padStart(2, '0');
-      return `#${toH(f(0))}${toH(f(8))}${toH(f(4))}`;
-    }
-    function hueFromHex(hex) {
-      const r = parseInt(hex.slice(1,3),16)/255;
-      const g = parseInt(hex.slice(3,5),16)/255;
-      const b = parseInt(hex.slice(5,7),16)/255;
-      const max = Math.max(r,g,b), min = Math.min(r,g,b);
-      if (max === min) return 0;
-      const d = max - min;
-      const h = (max===r) ? ((g-b)/d + (g<b?6:0))/6
-               :(max===g) ? ((b-r)/d + 2)/6
-               :            ((r-g)/d + 4)/6;
-      return h;
-    }
-
     // ── 3D drum builder ───────────────────────────────────────────
     //   items      – array of any objects
     //   initIdx    – index of initially-selected item
@@ -1084,9 +1103,6 @@ class KartPreview {
       return row;
     }
 
-    // ── spectrum reference (set after strip is built) ─────────────
-    let specThumbEl = null;
-
     // ── Helper: small pill header above each drum ─────────────────
     function makeHeader(text, cls) {
       const h = document.createElement('div');
@@ -1121,8 +1137,6 @@ class KartPreview {
       onSelect: (ef) => {
         gloEffect = ef.id;
         saveGlo();
-        const c2row = carousel.querySelector('.glo-c2-row');
-        if (c2row) c2row.style.display = gloEffect === 'two-color' ? '' : 'none';
       },
     });
     carousel.appendChild(scenesDrum);
@@ -1152,69 +1166,11 @@ class KartPreview {
       },
       onSelect: (hex) => {
         gloColor = hex;
-        if (specThumbEl) specThumbEl.style.left =
-          `${(hueFromHex(hex) * 100).toFixed(1)}%`;
+        gloEffect = 'solid';
         saveGlo();
       },
     });
     carousel.appendChild(colorDrumRow);
-
-    // ── Spectrum strip (any hue picker) ───────────────────────────
-    const specRow   = document.createElement('div');
-    specRow.className = 'glo-spec-row';
-
-    const specSpacer = document.createElement('span');
-    specSpacer.className = 'glo-drum-lbl';
-    specSpacer.textContent = '∞';
-    specRow.appendChild(specSpacer);
-
-    const specWrap  = document.createElement('div');
-    specWrap.className = 'glo-spectrum';
-    const specThumb = document.createElement('div');
-    specThumb.className = 'glo-spectrum-thumb';
-    specWrap.appendChild(specThumb);
-    specThumbEl = specThumb;
-
-    specThumb.style.left = `${(hueFromHex(gloColor) * 100).toFixed(1)}%`;
-
-    let specDown = false;
-    const onSpecMove = (e) => {
-      const rect = specWrap.getBoundingClientRect();
-      const t = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-      specThumb.style.left = `${(t * 100).toFixed(1)}%`;
-      gloColor = hslToHex(Math.round(t * 360));
-      if (gloEffect !== 'two-color') gloEffect = 'solid';
-      saveGlo();
-    };
-    specWrap.addEventListener('pointerdown', e => {
-      specDown = true; specWrap.setPointerCapture(e.pointerId); onSpecMove(e);
-    });
-    specWrap.addEventListener('pointermove', e => { if (specDown) onSpecMove(e); });
-    specWrap.addEventListener('pointerup',     () => { specDown = false; });
-    specWrap.addEventListener('pointercancel', () => { specDown = false; });
-
-    specRow.appendChild(specWrap);
-    carousel.appendChild(specRow);
-
-    // ── 2nd colour drum (two-color effect only) ───────────────────
-    const initColor2Idx = Math.max(0,
-      PALETTE.findIndex(h => h.toLowerCase() === gloColor2.toLowerCase()));
-
-    const c2row = buildDrum(PALETTE, initColor2Idx, {
-      label:      '2ND',
-      fh:         38,
-      extraClass: 'glo-drum-row--color glo-drum-row--simple glo-c2-row',
-      renderFace: (face, hex) => {
-        face.classList.add('glo-drum-face--color');
-        const bg = document.createElement('div');
-        bg.className = 'glo-drum-face-bg';
-        bg.style.background = hex;
-        face.appendChild(bg);
-      },
-      onSelect: (hex) => { gloColor2 = hex; saveGlo(); },
-    });
-    c2row.style.display = gloEffect === 'two-color' ? '' : 'none';
-    carousel.appendChild(c2row);
   }
 }
 

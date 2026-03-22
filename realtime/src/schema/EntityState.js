@@ -25,6 +25,7 @@ export class EntityState extends Schema {
     this.respawnTimer = 0;
     this.damage = 0;          // damage dealt on hit
     this.lifespan = 0;        // ms remaining before auto-despawn
+    this.targetId = "";       // homing target player id (empty = no homing)
   }
 }
 
@@ -32,6 +33,7 @@ type("string")(EntityState.prototype, "id");
 type("string")(EntityState.prototype, "type");
 type("string")(EntityState.prototype, "subType");
 type("string")(EntityState.prototype, "ownerId");
+type("string")(EntityState.prototype, "targetId");
 
 type("number")(EntityState.prototype, "x");
 type("number")(EntityState.prototype, "y");

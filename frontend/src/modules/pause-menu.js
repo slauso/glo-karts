@@ -4,10 +4,12 @@
  * Features:
  *  - Escape key toggles pause
  *  - Freezes game loop (physics & render)
- *  - Overlay with Resume, Restart Race, Settings (volume), Quit to Lobby
+ *  - Overlay with Resume, Restart Race, Settings (volume), Controls, Quit to Lobby
  *  - Blocks game input while paused
  *  - Works for both race and battle modes
  */
+
+import { showControlsOverlay } from './input-config.js';
 
 let _overlay = null;
 let _paused  = false;
@@ -145,9 +147,12 @@ function _buildOverlay() {
   quitBtn.style.marginTop = '24px';
   quitBtn.style.borderColor = 'rgba(255,80,80,0.5)';
 
+  const controlsBtn = _btn('🎮  CONTROLS', btnStyle, hoverIn, hoverOut, () => showControlsOverlay());
+
   _overlay.appendChild(resumeBtn);
   _overlay.appendChild(restartBtn);
   _overlay.appendChild(settingsBox);
+  _overlay.appendChild(controlsBtn);
   _overlay.appendChild(quitBtn);
 
   document.body.appendChild(_overlay);

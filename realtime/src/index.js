@@ -8,6 +8,7 @@ import { RaceRoom } from "./rooms/RaceRoom.js";
 import { BattleRoom } from "./rooms/BattleRoom.js";
 import { LobbyRoom } from "./rooms/LobbyRoom.js";
 import { GloFluxRoom } from "./rooms/GloFluxRoom.js";
+import { FpsArenaRoom } from "./rooms/FpsArenaRoom.js";
 import { log } from "./logger.js";
 
 const port = Number(process.env.COLYSEUS_PORT || 2567);
@@ -33,6 +34,8 @@ gameServer.define("race_room", RaceRoom)
 gameServer.define("battle_room", BattleRoom)
   .filterBy(["partyCode"]);
 gameServer.define("gloflux", GloFluxRoom)
+  .filterBy(["partyCode"]);
+gameServer.define("fps_arena", FpsArenaRoom)
   .filterBy(["partyCode"]);
 
 // Task 2.4: Disable monitor in production to prevent information leakage.

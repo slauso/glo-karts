@@ -2,23 +2,32 @@ import { Room } from "@colyseus/core";
 import { RaceState } from "../schema/RaceState.js";
 import { PlayerState } from "../schema/PlayerState.js";
 import { EntityState } from "../schema/EntityState.js";
-import { WEAPONS, grantWeapon, handleFireWeapon, tickProjectiles } from "../combat.js";
-import { RateLimiter, sanitizePosition, isWithinPickupRange, isValidProjectileOrigin } from "../server-guard.js";
+import { RACE_WEAPON_POOL, WEAPONS, grantWeapon, handleFireWeapon, swapSecondaryWeapon, tickProjectiles } from "../combat.js";
+import { RateLimiter, sanitizePosition, isWithinPickupRangeWithClientPosition, isValidProjectileOrigin } from "../server-guard.js";
 import { log } from "../logger.js";
+import {
+  applyAuthoritativeKartStep,
+  buildRealtimeInput,
+  configureRealtimeRoom,
+  getRealtimeControlInput,
+  getRealtimeCountdownMs,
+  getRealtimeJoinPayload,
+  getSimulationIntervalMs,
+  isRealtimeInputFresh,
+  initializeAuthoritativeKart,
+  noteProcessedInput,
+  noteRealtimeTick,
+  noteRejectedInput,
+  REALTIME_SYNC_DEFAULTS,
+  resolveAuthoritativeKartContacts,
+  storeLatestRealtimeInput,
+} from "../realtime-sync.js";
 
-const TICK_RATE = 1000 / 60;
-const ACCEL = 22;
-const DRAG = 0.92;
-
-function safeNumber(value, fallback = 0) {
-  const n = Number(value);
-  return Number.isFinite(n) ? n : fallback;
-}
-
-function safeUnit(value, fallback = 0) {
-  const n = safeNumber(value, fallback);
-  return Math.max(-1, Math.min(1, n));
-}
+const TICK_RATE = getSimulationIntervalMs();
+const TRACK_SURFACE_Y = {
+  test_box: 1.0,
+  glo_circuit: 1.0,
+};
 
 export class RaceRoom extends Room {
   onCreate(options = {}) {
@@ -26,20 +35,24 @@ export class RaceRoom extends Room {
     state.trackId = options.trackId || "test_box";
     state.totalLaps = Math.min(Math.max(Number(options.totalLaps) || 3, 1), 10);
     this.setState(state);
+    this._surfaceY = TRACK_SURFACE_Y[state.trackId] ?? 1.0;
 
-    this.maxClients = Math.min(Number(options.maxPlayers) || 12, 12);
+    const syncConfig = configureRealtimeRoom(this, options, { authoritative: true });
     // Minimum elapsed time (ms) before a new lap is accepted — prevents double-trigger
     this._minLapMs = 15000;
     this.inputBySession = new Map();
     this.countdownActive = false;
+    this.staleInputMs = syncConfig.staleInputMs || REALTIME_SYNC_DEFAULTS.staleInputMs;
+    this.countdownDurationMs = getRealtimeCountdownMs(options);
     // Task 2.2: per-client rate limiter
     this._rateLimiter = new RateLimiter();
+    this._kartCrashCooldownUntil = new Map();
 
     this.onMessage("triggerStart", () => {
       if (this.state.started || this.countdownActive) return;
       this.countdownActive = true;
 
-      const durationMs = 10000;
+      const durationMs = this.countdownDurationMs;
       const serverNow = Date.now();
       const startAt = serverNow + durationMs;
       this._countdownStartAt = startAt;
@@ -57,7 +70,7 @@ export class RaceRoom extends Room {
       if (this.state.started || this.countdownActive) return;
       this.countdownActive = true;
 
-      const durationMs = 10000;
+      const durationMs = this.countdownDurationMs;
       const serverNow = Date.now();
       const startAt = serverNow + durationMs;
       this._countdownStartAt = startAt;
@@ -74,20 +87,8 @@ export class RaceRoom extends Room {
     this.onMessage("input", (client, data) => {
       // Task 2.2: rate-limit input messages
       if (!this._rateLimiter.allow(client.sessionId, "input")) return;
-      this.inputBySession.set(client.sessionId, {
-        seq: Math.max(0, Math.floor(safeNumber(data.seq, 0))),
-        throttle: safeUnit(data.throttle, 0),
-        steer: safeUnit(data.steer, 0),
-        brake: safeUnit(data.brake, 0),
-        fire: !!data.fire,
-        x: safeNumber(data.x, 0),
-        y: safeNumber(data.y, 1),
-        z: safeNumber(data.z, 0),
-        rx: safeNumber(data.rx, 0),
-        ry: safeNumber(data.ry, 0),
-        rz: safeNumber(data.rz, 0),
-        rw: safeNumber(data.rw, 1)
-      });
+      const accepted = storeLatestRealtimeInput(this.inputBySession, client.sessionId, buildRealtimeInput(data));
+      if (!accepted) noteRejectedInput(this, "out_of_order");
     });
 
     this.onMessage("checkpoint", (client, data) => {
@@ -158,27 +159,60 @@ export class RaceRoom extends Room {
         const entityId = data.entityId;
         const e = this.state.entities.get(entityId);
         const player = this.state.players.get(client.sessionId);
+        const pickupPosition = data && Number.isFinite(Number(data.x)) && Number.isFinite(Number(data.y)) && Number.isFinite(Number(data.z))
+          ? { x: Number(data.x), y: Number(data.y), z: Number(data.z) }
+          : null;
         
-        if (e && e.type === "item_box" && e.active && player && isWithinPickupRange(player, e)) {
+        if (e && e.type === "item_box" && e.active && player && isWithinPickupRangeWithClientPosition(player, e, pickupPosition)) {
+            // Allow pickup if any pickup slot has room
+            const hasRoom = (!player.weapon2 || player.ammo2 <= 0) || (!player.weapon3 || player.ammo3 <= 0);
+            if (!hasRoom) return;
             // "Consume" the item box
             e.active = false;
             e.respawnTimer = 10000; // 10 seconds respawn
+            const slot = (player.weapon2 && player.ammo2 > 0) ? "reserve" : "secondary";
             
             // Grant weapon via combat system
-            const rolled = grantWeapon(player);
+            const rolled = grantWeapon(player, 0.5, { pool: RACE_WEAPON_POOL });
+          const weaponDef = WEAPONS[rolled];
             
             // Tell the specific client what they got
-            client.send("itemReceived", { weapon: rolled });
+          client.send("itemReceived", {
+            slot,
+            weapon: rolled,
+            ammo: slot === "reserve" ? player.ammo3 : player.ammo2,
+            category: weaponDef?.category || 'unknown',
+            cooldownMs: weaponDef?.cooldown || 0,
+            effect: weaponDef?.effect || '',
+            description: weaponDef?.desc || '',
+            reserve: { weapon: player.weapon3 || "", ammo: player.ammo3 || 0 },
+          });
         }
     });
 
-    this.onMessage("fireWeapon", (client) => {
+    this.onMessage("swapSecondaryWeapon", (client) => {
+        if (!this._rateLimiter.allow(client.sessionId, "swapSecondaryWeapon")) return;
+        const player = this.state.players.get(client.sessionId);
+        if (!player || !this.state.started) return;
+        if (!swapSecondaryWeapon(player)) return;
+
+        client.send("secondaryWeaponSwapped", {
+          active: { weapon: player.weapon2 || "", ammo: player.ammo2 || 0 },
+          reserve: { weapon: player.weapon3 || "", ammo: player.ammo3 || 0 },
+          cooldownMs: WEAPONS[player.weapon2 || ""]?.cooldown || 0,
+        });
+    });
+
+    this.onMessage("fireWeapon", (client, data = {}) => {
         // Task 2.2: rate-limit weapon fire
         if (!this._rateLimiter.allow(client.sessionId, "fireWeapon")) return;
         const player = this.state.players.get(client.sessionId);
         if (!player || !this.state.started) return;
 
-        const result = handleFireWeapon(player, this.state.entities, this.state.players);
+        const result = handleFireWeapon(player, this.state.entities, this.state.players, {
+          roomState: this.state,
+          fireInput: data,
+        });
         if (!result) return;
 
         if (result.projectile) {
@@ -199,11 +233,68 @@ export class RaceRoom extends Room {
         if (result.effectApplied) {
             this.broadcast("effectApplied", result.effectApplied);
         }
+        if (Array.isArray(result.instantHits)) {
+          for (const hit of result.instantHits) {
+            const damage = Math.max(0, Number(hit.damage || 0));
+            const victim = hit.victim;
+            if (!victim || damage <= 0) continue;
+            if (victim.shielded) {
+              victim.shieldHP = Math.max(0, Number(victim.shieldHP || 0) - damage);
+              if (victim.shieldHP <= 0) {
+                victim.shielded = false;
+                victim.effectType = "";
+                victim.effectTimer = 0;
+              }
+              this.broadcast("shieldAbsorbed", {
+                projectileId: "",
+                victimId: victim.id,
+                attackerId: hit.ownerId || player.id,
+                subType: hit.subType || "swatter",
+                shieldHP: victim.shieldHP ?? 0,
+                shieldBroken: (victim.shieldHP ?? 0) <= 0,
+                hitX: hit.hitPoint?.x,
+                hitY: hit.hitPoint?.y,
+                hitZ: hit.hitPoint?.z,
+              });
+              continue;
+            }
+            victim.health = Math.max(0, victim.health - damage);
+            this.broadcast("projectileHit", {
+              projectileId: "",
+              victimId: victim.id,
+              attackerId: hit.ownerId || player.id,
+              subType: hit.subType || "swatter",
+              damage,
+              remainingHealth: victim.health,
+              effect: hit.effectApplied?.type || hit.subType || "swatter",
+              hitX: hit.hitPoint?.x,
+              hitY: hit.hitPoint?.y,
+              hitZ: hit.hitPoint?.z,
+            });
+            if (hit.effectApplied?.type) {
+              this.broadcast("effectApplied", {
+                type: hit.effectApplied.type,
+                target: victim.id,
+                attackerId: hit.ownerId || player.id,
+                duration: hit.effectApplied.duration,
+              });
+            }
+          }
+        }
     });
 
     this.setSimulationInterval((deltaTime) => this.update(deltaTime), TICK_RATE);
-    log('info', 'room_create', { room: 'race_room', roomId: this.roomId, track: state.trackId, laps: state.totalLaps, maxClients: this.maxClients });
-    console.log(`[race_room] created roomId=${this.roomId} track=${state.trackId} laps=${state.totalLaps} maxClients=${this.maxClients}`);
+    log('info', 'room_create', {
+      room: 'race_room',
+      roomId: this.roomId,
+      track: state.trackId,
+      laps: state.totalLaps,
+      maxClients: this.maxClients,
+      patchRateMs: syncConfig.patchRateMs,
+      staleInputMs: this.staleInputMs,
+      authoritative: true,
+    });
+    console.log(`[race_room] created roomId=${this.roomId} track=${state.trackId} laps=${state.totalLaps} maxClients=${this.maxClients} patchRateMs=${Math.round(syncConfig.patchRateMs)}`);
 
     this.spawnItemBoxes();
   }
@@ -233,6 +324,10 @@ export class RaceRoom extends Room {
     console.log(`[race_room] race ended — ${standings.length} finishers`);
   }
 
+  _getKartCrashKey(playerAId, playerBId) {
+    return [playerAId, playerBId].sort().join(":");
+  }
+
   spawnItemBoxes() {
     // Spawn item boxes in rows at known positions relative to the track start.
     // Two rows of 4 boxes offset either side of the start-line so karts pass
@@ -253,7 +348,7 @@ export class RaceRoom extends Room {
         box.active = true;
         const tOff = (s / (row.count - 1 || 1) - 0.5) * row.spread;
         box.x = tOff;
-        box.y = 2.5;
+        box.y = this._surfaceY + 0.9;
         box.z = row.zOff;
         this.state.entities.set(id, box);
       }
@@ -276,14 +371,12 @@ export class RaceRoom extends Room {
 
     const idx = this.state.players.size;
     const spawn = this.getSpawnPoint(this.maxClients, idx);
-    p.x = spawn.x;
-    p.y = 2.5;
-    p.z = spawn.z;
+    initializeAuthoritativeKart(p, { x: spawn.x, y: this._surfaceY, z: spawn.z });
 
     this.state.players.set(client.sessionId, p);
     log('info', 'room_join', { room: 'race_room', roomId: this.roomId, sessionId: client.sessionId, name: p.name, players: this.state.players.size });
     console.log(`[race_room] join sessionId=${client.sessionId} name=${p.name} players=${this.state.players.size}`);
-    client.send("joined", { sessionId: client.sessionId, room: this.roomId, mode: "race" });
+    client.send("joined", { sessionId: client.sessionId, room: this.roomId, mode: "race", sync: getRealtimeJoinPayload(this) });
 
     // Late-join catchup: sync countdown/live state to late arrivals
     if (this.state.started) {
@@ -349,42 +442,51 @@ export class RaceRoom extends Room {
   }
 
   update(deltaTime) {
-    const dt = deltaTime / 1000;
-    this.state.serverTime += deltaTime;
+    const now = Date.now();
+    this.state.serverTime = now;
+    noteRealtimeTick(this, deltaTime, now);
 
     this.state.players.forEach((p, id) => {
       const input = this.inputBySession.get(id);
-      if (input && this.state.started) {
-        if (
-          !Number.isFinite(input.x) ||
-          !Number.isFinite(input.y) ||
-          !Number.isFinite(input.z) ||
-          !Number.isFinite(input.rx) ||
-          !Number.isFinite(input.ry) ||
-          !Number.isFinite(input.rz) ||
-          !Number.isFinite(input.rw)
-        ) {
-          return;
-        }
-
-        // Task 2.1: movement sanity — reject teleportation & clamp to arena
-        const clamped = sanitizePosition(
-          { x: p.x, y: p.y, z: p.z },
-          { x: input.x, y: input.y, z: input.z }
-        );
-        if (!clamped) return; // teleport detected — keep previous pose
-
-        // Phase 3: Update directly from client-authoritative Havok physics engine
-        p.x = clamped.x; 
-        p.y = clamped.y; 
-        p.z = clamped.z;
-        p.rx = input.rx; 
-        p.ry = input.ry; 
-        p.rz = input.rz; 
-        p.rw = input.rw;
-        p.lastProcessedInput = input.seq;
+      const inputFresh = !!(input && isRealtimeInputFresh(input, now, this.staleInputMs));
+      if (!this.state.started) return;
+      if (input && !inputFresh) {
+        noteRejectedInput(this, "stale");
       }
+
+      const authoritativeInput = getRealtimeControlInput(input, now, this.staleInputMs);
+      p.steer = authoritativeInput.steer || 0;
+      applyAuthoritativeKartStep(p, authoritativeInput, deltaTime, sanitizePosition);
+      if (inputFresh) noteProcessedInput(this, input, now);
     });
+
+    const kartCrashes = resolveAuthoritativeKartContacts(this.state.players, deltaTime, sanitizePosition);
+    for (const crash of kartCrashes) {
+      const pairKey = this._getKartCrashKey(crash.playerA.id, crash.playerB.id);
+      if (now < (this._kartCrashCooldownUntil.get(pairKey) || 0)) continue;
+      if (crash.severity < 1.2 && crash.damageA <= 0 && crash.damageB <= 0) continue;
+      this._kartCrashCooldownUntil.set(pairKey, now + 350);
+
+      if (crash.damageA > 0) {
+        crash.playerA.health = Math.max(0, crash.playerA.health - crash.damageA);
+      }
+      if (crash.damageB > 0) {
+        crash.playerB.health = Math.max(0, crash.playerB.health - crash.damageB);
+      }
+
+      this.broadcast("kartCrash", {
+        playerAId: crash.playerA.id,
+        playerBId: crash.playerB.id,
+        damageA: crash.damageA,
+        damageB: crash.damageB,
+        remainingHealthA: crash.playerA.health,
+        remainingHealthB: crash.playerB.health,
+        severity: crash.severity,
+        hitX: crash.hitX,
+        hitY: crash.hitY,
+        hitZ: crash.hitZ,
+      });
+    }
 
     // Handle entity respawns and updates
     this.state.entities.forEach((e) => {
@@ -398,24 +500,44 @@ export class RaceRoom extends Room {
     });
 
     // Tick projectiles — movement, lifespan, hit detection
-    const hits = tickProjectiles(this.state.entities, this.state.players, deltaTime);
-    for (const { projectile, victim, shieldAbsorbed } of hits) {
+    const hits = tickProjectiles(this.state.entities, this.state.players, deltaTime, this._surfaceY);
+    for (const { projectile, victim, shieldAbsorbed, effectApplied, shieldHP, hitPoint, damage } of hits) {
         if (shieldAbsorbed) {
             this.broadcast("shieldAbsorbed", {
                 projectileId: projectile.id,
                 victimId: victim.id,
+          attackerId: projectile.ownerId,
+          subType: projectile.subType,
+          shieldHP: shieldHP ?? 0,
+          shieldBroken: (shieldHP ?? 0) <= 0,
+          hitX: hitPoint?.x,
+          hitY: hitPoint?.y,
+          hitZ: hitPoint?.z,
             });
             continue;
         }
-        victim.health = Math.max(0, victim.health - projectile.damage);
+        const appliedDamage = Math.max(0, Number(damage ?? projectile.damage ?? 0));
+        victim.health = Math.max(0, victim.health - appliedDamage);
         this.broadcast("projectileHit", {
             projectileId: projectile.id,
             victimId: victim.id,
+        attackerId: projectile.ownerId,
             subType: projectile.subType,
-            damage: projectile.damage,
+            damage: appliedDamage,
             remainingHealth: victim.health,
-            effect: projectile.subType,
+        effect: effectApplied?.type || projectile.subType,
+        hitX: hitPoint?.x,
+        hitY: hitPoint?.y,
+        hitZ: hitPoint?.z,
         });
+        if (effectApplied?.type) {
+          this.broadcast("effectApplied", {
+            type: effectApplied.type,
+            target: victim.id,
+            attackerId: projectile.ownerId,
+            duration: effectApplied.duration,
+          });
+        }
     }
   }
 }

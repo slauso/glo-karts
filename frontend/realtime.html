@@ -23,7 +23,7 @@
       #realtime-canvas{width:100vw;height:100vh;display:block;touch-action:none}
       .exit-game-btn{position:fixed;top:20px;right:20px;z-index:100;width:44px;height:44px;border-radius:50%;background:rgba(12,12,18,.55);backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,.15);color:rgba(255,255,255,.7);display:flex;align-items:center;justify-content:center;text-decoration:none;font-size:18px;transition:all .2s}
       .exit-game-btn:hover{background:#ff0080;color:#fff;border-color:#b30059}
-      #weapon-hud{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);padding:8px 20px;border-radius:12px;z-index:50;background:rgba(12,12,18,.6);backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,.12);font-weight:700;font-size:.9rem;letter-spacing:2px;text-transform:uppercase;color:rgba(255,255,255,.8)}
+      #weapon-hud{position:fixed;left:-9999px;top:-9999px;width:1px;height:1px;opacity:0;pointer-events:none}
       #effect-overlay{position:fixed;inset:0;z-index:40;pointer-events:none;display:none}
 
       /* ── Prematch Lobby ────────────────────────────────── */
@@ -127,7 +127,7 @@
     <canvas id="realtime-canvas"></canvas>
 
     <!-- Weapon HUD -->
-    <div id="weapon-hud">NO WEAPON</div>
+    <div id="weapon-hud" aria-hidden="true"></div>
 
     <!-- Status-effect overlay -->
     <div id="effect-overlay"></div>
@@ -142,8 +142,44 @@
       import { ColyseusBabylonClient } from '/src/modules/realtime/colyseus-babylon-client.js';
       import { getColyseusEndpoint } from '/src/modules/realtime/feature-flag.js';
 
-      const config = JSON.parse(sessionStorage.getItem('gameConfig') || '{}');
-      const myId   = sessionStorage.getItem('myPlayerId') || localStorage.getItem('myPlayerId');
+      const params = new URLSearchParams(window.location.search);
+      const isDevBattle = !!import.meta.env.DEV && params.get('devBattle') === '1';
+      const scenarioDelayMs = Number(params.get('scenarioDelayMs') || 900);
+      const scenarioCount = Number(params.get('scenarioCount') || 10);
+      const scenarioTrackId = params.get('trackId') || 'test_box';
+      const scenarioWeapon = params.get('scenarioWeapon') || 'super_nova';
+
+      const ensureDevPlayerId = () => {
+        const existing = sessionStorage.getItem('myPlayerId') || localStorage.getItem('myPlayerId');
+        if (existing) return existing;
+        const next = `dev-${Math.random().toString(36).slice(2, 10)}`;
+        sessionStorage.setItem('myPlayerId', next);
+        localStorage.setItem('myPlayerId', next);
+        return next;
+      };
+
+      const baseConfig = JSON.parse(sessionStorage.getItem('gameConfig') || '{}');
+      const myId = isDevBattle ? ensureDevPlayerId() : (sessionStorage.getItem('myPlayerId') || localStorage.getItem('myPlayerId'));
+      const config = isDevBattle
+        ? {
+            gameMode: 'battle',
+            battleType: 'deathmatch',
+            trackId: scenarioTrackId,
+            arenaId: scenarioTrackId,
+            maxPlayers: 2,
+            scoreLimit: 5,
+            players: [{
+              id: myId,
+              name: params.get('playerName') || 'DevBattle',
+              playerColor: params.get('playerColor') || 'red',
+            }],
+            ...baseConfig,
+            gameMode: 'battle',
+            battleType: params.get('battleType') || baseConfig.battleType || 'deathmatch',
+            trackId: scenarioTrackId,
+            arenaId: scenarioTrackId,
+          }
+        : baseConfig;
       const glo    = {
         gloEffect: sessionStorage.getItem('gloEffect') || 'falling-petals',
         gloColor:  sessionStorage.getItem('gloColor')  || '#ff0080',
@@ -167,9 +203,19 @@
       });
 
       (async () => {
+        const lt = document.querySelector('.loading-text');
+        const maxRetries = 2;
+        let lastError = null;
+
         try {
+          console.log('[Realtime] Step 1: gameConfig =', JSON.stringify(config));
+          console.log('[Realtime] Step 1b: endpoint =', client.endpoint, 'roomName =', roomName);
+
+          console.log('[Realtime] Step 2: initBabylon...');
           await client.initBabylon(canvas);
-          await client.connect({
+          console.log('[Realtime] Step 2 OK: Babylon initialized');
+
+          const connectOpts = {
             partyCode:   config.lobbyCode || config.partyCode || '',
             trackId:     config.trackId   || 'test_box',
             arenaId:     config.arenaId   || 'test_box',
@@ -181,18 +227,72 @@
             kartId:      config.selectedKart || sessionStorage.getItem('selectedKart') || 'tux',
             playerColor: config.players?.find(p => p.id === myId)?.playerColor || 'red',
             ...glo,
-          });
+          };
+          console.log('[Realtime] Step 3: connect opts =', JSON.stringify(connectOpts));
+
+          // Retry connection up to maxRetries times
+          for (let attempt = 0; attempt <= maxRetries; attempt++) {
+            try {
+              if (attempt > 0) {
+                console.log(`[Realtime] Retry ${attempt}/${maxRetries}...`);
+                if (lt) lt.textContent = `Retrying connection (${attempt}/${maxRetries})...`;
+                await new Promise(r => setTimeout(r, 1500 * attempt));
+              }
+              await client.connect(connectOpts);
+              console.log('[Realtime] Step 3 OK: Connected to room');
+              lastError = null;
+              break;
+            } catch (err) {
+              lastError = err;
+              console.warn(`[Realtime] Attempt ${attempt + 1} failed:`, err?.message || err);
+              if (attempt === maxRetries) throw err;
+            }
+          }
+
           // Auto-trigger match start after prematch lobby is shown
           setTimeout(() => { client.triggerStart(); }, 3000);
           // Expose for automated Playwright tests
           window.__gloClient = client;
+          if (isDevBattle && window.__gloDebug) {
+            window.__gloDebug.devBattleMode = true;
+            window.__gloDebug.devBattleConfig = {
+              trackId: scenarioTrackId,
+              scenarioCount,
+              scenarioWeapon,
+            };
+          }
         } catch (err) {
-          console.error('[Realtime] Connection failed:', err);
-          const lt = document.querySelector('.loading-text');
-          if (lt) lt.textContent = 'Connection failed — returning to lobby...';
-          setTimeout(() => { window.location.href = 'index.html'; }, 3000);
+          const msg = err?.message || String(err);
+          console.error('[Realtime] Connection failed:', msg);
+          console.error('[Realtime] Full error:', err);
+          if (lt) lt.textContent = `Connection failed: ${msg.slice(0, 120)}`;
+          setTimeout(() => { window.location.href = 'index.html'; }, 4000);
         }
       })();
+
+      if (isDevBattle) {
+        let debugScenarioScheduled = false;
+        const runDebugScenarioWhenReady = async () => {
+          if (debugScenarioScheduled) return;
+          debugScenarioScheduled = true;
+          const maxAttempts = 80;
+          for (let attempt = 0; attempt < maxAttempts; attempt++) {
+            if (window.__gloDebug?.matchLive && typeof window.__gloDebug?.runBattleDebugScenario === 'function') {
+              window.__gloDebug.runBattleDebugScenario({
+                count: scenarioCount,
+                subType: scenarioWeapon,
+                durationMs: Number(params.get('durationMs') || 1200),
+                radius: Number(params.get('radius') || 14),
+              });
+              return;
+            }
+            await new Promise((resolve) => setTimeout(resolve, scenarioDelayMs));
+          }
+          console.warn('[Realtime] Dev battle scenario hook never became ready');
+        };
+        runDebugScenarioWhenReady();
+        window.addEventListener('load', () => { runDebugScenarioWhenReady(); }, { once: true });
+      }
     </script>
 
     <!-- Vercel analytics: only on deployed domain -->

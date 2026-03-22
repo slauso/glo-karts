@@ -22,12 +22,19 @@ import {
   RACE_CONFIG,
 } from './helpers/game-helpers.js';
 
+function withLobbyCode(config, label) {
+  return {
+    ...config,
+    lobbyCode: `${label}-${Date.now()}-${Math.floor(Math.random() * 100000)}`,
+  };
+}
+
 test.describe('Prematch Lobby', () => {
   test('loading screen shows then prematch lobby appears', async ({ page }) => {
     const errors = [];
     page.on('pageerror', (err) => errors.push(err.message));
 
-    await injectGameConfig(page, BATTLE_CONFIG);
+    await injectGameConfig(page, withLobbyCode(BATTLE_CONFIG, 'prematch-load'));
     await page.goto('/realtime.html');
 
     // Loading screen should be visible initially
@@ -44,7 +51,7 @@ test.describe('Prematch Lobby', () => {
 
   test('player card displays correct name and GLO info', async ({ page }) => {
     await injectGameConfig(page, {
-      ...BATTLE_CONFIG,
+      ...withLobbyCode(BATTLE_CONFIG, 'prematch-card'),
       players: [{ id: 'test-player-001', name: 'TestRacer', playerColor: 'red' }],
     });
     await page.goto('/realtime.html');
@@ -74,7 +81,7 @@ test.describe('Prematch Lobby', () => {
   });
 
   test('countdown starts and decrements', async ({ page }) => {
-    await injectGameConfig(page, BATTLE_CONFIG);
+    await injectGameConfig(page, withLobbyCode(BATTLE_CONFIG, 'prematch-countdown'));
     await page.goto('/realtime.html');
 
     const lobby = page.locator('#prematch-lobby');
@@ -112,7 +119,7 @@ test.describe('Prematch Lobby', () => {
     const errors = [];
     page.on('pageerror', (err) => errors.push(err.message));
 
-    await injectGameConfig(page, BATTLE_CONFIG);
+    await injectGameConfig(page, withLobbyCode(BATTLE_CONFIG, 'prematch-live'));
     await page.goto('/realtime.html');
 
     // Wait for matchLive
@@ -137,7 +144,7 @@ test.describe('Prematch Lobby', () => {
     page.on('pageerror', (err) => errors.push(err.message));
     const timestamps = {};
 
-    await injectGameConfig(page, BATTLE_CONFIG);
+    await injectGameConfig(page, withLobbyCode(BATTLE_CONFIG, 'prematch-flow'));
 
     timestamps.start = Date.now();
     await page.goto('/realtime.html');
@@ -201,7 +208,7 @@ test.describe('Prematch Lobby', () => {
 
   test('map info and settings display correctly', async ({ page }) => {
     await injectGameConfig(page, {
-      ...BATTLE_CONFIG,
+      ...withLobbyCode(BATTLE_CONFIG, 'prematch-settings'),
       maxPlayers: 4,
       scoreLimit: 10,
     });
@@ -227,7 +234,7 @@ test.describe('Prematch Lobby', () => {
 
   test('race mode shows correct labels', async ({ page }) => {
     await injectGameConfig(page, {
-      ...RACE_CONFIG,
+      ...withLobbyCode(RACE_CONFIG, 'prematch-race'),
       trackId: 'test_box',
     });
     await page.goto('/realtime.html');
@@ -240,7 +247,7 @@ test.describe('Prematch Lobby', () => {
   });
 
   test('at most 2 WebGL contexts (main game + kart previews)', async ({ page }) => {
-    await injectGameConfig(page, BATTLE_CONFIG);
+    await injectGameConfig(page, withLobbyCode(BATTLE_CONFIG, 'prematch-webgl'));
 
     // Instrument canvas.getContext to count WebGL context requests before lobby
     await page.addInitScript(() => {

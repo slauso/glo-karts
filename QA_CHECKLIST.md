@@ -1,85 +1,82 @@
-# TwistedKart Manual QA Checklist
+# TwistedKart QA Checklist
 
-## Per-Mode Smoke Checks
+This checklist tracks the current active runtime, not historical solo pages.
 
-### Lobby (index.html)
-- [ ] Page loads without console errors
-- [ ] Menu music plays after first click
-- [ ] Mute button toggles music on/off
-- [ ] Kart carousel shows 18 kart models
-- [ ] GLO effect selector works (color picker + effect type)
-- [ ] Track selector shows 18+ tracks
-- [ ] "Solo Race" button navigates to game.html
-- [ ] "Solo Battle" button navigates to battle.html
-- [ ] "Multiplayer" option navigates to realtime.html
-- [ ] Grand Prix mode shows cup selection
+## Surfaced Product Smoke
 
-### Solo Race (game.html)
-- [ ] Loading screen appears then fades
-- [ ] 3-2-1-GO countdown with audio beeps
-- [ ] Engine sound starts at GO
-- [ ] Background music plays
-- [ ] Kart responds to arrow keys / WASD
-- [ ] Lap counter HUD visible ("Lap 1/3")
-- [ ] Checkpoint progression works
-- [ ] Last lap triggers fanfare SFX + fast music
-- [ ] Race finish shows results overlay
-- [ ] Engine and music stop on finish
-- [ ] Post-race music plays
+### Lobby (`frontend/index.html`)
 
-### Solo Battle (battle.html)
-- [ ] Arena loads with correct geometry
-- [ ] 3-2-1-GO countdown with audio
-- [ ] Weapon pickups spawn on map
-- [ ] Picking up weapon shows HUD indicator
-- [ ] Firing weapon plays weapon-specific SFX
-- [ ] Bot opponents move and attack
-- [ ] Damage numbers appear on hits
-- [ ] Health bar updates on damage
-- [ ] Respawn works with blink effect
-- [ ] CTF: flags visible, scoring works
+- [ ] Page loads without blocking console errors
+- [ ] Only `Online Battle` is visibly exposed in the mode picker
+- [ ] Lobby selections route into `realtime.html`
+- [ ] Ready/start flow works for a fresh private battle room
+- [ ] Arena selection, score limit, and max-player settings persist into the match launch config
 
-### Online Race (realtime.html → race_room)
-- [ ] Prematch lobby shows with kart preview
-- [ ] Countdown syncs for all players
-- [ ] Remote players visible and moving
-- [ ] Minimap shows player positions
-- [ ] Lap HUD updates for all participants
-- [ ] Weapon pickups work online
-- [ ] Weapon fire/hit SFX per weapon type
-- [ ] Race finish shows final standings
-- [ ] Late-join players see current race state
+### Online Battle (`frontend/realtime.html` -> `battle_room`)
 
-### Online Battle (realtime.html → battle_room)
-- [ ] Battle arena loads
-- [ ] Kill feed shows on eliminations
-- [ ] Respawn blink effect works
-- [ ] Weapon fire + hit SFX play correctly
-- [ ] Match end shows results
+- [ ] Prematch lobby appears and match starts cleanly
+- [ ] Both players join the same room and see `matchLive`
+- [ ] Arena loads and both karts spawn in valid positions
+- [ ] Pickup acquisition updates the active/reserve weapon HUD correctly
+- [ ] Primary and secondary fire both work
+- [ ] Anomaly weapons behave correctly:
+  - [ ] `gravity_well`
+  - [ ] `mirror_realm`
+  - [ ] `phase_shift`
+  - [ ] `memory_leak`
+  - [ ] `weather_dominion`
+- [ ] Projectile hits, shields, and phase/mirror effects stay authoritative
+- [ ] Kill, respawn, and health flows remain stable
+- [ ] Match-end/results flow completes without soft-locking
 
-### Grand Prix
-- [ ] Cup selection shows 5 cups
-- [ ] Race 1 loads correct track
-- [ ] Standings overlay shows after each race
-- [ ] Score carries over between races
-- [ ] Final results show medals (gold/silver/bronze)
-- [ ] Resume after page reload works
+## Hidden / Direct-Entry Smoke
 
-## Browser Matrix
-- [ ] Chrome (latest) - Desktop
-- [ ] Firefox (latest) - Desktop
-- [ ] Edge (latest) - Desktop
-- [ ] Chrome (latest) - Android
-- [ ] Safari (latest) - iOS (if available)
+Run these only when work touches the hidden branches.
 
-## Performance Checks
-- [ ] Initial page load < 5s on broadband
-- [ ] 60 FPS during solo race (no major drops)
-- [ ] No memory leak during extended play (10+ min)
-- [ ] Audio context properly cleaned up on page navigation
+### Online Race (`frontend/realtime.html` -> `race_room`)
 
-## Security Checks
-- [ ] /colyseus monitor disabled in production (NODE_ENV=production)
-- [ ] CORS restricted to known frontend origin
-- [ ] No ROM files or large archives in production build
-- [ ] Rate limiting prevents message flood
+- [ ] Room boots with race config
+- [ ] Countdown and lap flow work
+- [ ] Remote kart sync stays stable
+
+### Glo Flux (`frontend/gloflux.html`)
+
+- [ ] Page boots without fatal runtime errors
+- [ ] Telemetry and anomaly state surface in the client
+- [ ] Room lifecycle completes for a multiplayer join
+
+### FPS Arena (`frontend/fps.html`)
+
+- [ ] Page boots without fatal runtime errors
+- [ ] Room join succeeds
+- [ ] Player movement and weapon loop initialize
+
+### Track Builder (`frontend/builder.html`)
+
+- [ ] Page boots without fatal runtime errors
+- [ ] Builder UI loads the current editor state
+- [ ] Export/import path still works
+
+## Automated Baseline
+
+Minimum must-pass automated checks for the current surfaced battle shell:
+
+- [ ] `frontend/tests/03-pvp-session.spec.js`
+- [ ] `frontend/tests/05-prematch-lobby.spec.js`
+- [ ] `frontend/tests/30-anomaly-weapons.spec.js`
+- [ ] `realtime/reports/load-sync-latest.json` reviewed as the current battle scale anchor
+
+## Performance / Stability
+
+- [ ] Frontend dev server boots cleanly
+- [ ] Realtime server boots cleanly on `:2567`
+- [ ] No obvious memory growth during a 10+ minute battle session
+- [ ] Sync monitor remains readable under a 2-player local run
+- [ ] No repeated reconnect loop or room split under two-client Playwright coverage
+
+## Security / Hygiene
+
+- [ ] Rate limiting still guards weapon-fire and room messages
+- [ ] Realtime projectile origin validation still blocks abusive offsets
+- [ ] No ROMs or other legally risky binaries are back in the shipping frontend
+- [ ] Production monitor/CORS assumptions remain documented before deploy

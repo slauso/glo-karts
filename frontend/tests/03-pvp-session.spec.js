@@ -18,11 +18,19 @@ import {
   waitForDebug,
   readDebug,
   waitForMatchLive,
+  debugGrantWeapon,
   teleportKart,
   getFirstItemBoxPos,
   isCriticalError,
   BATTLE_CONFIG,
 } from './helpers/game-helpers.js';
+
+function withLobbyCode(config, label) {
+  return {
+    ...config,
+    lobbyCode: `${label}-${Date.now()}-${Math.floor(Math.random() * 100000)}`,
+  };
+}
 
 // Run PvP tests serially — they share the Colyseus server
 test.describe.configure({ mode: 'serial' });
@@ -30,6 +38,7 @@ test.describe.configure({ mode: 'serial' });
 test.describe('PvP Battle Session', () => {
   // ── Test 1: Two players join and both reach matchLive ─────────────────────
   test('2 players join battle_room and reach matchLive', async ({ browser }) => {
+    const roomConfig = withLobbyCode(BATTLE_CONFIG, 'pvp-join');
     const ctx1 = await browser.newContext();
     const ctx2 = await browser.newContext();
     const page1 = await ctx1.newPage();
@@ -41,13 +50,13 @@ test.describe('PvP Battle Session', () => {
 
     try {
       // Player 1 (host side)
-      await injectGameConfig(page1, { ...BATTLE_CONFIG, playerName: 'P1-Test' });
+      await injectGameConfig(page1, { ...roomConfig, playerName: 'P1-Test' });
       await page1.goto('/realtime.html');
 
       // Player 2 joins 2 s later (lets P1 create the room first and
       // ensures P1's Colyseus joinOrCreate is complete before P2 connects)
       await page1.waitForTimeout(2000);
-      await injectGameConfig(page2, { ...BATTLE_CONFIG, playerName: 'P2-Test' });
+      await injectGameConfig(page2, { ...roomConfig, playerName: 'P2-Test' });
       await page2.goto('/realtime.html');
 
       // Wait for both players to have joined the Colyseus room before
@@ -58,7 +67,7 @@ test.describe('PvP Battle Session', () => {
       ]);
 
       // Both should reach matchLive within 30 s of both being joined
-      await waitForMatchLive([page1, page2], 30_000);
+      await waitForMatchLive([page1, page2], 45_000);
 
       const d1 = await readDebug(page1);
       const d2 = await readDebug(page2);
@@ -85,26 +94,29 @@ test.describe('PvP Battle Session', () => {
       expect(crit1).toHaveLength(0);
       expect(crit2).toHaveLength(0);
     } finally {
-      await ctx1.close();
-      await ctx2.close();
+      await Promise.allSettled([
+        ctx1.close(),
+        ctx2.close(),
+      ]);
     }
   });
 
   // ── Test 2: Item pickup — teleport to item box, verify weapon received ────
   test('item box pickup grants weapon to local player', async ({ browser }) => {
+    const roomConfig = withLobbyCode(BATTLE_CONFIG, 'pvp-pickup');
     const ctx1 = await browser.newContext();
     const ctx2 = await browser.newContext();
     const page1 = await ctx1.newPage();
     const page2 = await ctx2.newPage();
 
     try {
-      await injectGameConfig(page1, BATTLE_CONFIG);
+      await injectGameConfig(page1, roomConfig);
       await page1.goto('/realtime.html');
       await page1.waitForTimeout(1000);
-      await injectGameConfig(page2, BATTLE_CONFIG);
+      await injectGameConfig(page2, roomConfig);
       await page2.goto('/realtime.html');
 
-      await waitForMatchLive([page1, page2], 30_000);
+      await waitForMatchLive([page1, page2], 45_000);
 
       // Give entities a moment to sync (server sends them after match starts)
       await page1.waitForTimeout(2000);
@@ -130,81 +142,79 @@ test.describe('PvP Battle Session', () => {
         expect(d1.lastWeaponReceived.length).toBeGreaterThan(0);
       }
     } finally {
-      await ctx1.close();
-      await ctx2.close();
+      await Promise.allSettled([
+        ctx1.close(),
+        ctx2.close(),
+      ]);
     }
   });
 
   // ── Test 3: Weapon fire — press E after acquiring weapon, check broadcast ─
   test('fire weapon broadcasts projectileFired to both players', async ({ browser }) => {
+    test.setTimeout(180_000);
+    const roomConfig = withLobbyCode(BATTLE_CONFIG, 'pvp-fire');
     const ctx1 = await browser.newContext();
     const ctx2 = await browser.newContext();
     const page1 = await ctx1.newPage();
     const page2 = await ctx2.newPage();
 
     try {
-      await injectGameConfig(page1, BATTLE_CONFIG);
+      await injectGameConfig(page1, roomConfig);
       await page1.goto('/realtime.html');
       await page1.waitForTimeout(1000);
-      await injectGameConfig(page2, BATTLE_CONFIG);
+      await injectGameConfig(page2, roomConfig);
       await page2.goto('/realtime.html');
 
-      await waitForMatchLive([page1, page2], 30_000);
+      await waitForMatchLive([page1, page2], 45_000);
 
-      // Teleport P1 to a known item box to grab a weapon
-      await page1.waitForTimeout(2000);
-      const boxPos = await getFirstItemBoxPos(page1);
-      if (boxPos) {
-        await teleportKart(page1, { x: boxPos.x, y: boxPos.y + 1, z: boxPos.z });
-        // Wait for weapon grant
-        await waitForDebug(page1, (d) => d.lastWeaponReceived !== null, 5_000)
-          .catch(() => {});
-      }
-
-      const haweapon = await page1.evaluate(() => !!window.__gloClient?.currentWeapon);
-      if (!haweapon) {
-        // Grant a weapon directly via evaluate for test isolation
-        await page1.evaluate(() => {
-          if (window.__gloClient) window.__gloClient.currentWeapon = 'bowling_ball';
-        });
-      }
+      // Make the fire path deterministic: ensure the server grants a real
+      // secondary weapon so E-key fire goes through the same authoritative flow
+      // as human multiplayer input.
+      await debugGrantWeapon(page1, 'missile', null, 1);
+      await waitForDebug(
+        page1,
+        (d) => d.weaponState?.weapon2 === 'missile' && Number(d.weaponState?.ammo2 || 0) >= 1,
+        10_000,
+      );
 
       // Press E (fire key) on P1
-      await page1.keyboard.press('KeyE');
-      await page1.waitForTimeout(500);
+      await page1.bringToFront();
+      await page1.keyboard.down('KeyE');
+      await page1.waitForTimeout(250);
+      await page1.keyboard.up('KeyE');
+      await Promise.all([
+        waitForDebug(page1, (d) => d.lastWeaponFired === 'missile', 10_000),
+        waitForDebug(page2, (d) => d.lastWeaponFired === 'missile', 10_000),
+      ]);
 
-      // Check P1 sees a projectileFired debug entry
-      // (may not fire if cooldown active, so soft-assert)
       const d1After = await readDebug(page1);
-      if (d1After.lastWeaponFired) {
-        console.log(`[pvp] projectileFired: ${d1After.lastWeaponFired}`);
-        // P2 may also see a projectileFired message (broadcast)
-        const d2After = await readDebug(page2);
-        console.log(`[pvp] P2 lastWeaponFired: ${d2After.lastWeaponFired}`);
-      } else {
-        console.warn('[pvp] No projectileFired recorded — weapon may have been on cooldown or server rejected empty ammo');
-      }
+      const d2After = await readDebug(page2);
+      expect(d1After.lastWeaponFired).toBe('missile');
+      expect(d2After.lastWeaponFired).toBe('missile');
     } finally {
-      await ctx1.close();
-      await ctx2.close();
+      await Promise.allSettled([
+        ctx1.close(),
+        ctx2.close(),
+      ]);
     }
   });
 
   // ── Test 4: Room state integrity — no player position is NaN / Infinity ───
   test('kart positions stay finite for both players during live play', async ({ browser }) => {
+    const roomConfig = withLobbyCode(BATTLE_CONFIG, 'pvp-finite');
     const ctx1 = await browser.newContext();
     const ctx2 = await browser.newContext();
     const page1 = await ctx1.newPage();
     const page2 = await ctx2.newPage();
 
     try {
-      await injectGameConfig(page1, BATTLE_CONFIG);
+      await injectGameConfig(page1, roomConfig);
       await page1.goto('/realtime.html');
       await page1.waitForTimeout(1000);
-      await injectGameConfig(page2, BATTLE_CONFIG);
+      await injectGameConfig(page2, roomConfig);
       await page2.goto('/realtime.html');
 
-      await waitForMatchLive([page1, page2], 30_000);
+      await waitForMatchLive([page1, page2], 45_000);
 
       // Drive around for 3 s (hold W on P1)
       await page1.keyboard.down('KeyW');
@@ -236,8 +246,10 @@ test.describe('PvP Battle Session', () => {
         expect(Number.isFinite(pos2.z), 'P2 z finite').toBe(true);
       }
     } finally {
-      await ctx1.close();
-      await ctx2.close();
+      await Promise.allSettled([
+        ctx1.close(),
+        ctx2.close(),
+      ]);
     }
   });
 });

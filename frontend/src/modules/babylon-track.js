@@ -23,7 +23,11 @@ import { FILTER, applyFilterToAggregate } from './realtime/collision-layers.js';
 import { createProceduralAddonTrack } from './procedural-tracks.js';
 import { generateProceduralTrack } from './procedural-track-gen.js';
 import { generateProceduralArena } from './procedural-arena-gen.js';
-import { generateDemoCourse, generateDemoArena } from './procedural-demo-course.js';
+import { generateDemoArena } from './procedural-demo-course.js';
+import { generateMapDefinition } from './map-definition-generator.js';
+
+// Expose a global or scene-attached definition so the game logic can grab generated metadata
+export let currentMapDefinition = null;
 
 /**
  * Load the track model and add to the Babylon.js scene.
@@ -40,15 +44,7 @@ export function loadTrackModel(mapId = 'test_box', scene, loadingManager, callba
   // Procedural track — no GLB to load, build geometry inline
   if (!modelPath) {
     // ── Phase 19.4 procedural demo course ──
-    if (mapId === 'glo_circuit') {
-      try {
-        const result = generateDemoCourse(scene);
-        if (callback) callback(result.root);
-        return;
-      } catch (e) {
-        console.warn(`[track] Demo course generation failed for ${mapId}:`, e);
-      }
-    } else if (mapId === 'glo_arena') {
+    if (mapId === 'glo_arena') {
       try {
         const result = generateDemoArena(scene);
         if (callback) callback(result.root);
@@ -145,8 +141,14 @@ export function loadTrackModel(mapId = 'test_box', scene, loadingManager, callba
 
     console.log(`Map ${mapId} track loaded successfully`);
 
-    // Create per-mesh physics colliders in the SAME scene (clone+bake pattern)
-    _createTrackPhysics(result, scene);
+      // Auto-generate missing metadata immediately from imported geometry
+      currentMapDefinition = generateMapDefinition(scene, result, {
+        numPlayers: 12,
+        numItems: 12,
+        generateWalls: true,
+        applyPhysics: false // handled below by unified clone+bake
+      });
+
 
     // Add kill-plane boundary below the track
     _createKillPlane(scene);
@@ -164,55 +166,123 @@ export function loadTrackModel(mapId = 'test_box', scene, loadingManager, callba
  * Physics colliders are created directly in the rendering scene.
  */
 function _createProceduralTestBox(scene) {
-  const HALF = 100;
-  const WALL_H = 6;
-  const WALL_T = 1;
+  const U = 10;
+  const ARENA = 17 * U;
+  const HALF = ARENA / 2;
+  const H1 = 1.5 * U;
+  const H2 = 3.0 * U;
+  const WALL_H = 4 * U;
+  const WALL_T = 2;
+  const BRIDGE_T = 0.2 * U;
+  const FORT_OFF = 3.5 * U;
   const root = new TransformNode('trackRoot', scene);
 
-  // Floor
-  const ground = MeshBuilder.CreateGround('test-box-floor', { width: HALF * 2, height: HALF * 2 }, scene);
-  ground.parent = root;
-  const floorMat = new StandardMaterial('test-box-floor-mat', scene);
-  floorMat.diffuseColor = new Color3(0.35, 0.35, 0.4);
-  ground.material = floorMat;
-  const groundCollider = MeshBuilder.CreateBox('ground-collider', { width: HALF * 2, height: 0.2, depth: HALF * 2 }, scene);
-  groundCollider.position.y = -0.1;
-  groundCollider.isVisible = false;
-  const groundAgg = new PhysicsAggregate(groundCollider, PhysicsShapeType.BOX, { mass: 0, friction: 0.9, restitution: 0.05 }, scene);
+  const _box = (name, w, h, d, x, y, z, mat, filter = FILTER.TRACK) => {
+    const m = MeshBuilder.CreateBox(name, { width: w, height: h, depth: d }, scene);
+    m.position.set(x, y, z); m.material = mat; m.parent = root; m.receiveShadows = true;
+    const agg = new PhysicsAggregate(m, PhysicsShapeType.BOX, { mass: 0, friction: 0.7, restitution: 0.05 }, scene);
+    applyFilterToAggregate(agg, filter);
+    return m;
+  };
+
+  const _ramp = (name, w, h, l, x, y, z, isXAxis, isNeg, mat) => {
+    const hyp = Math.sqrt(h * h + l * l);
+    const angle = Math.atan2(h, l);
+    const m = MeshBuilder.CreateBox(name, { width: isXAxis ? hyp : w, height: 1, depth: isXAxis ? w : hyp }, scene);
+    m.position.set(x, y, z); m.material = mat; m.parent = root; m.receiveShadows = true;
+    if (isXAxis) m.rotation.z = isNeg ? -angle : angle;
+    else m.rotation.x = isNeg ? angle : -angle;
+    const agg = new PhysicsAggregate(m, PhysicsShapeType.BOX, { mass: 0, friction: 0.8 }, scene);
+    applyFilterToAggregate(agg, FILTER.TRACK);
+    return m;
+  };
+
+  // Materials
+  const matGround = new StandardMaterial("bf-ground-mat", scene);
+  matGround.diffuseColor = new Color3(0.45, 0.45, 0.48);
+  const matWall = new StandardMaterial("bf-wall-mat", scene);
+  matWall.diffuseColor = new Color3(0.12, 0.12, 0.12);
+  const matBridge = new StandardMaterial("bf-bridge-mat", scene);
+  matBridge.diffuseColor = new Color3(0.55, 0.55, 0.55);
+  const fortColors = {
+    red: new Color3(0.85, 0.18, 0.18), blue: new Color3(0.18, 0.35, 0.85),
+    yellow: new Color3(0.85, 0.78, 0.15), green: new Color3(0.18, 0.72, 0.28),
+  };
+  const fortMats = {};
+  for (const [k, c] of Object.entries(fortColors)) {
+    const m = new StandardMaterial(`bf-${k}-mat`, scene); m.diffuseColor = c; fortMats[k] = m;
+  }
+
+  // Ground
+  const ground = MeshBuilder.CreateGround('bf-ground', { width: ARENA, height: ARENA }, scene);
+  ground.material = matGround; ground.parent = root; ground.receiveShadows = true;
+  const groundCollider = MeshBuilder.CreateBox('ground-collider', { width: ARENA, height: 0.2, depth: ARENA }, scene);
+  groundCollider.position.y = -0.1; groundCollider.isVisible = false;
+  const groundAgg = new PhysicsAggregate(groundCollider, PhysicsShapeType.BOX, { mass: 0, friction: 0.8 }, scene);
   applyFilterToAggregate(groundAgg, FILTER.TRACK);
 
   // Grid overlay
-  const gridMat = new StandardMaterial('test-box-grid-mat', scene);
-  gridMat.diffuseColor = new Color3(0.5, 0.5, 0.55);
-  gridMat.alpha = 0.4;
-  gridMat.wireframe = true;
-  const gridPlane = MeshBuilder.CreateGround('test-box-grid', { width: HALF * 2, height: HALF * 2, subdivisions: 20 }, scene);
-  gridPlane.position.y = 0.02;
-  gridPlane.parent = root;
-  gridPlane.material = gridMat;
+  const gridMat = new StandardMaterial('bf-grid-mat', scene);
+  gridMat.diffuseColor = new Color3(0.55, 0.55, 0.58); gridMat.alpha = 0.35; gridMat.wireframe = true;
+  const grid = MeshBuilder.CreateGround('bf-grid', { width: ARENA, height: ARENA, subdivisions: 17 }, scene);
+  grid.position.y = 0.02; grid.parent = root; grid.material = gridMat;
 
-  // Walls
-  const wallMat = new StandardMaterial('test-box-wall-mat', scene);
-  wallMat.diffuseColor = new Color3(0.6, 0.15, 0.15);
-  wallMat.alpha = 0.7;
+  // Outer walls
+  _box("bf-wall-N", ARENA, WALL_H, WALL_T, 0, WALL_H/2, -HALF, matWall, FILTER.BOUNDARY);
+  _box("bf-wall-S", ARENA, WALL_H, WALL_T, 0, WALL_H/2,  HALF, matWall, FILTER.BOUNDARY);
+  _box("bf-wall-E", WALL_T, WALL_H, ARENA,  HALF, WALL_H/2, 0, matWall, FILTER.BOUNDARY);
+  _box("bf-wall-W", WALL_T, WALL_H, ARENA, -HALF, WALL_H/2, 0, matWall, FILTER.BOUNDARY);
 
-  const wallDefs = [
-    { name: 'wall-N', w: HALF * 2, h: WALL_H, d: WALL_T, x: 0,     y: WALL_H / 2, z: -HALF },
-    { name: 'wall-S', w: HALF * 2, h: WALL_H, d: WALL_T, x: 0,     y: WALL_H / 2, z:  HALF },
-    { name: 'wall-E', w: WALL_T,   h: WALL_H, d: HALF * 2, x:  HALF, y: WALL_H / 2, z: 0    },
-    { name: 'wall-W', w: WALL_T,   h: WALL_H, d: HALF * 2, x: -HALF, y: WALL_H / 2, z: 0    },
+  // 4 Forts
+  const forts = [
+    { key: "red", x: -FORT_OFF, z: -FORT_OFF, name: "NW" },
+    { key: "blue", x: FORT_OFF, z: -FORT_OFF, name: "NE" },
+    { key: "yellow", x: -FORT_OFF, z: FORT_OFF, name: "SW" },
+    { key: "green", x: FORT_OFF, z: FORT_OFF, name: "SE" },
   ];
-  for (const wd of wallDefs) {
-    const wall = MeshBuilder.CreateBox(wd.name, { width: wd.w, height: wd.h, depth: wd.d }, scene);
-    wall.position.set(wd.x, wd.y, wd.z);
-    wall.material = wallMat;
-    wall.parent = root;
-    // Physics collider directly on the visual wall
-    const wallAgg = new PhysicsAggregate(wall, PhysicsShapeType.BOX, { mass: 0, friction: 0.6, restitution: 0.05 }, scene);
-    applyFilterToAggregate(wallAgg, FILTER.TRACK);
+  for (const f of forts) {
+    const mat = fortMats[f.key]; const fx = f.x, fz = f.z;
+    _box(`bf-${f.key}-L2`, 2*U, H2, 2*U, fx, H2/2, fz, mat);
+    _box(`bf-${f.key}-L1-N`, 4*U, H1, U, fx, H1/2, fz-1.5*U, mat);
+    _box(`bf-${f.key}-L1-S`, 4*U, H1, U, fx, H1/2, fz+1.5*U, mat);
+    _box(`bf-${f.key}-L1-W`, U, H1, 2*U, fx-1.5*U, H1/2, fz, mat);
+    _box(`bf-${f.key}-L1-E`, U, H1, 2*U, fx+1.5*U, H1/2, fz, mat);
+
+    const r1Dist = 3*U;
+    if (fx < 0) _ramp(`bf-${f.key}-ramp-gL1`, 2*U, H1, 2*U, fx-r1Dist, H1/2, fz, true, false, mat);
+    else _ramp(`bf-${f.key}-ramp-gL1`, 2*U, H1, 2*U, fx+r1Dist, H1/2, fz, true, true, mat);
+    if (fz < 0) _ramp(`bf-${f.key}-ramp-gL1z`, 2*U, H1, 2*U, fx, H1/2, fz-r1Dist, false, false, mat);
+    else _ramp(`bf-${f.key}-ramp-gL1z`, 2*U, H1, 2*U, fx, H1/2, fz+r1Dist, false, true, mat);
+
+    const r2Dist = 1.5*U, r2Y = H1+(H2-H1)/2, dH = H2-H1;
+    if (f.name==="NW") {
+      _ramp(`bf-${f.key}-ramp-L2a`, U, dH, U, fx+r2Dist, r2Y, fz+0.5*U, true, true, mat);
+      _ramp(`bf-${f.key}-ramp-L2b`, U, dH, U, fx-0.5*U, r2Y, fz+r2Dist, false, true, mat);
+    } else if (f.name==="NE") {
+      _ramp(`bf-${f.key}-ramp-L2a`, U, dH, U, fx-r2Dist, r2Y, fz+0.5*U, true, false, mat);
+      _ramp(`bf-${f.key}-ramp-L2b`, U, dH, U, fx+0.5*U, r2Y, fz+r2Dist, false, true, mat);
+    } else if (f.name==="SW") {
+      _ramp(`bf-${f.key}-ramp-L2a`, U, dH, U, fx+r2Dist, r2Y, fz-0.5*U, true, true, mat);
+      _ramp(`bf-${f.key}-ramp-L2b`, U, dH, U, fx-0.5*U, r2Y, fz-r2Dist, false, false, mat);
+    } else {
+      _ramp(`bf-${f.key}-ramp-L2a`, U, dH, U, fx-r2Dist, r2Y, fz-0.5*U, true, false, mat);
+      _ramp(`bf-${f.key}-ramp-L2b`, U, dH, U, fx+0.5*U, r2Y, fz-r2Dist, false, false, mat);
+    }
   }
 
-  // Kill plane
+  // Bridges
+  const b1Len = 3*U, b1Y = H1 - BRIDGE_T/2;
+  _box("bf-bridge-L1-N", b1Len, BRIDGE_T, U, 0, b1Y, -FORT_OFF+1.5*U, matBridge);
+  _box("bf-bridge-L1-S", b1Len, BRIDGE_T, U, 0, b1Y,  FORT_OFF-1.5*U, matBridge);
+  _box("bf-bridge-L1-W", U, BRIDGE_T, b1Len, -FORT_OFF+1.5*U, b1Y, 0, matBridge);
+  _box("bf-bridge-L1-E", U, BRIDGE_T, b1Len,  FORT_OFF-1.5*U, b1Y, 0, matBridge);
+
+  const b2Len = 5*U, b2Y = H2 - BRIDGE_T/2;
+  _box("bf-bridge-L2-N", b2Len, BRIDGE_T, U, 0, b2Y, -FORT_OFF-0.5*U, matBridge);
+  _box("bf-bridge-L2-S", b2Len, BRIDGE_T, U, 0, b2Y,  FORT_OFF+0.5*U, matBridge);
+  _box("bf-bridge-L2-W", U, BRIDGE_T, b2Len, -FORT_OFF-0.5*U, b2Y, 0, matBridge);
+  _box("bf-bridge-L2-E", U, BRIDGE_T, b2Len,  FORT_OFF+0.5*U, b2Y, 0, matBridge);
+
   _createKillPlane(scene);
 
   return root;
@@ -225,12 +295,18 @@ function _createProceduralTestBox(scene) {
 function _createTrackPhysics(importResult, scene) {
   if (!importResult?.meshes?.length) return;
 
-  const geometryMeshes = importResult.meshes.filter(
-    (m) => m.getTotalVertices && m.getTotalVertices() > 0 && m.isVisible !== false
-  );
+  // Broader filter: include InstancedMesh, don't filter by isVisible
+  const geometryMeshes = importResult.meshes.filter((m) => {
+    if (!m.getTotalVertices) return false;
+    if (m.getTotalVertices() > 0) return true;
+    if (m.sourceMesh && m.sourceMesh.getTotalVertices && m.sourceMesh.getTotalVertices() > 0) return true;
+    return false;
+  });
+
+  console.log(`[track] Geometry meshes found: ${geometryMeshes.length} / ${importResult.meshes.length} total`);
 
   if (geometryMeshes.length === 0) {
-    console.warn('[track] Track has zero geometry meshes – skipping physics');
+    console.warn('[track] Track has zero geometry meshes – using fallback');
     return;
   }
 
@@ -242,8 +318,17 @@ function _createTrackPhysics(importResult, scene) {
 
   for (const mesh of geometryMeshes) {
     try {
-      const clone = mesh.clone(`${mesh.name}_collider`, null);
+      const sourceMesh = mesh.sourceMesh || mesh;
+      const clone = sourceMesh.clone(`${mesh.name}_collider`, null);
       if (!clone) continue;
+
+      if (mesh.sourceMesh) {
+        clone.position.copyFrom(mesh.absolutePosition);
+        if (mesh.absoluteRotationQuaternion) {
+          clone.rotationQuaternion = mesh.absoluteRotationQuaternion.clone();
+        }
+        clone.scaling.copyFrom(mesh.absoluteScaling);
+      }
 
       clone.computeWorldMatrix(true);
       clone.bakeCurrentTransformIntoVertices();
@@ -303,7 +388,7 @@ function _createKillPlane(scene) {
  * @param {object|null}   loadingManager  Unused
  * @param {BABYLON.ShadowGenerator} shadowGen  Optional shadow generator
  */
-export function loadMapDecorations(mapId = 'map1', scene, renderer, camera, loadingManager, shadowGen) {
+export function loadMapDecorations(mapId = 'test_box', scene, renderer, camera, loadingManager, shadowGen) {
   if (!isCustomMap(mapId)) {
     console.log(`Skipping decorations for ${mapId} (STK track/arena — no decorations.glb)`);
     return;

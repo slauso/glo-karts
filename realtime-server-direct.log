@@ -1,0 +1,28 @@
+{"ts":"2026-03-20T13:48:46.386Z","level":"info","event":"server_start","port":2567,"env":"development"}
+
+       ___      _
+      / __\___ | |_   _ ___  ___ _   _ ___
+     / /  / _ \| | | | / __|/ _ \ | | / __|
+    / /__| (_) | | |_| \__ \  __/ |_| \__ \
+    \____/\___/|_|\__, |___/\___|\__,_|___/
+                  |___/
+
+     · Multiplayer Framework for Node.js ·
+
+💖 Consider becoming a Sponsor on GitHub → https://github.com/sponsors/endel
+🌟 Give us a star on GitHub → https://github.com/colyseus/colyseus
+☁️  Deploy and scale your project on Colyseus Cloud → https://cloud.colyseus.io
+
+
+[battle_room] created roomId=Z1vi0DlMv gameType=deathmatch scoreLimit=5 maxClients=2 patchRateMs=17
+{"ts":"2026-03-20T13:50:00.114Z","level":"info","event":"room_create","room":"battle_room","roomId":"Z1vi0DlMv","gameType":"deathmatch","scoreLimit":5,"maxClients":2,"patchRateMs":16.666666666666668,"staleInputMs":500,"authoritative":true}
+[battle_room] join sessionId=7Ojlnjezm name=Player team=red players=1
+{"ts":"2026-03-20T13:50:00.455Z","level":"info","event":"room_join","room":"battle_room","roomId":"Z1vi0DlMv","sessionId":"7Ojlnjezm","name":"Player","players":1}
+{"ts":"2026-03-20T13:50:03.195Z","level":"info","event":"battle_ready","room":"battle_room","roomId":"Z1vi0DlMv","sessionId":"7Ojlnjezm","readyCount":0,"players":1}
+[battle_room] join sessionId=JxP1jOsAd name=Player team=blue players=2
+{"ts":"2026-03-20T13:50:07.192Z","level":"info","event":"room_join","room":"battle_room","roomId":"Z1vi0DlMv","sessionId":"JxP1jOsAd","name":"Player","players":2}
+{"ts":"2026-03-20T13:50:12.504Z","level":"info","event":"battle_ready","room":"battle_room","roomId":"Z1vi0DlMv","sessionId":"JxP1jOsAd","readyCount":1,"players":2}
+{"ts":"2026-03-20T13:51:14.787Z","level":"info","event":"room_leave","room":"battle_room","roomId":"Z1vi0DlMv","sessionId":"7Ojlnjezm","players":1}
+[battle_room] leave sessionId=7Ojlnjezm players=1
+{"ts":"2026-03-20T13:51:14.797Z","level":"info","event":"room_leave","room":"battle_room","roomId":"Z1vi0DlMv","sessionId":"JxP1jOsAd","players":0}
+[battle_room] leave sessionId=JxP1jOsAd players=0

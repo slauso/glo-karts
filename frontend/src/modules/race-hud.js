@@ -151,7 +151,7 @@ export function showWrongWay(show) {
 
 const ITEM_ICONS = {
   bowling_ball: '🎳', cake: '🎂', plunger: '🪠', missile: '🚀',
-  banana: '🍌', bubblegum: '🫧', zipper: '⚡', shield: '🛡️', swatter: '🪰',
+  banana: '🍌', bubblegum: '🫧', ludicrous_mode: '🔋', shield: '🛡️', swatter: '🪰',
   // Extreme weapons
   shockwave_cannon: '💥', thunderstrike: '⚡', black_hole: '🕳️',
   meteor_swarm: '☄️', frost_nova: '❄️', emp_pulse: '📡',
@@ -397,7 +397,7 @@ const WEAPON_ICON_MAP = {
   // Race-mode weapon names (different ID scheme)
   bowling_ball: '/textures/items/bowling-icon.png',
   missile: '/textures/items/bowling-icon.png',
-  zipper: '/textures/items/nitro.png',
+  ludicrous_mode: '/textures/items/nitro.png',
   shield: '/textures/items/bowling-icon.png',
 };
 

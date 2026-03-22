@@ -1,14 +1,13 @@
 /**
  * track-data.js — Central track metadata registry
  *
- * All courses are 100% procedurally generated at runtime. No static
- * STK/addon assets remain. Only kart GLTFs are imported assets.
+ * Tracks may be procedural or backed by shipped Babylon-ready GLBs.
  */
 
 import { resetKart } from './havok-physics.js';
 
 // ---------------------------------------------------------------------------
-// Registry — procedural courses only
+// Registry
 // ---------------------------------------------------------------------------
 
 const TRACK_REGISTRY = {
@@ -16,37 +15,25 @@ const TRACK_REGISTRY = {
   test_box: {
     type: 'procedural',
     scale: 1,
-    name: 'Test Box',
-    start: { x: 0, y: 2, z: 0 },
+    name: 'Block Fort',
+    start: { x: 0, y: 1, z: 0 },
     startHeading: 0,
     hasGates: false,
     hasDecorations: false,
     hasTrackOutline: false,
   },
 
-  // ── Procedural Demo Race Track ──────────────────────────────────────
-  glo_circuit: {
-    type: 'procedural',
-    scale: 1,
-    name: 'Glo Circuit',
-    start: { x: 0, y: 2, z: 0 },
-    startHeading: 0,
-    hasGates: false,
-    hasDecorations: true,
-    hasTrackOutline: false,
-  },
-
-  // ── Procedural Demo Battle Arena ────────────────────────────────────
+  // ── Default battle arena ────────────────────────────────────────────
   glo_arena: {
-    type: 'procedural-arena',
+    type: 'stk-arena',
     scale: 1,
     name: 'Glo Arena',
-    start: { x: 0, y: 2, z: 0 },
-    startHeading: 0,
-    halfSize: 65,
-    wallHeight: 5,
-    shape: 'circle',
+    arenaPath: '/models/stk/arenas/temple/arena.glb',
+    start: { x: 54.568, y: 5.123, z: 5.124 },
+    startHeading: 3.1416,
   },
+
+
 };
 
 // ---------------------------------------------------------------------------
@@ -66,8 +53,14 @@ export function getTrackInfo(mapId) {
   return TRACK_REGISTRY[mapId] || TRACK_REGISTRY.test_box;
 }
 
-export function isSTKTrack() { return false; }
-export function isSTKArena() { return false; }
+export function isSTKTrack(mapId) {
+  const info = getTrackInfo(mapId);
+  return info.type === 'stk-track';
+}
+export function isSTKArena(mapId) {
+  const info = getTrackInfo(mapId);
+  return info.type === 'stk-arena';
+}
 export function isCustomMap() { return false; }
 export function isAddonTrack() { return false; }
 
@@ -90,9 +83,10 @@ export function getAddonParams(mapId) {
   return null;
 }
 
-/** All courses are procedural — no model downloads. */
-export function getTrackModelPath() {
-  return null;
+/** Return .glb model path for STK entries, null for procedural ones. */
+export function getTrackModelPath(mapId) {
+  const info = getTrackInfo(mapId);
+  return info.arenaPath || info.trackPath || null;
 }
 
 /** Uniform scale to apply to the loaded .glb model. */

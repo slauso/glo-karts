@@ -17,7 +17,7 @@ test.describe('Track Builder Smoke Tests', () => {
     await page.goto(`${VITE}/builder.html`, { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(3000);
 
-    const canvasCount = await page.locator('canvas#builder-viewport').count();
+    const canvasCount = await page.locator('canvas#builder-canvas').count();
     expect(canvasCount).toBe(1);
 
     // No fatal errors
@@ -31,12 +31,10 @@ test.describe('Track Builder Smoke Tests', () => {
     await page.goto(`${VITE}/builder.html`, { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(2000);
 
-    // Should have segment buttons
-    const segmentBtns = await page.locator('.palette-btn[data-type="segment"]').count();
+    const segmentBtns = await page.locator('#segment-palette .palette-btn[data-tool]').count();
     expect(segmentBtns).toBeGreaterThanOrEqual(4);
 
-    // Should have obstacle buttons
-    const obstacleBtns = await page.locator('.palette-btn[data-type="obstacle"]').count();
+    const obstacleBtns = await page.locator('#obstacle-palette .palette-btn[data-tool]').count();
     expect(obstacleBtns).toBeGreaterThanOrEqual(2);
   });
 
@@ -47,8 +45,8 @@ test.describe('Track Builder Smoke Tests', () => {
       const mod = await import('/src/modules/track-editor.js');
       return {
         hasTrackEditor: typeof mod.TrackEditor === 'function',
-        hasSegmentTypes: Array.isArray(mod.SEGMENT_TYPES),
-        hasObstacleTypes: Array.isArray(mod.OBSTACLE_TYPES),
+        hasSegmentTypes: !!mod.SEGMENT_TYPES && Object.keys(mod.SEGMENT_TYPES).length >= 4,
+        hasObstacleTypes: !!mod.OBSTACLE_TYPES && Object.keys(mod.OBSTACLE_TYPES).length >= 2,
         hasGenerateGeometry: typeof mod.generateSegmentGeometry === 'function',
         hasExportCode: typeof mod.exportTrackCode === 'function',
         hasImportCode: typeof mod.importTrackCode === 'function',
@@ -74,12 +72,12 @@ test.describe('Track Builder Smoke Tests', () => {
       const { TrackEditor } = await import('/src/modules/track-editor.js');
       const editor = new TrackEditor();
 
-      editor.placeSegment('straight', { x: 0, y: 0, z: 0 });
-      editor.placeSegment('curve_left', { x: 10, y: 0, z: 0 });
-      const afterPlace = editor.exportTrack().segments.length;
+      editor.placeSegment('straight', 0, 0, 0);
+      editor.placeSegment('curve_left', 10, 0, 0);
+      const afterPlace = JSON.parse(editor.exportTrack()).segments.length;
 
-      editor.removeSegment(0);
-      const afterRemove = editor.exportTrack().segments.length;
+      editor.removeSegment(1);
+      const afterRemove = JSON.parse(editor.exportTrack()).segments.length;
 
       return { afterPlace, afterRemove };
     });
@@ -95,15 +93,15 @@ test.describe('Track Builder Smoke Tests', () => {
       const { TrackEditor } = await import('/src/modules/track-editor.js');
       const editor = new TrackEditor();
 
-      editor.placeSegment('straight', { x: 0, y: 0, z: 0 });
-      editor.placeSegment('ramp_up', { x: 10, y: 0, z: 0 });
-      const before = editor.exportTrack().segments.length;
+      editor.placeSegment('straight', 0, 0, 0);
+      editor.placeSegment('ramp_up', 10, 0, 0);
+      const before = JSON.parse(editor.exportTrack()).segments.length;
 
       editor.undo();
-      const afterUndo = editor.exportTrack().segments.length;
+      const afterUndo = JSON.parse(editor.exportTrack()).segments.length;
 
       editor.redo();
-      const afterRedo = editor.exportTrack().segments.length;
+      const afterRedo = JSON.parse(editor.exportTrack()).segments.length;
 
       return { before, afterUndo, afterRedo };
     });
@@ -119,18 +117,20 @@ test.describe('Track Builder Smoke Tests', () => {
     const result = await page.evaluate(async () => {
       const { TrackEditor } = await import('/src/modules/track-editor.js');
       const editor = new TrackEditor();
+      editor.trackName = 'Round Trip';
+      editor.trackAuthor = 'Playwright';
 
-      editor.placeSegment('straight', { x: 0, y: 0, z: 0 });
-      editor.placeSegment('curve_right', { x: 10, y: 0, z: 0 });
-      editor.placeObstacle('boost_pad', { x: 5, y: 0, z: 0 });
-      editor.addStartPosition({ x: 0, y: 1, z: -5 }, 0);
+      editor.placeSegment('straight', 0, 0, 0);
+      editor.placeSegment('curve_right', 10, 0, 0);
+      editor.placeObstacle('boost_pad', 5, 0, 0);
+      editor.addStartPosition(0, 1, -5, 0);
 
-      const exported = editor.exportTrack();
-      const json = JSON.stringify(exported);
+      const json = editor.exportTrack();
+      const exported = JSON.parse(json);
 
       const editor2 = new TrackEditor();
-      editor2.importTrack(JSON.parse(json));
-      const reimported = editor2.exportTrack();
+      editor2.importTrack(json);
+      const reimported = JSON.parse(editor2.exportTrack());
 
       return {
         segmentsMatch: reimported.segments.length === exported.segments.length,
@@ -153,14 +153,15 @@ test.describe('Track Builder Smoke Tests', () => {
       const { TrackEditor, exportTrackCode, importTrackCode } = await import('/src/modules/track-editor.js');
       const editor = new TrackEditor();
 
-      editor.placeSegment('straight', { x: 0, y: 0, z: 0 });
-      editor.placeSegment('flat_wide', { x: 10, y: 0, z: 0 });
+      editor.placeSegment('straight', 0, 0, 0);
+      editor.placeSegment('flat_wide', 10, 0, 0);
 
-      const trackData = editor.exportTrack();
-      const code = exportTrackCode(trackData);
+      const trackJson = editor.exportTrack();
+      const trackData = JSON.parse(trackJson);
+      const code = exportTrackCode(trackJson);
       const startsWithPrefix = code.startsWith('TK1:');
 
-      const decoded = importTrackCode(code);
+      const decoded = JSON.parse(importTrackCode(code));
       const segmentsMatch = decoded.segments.length === trackData.segments.length;
 
       return { startsWithPrefix, segmentsMatch };
@@ -191,9 +192,9 @@ test.describe('Track Builder Smoke Tests', () => {
     const result = await page.evaluate(async () => {
       const mod = await import('/src/game-modes.js');
       const registry = mod.MODE_REGISTRY || mod.default || {};
-      const categories = mod.CATEGORIES || [];
+      const categories = mod.CATEGORIES || {};
 
-      const hasToolsCat = categories.some(c => c.id === 'tools');
+      const hasToolsCat = !!categories.tools && categories.tools.id === 'tools';
       const hasBuilder = !!registry.track_builder;
       const builderCat = registry.track_builder?.category;
 
@@ -213,15 +214,16 @@ test.describe('Track Builder Smoke Tests', () => {
         = await import('/src/modules/track-editor.js');
       const editor = new TrackEditor();
 
-      editor.placeSegment('straight', { x: 0, y: 0, z: 0 });
-      const trackData = editor.exportTrack();
-      trackData.name = 'Test Track ' + Date.now();
+      editor.trackName = 'Test Track ' + Date.now();
+      editor.trackAuthor = 'Playwright';
+      editor.placeSegment('straight', 0, 0, 0);
+      const trackData = JSON.parse(editor.exportTrack());
 
       saveCustomTrack(trackData);
       const saved = getSavedCustomTracks();
       const found = saved.some(t => t.name === trackData.name);
 
-      removeCustomTrack(trackData.name);
+      removeCustomTrack(trackData.name, trackData.author);
       const afterRemove = getSavedCustomTracks();
       const stillFound = afterRemove.some(t => t.name === trackData.name);
 

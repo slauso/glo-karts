@@ -78,10 +78,10 @@ export const POWERS = Object.freeze({
   },
 
   // ─── Entropic Void (5-8) ──────────────────────────────────────────────
-  gravity_well: {
-    id: 'gravity_well', idx: 5, family: FAMILY.ENTROPIC_VOID,
-    label: 'Gravity Well', rarity: 0.12,
-    desc: 'Drop a radial force field that pulls nearby karts inward.',
+  pirateleportation: {
+    id: 'pirateleportation', idx: 5, family: FAMILY.ENTROPIC_VOID,
+    label: 'Pirateleportation', rarity: 0.12,
+    desc: 'Steal a random other player\'s item.',
     baseDuration: 5, cooldown: 12, surgeContrib: 5,
     effect: { type: 'radial_force', radius: 18, strength: 15, pull: true },
     havok: { radialImpulse: true, strengthScale: 1.0, damping: 0.98 },
@@ -259,7 +259,7 @@ export const SYNERGIES = Object.freeze({
     id: 'void_portal',
     label: 'Void Portal',
     family: FAMILY.ENTROPIC_VOID,
-    requires: ['gravity_well', 'dimensional_rift'],
+    requires: ['pirateleportation', 'dimensional_rift'],
     desc: 'Pull enemies into a swap-trap.',
     surgeMultiplier: 1.8,
     effect: { pullRadius: 22, swapOnContact: true },

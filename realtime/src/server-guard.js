@@ -24,6 +24,7 @@ export class RateLimiter {
       input:       { max: 70,  windowMs: 1000 },
       fireWeapon:  { max: 5,   windowMs: 1000 },
       pickupItem:  { max: 5,   windowMs: 1000 },
+      swapSecondaryWeapon: { max: 8, windowMs: 1000 },
       hit:         { max: 5,   windowMs: 1000 },
       checkpoint:  { max: 3,   windowMs: 5000 },
       ...limits,
@@ -79,7 +80,7 @@ export class RateLimiter {
 const MAX_DELTA_PER_TICK = 25;          // units (~40 m/s at 60Hz)
 const MAX_Y_VALUE        = 200;         // reasonable ceiling
 const MIN_Y_VALUE        = -50;         // reasonable floor
-const MAX_COORD          = 500;         // arena boundary guard
+const MAX_COORD          = 75;          // default arena boundary guard
 
 /**
  * Clamp a client-reported position to sane bounds and reject teleportation.
@@ -87,7 +88,7 @@ const MAX_COORD          = 500;         // arena boundary guard
  * @param {{ x: number, y: number, z: number }} prev — last accepted position
  * @param {{ x: number, y: number, z: number }} next — client-reported position
  */
-export function sanitizePosition(prev, next) {
+export function sanitizePosition(prev, next, maxCoord = MAX_COORD) {
   const dx = next.x - prev.x;
   const dy = next.y - prev.y;
   const dz = next.z - prev.z;
@@ -100,9 +101,9 @@ export function sanitizePosition(prev, next) {
 
   // Clamp to arena bounds
   return {
-    x: Math.max(-MAX_COORD, Math.min(MAX_COORD, next.x)),
+    x: Math.max(-maxCoord, Math.min(maxCoord, next.x)),
     y: Math.max(MIN_Y_VALUE, Math.min(MAX_Y_VALUE, next.y)),
-    z: Math.max(-MAX_COORD, Math.min(MAX_COORD, next.z)),
+    z: Math.max(-maxCoord, Math.min(maxCoord, next.z)),
   };
 }
 
@@ -110,19 +111,32 @@ export function sanitizePosition(prev, next) {
 
 const PICKUP_RANGE_SQ = 64; // 8 units squared — generous to account for client prediction
 
+function _isWithinPickupRangePoint(position, entity) {
+  const dx = position.x - entity.x;
+  const dy = position.y - entity.y;
+  const dz = position.z - entity.z;
+  return (dx * dx + dy * dy + dz * dz) < PICKUP_RANGE_SQ;
+}
+
 /**
  * Return true if the player is close enough to an entity to pick it up.
  */
 export function isWithinPickupRange(player, entity) {
-  const dx = player.x - entity.x;
-  const dy = player.y - entity.y;
-  const dz = player.z - entity.z;
-  return (dx * dx + dy * dy + dz * dz) < PICKUP_RANGE_SQ;
+  return _isWithinPickupRangePoint(player, entity);
+}
+
+export function isWithinPickupRangeWithClientPosition(player, entity, nextPosition) {
+  if (isWithinPickupRange(player, entity)) return true;
+  if (!nextPosition) return false;
+
+  const sanitized = sanitizePosition(player, nextPosition);
+  if (!sanitized) return false;
+  return _isWithinPickupRangePoint(sanitized, entity);
 }
 
 // ── Task 2.3.4: Projectile Spawn Origin Validation ─────────────────────
 
-const MAX_SPAWN_OFFSET = 5; // must be >= SPAWN_OFFSET (3.5) in combat.js
+const MAX_SPAWN_OFFSET = 8; // covers active zone/projectile spawn offsets in combat.js while keeping an authoritative bound
 
 /**
  * Return true if a projectile spawn position is within the expected offset

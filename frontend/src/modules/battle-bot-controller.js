@@ -16,8 +16,10 @@ import { TransformNode } from '@babylonjs/core/Meshes/transformNode';
 import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder';
 import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial';
 import { SceneLoader } from '@babylonjs/core/Loading/sceneLoader';
+import { Ray } from '@babylonjs/core/Culling/ray';
 import "@babylonjs/loaders/glTF";
-import { ALL_KARTS } from './content-registry.js';
+import { ALL_KARTS, getWeightStats } from './content-registry.js';
+import { pickPersonality, shouldUseItem, adaptStrategy, pickBattleTarget } from './ai/bot-personality.js';
 
 // ── Tuning ──────────────────────────────────────────────────────────────────
 
@@ -27,17 +29,31 @@ const BOT_BRAKE_FACTOR     = 0.80;
 const BOT_STEER_SPEED      = 5.0;   // rad/s
 const BOT_HEIGHT_OFFSET    = 0.3;
 const BOT_CHASE_RANGE      = 35;    // start chasing player
-const BOT_FIRE_RANGE       = 18;    // fire weapon range
-const BOT_FIRE_COOLDOWN    = 3.0;   // seconds between shots
+const BOT_FIRE_RANGE       = 25;    // fire weapon range (widened for smart AI)
+const BOT_FIRE_COOLDOWN    = 2.5;   // seconds between shots
 const BOT_WANDER_INTERVAL  = 4.0;   // seconds between picking new patrol target
 const STUCK_TIMEOUT        = 3.0;   // seconds before teleport
 const RESPAWN_INVULN_SEC   = 2.0;
 
+// 21.35 — Enhanced combat AI constants
+const FIRE_CONE_HALF_ANGLE = Math.PI / 6;  // 30° half-angle forward cone
+const WALL_RAY_LENGTH      = 6.0;          // wall avoidance raycast distance
+const WALL_RAY_ANGLE       = Math.PI / 6;  // 30° side rays
+const EVASION_SWERVE_SPEED = 8.0;          // rad/s swerve when evading
+const ITEM_SEEK_RANGE      = 30;           // seek item boxes within this range
+const ADAPT_INTERVAL       = 2.0;          // seconds between strategy adaptation
+const LEAD_PREDICTION_SEC  = 0.4;          // expert bots predict target position this far ahead
+
 const DIFFICULTY = [
-  { speedMul: 0.72, accuracy: 0.40, label: 'easy' },
-  { speedMul: 0.82, accuracy: 0.55, label: 'medium' },
-  { speedMul: 0.92, accuracy: 0.70, label: 'hard' },
-  { speedMul: 1.00, accuracy: 0.85, label: 'expert' },
+  { speedMul: 0.72, accuracy: 0.40, fireDelay: 1.4, leadFactor: 0.0, label: 'easy' },
+  { speedMul: 0.82, accuracy: 0.55, fireDelay: 0.8, leadFactor: 0.2, label: 'medium' },
+  { speedMul: 0.92, accuracy: 0.70, fireDelay: 0.3, leadFactor: 0.6, label: 'hard' },
+  { speedMul: 1.00, accuracy: 0.85, fireDelay: 0.0, leadFactor: 1.0, label: 'expert' },
+];
+
+const BOT_NAMES = [
+  'Blitz', 'Zippy', 'Vortex', 'Nitro', 'Shadow', 'Turbo', 'Flash', 'Phantom',
+  'Bolt', 'Scorcher', 'Havoc', 'Drift', 'Maverick', 'Rocket', 'Cyclone', 'Thunder',
 ];
 
 const BOT_KART_IDS = Object.keys(ALL_KARTS).filter(k => k !== 'default');
@@ -138,10 +154,15 @@ export function createBattleBots(scene, navmesh, spawnPositions, numBots = 4, pl
   const bots = [];
   const available = BOT_KART_IDS.filter(k => k !== playerKartId);
   const shuffled = shuffleArray([...available]);
+  const shuffledNames = shuffleArray([...BOT_NAMES]);
 
   for (let i = 0; i < Math.min(numBots, 8); i++) {
     const kartId = shuffled[i % shuffled.length];
     const diff = DIFFICULTY[Math.min(i, DIFFICULTY.length - 1)];
+    const weightStats = getWeightStats(kartId);
+
+    // Easy bots get light karts (forgiving handling), expert bots get varied
+    // Weight stats affect base health and speed
 
     // Spawn at arena spawn points (skip slot 0 which is for the player)
     const spawnIdx = (i + 1) % spawnPositions.length;
@@ -164,8 +185,10 @@ export function createBattleBots(scene, navmesh, spawnPositions, numBots = 4, pl
 
     const bot = {
       id: `battlebot-${i}`,
+      name: shuffledNames[i % shuffledNames.length],
       kartId,
       difficulty: diff,
+      personality: pickPersonality(Math.min(i, 3)),
       mesh: group,
       placeholder,
 
@@ -174,23 +197,42 @@ export function createBattleBots(scene, navmesh, spawnPositions, numBots = 4, pl
       heading: startHeading,
       speed: 0,
 
-      // Health
-      health: 100,
-      maxHealth: 100,
+      // Health (modified by weight class 21.36)
+      health: Math.round(100 * weightStats.healthMul),
+      maxHealth: Math.round(100 * weightStats.healthMul),
       alive: true,
       invulnTimer: 0,
+      weightStats,
 
       // Navmesh navigation
       currentFace: findNearestFace({ x: startPos[0], z: startPos[2] }, navmesh),
-      pathStack: [],         // face indices to follow
+      pathStack: [],
       targetFace: -1,
-      targetPos: null,       // THREE.Vector3 immediate waypoint
+      targetPos: null,
       wanderTimer: 0,
 
-      // Combat
+      // Combat (21.35 enhanced)
       currentWeapon: null,
+      weaponCategory: null,
       fireCooldown: BOT_FIRE_COOLDOWN * (0.5 + Math.random()),
       score: 0,
+      lastTargetPos: null,     // for lead prediction
+      lastTargetVel: null,     // estimated velocity of target
+
+      // Evasion (21.35)
+      evading: false,
+      evadeDir: 0,             // -1 or +1 swerve direction
+      evadeTimer: 0,
+
+      // Item seeking (21.35)
+      seekingItem: false,
+      itemTargetPos: null,
+
+      // Wall avoidance (21.35)
+      wallAvoidSteer: 0,       // accumulated avoidance steering
+
+      // Strategy adaptation timer
+      adaptTimer: ADAPT_INTERVAL * Math.random(),
 
       // Stuck detection
       stuckTimer: 0,
@@ -215,15 +257,18 @@ export function createBattleBots(scene, navmesh, spawnPositions, numBots = 4, pl
 /**
  * @param {Array}   bots
  * @param {number}  dt
- * @param {THREE.Object3D} playerCar  Player car mesh
+ * @param {Object}  playerCar  Player car mesh
  * @param {object}  battleState       {battleStarted, battleFinished}
  * @param {object}  navmesh
  * @param {Function|null} onBotFire   Callback(bot) when bot fires
+ * @param {Array|null}    itemBoxPositions  Active item box positions [{x,y,z}]
+ * @param {Array|null}    projectiles       Active projectile meshes for evasion
  */
-export function updateBattleBots(bots, dt, playerCar, battleState, navmesh, onBotFire = null) {
+export function updateBattleBots(bots, dt, playerCar, battleState, navmesh, onBotFire = null, itemBoxPositions = null, projectiles = null) {
   if (!battleState.battleStarted || battleState.battleFinished) return;
 
   const faceCenters = getFaceCenters(navmesh);
+  const scene = bots[0]?.mesh?.getScene?.() || null;
 
   for (const bot of bots) {
     if (!bot.alive) {
@@ -237,31 +282,102 @@ export function updateBattleBots(bots, dt, playerCar, battleState, navmesh, onBo
     // Invulnerability countdown
     if (bot.invulnTimer > 0) {
       bot.invulnTimer -= dt;
-      // Blink effect
       if (bot.mesh) bot.mesh.setEnabled(Math.floor(bot.invulnTimer * 6) % 2 === 0);
     } else {
       if (bot.mesh) bot.mesh.setEnabled(true);
     }
 
-    updateSingleBattleBot(bot, dt, playerCar, navmesh, faceCenters, onBotFire);
+    updateSingleBattleBot(bot, dt, playerCar, navmesh, faceCenters, onBotFire, scene, itemBoxPositions, projectiles);
   }
 }
 
-function updateSingleBattleBot(bot, dt, playerCar, navmesh, faceCenters, onBotFire) {
+function updateSingleBattleBot(bot, dt, playerCar, navmesh, faceCenters, onBotFire, scene, itemBoxPositions, projectiles) {
   const distToPlayer = playerCar
     ? Vector3.Distance(bot.position, playerCar.position)
     : Infinity;
 
-  const chasing = distToPlayer < BOT_CHASE_RANGE && playerCar;
+  // ── Strategy adaptation (21.35f) ──────────────────────────────────────
+  bot.adaptTimer -= dt;
+  if (bot.adaptTimer <= 0) {
+    bot.adaptTimer = ADAPT_INTERVAL;
+    adaptStrategy(bot.personality, {
+      positionRatio: 0.5,
+      healthPct: bot.health / bot.maxHealth,
+      matchTimeRemaining: Infinity,
+    });
+  }
+
+  // ── Evasion check — detect incoming projectiles (21.35c) ──────────────
+  bot.evading = false;
+  if (projectiles && projectiles.length > 0) {
+    for (const proj of projectiles) {
+      if (!proj || proj.isDisposed?.()) continue;
+      const pPos = proj.position || proj.getAbsolutePosition?.();
+      if (!pPos) continue;
+      const toBot = bot.position.subtract(pPos);
+      toBot.y = 0;
+      const dist = toBot.length();
+      if (dist < 12 && dist > 0.5) {
+        // Check if projectile is heading roughly toward us
+        const projVel = proj._vel || proj.metadata?.velocity;
+        if (projVel) {
+          const velDir = new Vector3(projVel.x || 0, 0, projVel.z || 0);
+          velDir.normalize();
+          toBot.normalize();
+          const dot = Vector3.Dot(velDir, toBot);
+          if (dot > 0.5) { // projectile heading toward bot
+            bot.evading = true;
+            // Swerve perpendicular to incoming direction
+            bot.evadeDir = (velDir.x * toBot.z - velDir.z * toBot.x) > 0 ? 1 : -1;
+            bot.evadeTimer = 0.4;
+            break;
+          }
+        }
+      }
+    }
+  }
+  // Continue evading for a short burst
+  if (bot.evadeTimer > 0) {
+    bot.evadeTimer -= dt;
+    bot.evading = true;
+  }
+
+  // ── Item seeking — go to nearest item box when no weapon (21.35d) ─────
+  bot.seekingItem = false;
+  if (!bot.currentWeapon && itemBoxPositions && itemBoxPositions.length > 0) {
+    let closestItem = null;
+    let closestDist = ITEM_SEEK_RANGE;
+    for (const ip of itemBoxPositions) {
+      const dx = bot.position.x - (ip.x ?? ip._x ?? 0);
+      const dz = bot.position.z - (ip.z ?? ip._z ?? 0);
+      const d = Math.sqrt(dx * dx + dz * dz);
+      if (d < closestDist) {
+        closestDist = d;
+        closestItem = ip;
+      }
+    }
+    if (closestItem) {
+      bot.seekingItem = true;
+      bot.itemTargetPos = new Vector3(
+        closestItem.x ?? closestItem._x ?? 0,
+        bot.position.y,
+        closestItem.z ?? closestItem._z ?? 0
+      );
+    }
+  }
+
+  const chasing = distToPlayer < BOT_CHASE_RANGE && playerCar && !bot.seekingItem;
 
   // ── Navigation target selection ───────────────────────────────────────
-  if (chasing) {
+  if (bot.seekingItem && bot.itemTargetPos) {
+    // Navigate toward nearest item box
+    bot.targetPos = bot.itemTargetPos;
+  } else if (chasing) {
     // Chase player: pathfind toward player's navmesh face
     const playerFace = findNearestFace(playerCar.position, navmesh);
     if (playerFace !== bot.targetFace || bot.pathStack.length === 0) {
       bot.targetFace = playerFace;
       bot.pathStack = bfsPath(bot.currentFace, playerFace, navmesh.adjacency);
-      // Skip current face in path
       if (bot.pathStack.length > 1 && bot.pathStack[0] === bot.currentFace) {
         bot.pathStack.shift();
       }
@@ -281,12 +397,11 @@ function updateSingleBattleBot(bot, dt, playerCar, navmesh, faceCenters, onBotFi
   }
 
   // ── Waypoint following ────────────────────────────────────────────────
-  if (bot.pathStack.length > 0) {
+  if (!bot.seekingItem && bot.pathStack.length > 0) {
     const nextFace = bot.pathStack[0];
     const center = faceCenters[nextFace];
     bot.targetPos = new Vector3(center[0], center[1] + BOT_HEIGHT_OFFSET, center[2]);
 
-    // If close enough to waypoint, advance to next
     const dxz = Math.hypot(bot.position.x - center[0], bot.position.z - center[2]);
     if (dxz < 3.0) {
       bot.currentFace = nextFace;
@@ -294,31 +409,75 @@ function updateSingleBattleBot(bot, dt, playerCar, navmesh, faceCenters, onBotFi
     }
   }
 
+  // ── Wall avoidance raycasts (21.35e) ──────────────────────────────────
+  bot.wallAvoidSteer = 0;
+  if (scene) {
+    const fwd = new Vector3(Math.sin(bot.heading), 0, Math.cos(bot.heading));
+    const origin = bot.position.add(new Vector3(0, 0.5, 0));
+
+    // 3 rays: center, left 30°, right 30°
+    const rays = [
+      { dir: fwd, weight: 0 },
+      { dir: _rotateY(fwd, WALL_RAY_ANGLE), weight: -1 },   // obstruction on left → steer right
+      { dir: _rotateY(fwd, -WALL_RAY_ANGLE), weight: 1 },   // obstruction on right → steer left
+    ];
+
+    for (const r of rays) {
+      const ray = new Ray(origin, r.dir, WALL_RAY_LENGTH);
+      const hit = scene.pickWithRay(ray, (m) => {
+        // Only hit static arena geometry, not bots/items
+        return m.isPickable && !m.name.startsWith('bot') && !m.name.startsWith('battlebot')
+          && !m.name.startsWith('item') && !m.name.startsWith('projectile');
+      });
+      if (hit?.hit && hit.distance < WALL_RAY_LENGTH) {
+        const urgency = 1 - (hit.distance / WALL_RAY_LENGTH);
+        if (r.weight === 0) {
+          // Center ray hit → steer whichever side is more open (default right)
+          bot.wallAvoidSteer += urgency * 2;
+        } else {
+          bot.wallAvoidSteer += r.weight * urgency * 3;
+        }
+      }
+    }
+  }
+
   // ── Steering ──────────────────────────────────────────────────────────
+  let steerTarget = bot.heading;
   if (bot.targetPos) {
     const dir = bot.targetPos.subtract(bot.position);
     dir.y = 0;
-    dir.normalize();
-    const targetHeading = Math.atan2(dir.x, dir.z);
-
-    let headingDiff = targetHeading - bot.heading;
-    while (headingDiff > Math.PI)  headingDiff -= Math.PI * 2;
-    while (headingDiff < -Math.PI) headingDiff += Math.PI * 2;
-
-    const sharpTurn = Math.abs(headingDiff) > 1.0;
-    bot.heading += headingDiff * Math.min(BOT_STEER_SPEED * dt, 1.0);
-
-    // ── Speed control ─────────────────────────────────────────────────
-    const effectiveMax = BOT_MAX_SPEED * bot.difficulty.speedMul;
-
-    if (sharpTurn && bot.speed > effectiveMax * 0.5) {
-      bot.speed *= BOT_BRAKE_FACTOR;
-    } else if (bot.speed < effectiveMax) {
-      bot.speed += BOT_ACCEL * dt;
+    if (dir.lengthSquared() > 0.01) {
+      dir.normalize();
+      steerTarget = Math.atan2(dir.x, dir.z);
     }
-    bot.speed = Math.min(bot.speed, effectiveMax);
-    bot.speed *= 0.98; // drag
   }
+
+  let headingDiff = steerTarget - bot.heading;
+  while (headingDiff > Math.PI)  headingDiff -= Math.PI * 2;
+  while (headingDiff < -Math.PI) headingDiff += Math.PI * 2;
+
+  // Apply evasion swerve (21.35c)
+  if (bot.evading) {
+    headingDiff += bot.evadeDir * EVASION_SWERVE_SPEED * dt;
+  }
+
+  // Apply wall avoidance (21.35e)
+  headingDiff += bot.wallAvoidSteer * dt * 2;
+
+  const sharpTurn = Math.abs(headingDiff) > 1.0;
+  const steerMul = bot.weightStats?.steerMul || 1;
+  bot.heading += headingDiff * Math.min(BOT_STEER_SPEED * steerMul * dt, 1.0);
+
+  // ── Speed control (with weight class 21.36) ────────────────────────
+  const effectiveMax = BOT_MAX_SPEED * bot.difficulty.speedMul * (bot.personality.speedBias || 1) * (bot.weightStats?.speedMul || 1);
+
+  if (sharpTurn && bot.speed > effectiveMax * 0.5) {
+    bot.speed *= BOT_BRAKE_FACTOR;
+  } else if (bot.speed < effectiveMax) {
+    bot.speed += BOT_ACCEL * dt;
+  }
+  bot.speed = Math.min(bot.speed, effectiveMax);
+  bot.speed *= 0.98; // drag
 
   // ── Move forward ──────────────────────────────────────────────────────
   const forward = new Vector3(Math.sin(bot.heading), 0, Math.cos(bot.heading));
@@ -340,14 +499,57 @@ function updateSingleBattleBot(bot, dt, playerCar, navmesh, faceCenters, onBotFi
   // Update current face
   bot.currentFace = findNearestFace(bot.position, navmesh);
 
-  // ── Combat ────────────────────────────────────────────────────────────
+  // ── Enhanced Combat (21.35a/b) ────────────────────────────────────────
   bot.fireCooldown -= dt;
 
-  if (chasing && distToPlayer < BOT_FIRE_RANGE && bot.fireCooldown <= 0) {
-    // Accuracy check: only fire if accuracy roll succeeds
-    if (Math.random() < bot.difficulty.accuracy) {
-      if (onBotFire) onBotFire(bot);
-      bot.fireCooldown = BOT_FIRE_COOLDOWN * (0.8 + Math.random() * 0.4);
+  if (chasing && playerCar && distToPlayer < BOT_FIRE_RANGE && bot.fireCooldown <= 0) {
+    // (a) Forward cone check — only fire if target is in front arc
+    const toPlayer = playerCar.position.subtract(bot.position);
+    toPlayer.y = 0;
+    if (toPlayer.lengthSquared() > 0.01) {
+      toPlayer.normalize();
+      const fwdDir = new Vector3(Math.sin(bot.heading), 0, Math.cos(bot.heading));
+      const dot = Vector3.Dot(fwdDir, toPlayer);
+      const angleToTarget = Math.acos(Math.min(1, Math.max(-1, dot)));
+
+      if (angleToTarget < FIRE_CONE_HALF_ANGLE) {
+        // (b) Weapon intelligence — use bot-personality.js shouldUseItem
+        const weaponCategory = bot.weaponCategory || 'projectile';
+        const enemyBehind = _isEnemyBehind(bot, playerCar.position);
+        const decision = shouldUseItem(bot.personality, {
+          heldItemId: bot.currentWeapon,
+          heldCategory: weaponCategory,
+          distToNearest: distToPlayer,
+          enemyAhead: true, // already checked cone
+          enemyBehind,
+          healthPct: bot.health / bot.maxHealth,
+          positionRatio: 0.5,
+        });
+
+        if (decision.shouldUse) {
+          // Difficulty-based fire delay (21.35f): easy bots hesitate
+          const delayChance = 1 - (bot.difficulty.fireDelay / BOT_FIRE_COOLDOWN);
+          if (Math.random() < delayChance) {
+            // Accuracy check with lead prediction for experts
+            if (Math.random() < bot.difficulty.accuracy) {
+              if (onBotFire) onBotFire(bot, decision.targetForward);
+              bot.currentWeapon = null;
+              bot.weaponCategory = null;
+            }
+            bot.fireCooldown = BOT_FIRE_COOLDOWN * (0.8 + Math.random() * 0.4);
+          }
+        }
+      }
+    }
+  }
+
+  // Drop traps when enemy is behind (21.35b)
+  if (bot.currentWeapon && bot.weaponCategory === 'trap' && playerCar && bot.fireCooldown <= 0) {
+    if (_isEnemyBehind(bot, playerCar.position) && distToPlayer < 15) {
+      if (onBotFire) onBotFire(bot, false); // fire backward = drop trap
+      bot.currentWeapon = null;
+      bot.weaponCategory = null;
+      bot.fireCooldown = BOT_FIRE_COOLDOWN;
     }
   }
 
@@ -356,7 +558,6 @@ function updateSingleBattleBot(bot, dt, playerCar, navmesh, faceCenters, onBotFi
   if (moved < 0.5 * dt * 10) {
     bot.stuckTimer += dt;
     if (bot.stuckTimer > STUCK_TIMEOUT) {
-      // Teleport to a random face
       const randomFace = Math.floor(Math.random() * navmesh.faces.length);
       const c = faceCenters[randomFace];
       bot.position.copyFromFloats(c[0], c[1] + BOT_HEIGHT_OFFSET, c[2]);
@@ -369,6 +570,46 @@ function updateSingleBattleBot(bot, dt, playerCar, navmesh, faceCenters, onBotFi
     bot.stuckTimer = 0;
   }
   bot.lastPosition.copyFromFloats(bot.position.x, 0, bot.position.z);
+}
+
+// ── Combat helpers (21.35) ──────────────────────────────────────────────────
+
+/** Check if an enemy position is behind the bot. */
+function _isEnemyBehind(bot, enemyPos) {
+  const toEnemy = enemyPos.subtract(bot.position);
+  toEnemy.y = 0;
+  if (toEnemy.lengthSquared() < 0.01) return false;
+  toEnemy.normalize();
+  const fwd = new Vector3(Math.sin(bot.heading), 0, Math.cos(bot.heading));
+  return Vector3.Dot(fwd, toEnemy) < -0.3;
+}
+
+/** Rotate a Vector3 around Y axis by angle (radians). */
+function _rotateY(v, angle) {
+  const cos = Math.cos(angle);
+  const sin = Math.sin(angle);
+  return new Vector3(v.x * cos + v.z * sin, 0, -v.x * sin + v.z * cos);
+}
+
+/**
+ * Give a weapon to a bot (called externally when bot collects item box).
+ * @param {object} bot
+ * @param {string} weaponId
+ * @param {string} category — 'projectile'|'trap'|'buff'|'defence'|'melee'|'homing'
+ */
+export function giveBotWeapon(bot, weaponId, category = 'projectile') {
+  bot.currentWeapon = weaponId;
+  bot.weaponCategory = category;
+}
+
+/**
+ * Get the lead-predicted target position for expert bots.
+ * Returns the player's predicted position based on velocity estimation.
+ */
+export function getLeadPredictedTarget(bot, targetPos, targetVel) {
+  if (bot.difficulty.leadFactor <= 0 || !targetVel) return targetPos;
+  const leadTime = LEAD_PREDICTION_SEC * bot.difficulty.leadFactor;
+  return targetPos.add(targetVel.scale(leadTime));
 }
 
 // ── Damage & respawn ────────────────────────────────────────────────────────
@@ -417,10 +658,9 @@ export function getBattleScoreboard(bots, playerScore, playerName = 'You') {
   ];
 
   for (const bot of bots) {
-    const label = ALL_KARTS[bot.kartId]?.label || bot.kartId;
     entries.push({
       id: bot.id,
-      name: label,
+      name: bot.name || ALL_KARTS[bot.kartId]?.label || bot.kartId,
       score: bot.score,
       health: bot.health,
     });

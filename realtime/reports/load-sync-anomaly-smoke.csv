@@ -1,0 +1,2 @@
+label,generatedAt,roomName,endpoint,players,patchAvg,patchP95,patchMax,patchSamples,fullStateAvg,fullStateMax,fullStateSamples,rttAvg,rttP95,rttMax,rttSamples,avgTickDriftMs,avgInputAgeMs,maxInputAgeMs,staleInputDrops,outOfOrderInputDrops,patchRateMs,authoritative,metricSamples,anomalyEvents,anomalyPayloadBytes,anomalyProjectilesFired,anomalyProjectileHits,anomalyEffectsApplied,arenaEffectsApplied,apocalypseBursts
+anomaly-smoke,2026-03-12T22:32:57.261Z,battle_room,ws://127.0.0.1:2567,2,101.38,135,248,414,765.5,844,2,0.75,1,1,8,8.72,40.16,65,0,0,16.67,true,4,4,216,0,0,2,0,0

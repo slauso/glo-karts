@@ -28,6 +28,7 @@ import {
   TrailMesh,
   SpotLight,
 } from "@babylonjs/core";
+import { runtimeFXBudget, runtimePressure } from '../perf-tier.js';
 
 // ═══════════════════════════════════════════════════════════════════════════
 //  SHADER SOURCE (registered once via Effect.ShadersStore)
@@ -276,13 +277,18 @@ export function createGloUnderglow(scene, kartMesh, opts = {}) {
   const effect   = opts.effect || 'solid';
   const color    = opts.color  || '#ff0080';
   const color2   = opts.color2 || '#00e5ff';
-  const trailLen = opts.trailLength || 60;
+  const isRemote = !!opts.isRemote;
+  const trailLen = opts.trailLength || (isRemote ? 36 : 60);
+  const enableLight = opts.enableLight !== false;
+  const runtimeManagedLight = opts.runtimeManagedLight !== false;
 
   // ── SpotLight underglow (primary — real scene illumination) ─────────────
   // A coloured SpotLight pointing straight down from the kart's underside.
   // This is how real underglow works: LEDs illuminate the ground beneath.
   // The spotlight creates a natural, circular pool of light on any surface.
-  const spot = new SpotLight(
+  let spot = null;
+  if (enableLight) {
+    spot = new SpotLight(
     `glo-spot-${id}`,
     new Vector3(0, 0, 0),      // position set via parent
     new Vector3(0, -1, 0),     // straight down
@@ -291,13 +297,14 @@ export function createGloUnderglow(scene, kartMesh, opts = {}) {
     scene,
   );
   spot.parent = kartMesh;
-  spot.position.set(0, 0.1, 0);         // just above kart centre, shines down through body
-  spot.diffuse  = Color3.FromHexString(color);
+  spot.position.set(0, 0.1, 0);
+  spot.diffuse = Color3.FromHexString(color);
   spot.specular = Color3.FromHexString(color).scale(0.2);
-  spot.intensity = 3.0;
-  spot.range     = 6;
+  spot.intensity = isRemote ? 1.6 : 3.0;
+  spot.range = isRemote ? 4.2 : 6;
   // Don't illuminate the kart itself — only the ground/walls/surroundings
   spot.excludedMeshes = [kartMesh, ...kartMesh.getChildMeshes(false)];
+  }
 
   // ── Accent disc (secondary — subtle additive glow haze) ───────────────
   // A small circular mesh with soft radial shader. This is NOT the main effect
@@ -356,7 +363,7 @@ export function createGloUnderglow(scene, kartMesh, opts = {}) {
   // Start hidden — caller reveals at GO
   decal.isVisible = false;
   trail.isVisible = false;
-  spot.setEnabled(false);
+  if (spot) spot.setEnabled(false);
 
   return {
     decal, decalMat,
@@ -367,6 +374,9 @@ export function createGloUnderglow(scene, kartMesh, opts = {}) {
     trailLength: trailLen,
     time: 0,
     visible: false,
+    isRemote,
+    runtimeManagedLight,
+    _updateAccumulator: 0,
   };
 }
 
@@ -379,24 +389,39 @@ export function createGloUnderglow(scene, kartMesh, opts = {}) {
 export function updateGloUnderglow(glo, dt) {
   if (!glo || !glo.kartMesh) return;
 
+  glo._updateAccumulator = (glo._updateAccumulator || 0) + dt;
+  const pressure = runtimePressure();
+  const minStep = glo.isRemote
+    ? (pressure > 0.72 ? 0.09 : pressure > 0.45 ? 0.05 : 0.025)
+    : 0;
+  if (minStep > 0 && glo._updateAccumulator < minStep) return;
+  dt = glo._updateAccumulator;
+  glo._updateAccumulator = 0;
+
   glo.time += dt;
   const { color, intensity } = resolveGloColor(glo.effect, glo.color, glo.color2, glo.time);
+  const fxBudget = runtimeFXBudget();
+  const finalIntensity = intensity * (glo.isRemote ? 0.72 : 0.94) * Math.max(glo.isRemote ? 0.45 : 0.6, fxBudget);
 
   // Update decal shader uniforms
   glo.decalMat.setFloat("time", glo.time);
-  glo.decalMat.setFloat("intensity", intensity);
+  glo.decalMat.setFloat("intensity", finalIntensity);
   glo.decalMat.setColor3("gloColor", color);
 
   // Update trail shader uniforms
   glo.trailMat.setFloat("time", glo.time);
-  glo.trailMat.setFloat("intensity", intensity);
+  glo.trailMat.setFloat("intensity", finalIntensity);
   glo.trailMat.setColor3("gloColor", color);
 
   // Update SpotLight colour + intensity
   if (glo.spot) {
+    const allowLight = glo.visible
+      && (!glo.runtimeManagedLight || (!glo.isRemote && pressure < 0.78) || (glo.isRemote && pressure < 0.34));
+    glo.spot.setEnabled(allowLight);
+    if (!allowLight) return;
     glo.spot.diffuse.copyFrom(color);
     glo.spot.specular.copyFrom(color).scaleInPlace(0.2);
-    glo.spot.intensity = intensity * 3.5;
+    glo.spot.intensity = finalIntensity * (glo.isRemote ? 1.45 : 3.1);
   }
 
   // Decal is parented to kartMesh — no world-space tracking needed.

@@ -6,7 +6,7 @@ export class RaceState extends Schema {
   constructor() {
     super();
     this.mode = "race";
-    this.trackId = "cocoa_temple";
+    this.trackId = "test_box";
     this.started = false;
     this.serverTime = 0;
     this.totalLaps = 3;     // configurable per-lobby

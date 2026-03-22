@@ -13,15 +13,15 @@ export const WEAPON_DEFS = {
   missile:      { name: 'Missile',      icon: '🚀', category: 'homing',     speed: 48, damage: 35, lifetime: 4, bounces: 0, cooldown: 0.6 },
   banana:       { name: 'Banana',       icon: '🍌', category: 'trap',       speed: 0,  damage: 5,  lifetime: 18, bounces: 0, cooldown: 0.2 },
   bubblegum:    { name: 'Bubblegum',    icon: '🫧', category: 'trap',       speed: 0,  damage: 10, lifetime: 15, bounces: 0, cooldown: 0.2 },
-  zipper:       { name: 'Zipper',       icon: '⚡', category: 'buff',       speed: 0,  damage: 0,  lifetime: 0, bounces: 0, cooldown: 0, boostFactor: 1.6, boostDuration: 3.0 },
+  ludicrous_mode: { name: 'Ludicrous Mode', icon: '🔋', category: 'buff',       speed: 0,  damage: 0,  lifetime: 0, bounces: 0, cooldown: 0, boostFactor: 2.0, boostDuration: 5.0 },
   shield:       { name: 'Shield',       icon: '🛡️', category: 'defence',    speed: 0,  damage: 0,  lifetime: 10, bounces: 0, cooldown: 0 },
   swatter:      { name: 'Swatter',      icon: '🪰', category: 'melee',      speed: 0,  damage: 40, lifetime: 0, bounces: 0, cooldown: 1.0, hitRadius: 6 },
 };
 
 // Position-weighted draw tables (mirrors race-items.js)
-const BACK_WEIGHTS  = { bowling_ball: 3, cake: 3, missile: 4, plunger: 2, banana: 1, bubblegum: 1, zipper: 5, shield: 2, swatter: 2 };
-const MID_WEIGHTS   = { bowling_ball: 3, cake: 2, missile: 2, plunger: 2, banana: 3, bubblegum: 3, zipper: 2, shield: 3, swatter: 2 };
-const FRONT_WEIGHTS = { bowling_ball: 1, cake: 1, missile: 1, plunger: 1, banana: 5, bubblegum: 4, zipper: 1, shield: 4, swatter: 1 };
+const BACK_WEIGHTS  = { bowling_ball: 3, cake: 3, missile: 4, plunger: 2, banana: 1, bubblegum: 1, ludicrous_mode: 5, shield: 2, swatter: 2 };
+const MID_WEIGHTS   = { bowling_ball: 3, cake: 2, missile: 2, plunger: 2, banana: 3, bubblegum: 3, ludicrous_mode: 2, shield: 3, swatter: 2 };
+const FRONT_WEIGHTS = { bowling_ball: 1, cake: 1, missile: 1, plunger: 1, banana: 5, bubblegum: 4, ludicrous_mode: 1, shield: 4, swatter: 1 };
 
 /**
  * Draw a random weapon based on race position.
@@ -78,9 +78,10 @@ export class WeaponSlot {
    * Use the current weapon. Returns fire spec or null.
    * @param {{ x:number, y:number, z:number, heading:number }} origin
    * @param {string} [targetId] — for homing weapons
+   * @param {boolean} [backward] — fire in reverse direction
    * @returns {object|null}
    */
-  fire(origin, targetId) {
+  fire(origin, targetId, backward) {
     if (!this.canFire()) return null;
 
     const def = this.def;
@@ -128,8 +129,9 @@ export class WeaponSlot {
     }
 
     // Projectile or homing
-    const vx = Math.sin(origin.heading) * def.speed;
-    const vz = Math.cos(origin.heading) * def.speed;
+    const dirSign = backward ? -1 : 1;
+    const vx = Math.sin(origin.heading) * def.speed * dirSign;
+    const vz = Math.cos(origin.heading) * def.speed * dirSign;
     return {
       type: def.category === 'homing' ? 'homing' : 'ballistic',
       weaponId: wId,
@@ -164,7 +166,7 @@ export class WeaponSlot {
 
   /** @returns {boolean} Whether a speed boost buff is active. */
   hasBoost() {
-    return this.activeBuff?.type === 'zipper';
+    return this.activeBuff?.type === 'ludicrous_mode';
   }
 
   /** @returns {number} Boost multiplier (1.0 if none). */

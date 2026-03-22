@@ -29,10 +29,25 @@ export function createGloFluxClient(opts = {}) {
     sessionId: null,
     players: new Map(),        // sessionId → synced player data
     powerSpawns: [],           // server-authoritative spawns
+    telemetry: {
+      arenaSeed: 0,
+      activeCoreCount: 0,
+      totalCoreCollections: 0,
+      totalChainBursts: 0,
+      activeChainPeak: 0,
+      longestChain: 0,
+      patchVersion: 0,
+      totalSurgeEvents: 0,
+      highestSurgeMeter: 0,
+      apocalypseBursts: 0,
+      anomalyCoreCollections: 0,
+      anomalyChainBursts: 0,
+    },
     surgeStates: new Map(),    // sessionId → surge data
     mutationStates: new Map(), // sessionId → mutation data
     callbacks: {},
     disposed: false,
+    metricsPollInterval: null,
   };
 
   return {
@@ -40,6 +55,7 @@ export function createGloFluxClient(opts = {}) {
     get sessionId() { return state.sessionId; },
     get players() { return state.players; },
     get powerSpawns() { return state.powerSpawns; },
+    get telemetry() { return state.telemetry; },
     get room() { return state.room; },
 
     /**
@@ -51,12 +67,29 @@ export function createGloFluxClient(opts = {}) {
       const joinOpts = opts.joinOptions || {};
 
       try {
-        state.room = await colyseusClient.joinOrCreate(roomName, joinOpts);
+        // 20.22 — if a party code is provided, try to join existing room first
+        if (joinOpts.partyCode) {
+          try {
+            const rooms = await colyseusClient.getAvailableRooms(roomName);
+            const partyRoom = rooms.find(r => r.metadata?.partyCode === joinOpts.partyCode);
+            if (partyRoom) {
+              state.room = await colyseusClient.joinById(partyRoom.roomId, joinOpts);
+            } else {
+              state.room = await colyseusClient.create(roomName, joinOpts);
+            }
+          } catch (_) {
+            state.room = await colyseusClient.joinOrCreate(roomName, joinOpts);
+          }
+        } else {
+          state.room = await colyseusClient.joinOrCreate(roomName, joinOpts);
+        }
+
         state.sessionId = state.room.sessionId;
         state.connected = true;
 
         setupStateHandlers(state);
         setupMessageHandlers(state);
+        startMetricsPolling(state);
 
         console.log(`[gloFLUX-net] Connected to room ${roomName}, session=${state.sessionId}`);
       } catch (err) {
@@ -121,6 +154,24 @@ export function createGloFluxClient(opts = {}) {
       state.room.send('triggerStart', {});
     },
 
+    /** 20.15 — Vote for rematch after results. */
+    requestRematch() {
+      if (!state.room || state.disposed) return;
+      state.room.send('rematchVote', {});
+    },
+
+    /** 20.15 — Request return to menu. */
+    requestReturn() {
+      if (!state.room || state.disposed) return;
+      state.room.send('returnToMenu', {});
+    },
+
+    /** 20.16 — Request spectator mode. */
+    requestSpectate() {
+      if (!state.room || state.disposed) return;
+      state.room.send('spectate', {});
+    },
+
     /**
      * Register a callback.
      * @param {string} event
@@ -144,6 +195,7 @@ export function createGloFluxClient(opts = {}) {
       state.players.clear();
       state.surgeStates.clear();
       state.mutationStates.clear();
+      stopMetricsPolling(state);
       state.callbacks = {};
     },
   };
@@ -155,6 +207,22 @@ function setupStateHandlers(state) {
   const room = state.room;
   if (!room?.state) return;
 
+  const syncTelemetry = () => {
+    state.telemetry = {
+      ...state.telemetry,
+      arenaSeed: Number(room.state.arenaSeed || 0),
+      activeCoreCount: Number(room.state.activeCoreCount || 0),
+      totalCoreCollections: Number(room.state.totalCoreCollections || 0),
+      totalChainBursts: Number(room.state.totalChainBursts || 0),
+      activeChainPeak: Number(room.state.activeChainPeak || 0),
+      longestChain: Number(room.state.longestChain || 0),
+    };
+    emit(state, 'telemetry', state.telemetry);
+  };
+
+  syncTelemetry();
+  room.state.onChange?.(() => syncTelemetry());
+
   if (room.state.powerSpawns) {
     const syncPowerSpawns = () => {
       state.powerSpawns = Array.from(room.state.powerSpawns, (spawn, idx) => ({
@@ -165,6 +233,7 @@ function setupStateHandlers(state) {
         powerId: spawn.powerId,
         collected: spawn.collected,
       }));
+      syncTelemetry();
     };
 
     syncPowerSpawns();
@@ -224,6 +293,35 @@ function setupMessageHandlers(state) {
   const room = state.room;
   if (!room) return;
 
+  room.onMessage('joined', (msg) => {
+    emit(state, 'joined', msg);
+  });
+
+  room.onMessage('syncMetricsSnapshot', (msg = {}) => {
+    state.telemetry = {
+      ...state.telemetry,
+      patchVersion: Number(msg.patchVersion || state.telemetry.patchVersion || 0),
+      totalSurgeEvents: Number(msg.totalSurgeEvents || state.telemetry.totalSurgeEvents || 0),
+      highestSurgeMeter: Number(msg.highestSurgeMeter || state.telemetry.highestSurgeMeter || 0),
+      apocalypseBursts: Number(msg.apocalypseBursts || 0),
+      anomalyCoreCollections: Number(msg.anomalyCoreCollections || 0),
+      anomalyChainBursts: Number(msg.anomalyChainBursts || 0),
+    };
+    emit(state, 'telemetry', state.telemetry);
+  });
+
+  room.onMessage('chainActivated', (msg) => {
+    if (msg?.surgeMeter != null) {
+      state.telemetry = {
+        ...state.telemetry,
+        totalSurgeEvents: state.telemetry.totalSurgeEvents + 1,
+        highestSurgeMeter: Math.max(state.telemetry.highestSurgeMeter, Number(msg.surgeMeter || 0)),
+        patchVersion: Math.max(state.telemetry.patchVersion, Number(msg.patchVersion || 0)),
+      };
+    }
+    emit(state, 'chainActivated', msg);
+  });
+
   // Server grants power-up collection
   room.onMessage('powerGranted', (msg) => {
     emit(state, 'powerGranted', msg);
@@ -265,6 +363,28 @@ function setupMessageHandlers(state) {
     emit(state, 'matchLive', {});
   });
 
+  // 20.15 — phase transitions from server
+  room.onMessage('phaseChange', (msg) => {
+    emit(state, 'phaseChange', msg);
+  });
+
+  room.onMessage('matchResults', (msg) => {
+    emit(state, 'matchResults', msg);
+  });
+
+  room.onMessage('rematchStatus', (msg) => {
+    emit(state, 'rematchStatus', msg);
+  });
+
+  room.onMessage('rematchStarting', () => {
+    emit(state, 'rematchStarting', {});
+  });
+
+  // 20.16 — spectate confirmation
+  room.onMessage('spectateConfirmed', (msg) => {
+    emit(state, 'spectateConfirmed', msg);
+  });
+
   // Power-up respawn broadcast
   room.onMessage('powerRespawn', (msg) => {
     emit(state, 'powerRespawn', msg);
@@ -272,6 +392,7 @@ function setupMessageHandlers(state) {
 
   room.onLeave(() => {
     state.connected = false;
+    stopMetricsPolling(state);
     emit(state, 'disconnected', {});
   });
 
@@ -287,4 +408,23 @@ function emit(state, event, data) {
   for (const cb of cbs) {
     try { cb(data); } catch (e) { console.error(`[gloFLUX-net] callback error:`, e); }
   }
+}
+
+function startMetricsPolling(state) {
+  stopMetricsPolling(state);
+  if (!state.room) return;
+
+  const pollMetrics = () => {
+    if (!state.room || state.disposed) return;
+    state.room.send('syncMetricsRequest', {});
+  };
+
+  pollMetrics();
+  state.metricsPollInterval = window.setInterval(pollMetrics, 1000);
+}
+
+function stopMetricsPolling(state) {
+  if (!state.metricsPollInterval) return;
+  window.clearInterval(state.metricsPollInterval);
+  state.metricsPollInterval = null;
 }

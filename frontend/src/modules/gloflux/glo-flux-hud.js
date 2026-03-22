@@ -59,6 +59,17 @@ export function createHUDState() {
     burstProgress: 0,
     playerCount: 0,
     placement: 0,
+    telemetry: {
+      arenaSeed: 0,
+      activeCoreCount: 0,
+      totalCoreCollections: 0,
+      totalChainBursts: 0,
+      activeChainPeak: 0,
+      longestChain: 0,
+      apocalypseBursts: 0,
+      anomalyCoreCollections: 0,
+      anomalyChainBursts: 0,
+    },
     canvas: null,
     ctx: null,
   };
@@ -70,12 +81,20 @@ export function createHUDState() {
  * Sync HUD state from game systems.
  */
 export function updateSurge(hud, surgeState) {
-  hud.surgePercent = surgeState.current / 100;
-  hud.surgeTier = surgeState.tier;
-  hud.surgeDominantFamily = surgeState.dominantContributorFamily;
-  hud.isBursting = surgeState.burstActive;
-  hud.burstProgress = surgeState.burstActive
-    ? (Date.now() - surgeState.burstStartTime) / (surgeState.burstDuration || 4000)
+  const current = Number.isFinite(Number(surgeState?.current)) ? Number(surgeState.current) : 0;
+  const tier = surgeState?.tier ?? SURGE_TIER.DORMANT;
+  const burstActive = !!surgeState?.burstActive;
+  const burstStartTime = Number.isFinite(Number(surgeState?.burstStartTime)) ? Number(surgeState.burstStartTime) : Date.now();
+  const burstDuration = Number.isFinite(Number(surgeState?.burstDuration)) && Number(surgeState.burstDuration) > 0
+    ? Number(surgeState.burstDuration)
+    : 4000;
+
+  hud.surgePercent = current / 100;
+  hud.surgeTier = tier;
+  hud.surgeDominantFamily = surgeState?.dominantContributorFamily || null;
+  hud.isBursting = burstActive;
+  hud.burstProgress = burstActive
+    ? (Date.now() - burstStartTime) / burstDuration
     : 0;
 }
 
@@ -123,6 +142,21 @@ export function updateRadar(hud, blips) {
   hud.radarBlips = blips; // [{x, z, type: 'enemy'|'power'|'hazard'}]
 }
 
+export function updateTelemetry(hud, telemetry = {}) {
+  hud.telemetry = {
+    ...hud.telemetry,
+    arenaSeed: Number(telemetry.arenaSeed || 0),
+    activeCoreCount: Number(telemetry.activeCoreCount || 0),
+    totalCoreCollections: Number(telemetry.totalCoreCollections || 0),
+    totalChainBursts: Number(telemetry.totalChainBursts || 0),
+    activeChainPeak: Number(telemetry.activeChainPeak || 0),
+    longestChain: Number(telemetry.longestChain || 0),
+    apocalypseBursts: Number(telemetry.apocalypseBursts || 0),
+    anomalyCoreCollections: Number(telemetry.anomalyCoreCollections || 0),
+    anomalyChainBursts: Number(telemetry.anomalyChainBursts || 0),
+  };
+}
+
 // ── Render ──────────────────────────────────────────────────────────────────
 
 /**
@@ -168,6 +202,7 @@ export function renderHUD(hud) {
   drawRadar(ctx, hud, W, H);
   drawTimerLap(ctx, hud, W, H);
   drawHealthBar(ctx, hud, W, H);
+  drawTelemetryPanel(ctx, hud, W, H);
 
   if (hud.isBursting) drawApocalypseBurstOverlay(ctx, hud, W, H);
 }
@@ -395,6 +430,35 @@ function drawHealthBar(ctx, hud, _W, H) {
   ctx.fillText(`${Math.ceil(hud.health)}`, x + barW / 2, y + barH - 1);
 }
 
+function drawTelemetryPanel(ctx, hud, W, _H) {
+  const x = W - HUD_PADDING - 210;
+  const y = HUD_PADDING + 100;
+  const telemetry = hud.telemetry || {};
+
+  ctx.fillStyle = 'rgba(5,10,18,0.78)';
+  roundRect(ctx, x, y, 210, 92, 8);
+  ctx.fill();
+
+  ctx.strokeStyle = 'rgba(120,230,255,0.45)';
+  ctx.lineWidth = 1.5;
+  roundRect(ctx, x, y, 210, 92, 8);
+  ctx.stroke();
+
+  ctx.textAlign = 'left';
+  ctx.fillStyle = '#c9fbff';
+  ctx.font = 'bold 11px monospace';
+  ctx.fillText(`ANOMALY SEED ${telemetry.arenaSeed || 0}`, x + 10, y + 16);
+
+  ctx.font = '10px monospace';
+  ctx.fillStyle = '#9bd0ff';
+  ctx.fillText(`CORES ${telemetry.activeCoreCount || 0} LIVE / ${telemetry.totalCoreCollections || 0} TAKEN`, x + 10, y + 34);
+  ctx.fillText(`CHAIN ${telemetry.activeChainPeak || 0} LIVE / ${telemetry.longestChain || 0} BEST`, x + 10, y + 50);
+  ctx.fillText(`BURSTS ${telemetry.totalChainBursts || 0} CHAIN / ${telemetry.apocalypseBursts || 0} APOC`, x + 10, y + 66);
+
+  ctx.fillStyle = '#ffd36a';
+  ctx.fillText(`SYNC ${telemetry.anomalyCoreCollections || 0} CORE EVT / ${telemetry.anomalyChainBursts || 0} CHAIN EVT`, x + 10, y + 82);
+}
+
 function drawApocalypseBurstOverlay(ctx, hud, W, H) {
   const p = hud.burstProgress;
   const famColor = getFamilyColor(hud.surgeDominantFamily);
@@ -444,6 +508,85 @@ function roundRect(ctx, x, y, w, h, r) {
   ctx.lineTo(x, y + r);
   ctx.quadraticCurveTo(x, y, x + r, y);
   ctx.closePath();
+}
+
+// ── 20.15 — Results Overlay ─────────────────────────────────────────────────
+
+/**
+ * Render match results overlay on the HUD canvas.
+ * @param {object} hud
+ * @param {{ standings: Array, seedBadge: string }} results
+ * @param {{ votes: number, target: number }|null} rematchStatus
+ */
+export function renderResultsOverlay(hud, results, rematchStatus) {
+  if (!hud.ctx || !hud.canvas || !results?.standings) return;
+  const ctx = hud.ctx;
+  const cw = hud.canvas.width;
+  const ch = hud.canvas.height;
+
+  // Semi-transparent backdrop
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.75)';
+  ctx.fillRect(0, 0, cw, ch);
+
+  // Title
+  ctx.fillStyle = '#ffcc00';
+  ctx.font = 'bold 36px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('MATCH RESULTS', cw / 2, 60);
+
+  // Seed badge
+  if (results.seedBadge) {
+    ctx.fillStyle = '#888';
+    ctx.font = '14px monospace';
+    ctx.fillText(results.seedBadge, cw / 2, 80);
+  }
+
+  // Standings
+  ctx.textAlign = 'left';
+  const startY = 110;
+  const lineH = 32;
+  for (let i = 0; i < Math.min(results.standings.length, 12); i++) {
+    const s = results.standings[i];
+    const y = startY + i * lineH;
+    const isWinner = i === 0;
+    ctx.fillStyle = isWinner ? '#ffcc00' : (s.alive ? '#0f0' : '#888');
+    ctx.font = isWinner ? 'bold 20px monospace' : '18px monospace';
+    const prefix = `${i + 1}.`;
+    ctx.fillText(`${prefix} ${s.name}`, cw / 2 - 160, y);
+    ctx.textAlign = 'right';
+    ctx.fillText(`HP: ${Math.round(s.health)}  Score: ${s.score}`, cw / 2 + 160, y);
+    ctx.textAlign = 'left';
+  }
+
+  // Rematch status
+  const rematchY = startY + Math.min(results.standings.length, 12) * lineH + 30;
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#aaa';
+  ctx.font = '16px monospace';
+  if (rematchStatus) {
+    ctx.fillText(`Rematch: ${rematchStatus.votes}/${rematchStatus.target} votes`, cw / 2, rematchY);
+  }
+  ctx.fillText('Press R to vote REMATCH  |  Press ESC to RETURN', cw / 2, rematchY + 24);
+}
+
+// ── 20.19 — Onboarding Tooltip ──────────────────────────────────────────────
+
+/**
+ * Render a temporary onboarding hint banner.
+ * @param {object} hud
+ * @param {string} text
+ */
+export function renderOnboardingHint(hud, text) {
+  if (!hud.ctx || !hud.canvas) return;
+  const ctx = hud.ctx;
+  const cw = hud.canvas.width;
+
+  ctx.fillStyle = 'rgba(0, 60, 80, 0.85)';
+  ctx.fillRect(cw / 2 - 300, 8, 600, 36);
+  ctx.fillStyle = '#0ff';
+  ctx.font = '14px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText(text, cw / 2, 30);
 }
 
 // ── Cleanup ─────────────────────────────────────────────────────────────────

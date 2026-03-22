@@ -29,6 +29,7 @@ import {
 } from './battle/weapon-models.js';
 import { FILTER, applyFilterToAggregate } from './realtime/collision-layers.js';
 import { EXTREME_WEAPONS, drawExtremeWeapon } from './procedural-models.js';
+import { emitPickupSparkle, emitItemBoxCollectionBurst, emitItemBoxRespawn, emitItemBoxShatter } from './babylon-particles.js';
 
 // ── Weapon catalogue (client-side, matching server combat.js) ───────────────
 
@@ -39,7 +40,7 @@ const WEAPONS = {
   missile:      { name: 'Missile',      icon: '🚀', category: 'projectile', speed: 48, damage: 35, lifetime: 4, bounces: 0, gravity: 0 },
   banana:       { name: 'Banana',       icon: '🍌', category: 'trap',       speed: 0,  damage: 5,  lifetime: 18, bounces: 0, gravity: 0 },
   bubblegum:    { name: 'Bubblegum',    icon: '🫧', category: 'trap',       speed: 0,  damage: 10, lifetime: 15, bounces: 0, gravity: 0 },
-  zipper:       { name: 'Zipper',       icon: '⚡', category: 'buff',       speed: 0,  damage: 0,  lifetime: 0, bounces: 0, gravity: 0, boostFactor: 1.6, boostDuration: 3.0 },
+  ludicrous_mode: { name: 'Ludicrous Mode', icon: '🔋', category: 'buff',       speed: 0,  damage: 0,  lifetime: 0, bounces: 0, gravity: 0, boostFactor: 2.0, boostDuration: 5.0 },
   shield:       { name: 'Shield',       icon: '🛡️', category: 'defence',    speed: 0,  damage: 0,  lifetime: 10, bounces: 0, gravity: 0 },
   swatter:      { name: 'Swatter',      icon: '🪰', category: 'melee',      speed: 0,  damage: 40, lifetime: 0, bounces: 0, gravity: 0, hitRadius: 6 },
   // Extreme weapons (rare drops)
@@ -56,9 +57,9 @@ const WEAPONS = {
 };
 
 // Position-aware weighted draw tables
-const BACK_WEIGHTS  = { bowling_ball: 3, cake: 3, missile: 4, plunger: 2, banana: 1, bubblegum: 1, zipper: 5, shield: 2, swatter: 2 };
-const MID_WEIGHTS   = { bowling_ball: 3, cake: 2, missile: 2, plunger: 2, banana: 3, bubblegum: 3, zipper: 2, shield: 3, swatter: 2 };
-const FRONT_WEIGHTS = { bowling_ball: 1, cake: 1, missile: 1, plunger: 1, banana: 5, bubblegum: 4, zipper: 1, shield: 4, swatter: 1 };
+const BACK_WEIGHTS  = { bowling_ball: 3, cake: 3, missile: 4, plunger: 2, banana: 1, bubblegum: 1, ludicrous_mode: 5, shield: 2, swatter: 2 };
+const MID_WEIGHTS   = { bowling_ball: 3, cake: 2, missile: 2, plunger: 2, banana: 3, bubblegum: 3, ludicrous_mode: 2, shield: 3, swatter: 2 };
+const FRONT_WEIGHTS = { bowling_ball: 1, cake: 1, missile: 1, plunger: 1, banana: 5, bubblegum: 4, ludicrous_mode: 1, shield: 4, swatter: 1 };
 
 function drawWeapon(positionRatio) {
   // 8% chance of extreme weapon draw (rare "wow" moment)
@@ -218,8 +219,62 @@ export function updateRaceItems(dt, car, positionRatio = 0.5) {
   // ── Item box collection ───────────────────────────────────────────────
   for (const box of _itemBoxes) {
     if (box.active) {
-      // Animate rotation
-      box.mesh.rotation.y += dt * 2.0;
+      const now = performance.now();
+      const t = now * 0.001; // seconds
+
+      // ── Tilted-axis rotation (classic MK style) ───────────────────
+      // Spin around Y at 90°/s, with a slight X tilt oscillation
+      box.mesh.rotation.y += dt * 1.8;
+      box.mesh.rotation.x = Math.sin(t * 0.7) * 0.15;
+
+      // ── Float bob — gentle sinusoidal hover ───────────────────────
+      box.mesh.position.y = box.position.y + Math.sin(t * 1.5) * 0.35;
+
+      // ── Rainbow/prismatic color cycling on materials ──────────────
+      const meta = box.mesh.metadata;
+      if (meta?._itemBoxMat) {
+        // HSL-like hue cycling: 0→360° over ~4 seconds
+        const hue = (t * 0.25) % 1.0;
+        const r = Math.abs(hue * 6 - 3) - 1;
+        const g = 2 - Math.abs(hue * 6 - 2);
+        const b = 2 - Math.abs(hue * 6 - 4);
+        const cr = Math.max(0, Math.min(1, r));
+        const cg = Math.max(0, Math.min(1, g));
+        const cb = Math.max(0, Math.min(1, b));
+
+        // Emissive color cycles through rainbow
+        meta._itemBoxMat.emissiveColor.set(cr * 0.5, cg * 0.5, cb * 0.5);
+        if (meta._glowMat) meta._glowMat.emissiveColor.set(cr * 0.5, cg * 0.5, cb * 0.55);
+        if (meta._haloMat) meta._haloMat.emissiveColor.set(cr * 0.35, cg * 0.35, cb * 0.45);
+
+        // Inner core pulses brightness
+        const pulse = 0.5 + Math.sin(t * 3.0) * 0.3;
+        meta._coreMat.emissiveColor.set(
+          0.5 + cr * pulse,
+          0.5 + cg * pulse,
+          0.2 + cb * pulse
+        );
+
+        // Core mesh scale pulse
+        if (meta._core) {
+          const corePulse = 0.9 + Math.sin(t * 4.0) * 0.15;
+          meta._core.scaling.setAll(corePulse);
+        }
+
+        // Carousel: spin and periodically swap the displayed weapon
+        if (meta._carouselNode) {
+          meta._carouselNode.rotation.y += dt * 2.5;
+          meta._carouselTimer = (meta._carouselTimer || 0) + dt;
+          if (meta._carouselTimer >= (meta._carouselSwapInterval || 0.1)) {
+            meta._carouselTimer = 0;
+            if (meta._spawnCarouselItem) meta._spawnCarouselItem();
+          }
+        }
+      }
+
+      // ── Subtle scale breathing ────────────────────────────────────
+      const breathe = 1.0 + Math.sin(t * 2.0) * 0.04;
+      box.mesh.scaling.setAll(breathe);
 
       // Check pickup
       if (Vector3.Distance(carPos, box.position) < ITEM_BOX_PICKUP_RADIUS) {
@@ -228,6 +283,16 @@ export function updateRaceItems(dt, car, positionRatio = 0.5) {
           box.active = false;
           box.mesh.setEnabled(false);
           box.respawnTimer = ITEM_BOX_RESPAWN_TIME;
+
+          // Stop orbit particles while hidden
+          if (box.mesh.metadata?._sparklePS) {
+            box.mesh.metadata._sparklePS.stop();
+          }
+
+          // Enhanced collection burst + shatter destruction effect
+          _emitCollectionBurst(box.position);
+          try { emitItemBoxShatter(box.position); } catch (_) { /* particles not init */ }
+
           // Fire roulette callback
           if (_onItemCollected) _onItemCollected(_currentItem.id);
         }
@@ -238,6 +303,27 @@ export function updateRaceItems(dt, car, positionRatio = 0.5) {
       if (box.respawnTimer <= 0) {
         box.active = true;
         box.mesh.setEnabled(true);
+        // Fade-in effect: scale from 0 → 1 over 0.6s with overshoot
+        box.mesh.scaling.setAll(0.01);
+        box._respawnFade = 0.6;
+
+        // Restart orbit particles
+        if (box.mesh.metadata?._sparklePS) {
+          box.mesh.metadata._sparklePS.start();
+        }
+
+        // Respawn particle coalesce effect
+        try { emitItemBoxRespawn(box.position); } catch (_) { /* particles not init */ }
+      }
+      // Animate respawn fade-in with elastic overshoot
+      if (box._respawnFade > 0) {
+        box._respawnFade -= dt;
+        const progress = 1 - Math.max(0, box._respawnFade) / 0.6;
+        // Elastic ease-out: overshoot then settle
+        const elastic = progress < 0.6
+          ? progress / 0.6 * 1.15
+          : 1.0 + (1.0 - progress) / 0.4 * 0.15;
+        box.mesh.scaling.setAll(Math.min(elastic, 1.15));
       }
     }
   }
@@ -283,6 +369,10 @@ export function updateRaceItems(dt, car, positionRatio = 0.5) {
     if (trap.lifetime <= 0) {
       removeTrap(i);
       continue;
+    }
+    // Gentle bob animation for traps
+    if (trap.mesh) {
+      trap.mesh.position.y = trap.position.y + Math.sin(performance.now() * 0.003 + i) * 0.08;
     }
     if (Vector3.Distance(carPos, trap.position) < BANANA_HIT_RADIUS) {
       if (trap.type === 'banana') result.spinout = true;
@@ -347,20 +437,24 @@ export function updateRaceItems(dt, car, positionRatio = 0.5) {
 /**
  * Use the currently held item. Call when player presses fire.
  * @param {THREE.Object3D} car Player car mesh
+ * @param {object} [opts] Fire options
+ * @param {boolean} [opts.backward] Fire backward (hold brake + fire)
+ * @param {string} [opts.targetId] Lock-on target for homing weapons
  * @returns {boolean} Whether an item was used
  */
-export function useCurrentItem(car) {
+export function useCurrentItem(car, opts) {
   if (!_currentItem || !car) return false;
 
   const item = _currentItem;
   _currentItem = null;
 
   const forward = getForward(car);
+  const fireDir = (opts?.backward) ? forward.scale(-1) : forward;
 
   if (item.category === 'projectile') {
-    // Fire forward
-    const start = car.position.add(forward.scale(2.5)).add(new Vector3(0, 1.0, 0));
-    const velocity = forward.scale(item.speed);
+    // Fire in chosen direction
+    const start = car.position.add(fireDir.scale(2.5)).add(new Vector3(0, 1.0, 0));
+    const velocity = fireDir.scale(item.speed);
 
     const mesh = createProjectileMesh(item.id);
     mesh.position.copyFrom(start);
@@ -410,12 +504,13 @@ export function useCurrentItem(car) {
       factor: item.boostFactor || 1.6,
     };
   } else if (item.category === 'defence') {
-    // Shield
+    // Shield — create visible bubble mesh around kart
     _activeEffect = {
       type: 'shield',
       timer: item.lifetime || 10.0,
       factor: 1,
     };
+    _createShieldBubble(car);
   } else if (item.category === 'melee') {
     // Swatter — instant hit in radius
     // Handled externally (damage bots in range)
@@ -450,9 +545,102 @@ export function getProjectiles() {
   return _projectiles;
 }
 
+// ── Shield Bubble Mesh (21.10) ──────────────────────────────────────────────
+
+let _shieldBubble = null;
+
+function _createShieldBubble(car) {
+  _disposeShieldBubble();
+  if (!_scene) return;
+  _shieldBubble = MeshBuilder.CreateSphere('shieldBubble', { diameter: 4.5, segments: 16 }, _scene);
+  const mat = new StandardMaterial('shieldBubbleMat', _scene);
+  mat.diffuseColor = new Color3(0.3, 0.7, 1.0);
+  mat.emissiveColor = new Color3(0.15, 0.4, 0.8);
+  mat.alpha = 0.25;
+  mat.backFaceCulling = false;
+  _shieldBubble.material = mat;
+  _shieldBubble.parent = car;
+  _shieldBubble.position.y = 0.8;
+  _shieldBubble._pulseTime = 0;
+}
+
+function _disposeShieldBubble() {
+  if (_shieldBubble) {
+    _shieldBubble.dispose();
+    _shieldBubble = null;
+  }
+}
+
+/**
+ * Per-frame update for shield bubble (pulse glow + dispose when shield expires).
+ * Call from the main game loop.
+ */
+export function updateShieldBubble(dt) {
+  if (!_shieldBubble) return;
+  if (!_activeEffect || _activeEffect.type !== 'shield') {
+    _disposeShieldBubble();
+    return;
+  }
+  _shieldBubble._pulseTime = (_shieldBubble._pulseTime || 0) + dt;
+  const pulse = 0.2 + Math.sin(_shieldBubble._pulseTime * 4) * 0.08;
+  if (_shieldBubble.material) _shieldBubble.material.alpha = pulse;
+}
+
+/**
+ * Apply spin-out rotation to a kart mesh (banana hit visual effect).
+ * Rotates the kart 720° over 1s while killing speed.
+ * @param {import('@babylonjs/core').AbstractMesh} kartMesh
+ * @param {number} [duration=1.0]
+ */
+export function applySpinoutVisual(kartMesh, duration = 1.0) {
+  if (!kartMesh) return;
+  const startTime = performance.now();
+  const totalRotation = Math.PI * 4; // 720°
+  const originalY = kartMesh.rotation?.y ?? 0;
+
+  const spinInterval = setInterval(() => {
+    const elapsed = (performance.now() - startTime) / 1000;
+    if (elapsed >= duration) {
+      clearInterval(spinInterval);
+      return;
+    }
+    const progress = elapsed / duration;
+    const eased = 1 - (1 - progress) * (1 - progress); // ease-out
+    if (kartMesh.rotation) {
+      kartMesh.rotation.y = originalY + totalRotation * eased;
+    }
+  }, 16);
+}
+
+/**
+ * Apply frozen/stuck visual to a kart (bubblegum hit).
+ * Tints the kart pink and scales slightly for 1.5s.
+ * @param {import('@babylonjs/core').AbstractMesh} kartMesh
+ * @param {number} [duration=1.5]
+ */
+export function applyFrozenVisual(kartMesh, duration = 1.5) {
+  if (!kartMesh) return;
+  const children = kartMesh.getChildMeshes ? kartMesh.getChildMeshes() : [kartMesh];
+  const saved = [];
+  for (const m of children) {
+    if (m.material) {
+      saved.push({ mat: m.material, orig: m.material.emissiveColor?.clone() });
+      m.material.emissiveColor = new Color3(0.8, 0.2, 0.6);
+    }
+  }
+  kartMesh.scaling && kartMesh.scaling.scaleInPlace(1.05);
+  setTimeout(() => {
+    for (const s of saved) {
+      if (s.mat) s.mat.emissiveColor = s.orig || new Color3(0, 0, 0);
+    }
+    if (kartMesh.scaling) kartMesh.scaling.scaleInPlace(1 / 1.05);
+  }, duration * 1000);
+}
+
 // ── Dispose ─────────────────────────────────────────────────────────────────
 
 export function disposeRaceItems() {
+  _disposeShieldBubble();
   for (const box of _itemBoxes) {
     if (box.triggerAgg) box.triggerAgg.dispose();
     box.mesh.dispose(false, true);
@@ -519,6 +707,11 @@ function createBubblegumMesh() {
 
 function createProjectileMesh(weaponId) {
   return createWeaponModel(weaponId, _scene);
+}
+
+/** Item box collection burst — enhanced rainbow sparkles + expanding flash */
+function _emitCollectionBurst(position) {
+  try { emitItemBoxCollectionBurst(position); } catch (_) { /* particles not init */ }
 }
 
 // ── Internal helpers ────────────────────────────────────────────────────────

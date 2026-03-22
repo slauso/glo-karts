@@ -1,0 +1,202 @@
+
+> GLOKarts-realtime@0.1.0 start
+> node src/index.js
+
+{"ts":"2026-03-19T18:14:15.789Z","level":"info","event":"server_start","port":2567,"env":"development"}
+
+       ___      _
+      / __\___ | |_   _ ___  ___ _   _ ___
+     / /  / _ \| | | | / __|/ _ \ | | / __|
+    / /__| (_) | | |_| \__ \  __/ |_| \__ \
+    \____/\___/|_|\__, |___/\___|\__,_|___/
+                  |___/
+
+     · Multiplayer Framework for Node.js ·
+
+💖 Consider becoming a Sponsor on GitHub → https://github.com/sponsors/endel
+🌟 Give us a star on GitHub → https://github.com/colyseus/colyseus
+☁️  Deploy and scale your project on Colyseus Cloud → https://cloud.colyseus.io
+
+
+[battle_room] created roomId=VYwRFW12S gameType=deathmatch scoreLimit=5 maxClients=2 patchRateMs=17
+{"ts":"2026-03-19T18:14:30.343Z","level":"info","event":"room_create","room":"battle_room","roomId":"VYwRFW12S","gameType":"deathmatch","scoreLimit":5,"maxClients":2,"patchRateMs":16.666666666666668,"staleInputMs":500,"authoritative":true}
+[battle_room] join sessionId=VYXTKWRJh name=Player team=red players=1
+{"ts":"2026-03-19T18:14:30.657Z","level":"info","event":"room_join","room":"battle_room","roomId":"VYwRFW12S","sessionId":"VYXTKWRJh","name":"Player","players":1}
+{"ts":"2026-03-19T18:14:33.132Z","level":"info","event":"battle_ready","room":"battle_room","roomId":"VYwRFW12S","sessionId":"VYXTKWRJh","readyCount":0,"players":1}
+[battle_room] join sessionId=4BbVXJTIu name=Player team=blue players=2
+{"ts":"2026-03-19T18:14:36.420Z","level":"info","event":"room_join","room":"battle_room","roomId":"VYwRFW12S","sessionId":"4BbVXJTIu","name":"Player","players":2}
+{"ts":"2026-03-19T18:14:41.066Z","level":"info","event":"battle_ready","room":"battle_room","roomId":"VYwRFW12S","sessionId":"4BbVXJTIu","readyCount":1,"players":2}
+{"ts":"2026-03-19T18:15:27.894Z","level":"info","event":"room_leave","room":"battle_room","roomId":"VYwRFW12S","sessionId":"VYXTKWRJh","players":1}
+[battle_room] leave sessionId=VYXTKWRJh players=1
+{"ts":"2026-03-19T18:15:30.269Z","level":"info","event":"room_leave","room":"battle_room","roomId":"VYwRFW12S","sessionId":"4BbVXJTIu","players":0}
+[battle_room] leave sessionId=4BbVXJTIu players=0
+[battle_room] created roomId=mhm09xhb8 gameType=deathmatch scoreLimit=5 maxClients=2 patchRateMs=17
+{"ts":"2026-03-19T18:15:34.953Z","level":"info","event":"room_create","room":"battle_room","roomId":"mhm09xhb8","gameType":"deathmatch","scoreLimit":5,"maxClients":2,"patchRateMs":16.666666666666668,"staleInputMs":500,"authoritative":true}
+[battle_room] join sessionId=V_uKN0_uZ name=Player team=red players=1
+{"ts":"2026-03-19T18:15:35.287Z","level":"info","event":"room_join","room":"battle_room","roomId":"mhm09xhb8","sessionId":"V_uKN0_uZ","name":"Player","players":1}
+{"ts":"2026-03-19T18:15:37.686Z","level":"info","event":"battle_ready","room":"battle_room","roomId":"mhm09xhb8","sessionId":"V_uKN0_uZ","readyCount":0,"players":1}
+[battle_room] join sessionId=Lr7oSYisO name=Player team=blue players=2
+{"ts":"2026-03-19T18:15:40.776Z","level":"info","event":"room_join","room":"battle_room","roomId":"mhm09xhb8","sessionId":"Lr7oSYisO","name":"Player","players":2}
+{"ts":"2026-03-19T18:15:45.077Z","level":"info","event":"battle_ready","room":"battle_room","roomId":"mhm09xhb8","sessionId":"Lr7oSYisO","readyCount":1,"players":2}
+{"ts":"2026-03-19T18:16:28.358Z","level":"info","event":"room_leave","room":"battle_room","roomId":"mhm09xhb8","sessionId":"V_uKN0_uZ","players":1}
+[battle_room] leave sessionId=V_uKN0_uZ players=1
+{"ts":"2026-03-19T18:16:30.657Z","level":"info","event":"room_leave","room":"battle_room","roomId":"mhm09xhb8","sessionId":"Lr7oSYisO","players":0}
+[battle_room] leave sessionId=Lr7oSYisO players=0
+[battle_room] created roomId=hmUzoP9O_ gameType=deathmatch scoreLimit=5 maxClients=2 patchRateMs=17
+{"ts":"2026-03-19T18:17:07.385Z","level":"info","event":"room_create","room":"battle_room","roomId":"hmUzoP9O_","gameType":"deathmatch","scoreLimit":5,"maxClients":2,"patchRateMs":16.666666666666668,"staleInputMs":500,"authoritative":true}
+[battle_room] join sessionId=FF6_588nk name=Player team=red players=1
+{"ts":"2026-03-19T18:17:07.739Z","level":"info","event":"room_join","room":"battle_room","roomId":"hmUzoP9O_","sessionId":"FF6_588nk","name":"Player","players":1}
+{"ts":"2026-03-19T18:17:10.387Z","level":"info","event":"battle_ready","room":"battle_room","roomId":"hmUzoP9O_","sessionId":"FF6_588nk","readyCount":0,"players":1}
+[battle_room] join sessionId=sK5aL2yoJ name=Player team=blue players=2
+{"ts":"2026-03-19T18:17:13.833Z","level":"info","event":"room_join","room":"battle_room","roomId":"hmUzoP9O_","sessionId":"sK5aL2yoJ","name":"Player","players":2}
+{"ts":"2026-03-19T18:17:18.703Z","level":"info","event":"battle_ready","room":"battle_room","roomId":"hmUzoP9O_","sessionId":"sK5aL2yoJ","readyCount":1,"players":2}
+{"ts":"2026-03-19T18:17:57.622Z","level":"info","event":"room_leave","room":"battle_room","roomId":"hmUzoP9O_","sessionId":"FF6_588nk","players":1}
+[battle_room] leave sessionId=FF6_588nk players=1
+{"ts":"2026-03-19T18:17:59.670Z","level":"info","event":"room_leave","room":"battle_room","roomId":"hmUzoP9O_","sessionId":"sK5aL2yoJ","players":0}
+[battle_room] leave sessionId=sK5aL2yoJ players=0
+[battle_room] created roomId=GkYi9fPgY gameType=deathmatch scoreLimit=5 maxClients=2 patchRateMs=17
+{"ts":"2026-03-19T18:18:11.205Z","level":"info","event":"room_create","room":"battle_room","roomId":"GkYi9fPgY","gameType":"deathmatch","scoreLimit":5,"maxClients":2,"patchRateMs":16.666666666666668,"staleInputMs":500,"authoritative":true}
+[battle_room] join sessionId=C4KgNLjpX name=Player team=red players=1
+{"ts":"2026-03-19T18:18:11.556Z","level":"info","event":"room_join","room":"battle_room","roomId":"GkYi9fPgY","sessionId":"C4KgNLjpX","name":"Player","players":1}
+{"ts":"2026-03-19T18:18:14.004Z","level":"info","event":"battle_ready","room":"battle_room","roomId":"GkYi9fPgY","sessionId":"C4KgNLjpX","readyCount":0,"players":1}
+[battle_room] join sessionId=qKlEEVllN name=Player team=blue players=2
+{"ts":"2026-03-19T18:18:17.242Z","level":"info","event":"room_join","room":"battle_room","roomId":"GkYi9fPgY","sessionId":"qKlEEVllN","name":"Player","players":2}
+{"ts":"2026-03-19T18:18:21.789Z","level":"info","event":"battle_ready","room":"battle_room","roomId":"GkYi9fPgY","sessionId":"qKlEEVllN","readyCount":1,"players":2}
+{"ts":"2026-03-19T18:19:05.096Z","level":"info","event":"room_leave","room":"battle_room","roomId":"GkYi9fPgY","sessionId":"C4KgNLjpX","players":1}
+[battle_room] leave sessionId=C4KgNLjpX players=1
+{"ts":"2026-03-19T18:19:07.453Z","level":"info","event":"room_leave","room":"battle_room","roomId":"GkYi9fPgY","sessionId":"qKlEEVllN","players":0}
+[battle_room] leave sessionId=qKlEEVllN players=0
+[battle_room] created roomId=C0aAyRSod gameType=deathmatch scoreLimit=5 maxClients=2 patchRateMs=17
+{"ts":"2026-03-19T18:19:11.917Z","level":"info","event":"room_create","room":"battle_room","roomId":"C0aAyRSod","gameType":"deathmatch","scoreLimit":5,"maxClients":2,"patchRateMs":16.666666666666668,"staleInputMs":500,"authoritative":true}
+[battle_room] join sessionId=q_SuRGaB4 name=Player team=red players=1
+{"ts":"2026-03-19T18:19:12.236Z","level":"info","event":"room_join","room":"battle_room","roomId":"C0aAyRSod","sessionId":"q_SuRGaB4","name":"Player","players":1}
+{"ts":"2026-03-19T18:19:14.614Z","level":"info","event":"battle_ready","room":"battle_room","roomId":"C0aAyRSod","sessionId":"q_SuRGaB4","readyCount":0,"players":1}
+[battle_room] join sessionId=XqDJIH9oF name=Player team=blue players=2
+{"ts":"2026-03-19T18:19:18.048Z","level":"info","event":"room_join","room":"battle_room","roomId":"C0aAyRSod","sessionId":"XqDJIH9oF","name":"Player","players":2}
+{"ts":"2026-03-19T18:19:22.674Z","level":"info","event":"battle_ready","room":"battle_room","roomId":"C0aAyRSod","sessionId":"XqDJIH9oF","readyCount":1,"players":2}
+{"ts":"2026-03-19T18:19:57.581Z","level":"info","event":"room_leave","room":"battle_room","roomId":"C0aAyRSod","sessionId":"q_SuRGaB4","players":1}
+[battle_room] leave sessionId=q_SuRGaB4 players=1
+{"ts":"2026-03-19T18:19:59.810Z","level":"info","event":"room_leave","room":"battle_room","roomId":"C0aAyRSod","sessionId":"XqDJIH9oF","players":0}
+[battle_room] leave sessionId=XqDJIH9oF players=0
+[battle_room] created roomId=LdUiidlKQ gameType=deathmatch scoreLimit=5 maxClients=2 patchRateMs=17
+{"ts":"2026-03-19T18:20:01.686Z","level":"info","event":"room_create","room":"battle_room","roomId":"LdUiidlKQ","gameType":"deathmatch","scoreLimit":5,"maxClients":2,"patchRateMs":16.666666666666668,"staleInputMs":500,"authoritative":true}
+[battle_room] join sessionId=pfQc_zBAu name=Player team=red players=1
+{"ts":"2026-03-19T18:20:01.984Z","level":"info","event":"room_join","room":"battle_room","roomId":"LdUiidlKQ","sessionId":"pfQc_zBAu","name":"Player","players":1}
+{"ts":"2026-03-19T18:20:04.356Z","level":"info","event":"battle_ready","room":"battle_room","roomId":"LdUiidlKQ","sessionId":"pfQc_zBAu","readyCount":0,"players":1}
+[battle_room] join sessionId=FR4dSIMja name=Player team=blue players=2
+{"ts":"2026-03-19T18:20:07.923Z","level":"info","event":"room_join","room":"battle_room","roomId":"LdUiidlKQ","sessionId":"FR4dSIMja","name":"Player","players":2}
+{"ts":"2026-03-19T18:20:12.104Z","level":"info","event":"battle_ready","room":"battle_room","roomId":"LdUiidlKQ","sessionId":"FR4dSIMja","readyCount":1,"players":2}
+{"ts":"2026-03-19T18:20:48.629Z","level":"info","event":"room_leave","room":"battle_room","roomId":"LdUiidlKQ","sessionId":"pfQc_zBAu","players":1}
+[battle_room] leave sessionId=pfQc_zBAu players=1
+{"ts":"2026-03-19T18:20:50.896Z","level":"info","event":"room_leave","room":"battle_room","roomId":"LdUiidlKQ","sessionId":"FR4dSIMja","players":0}
+[battle_room] leave sessionId=FR4dSIMja players=0
+[battle_room] created roomId=BVb_HIlEb gameType=deathmatch scoreLimit=5 maxClients=2 patchRateMs=17
+{"ts":"2026-03-19T18:20:53.020Z","level":"info","event":"room_create","room":"battle_room","roomId":"BVb_HIlEb","gameType":"deathmatch","scoreLimit":5,"maxClients":2,"patchRateMs":16.666666666666668,"staleInputMs":500,"authoritative":true}
+[battle_room] join sessionId=GHiXUaa92 name=Player team=red players=1
+{"ts":"2026-03-19T18:20:53.327Z","level":"info","event":"room_join","room":"battle_room","roomId":"BVb_HIlEb","sessionId":"GHiXUaa92","name":"Player","players":1}
+{"ts":"2026-03-19T18:20:55.702Z","level":"info","event":"battle_ready","room":"battle_room","roomId":"BVb_HIlEb","sessionId":"GHiXUaa92","readyCount":0,"players":1}
+[battle_room] join sessionId=YqRzqUIvO name=Player team=blue players=2
+{"ts":"2026-03-19T18:20:59.390Z","level":"info","event":"room_join","room":"battle_room","roomId":"BVb_HIlEb","sessionId":"YqRzqUIvO","name":"Player","players":2}
+{"ts":"2026-03-19T18:21:03.962Z","level":"info","event":"battle_ready","room":"battle_room","roomId":"BVb_HIlEb","sessionId":"YqRzqUIvO","readyCount":1,"players":2}
+{"ts":"2026-03-19T18:21:42.725Z","level":"info","event":"room_leave","room":"battle_room","roomId":"BVb_HIlEb","sessionId":"GHiXUaa92","players":1}
+[battle_room] leave sessionId=GHiXUaa92 players=1
+{"ts":"2026-03-19T18:21:45.327Z","level":"info","event":"room_leave","room":"battle_room","roomId":"BVb_HIlEb","sessionId":"YqRzqUIvO","players":0}
+[battle_room] leave sessionId=YqRzqUIvO players=0
+[battle_room] created roomId=TiPs3z3mK gameType=deathmatch scoreLimit=5 maxClients=2 patchRateMs=17
+{"ts":"2026-03-19T18:22:07.175Z","level":"info","event":"room_create","room":"battle_room","roomId":"TiPs3z3mK","gameType":"deathmatch","scoreLimit":5,"maxClients":2,"patchRateMs":16.666666666666668,"staleInputMs":500,"authoritative":true}
+[battle_room] join sessionId=tyUeYTxBV name=Player team=red players=1
+{"ts":"2026-03-19T18:22:07.515Z","level":"info","event":"room_join","room":"battle_room","roomId":"TiPs3z3mK","sessionId":"tyUeYTxBV","name":"Player","players":1}
+{"ts":"2026-03-19T18:22:09.954Z","level":"info","event":"battle_ready","room":"battle_room","roomId":"TiPs3z3mK","sessionId":"tyUeYTxBV","readyCount":0,"players":1}
+[battle_room] join sessionId=7XE_baz4S name=Player team=blue players=2
+{"ts":"2026-03-19T18:22:12.961Z","level":"info","event":"room_join","room":"battle_room","roomId":"TiPs3z3mK","sessionId":"7XE_baz4S","name":"Player","players":2}
+{"ts":"2026-03-19T18:22:17.453Z","level":"info","event":"battle_ready","room":"battle_room","roomId":"TiPs3z3mK","sessionId":"7XE_baz4S","readyCount":1,"players":2}
+{"ts":"2026-03-19T18:22:58.367Z","level":"info","event":"room_leave","room":"battle_room","roomId":"TiPs3z3mK","sessionId":"tyUeYTxBV","players":1}
+[battle_room] leave sessionId=tyUeYTxBV players=1
+{"ts":"2026-03-19T18:23:00.669Z","level":"info","event":"room_leave","room":"battle_room","roomId":"TiPs3z3mK","sessionId":"7XE_baz4S","players":0}
+[battle_room] leave sessionId=7XE_baz4S players=0
+[battle_room] created roomId=s-pAMTiKk gameType=deathmatch scoreLimit=5 maxClients=2 patchRateMs=17
+{"ts":"2026-03-19T18:23:11.550Z","level":"info","event":"room_create","room":"battle_room","roomId":"s-pAMTiKk","gameType":"deathmatch","scoreLimit":5,"maxClients":2,"patchRateMs":16.666666666666668,"staleInputMs":500,"authoritative":true}
+[battle_room] join sessionId=bdN_sfsjX name=Player team=red players=1
+{"ts":"2026-03-19T18:23:11.887Z","level":"info","event":"room_join","room":"battle_room","roomId":"s-pAMTiKk","sessionId":"bdN_sfsjX","name":"Player","players":1}
+{"ts":"2026-03-19T18:23:14.370Z","level":"info","event":"battle_ready","room":"battle_room","roomId":"s-pAMTiKk","sessionId":"bdN_sfsjX","readyCount":0,"players":1}
+[battle_room] join sessionId=61gvK_mrU name=Player team=blue players=2
+{"ts":"2026-03-19T18:23:17.710Z","level":"info","event":"room_join","room":"battle_room","roomId":"s-pAMTiKk","sessionId":"61gvK_mrU","name":"Player","players":2}
+{"ts":"2026-03-19T18:23:21.986Z","level":"info","event":"battle_ready","room":"battle_room","roomId":"s-pAMTiKk","sessionId":"61gvK_mrU","readyCount":1,"players":2}
+{"ts":"2026-03-19T18:23:54.700Z","level":"info","event":"room_leave","room":"battle_room","roomId":"s-pAMTiKk","sessionId":"bdN_sfsjX","players":1}
+[battle_room] leave sessionId=bdN_sfsjX players=1
+{"ts":"2026-03-19T18:23:56.826Z","level":"info","event":"room_leave","room":"battle_room","roomId":"s-pAMTiKk","sessionId":"61gvK_mrU","players":0}
+[battle_room] leave sessionId=61gvK_mrU players=0
+[battle_room] created roomId=ls3X78rsu gameType=deathmatch scoreLimit=5 maxClients=2 patchRateMs=17
+{"ts":"2026-03-19T18:23:58.534Z","level":"info","event":"room_create","room":"battle_room","roomId":"ls3X78rsu","gameType":"deathmatch","scoreLimit":5,"maxClients":2,"patchRateMs":16.666666666666668,"staleInputMs":500,"authoritative":true}
+[battle_room] join sessionId=_vB99SvSB name=Player team=red players=1
+{"ts":"2026-03-19T18:23:58.854Z","level":"info","event":"room_join","room":"battle_room","roomId":"ls3X78rsu","sessionId":"_vB99SvSB","name":"Player","players":1}
+{"ts":"2026-03-19T18:24:01.271Z","level":"info","event":"battle_ready","room":"battle_room","roomId":"ls3X78rsu","sessionId":"_vB99SvSB","readyCount":0,"players":1}
+[battle_room] join sessionId=rXu546IFN name=Player team=blue players=2
+{"ts":"2026-03-19T18:24:04.502Z","level":"info","event":"room_join","room":"battle_room","roomId":"ls3X78rsu","sessionId":"rXu546IFN","name":"Player","players":2}
+{"ts":"2026-03-19T18:24:09.070Z","level":"info","event":"battle_ready","room":"battle_room","roomId":"ls3X78rsu","sessionId":"rXu546IFN","readyCount":1,"players":2}
+{"ts":"2026-03-19T18:24:52.790Z","level":"info","event":"room_leave","room":"battle_room","roomId":"ls3X78rsu","sessionId":"_vB99SvSB","players":1}
+[battle_room] leave sessionId=_vB99SvSB players=1
+{"ts":"2026-03-19T18:24:55.077Z","level":"info","event":"room_leave","room":"battle_room","roomId":"ls3X78rsu","sessionId":"rXu546IFN","players":0}
+[battle_room] leave sessionId=rXu546IFN players=0
+[battle_room] created roomId=jBgbrrRiB gameType=deathmatch scoreLimit=5 maxClients=2 patchRateMs=17
+{"ts":"2026-03-19T18:24:56.852Z","level":"info","event":"room_create","room":"battle_room","roomId":"jBgbrrRiB","gameType":"deathmatch","scoreLimit":5,"maxClients":2,"patchRateMs":16.666666666666668,"staleInputMs":500,"authoritative":true}
+[battle_room] join sessionId=CcH8uOLpB name=Player team=red players=1
+{"ts":"2026-03-19T18:24:57.178Z","level":"info","event":"room_join","room":"battle_room","roomId":"jBgbrrRiB","sessionId":"CcH8uOLpB","name":"Player","players":1}
+{"ts":"2026-03-19T18:24:59.630Z","level":"info","event":"battle_ready","room":"battle_room","roomId":"jBgbrrRiB","sessionId":"CcH8uOLpB","readyCount":0,"players":1}
+[battle_room] join sessionId=GfZJaOKFN name=Player team=blue players=2
+{"ts":"2026-03-19T18:25:02.857Z","level":"info","event":"room_join","room":"battle_room","roomId":"jBgbrrRiB","sessionId":"GfZJaOKFN","name":"Player","players":2}
+{"ts":"2026-03-19T18:25:07.208Z","level":"info","event":"battle_ready","room":"battle_room","roomId":"jBgbrrRiB","sessionId":"GfZJaOKFN","readyCount":1,"players":2}
+{"ts":"2026-03-19T18:25:53.771Z","level":"info","event":"room_leave","room":"battle_room","roomId":"jBgbrrRiB","sessionId":"CcH8uOLpB","players":1}
+[battle_room] leave sessionId=CcH8uOLpB players=1
+{"ts":"2026-03-19T18:25:56.053Z","level":"info","event":"room_leave","room":"battle_room","roomId":"jBgbrrRiB","sessionId":"GfZJaOKFN","players":0}
+[battle_room] leave sessionId=GfZJaOKFN players=0
+[battle_room] created roomId=01_h6g7d1 gameType=deathmatch scoreLimit=5 maxClients=2 patchRateMs=17
+{"ts":"2026-03-19T18:26:00.576Z","level":"info","event":"room_create","room":"battle_room","roomId":"01_h6g7d1","gameType":"deathmatch","scoreLimit":5,"maxClients":2,"patchRateMs":16.666666666666668,"staleInputMs":500,"authoritative":true}
+[battle_room] join sessionId=erHge4GOE name=Player team=red players=1
+{"ts":"2026-03-19T18:26:00.911Z","level":"info","event":"room_join","room":"battle_room","roomId":"01_h6g7d1","sessionId":"erHge4GOE","name":"Player","players":1}
+{"ts":"2026-03-19T18:26:03.419Z","level":"info","event":"battle_ready","room":"battle_room","roomId":"01_h6g7d1","sessionId":"erHge4GOE","readyCount":0,"players":1}
+[battle_room] join sessionId=GwnlDTNEN name=Player team=blue players=2
+{"ts":"2026-03-19T18:26:06.711Z","level":"info","event":"room_join","room":"battle_room","roomId":"01_h6g7d1","sessionId":"GwnlDTNEN","name":"Player","players":2}
+{"ts":"2026-03-19T18:26:11.067Z","level":"info","event":"battle_ready","room":"battle_room","roomId":"01_h6g7d1","sessionId":"GwnlDTNEN","readyCount":1,"players":2}
+{"ts":"2026-03-19T18:26:53.180Z","level":"info","event":"room_leave","room":"battle_room","roomId":"01_h6g7d1","sessionId":"erHge4GOE","players":1}
+[battle_room] leave sessionId=erHge4GOE players=1
+{"ts":"2026-03-19T18:26:55.491Z","level":"info","event":"room_leave","room":"battle_room","roomId":"01_h6g7d1","sessionId":"GwnlDTNEN","players":0}
+[battle_room] leave sessionId=GwnlDTNEN players=0
+[battle_room] created roomId=JbddcoJbL gameType=deathmatch scoreLimit=5 maxClients=2 patchRateMs=17
+{"ts":"2026-03-19T18:26:59.925Z","level":"info","event":"room_create","room":"battle_room","roomId":"JbddcoJbL","gameType":"deathmatch","scoreLimit":5,"maxClients":2,"patchRateMs":16.666666666666668,"staleInputMs":500,"authoritative":true}
+[battle_room] join sessionId=PDJfFDYoz name=Player team=red players=1
+{"ts":"2026-03-19T18:27:00.253Z","level":"info","event":"room_join","room":"battle_room","roomId":"JbddcoJbL","sessionId":"PDJfFDYoz","name":"Player","players":1}
+{"ts":"2026-03-19T18:27:02.639Z","level":"info","event":"battle_ready","room":"battle_room","roomId":"JbddcoJbL","sessionId":"PDJfFDYoz","readyCount":0,"players":1}
+[battle_room] join sessionId=REwMyY_0d name=Player team=blue players=2
+{"ts":"2026-03-19T18:27:06.491Z","level":"info","event":"room_join","room":"battle_room","roomId":"JbddcoJbL","sessionId":"REwMyY_0d","name":"Player","players":2}
+{"ts":"2026-03-19T18:27:11.074Z","level":"info","event":"battle_ready","room":"battle_room","roomId":"JbddcoJbL","sessionId":"REwMyY_0d","readyCount":1,"players":2}
+{"ts":"2026-03-19T18:27:44.860Z","level":"info","event":"room_leave","room":"battle_room","roomId":"JbddcoJbL","sessionId":"PDJfFDYoz","players":1}
+[battle_room] leave sessionId=PDJfFDYoz players=1
+{"ts":"2026-03-19T18:27:47.254Z","level":"info","event":"room_leave","room":"battle_room","roomId":"JbddcoJbL","sessionId":"REwMyY_0d","players":0}
+[battle_room] leave sessionId=REwMyY_0d players=0
+[battle_room] created roomId=h8e8dcehu gameType=deathmatch scoreLimit=5 maxClients=2 patchRateMs=17
+{"ts":"2026-03-19T18:27:49.062Z","level":"info","event":"room_create","room":"battle_room","roomId":"h8e8dcehu","gameType":"deathmatch","scoreLimit":5,"maxClients":2,"patchRateMs":16.666666666666668,"staleInputMs":500,"authoritative":true}
+[battle_room] join sessionId=BBC0s-vQJ name=Player team=red players=1
+{"ts":"2026-03-19T18:27:49.380Z","level":"info","event":"room_join","room":"battle_room","roomId":"h8e8dcehu","sessionId":"BBC0s-vQJ","name":"Player","players":1}
+{"ts":"2026-03-19T18:27:51.798Z","level":"info","event":"battle_ready","room":"battle_room","roomId":"h8e8dcehu","sessionId":"BBC0s-vQJ","readyCount":0,"players":1}
+[battle_room] join sessionId=DMQWfm_h4 name=Player team=blue players=2
+{"ts":"2026-03-19T18:27:54.889Z","level":"info","event":"room_join","room":"battle_room","roomId":"h8e8dcehu","sessionId":"DMQWfm_h4","name":"Player","players":2}
+{"ts":"2026-03-19T18:27:59.112Z","level":"info","event":"battle_ready","room":"battle_room","roomId":"h8e8dcehu","sessionId":"DMQWfm_h4","readyCount":1,"players":2}
+{"ts":"2026-03-19T18:28:35.580Z","level":"info","event":"room_leave","room":"battle_room","roomId":"h8e8dcehu","sessionId":"BBC0s-vQJ","players":1}
+[battle_room] leave sessionId=BBC0s-vQJ players=1
+{"ts":"2026-03-19T18:28:37.650Z","level":"info","event":"room_leave","room":"battle_room","roomId":"h8e8dcehu","sessionId":"DMQWfm_h4","players":0}
+[battle_room] leave sessionId=DMQWfm_h4 players=0
+[battle_room] created roomId=ZsobkMdX7 gameType=deathmatch scoreLimit=5 maxClients=2 patchRateMs=17
+{"ts":"2026-03-19T18:28:54.710Z","level":"info","event":"room_create","room":"battle_room","roomId":"ZsobkMdX7","gameType":"deathmatch","scoreLimit":5,"maxClients":2,"patchRateMs":16.666666666666668,"staleInputMs":500,"authoritative":true}
+[battle_room] join sessionId=P5VOjlJjy name=Player team=red players=1
+{"ts":"2026-03-19T18:28:55.003Z","level":"info","event":"room_join","room":"battle_room","roomId":"ZsobkMdX7","sessionId":"P5VOjlJjy","name":"Player","players":1}
+{"ts":"2026-03-19T18:28:57.397Z","level":"info","event":"battle_ready","room":"battle_room","roomId":"ZsobkMdX7","sessionId":"P5VOjlJjy","readyCount":0,"players":1}
+[battle_room] join sessionId=vI9UjB28g name=Player team=blue players=2
+{"ts":"2026-03-19T18:29:00.056Z","level":"info","event":"room_join","room":"battle_room","roomId":"ZsobkMdX7","sessionId":"vI9UjB28g","name":"Player","players":2}
+{"ts":"2026-03-19T18:29:04.485Z","level":"info","event":"battle_ready","room":"battle_room","roomId":"ZsobkMdX7","sessionId":"vI9UjB28g","readyCount":1,"players":2}
+{"ts":"2026-03-19T18:29:39.265Z","level":"info","event":"room_leave","room":"battle_room","roomId":"ZsobkMdX7","sessionId":"P5VOjlJjy","players":1}
+[battle_room] leave sessionId=P5VOjlJjy players=1
+{"ts":"2026-03-19T18:29:39.278Z","level":"info","event":"room_leave","room":"battle_room","roomId":"ZsobkMdX7","sessionId":"vI9UjB28g","players":0}
+[battle_room] leave sessionId=vI9UjB28g players=0
+
+C:\Users\laptop\twistedkart\realtime>

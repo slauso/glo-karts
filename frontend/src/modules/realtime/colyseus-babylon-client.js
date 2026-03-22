@@ -21,6 +21,7 @@ import {
   PostProcess,
   Effect,
 } from "@babylonjs/core";
+import { ParticleSystem } from "@babylonjs/core/Particles/particleSystem";
 import { CubeTexture } from "@babylonjs/core/Materials/Textures/cubeTexture";
 import { DynamicTexture } from "@babylonjs/core/Materials/Textures/dynamicTexture";
 import {
@@ -33,7 +34,7 @@ import { resolveTrackAsset, resolveArenaAsset, resolveKartAsset } from "../conte
 import { FILTER, LAYER, applyFilterToAggregate } from './collision-layers.js';
 import { createMinimap, updateMinimapPlayers, createBattleMinimap, updateBattleMinimapPlayers } from '../minimap.js';
 import { initParticles, updateParticles, disposeParticles, emitWeaponExplosion, emitShieldBreak, createProjectileTrail, disposeProjectileTrail, resetParticleBudget, emitItemBoxShatter } from '../babylon-particles.js';
-import { initGamepad, pollGamepad } from '../gamepad-input.js';
+import { initGamepad, pollGamepad, disposeGamepad } from '../gamepad-input.js';
 import { getBindings, disposeControlsOverlay } from '../input-config.js';
 import { pause as pauseGame, resume as resumeGame, isPaused } from '../pause-menu.js';
 import {
@@ -50,7 +51,7 @@ import {
   playEliminationSFX, playHeartbeat, playBalloonPop,
   startEngineSound, updateEnginePitch, stopEngineSound,
   playCountdownSequence, stopBGM, disposeAudio,
-  playBattleMusic, setBattleMusicIntensity, setBattleMusicDead,
+  playBattleMusic, setBattleMusicIntensity, setBattleMusicDead, playMissileLockTone,
   startAmbientLoop, stopAmbientLoop, updateBoundaryWarning,
 } from "../game-audio.js";
 import {
@@ -65,6 +66,8 @@ import {
   createBattleGUIHud, disposeBattleGUIHud,
   updateGUIHealthBar, flashGUIHealthDamage, updateGUILives,
   updateGUIWeapon, updateGUIScore, pulseGUIWeaponSlot, pulseGUIReserveSlot,
+  showGUIStatusLane, clearGUIStatusLane, showGUIArenaMood, clearGUIArenaMood,
+  updateGUIBattleTelemetry, updateGUILockTelemetry,
 } from '../battle-gui-hud.js';
 import * as PrematchLobby from './prematch-lobby.js';
 import { generateMapDefinition } from '../map-definition-generator.js';
@@ -76,11 +79,19 @@ import {
   initBattleVFX, disposeBattleVFX, emitMuzzleFlash, emitBattleExplosion,
   emitFrostImpact, emitLightningStrike, emitBlackHoleVortex, emitKillCelebration,
   emitFireBurst, emitShockwaveRing, shakeCamera, showHitMarkerVFX,
-  showMultiKillBanner, flashDamageVignette, emitWeaponImpactVFX,
+  showMultiKillBanner, flashDamageVignette, emitWeaponImpactVFX, emitStreamImpactVFX,
+  emitTeslaArcBetween, emitPhaseSwapBurst, emitFinalFusionBurst, emitNuclearFissionDetonation,
 } from '../battle/battle-vfx.js';
 import { createWeaponModel, createItemBoxModel } from '../battle/weapon-models.js';
+import { createLockState, tickLockOn } from '../weapons/targeting.js';
+import { initWeaponFXEnhance, disposeWeaponFXEnhance, tickDecals, syncWeaponFXQuality } from '../battle/weapon-fx-enhance.js';
+import { detectPerformanceTier, startAdaptiveMonitor, stopAdaptiveMonitor, getTier, TIER, updateRuntimePerformanceBudget, runtimeFXBudget, runtimePostFXBudget, runtimePressure } from '../perf-tier.js';
 
 const HAVOK_WASM_PUBLIC_PATH = `${import.meta.env.BASE_URL}havok/HavokPhysics.wasm`;
+const MAX_QUEUED_PROJECTILE_EVENTS = 120;
+const MAX_QUEUED_IMPACT_EVENTS = 120;
+const MAX_QUEUED_CRASH_EVENTS = 48;
+const MAX_PENDING_INPUTS = 180;
 const COLYSEUS_PROTOCOL_NAMES = {
   9: 'HANDSHAKE',
   10: 'JOIN_ROOM',
@@ -109,19 +120,18 @@ const WEAPON_DISPLAY = {
   pirateleportation: { icon: "🏴‍☠️", hue: "#9b59b6", accent: "#e8d5f5", category: "Utility" },
   mirror_realm: { icon: "🪞", hue: "#91d6ff", accent: "#e8f8ff", category: "Defence" },
   phase_shift: { icon: "👻", hue: "#9ef2d0", accent: "#ebfff8", category: "Defence" },
-  memory_leak: { icon: "🧠", hue: "#ff9ca8", accent: "#ffe6ea", category: "Utility" },
   weather_dominion: { icon: "⛈️", hue: "#7ab4ff", accent: "#e2f0ff", category: "Utility" },
   fireball: { icon: "🔥", hue: "#ff7a30", accent: "#ffd6bf", category: "Elemental" },
   toxic_spread: { icon: "☣️", hue: "#6fd34a", accent: "#e6ffd9", category: "Elemental" },
   ice_lance: { icon: "🧊", hue: "#74d3ff", accent: "#e6f8ff", category: "Elemental" },
   tornado: { icon: "🌪️", hue: "#93e0c2", accent: "#e8fff4", category: "Elemental" },
-  super_nova: { icon: "☀️", hue: "#ffb347", accent: "#fff1ce", category: "Elemental" },
+  super_nova: { icon: "☢️", hue: "#f6d64a", accent: "#fff7bf", category: "Elemental", displayName: "Final Fusion" },
   rock_barrage: { icon: "🪨", hue: "#b08b67", accent: "#f2e6d9", category: "Elemental" },
   lightning_bolt: { icon: "⚡", hue: "#c6ccff", accent: "#f0f2ff", category: "Elemental" },
   wind_slash: { icon: "💨", hue: "#9de7c8", accent: "#eefff7", category: "Elemental" },
   toxic_cloud: { icon: "🧪", hue: "#5bb33d", accent: "#dbffd0", category: "Elemental" },
-  glow_thrower: { icon: "🔥", hue: "#ff0080", accent: "#ff99cc", category: "Stream" },
-  glo_burst: { icon: "💠", hue: "#00e5ff", accent: "#b3f5ff", category: "Stream" },
+  glow_thrower: { icon: "🔥", hue: "#ff0080", accent: "#ff99cc", category: "Stream", displayName: "Glo Thrower" },
+  glo_burst: { icon: "💠", hue: "#00e5ff", accent: "#b3f5ff", category: "Stream", displayName: "Glo Burst" },
 };
 
 const PROJECTILE_MODEL_ALIASES = {
@@ -140,6 +150,18 @@ const DEBUG_WM_WEAPON_CYCLE = [
   'wind_slash',
   'toxic_cloud',
 ];
+
+const BATTLE_IMPACT_SYNTH_WEAPONS = new Set([
+  'black_hole',
+  'lightning_bolt',
+  'plasma_railgun',
+  'shockwave_cannon',
+  'super_nova',
+]);
+
+const GLO_BURST_WARMUP_MS = 90;
+const GLO_BURST_FIRE_INTERVAL_MS = 60;
+const STREAM_SECONDARY_FIRE_INTERVAL_MS = 45;
 
 export class ColyseusBabylonClient {
   constructor(options = {}) {
@@ -217,22 +239,69 @@ export class ColyseusBabylonClient {
     this._firePressedLastFrame = false;
     this._fire2PressedLastFrame = false;
     this._swapSecondaryPressedLastFrame = false;
+    this._missileLockState = createLockState({
+      maxRange: 85,
+      minRange: 4,
+      halfAngle: Math.PI / 4.5,
+      acquireTime: 0.52,
+      loseTime: 0.24,
+      stickyBonus: 0.2,
+      maxScreenOffsetNorm: 0.56,
+      centerBias: 0.92,
+      edgePenalty: 1.42,
+      minAcquireScale: 0.34,
+    });
     this._missileLockTargetId = null;
     this._missileLockProgress = 0;
     this._missileLockScreenX = null;
     this._missileLockScreenY = null;
+    this._lastMissileLockToneAt = 0;
+    this._missileLockWasLocked = false;
     this._lastRockImpactTime = 0;
     this._lastRockImpactPos = null;
+    this._lastFinalFusionBurstAt = 0;
+    this._tmpProjectileRotation = new Quaternion();
+    this._queuedProjectileFires = [];
+    this._queuedProjectileHits = [];
+    this._queuedKartCrashes = [];
+    this._suppressedEntityIds = new Set();
+    this._debugScenarioTimer = null;
+    this._debugScenarioCleanup = null;
+    this._remoteInterpolationBeforeRender = null;
+    this._inputPollingBeforeRender = null;
+    this._primaryWarmupUntil = 0;
+    this._lastPrimaryFireSentAt = 0;
 
     // Active effect state
     this.activeEffect = "";      // current effect type on local player
     this.effectOverlayEl = null;  // DOM overlay for blind/status effects
+    this._effectOverlayTimer = null;
     this._arenaEffectOverlayEl = null;
+    this._arenaEffectOverlayTimer = null;
+    this._arenaEnvironmentBase = null;
+    this._arenaWeatherType = "";
 
     // Keyboard input state
     this._keys = {};
     this._onKeyDown = null;
     this._onKeyUp = null;
+    this._onWindowBlur = null;
+    this._onVisibilityChange = null;
+    this._onResize = null;
+    this._automationMode = typeof navigator !== 'undefined'
+      && !!navigator.webdriver
+      && /HeadlessChrome/i.test(navigator.userAgent || '');
+    this._lastPerfSampleAt = 0;
+    this._lastPerfSnapshot = {
+      drawCalls: 0,
+      particles: 0,
+      particleSystems: 0,
+      projectiles: 0,
+      tier: getTier(),
+      fxBudget: runtimeFXBudget(),
+      postFXBudget: runtimePostFXBudget(),
+      pressure: runtimePressure(),
+    };
     this._debugWeaponCycleIndex = 0;
 
     // Lap / race progress
@@ -305,6 +374,7 @@ export class ColyseusBabylonClient {
         lowLevelFrames: [],       // raw Colyseus frames observed on the socket
         readySignalSent: false,   // explicit ready gate signal sent to server
         errors: [],               // runtime JS errors captured internally
+        burstQueues: null,        // queued Colyseus burst counts
       };
     }
 
@@ -318,6 +388,7 @@ export class ColyseusBabylonClient {
     this._autoStartTimer = null;
     this._stateCatchupTimer = null;
     this._clientReadySent = false;
+    this._lastReadySignalAt = 0;
     this._countdownStartAt = 0;
     this._countdownAudioTimer = null;
     this._countdownVisualTimer = null;
@@ -335,8 +406,30 @@ export class ColyseusBabylonClient {
     ];
   }
 
+  _setSceneBeforeRender(slot, callback) {
+    if (!this.scene || typeof callback !== "function") return;
+    const existing = this[slot];
+    if (existing) {
+      this.scene.unregisterBeforeRender(existing);
+    }
+    this[slot] = callback;
+    this.scene.registerBeforeRender(callback);
+  }
+
+  _clearSceneBeforeRender(slot) {
+    const callback = this[slot];
+    if (!callback || !this.scene) {
+      this[slot] = null;
+      return;
+    }
+    this.scene.unregisterBeforeRender(callback);
+    this[slot] = null;
+  }
+
   async initBabylon(canvas) {
     this.engine = new Engine(canvas, true);
+    detectPerformanceTier(this.engine);
+    console.log('[PerfTier] Detected tier:', getTier());
     this.scene = new Scene(this.engine);
     this.scene.useRightHandedSystem = true; // Phase 1: STK uses right-handed
 
@@ -374,9 +467,11 @@ export class ColyseusBabylonClient {
     }
 
     // ── Smooth interpolation for remote karts + GLO animation ──
-    this.scene.registerBeforeRender(() => {
+    this._setSceneBeforeRender("_remoteInterpolationBeforeRender", () => {
       resetParticleBudget(); // (21.39) reset per-frame particle emission budget
       const dtSeconds = this.engine.getDeltaTime() / 1000;
+      const nowMs = performance.now();
+      this._drainBurstQueues();
       const lerpAlpha = this._getRemoteInterpolationAlpha(dtSeconds);
       const extrapolationMs = Math.min(
         this._networkStats.interpolationDelayMs * 0.35,
@@ -419,30 +514,42 @@ export class ColyseusBabylonClient {
       // Animate GLO underglow each frame (local + remote)
       const dt = dtSeconds;
       if (this._gloKit) updateGloUnderglow(this._gloKit, dt);
-      for (const kit of this._remoteGloKits.values()) {
-        updateGloUnderglow(kit, dt);
+      this._remoteGloTick = (this._remoteGloTick || 0) + 1;
+      const remoteGloStride = runtimePressure() > 0.72 ? 4 : runtimePressure() > 0.45 ? 2 : 1;
+      if ((this._remoteGloTick % remoteGloStride) === 0) {
+        for (const kit of this._remoteGloKits.values()) {
+          updateGloUnderglow(kit, dt * remoteGloStride);
+        }
       }
 
       // ── Smooth projectile interpolation — velocity extrapolation + facing ──
       for (const [id, pt] of this._projectileTargets.entries()) {
         const mesh = this.entityMeshes.get(id);
-        if (!mesh || !mesh.isEnabled()) continue;
+        if (!mesh || !mesh.isEnabled()) {
+          this._projectileTargets.delete(id);
+          continue;
+        }
 
         const isTrap = pt.subType === 'bubblegum' || pt.subType === 'banana';
         if (isTrap) continue; // traps don't move
 
+        const timeSinceUpdate = (nowMs - pt.lastUpdate) / 1000;
+        const predictionWindow = Math.min(timeSinceUpdate, 0.25);
+        const predictionWeight = timeSinceUpdate <= 0.25
+          ? 1
+          : Math.max(0, 1 - (timeSinceUpdate - 0.25) * 3);
+
         // Extrapolate position using velocity
-        mesh.position.x += pt.vel.x * dtSeconds;
-        mesh.position.y += pt.vel.y * dtSeconds;
-        mesh.position.z += pt.vel.z * dtSeconds;
+        mesh.position.x += pt.vel.x * dtSeconds * predictionWeight;
+        mesh.position.y += pt.vel.y * dtSeconds * predictionWeight;
+        mesh.position.z += pt.vel.z * dtSeconds * predictionWeight;
 
         // Smooth correction toward last-known server position
         const correctionAlpha = Math.min(1, dtSeconds * 8);
-        const timeSinceUpdate = (performance.now() - pt.lastUpdate) / 1000;
         // Server-extrapolated position (where server thinks it is now)
-        const serverX = pt.pos.x + pt.vel.x * timeSinceUpdate;
-        const serverY = Math.max(0.35, pt.pos.y + pt.vel.y * timeSinceUpdate);
-        const serverZ = pt.pos.z + pt.vel.z * timeSinceUpdate;
+        const serverX = pt.pos.x + pt.vel.x * predictionWindow;
+        const serverY = Math.max(0.35, pt.pos.y + pt.vel.y * predictionWindow);
+        const serverZ = pt.pos.z + pt.vel.z * predictionWindow;
         mesh.position.x += (serverX - mesh.position.x) * correctionAlpha;
         mesh.position.y += (serverY - mesh.position.y) * correctionAlpha;
         mesh.position.z += (serverZ - mesh.position.z) * correctionAlpha;
@@ -458,6 +565,8 @@ export class ColyseusBabylonClient {
           // Pitch for arced projectiles
           if (Math.abs(pt.vel.y) > 0.5) {
             mesh.rotation.x = -Math.atan2(pt.vel.y, speed);
+          } else {
+            mesh.rotation.x += (0 - mesh.rotation.x) * Math.min(1, dtSeconds * 10);
           }
         }
 
@@ -467,7 +576,14 @@ export class ColyseusBabylonClient {
         // Sync physics body if present
         const agg = this.entityAggregates.get(id);
         if (agg?.body) {
-          try { agg.body.setTargetTransform(mesh.position, mesh.rotationQuaternion || Quaternion.FromEulerAngles(mesh.rotation.x, mesh.rotation.y, mesh.rotation.z)); } catch (_) {}
+          try {
+            if (mesh.rotationQuaternion) {
+              agg.body.setTargetTransform(mesh.position, mesh.rotationQuaternion);
+            } else {
+              Quaternion.FromEulerAnglesToRef(mesh.rotation.x, mesh.rotation.y, mesh.rotation.z, this._tmpProjectileRotation);
+              agg.body.setTargetTransform(mesh.position, this._tmpProjectileRotation);
+            }
+          } catch (_) {}
         }
       }
 
@@ -506,6 +622,43 @@ export class ColyseusBabylonClient {
 
     this.engine.runRenderLoop(() => {
       this.scene.render();
+      tickDecals();
+      const nowPerf = performance.now();
+      const perfSampleIntervalMs = this._automationMode ? 750 : 200;
+      if (!this._lastPerfSampleAt || (nowPerf - this._lastPerfSampleAt) >= perfSampleIntervalMs) {
+        this._lastPerfSampleAt = nowPerf;
+        const totalDrawCalls = Number(this.scene.getEngine()._drawCalls?.current ?? 0);
+        const drawCalls = Math.max(0, totalDrawCalls - (this._lastDrawCallsTotal ?? totalDrawCalls));
+        this._lastDrawCallsTotal = totalDrawCalls;
+        const particles = this.scene.particleSystems?.reduce((n, ps) => n + (ps.getActiveCount?.() ?? 0), 0) ?? 0;
+        const particleSystems = this.scene.particleSystems?.length ?? 0;
+        let projectileCount = 0;
+        for (const [, mesh] of this.entityMeshes.entries()) {
+          if (mesh?._entityType === 'projectile' && mesh.isEnabled?.()) projectileCount++;
+        }
+        const perfSnapshot = updateRuntimePerformanceBudget({
+          players: this.authoritativeState?.players?.size || this.room?.state?.players?.size || 1,
+          particles,
+          particleSystems,
+          drawCalls,
+          projectiles: projectileCount,
+          fps: this.engine.getFps(),
+        });
+        syncWeaponFXQuality();
+        this._lastPerfSnapshot = {
+          drawCalls,
+          particles,
+          particleSystems,
+          projectiles: projectileCount,
+          tier: getTier(),
+          fxBudget: Number(perfSnapshot.fxBudget.toFixed(3)),
+          postFXBudget: Number(perfSnapshot.postFXBudget.toFixed(3)),
+          pressure: Number(perfSnapshot.pressure.toFixed(3)),
+        };
+      }
+      if (typeof window !== 'undefined' && window.__gloDebug) {
+        window.__gloDebug.performanceBudget = this._lastPerfSnapshot;
+      }
       // Update perf overlay when visible
       if (this._perfVisible) {
         if (!this._perfOverlay) {
@@ -518,10 +671,14 @@ export class ColyseusBabylonClient {
         const drawCalls = this.scene.getEngine()._drawCalls?.current ?? '?';
         const activeMeshes = this.scene.getActiveMeshes().length;
         const particles = this.scene.particleSystems?.reduce((n, ps) => n + (ps.getActiveCount?.() ?? 0), 0) ?? 0;
-        this._perfOverlay.textContent = `FPS: ${fps} | Draw: ${drawCalls} | Mesh: ${activeMeshes} | Ptcl: ${particles}`;
+        this._perfOverlay.textContent = `FPS: ${fps} | Draw: ${drawCalls} | Mesh: ${activeMeshes} | Ptcl: ${particles} | Tier: ${getTier()} | FX: ${runtimeFXBudget().toFixed(2)} | PFX: ${runtimePostFXBudget().toFixed(2)} | Load: ${runtimePressure().toFixed(2)}`;
       }
     });
-    window.addEventListener("resize", () => this.engine?.resize());
+    if (!this._automationMode) {
+      startAdaptiveMonitor(this.engine);
+    }
+    this._onResize = () => this.engine?.resize();
+    window.addEventListener("resize", this._onResize);
   }
 
   /**
@@ -705,7 +862,94 @@ export class ColyseusBabylonClient {
       }
     }
 
+    this._captureArenaEnvironmentBase();
+    if (this._arenaWeatherType) {
+      this._applyArenaWeatherToScene(this._arenaWeatherType);
+    }
+
     console.log(`[realtime] Arena environment set for '${arenaId}'`);
+  }
+
+  _captureArenaEnvironmentBase() {
+    if (!this.scene) return;
+    const hemi = this.scene.getLightByName('hemiLight');
+    const dir = this.scene.getLightByName('dirLight');
+    this._arenaEnvironmentBase = {
+      clearColor: this.scene.clearColor?.clone?.() || new Color4(0, 0, 0, 1),
+      fogMode: this.scene.fogMode,
+      fogDensity: Number(this.scene.fogDensity || 0),
+      fogColor: this.scene.fogColor?.clone?.() || new Color3(0.55, 0.62, 0.72),
+      exposure: Number(this.scene.imageProcessingConfiguration?.exposure || 1),
+      contrast: Number(this.scene.imageProcessingConfiguration?.contrast || 1),
+      hemiIntensity: typeof hemi?.intensity === 'number' ? hemi.intensity : null,
+      dirIntensity: typeof dir?.intensity === 'number' ? dir.intensity : null,
+    };
+  }
+
+  _lerpColor3(from, to, amount) {
+    const t = Math.max(0, Math.min(1, Number(amount) || 0));
+    return new Color3(
+      from.r + (to.r - from.r) * t,
+      from.g + (to.g - from.g) * t,
+      from.b + (to.b - from.b) * t,
+    );
+  }
+
+  _lerpColor4(from, to, amount) {
+    const t = Math.max(0, Math.min(1, Number(amount) || 0));
+    return new Color4(
+      from.r + (to.r - from.r) * t,
+      from.g + (to.g - from.g) * t,
+      from.b + (to.b - from.b) * t,
+      from.a + (to.a - from.a) * t,
+    );
+  }
+
+  _applyArenaWeatherToScene(effectType) {
+    if (!this.scene) return;
+    if (!this._arenaEnvironmentBase) this._captureArenaEnvironmentBase();
+    const base = this._arenaEnvironmentBase;
+    if (!base) return;
+
+    const hemi = this.scene.getLightByName('hemiLight');
+    const dir = this.scene.getLightByName('dirLight');
+
+    if (effectType === 'arena_rain') {
+      this.scene.fogMode = Scene.FOGMODE_EXP2;
+      this.scene.fogDensity = Math.max(base.fogDensity * 2.4, 0.0068);
+      this.scene.fogColor = this._lerpColor3(base.fogColor, new Color3(0.46, 0.56, 0.7), 0.78);
+      this.scene.clearColor = this._lerpColor4(base.clearColor, new Color4(0.18, 0.23, 0.3, base.clearColor.a ?? 1), 0.68);
+      this.scene.imageProcessingConfiguration.exposure = base.exposure * 0.84;
+      this.scene.imageProcessingConfiguration.contrast = base.contrast * 1.03;
+      if (typeof hemi?.intensity === 'number' && base.hemiIntensity != null) hemi.intensity = base.hemiIntensity * 0.68;
+      if (typeof dir?.intensity === 'number' && base.dirIntensity != null) dir.intensity = base.dirIntensity * 0.72;
+      return;
+    }
+
+    this.scene.fogMode = Scene.FOGMODE_EXP2;
+    this.scene.fogDensity = Math.max(base.fogDensity * 4.5, 0.012);
+    this.scene.fogColor = this._lerpColor3(base.fogColor, new Color3(0.84, 0.88, 0.92), 0.72);
+    this.scene.clearColor = this._lerpColor4(base.clearColor, new Color4(0.3, 0.34, 0.4, base.clearColor.a ?? 1), 0.5);
+    this.scene.imageProcessingConfiguration.exposure = base.exposure * 0.92;
+    this.scene.imageProcessingConfiguration.contrast = base.contrast * 0.98;
+    if (typeof hemi?.intensity === 'number' && base.hemiIntensity != null) hemi.intensity = base.hemiIntensity * 0.8;
+    if (typeof dir?.intensity === 'number' && base.dirIntensity != null) dir.intensity = base.dirIntensity * 0.78;
+  }
+
+  _restoreArenaWeatherScene() {
+    if (!this.scene || !this._arenaEnvironmentBase) return;
+    const base = this._arenaEnvironmentBase;
+    const hemi = this.scene.getLightByName('hemiLight');
+    const dir = this.scene.getLightByName('dirLight');
+
+    this.scene.clearColor = base.clearColor.clone();
+    this.scene.fogMode = base.fogMode;
+    this.scene.fogDensity = base.fogDensity;
+    this.scene.fogColor = base.fogColor.clone();
+    this.scene.imageProcessingConfiguration.exposure = base.exposure;
+    this.scene.imageProcessingConfiguration.contrast = base.contrast;
+    if (typeof hemi?.intensity === 'number' && base.hemiIntensity != null) hemi.intensity = base.hemiIntensity;
+    if (typeof dir?.intensity === 'number' && base.dirIntensity != null) dir.intensity = base.dirIntensity;
   }
 
   _createFallbackGround() {
@@ -1067,14 +1311,15 @@ export class ColyseusBabylonClient {
 
     // Init particle system for drift sparks / boost flames (Task 3.3.4)
     initParticles(this.scene);
+    createLockReticle();
 
     // Init battle VFX + preload wizard-masters assets for battle mode
     if (joinOptions.gameMode === 'battle') {
       initBattleVFX(this.scene);
+      initWeaponFXEnhance(this.scene, this.camera);
       loadBattleAssets(this.scene).catch(e => console.warn('[battle-assets] preload error:', e));
       createBattleGUIHud(this.scene);
-      createScoreDisplay();
-      createLockReticle();
+      this._installBattleDebugHooks();
     }
 
     // Init minimap
@@ -1210,11 +1455,11 @@ export class ColyseusBabylonClient {
       if (slot === "reserve") {
         // Item went to reserve slot
         this.reserveWeapon = msg.weapon || "";
-        this.reserveAmmo = Number(msg.ammo || 1);
+        this.reserveAmmo = Math.max(0, Number(msg.ammo ?? 0));
         this._localCombatState = {
           ...this._localCombatState,
           weapon3: msg.weapon || "",
-          ammo3: Number(msg.ammo || 1),
+          ammo3: this.reserveAmmo,
         };
       } else {
         // Item went to secondary (active) slot
@@ -1222,7 +1467,7 @@ export class ColyseusBabylonClient {
         this._localCombatState = {
           ...this._localCombatState,
           weapon2: msg.weapon || "",
-          ammo2: Number(msg.ammo || 1),
+          ammo2: Math.max(0, Number(msg.ammo ?? 0)),
           maxCooldownMs2: Number(msg.cooldownMs || 0),
         };
       }
@@ -1241,7 +1486,8 @@ export class ColyseusBabylonClient {
       } else {
         pulseGUIWeaponSlot();
       }
-      playSFX('pickup');
+      if (areBattleAssetsLoaded()) playBattleSound('pickup', { volume: 0.52 });
+      else playSFX('pickup');
       window.dispatchEvent(new CustomEvent("weaponEquipped", { detail: msg }));
       // Quick green screen flash — confirms the pickup without any extra assets
       const flash = document.createElement('div');
@@ -1275,170 +1521,26 @@ export class ColyseusBabylonClient {
     });
 
     this.room.onMessage("projectileFired", (msg) => {
-      console.log("[colyseus] Projectile fired:", msg.subType, "by", msg.ownerId);
-      playWeaponFireSFX(msg.subType);
-      if (areBattleAssetsLoaded()) playWeaponFireSound(msg.subType);
-      if (typeof window !== 'undefined' && window.__gloDebug) window.__gloDebug.lastWeaponFired = msg.subType;
-
-      // Muzzle flash VFX at firer position
-      const firerMesh = (msg.ownerId === this.room?.sessionId)
-        ? this.localMesh
-        : this.remoteMeshes.get(msg.ownerId);
-      if (firerMesh) emitMuzzleFlash(firerMesh.position, msg.subType);
-
-      // Spread projectiles are now replicated individually by the server.
+      this._enqueueBurstMessage(this._queuedProjectileFires, msg, MAX_QUEUED_PROJECTILE_EVENTS);
     });
 
     this.room.onMessage("projectileHit", (msg) => {
-      console.log("[colyseus] Projectile hit:", msg.victimId, "for", msg.damage, "dmg", msg.subType);
-      playWeaponHitSFX(msg.subType);
-      playWeaponImpactSynth(msg.subType, msg.damage || 30);
-      if (typeof window !== 'undefined' && window.__gloDebug) window.__gloDebug.lastHitVictimId = msg.victimId;
-
-      // Emit explosion VFX at victim position (enhanced + legacy)
-      const victimMesh = (msg.victimId === this.room?.sessionId)
-        ? this.localMesh
-        : this.remoteMeshes.get(msg.victimId);
-      const impactPosition = Number.isFinite(msg.hitX) && Number.isFinite(msg.hitY) && Number.isFinite(msg.hitZ)
-        ? new Vector3(msg.hitX, msg.hitY, msg.hitZ)
-        : victimMesh?.position;
-      if (msg.subType === 'rock_barrage' && impactPosition) {
-        this._lastRockImpactTime = performance.now();
-        this._lastRockImpactPos = impactPosition.clone ? impactPosition.clone() : new Vector3(impactPosition.x, impactPosition.y, impactPosition.z);
-      }
-      if (victimMesh) {
-        const pos = impactPosition || victimMesh.position;
-        emitWeaponExplosion(pos, msg.damage || 30);
-        emitBattleExplosion(pos, msg.subType);
-        emitWeaponImpactVFX(pos, msg.subType);
-        // Use KartEntity flash (cloned materials — safe per-instance)
-        if (msg.victimId === this.room?.sessionId && this._localKartEntity) {
-          this._localKartEntity.flashWhite(150);
-          this._localKartVFX?.emitHitBurst();
-        } else {
-          const remoteEntity = this._remoteKartEntities.get(msg.victimId);
-          if (remoteEntity) {
-            remoteEntity.flashWhite(150);
-            this._remoteKartVFXs.get(msg.victimId)?.emitHitBurst();
-          }
-        }
-      }
-      if (areBattleAssetsLoaded()) playWeaponHitSound(msg.subType);
-
-      // If we got hit, flash the screen red briefly + camera shake
-      if (this.room && msg.victimId === this.room.sessionId) {
-        this.flashDamage();
-        flashDamageVignette();
-        playSFX('crash');
-        if (this.localMesh) {
-          emitWeaponExplosion(this.localMesh.position, msg.damage || 30);
-          emitBattleExplosion(this.localMesh.position, msg.subType);
-        }
-        // Camera shake scaled by damage
-        const shakeIntensity = Math.min(1.0, (msg.damage || 30) / 50);
-        shakeCamera(this.camera, shakeIntensity, 400);
-        // (22.5) Shockwave post-process on heavy hits
-        this._triggerShockwave(msg.damage || 30);
-        // Track health from server
-        if (typeof msg.remainingHealth === 'number') {
-          this._localHealth = msg.remainingHealth;
-          updateGUIHealthBar(this._localHealth);
-          flashGUIHealthDamage();
-          updateLowHealthWarning(this._localHealth);
-        }
-        // Damage direction indicator — element-colored arc pointing toward attacker (22.4)
-        const atkMesh = this.remoteMeshes.get(msg.attackerId);
-        if (atkMesh && this.localMesh) {
-          const dx = atkMesh.position.x - this.localMesh.position.x;
-          const dz = atkMesh.position.z - this.localMesh.position.z;
-          const angle = Math.atan2(dx, dz);
-          showDamageDirection(angle, msg.subType);
-          // (22.9) Offscreen arrow pointing toward attacker
-          showOffscreenDamageArrow(angle);
-        }
-      }
-
-      // Attacker gets hit-confirm indicator
-      if (this.room && msg.attackerId === this.room.sessionId) {
-        showHitConfirm(msg.damage || 30);
-        showHitMarkerVFX();
-        playHitConfirmSFX();
-      }
+      this._enqueueBurstMessage(this._queuedProjectileHits, msg, MAX_QUEUED_IMPACT_EVENTS);
     });
 
     this.room.onMessage("kartCrash", (msg) => {
-      const impactPosition = Number.isFinite(msg.hitX) && Number.isFinite(msg.hitY) && Number.isFinite(msg.hitZ)
-        ? new Vector3(msg.hitX, msg.hitY, msg.hitZ)
-        : null;
-      const severity = Number(msg.severity || 0);
-      const playerAEntity = msg.playerAId === this.room?.sessionId
-        ? this._localKartEntity
-        : this._remoteKartEntities.get(msg.playerAId);
-      const playerBEntity = msg.playerBId === this.room?.sessionId
-        ? this._localKartEntity
-        : this._remoteKartEntities.get(msg.playerBId);
-
-      if (impactPosition) {
-        emitShockwaveRing(impactPosition, 6 + Math.min(10, severity * 0.6), [1, 0.58, 0.18]);
-        emitWeaponImpactVFX(impactPosition, 'wind_slash');
-      }
-
-      playerAEntity?.flashWhite(110);
-      playerBEntity?.flashWhite(110);
-      if (msg.playerAId === this.room?.sessionId) this._localKartVFX?.emitHitBurst();
-      if (msg.playerBId === this.room?.sessionId) this._localKartVFX?.emitHitBurst();
-      if (msg.playerAId !== this.room?.sessionId) this._remoteKartVFXs.get(msg.playerAId)?.emitHitBurst();
-      if (msg.playerBId !== this.room?.sessionId) this._remoteKartVFXs.get(msg.playerBId)?.emitHitBurst();
-
-      const localIsA = msg.playerAId === this.room?.sessionId;
-      const localIsB = msg.playerBId === this.room?.sessionId;
-      if (!localIsA && !localIsB) return;
-
-      const localDamage = localIsA ? Number(msg.damageA || 0) : Number(msg.damageB || 0);
-      const remainingHealth = localIsA ? msg.remainingHealthA : msg.remainingHealthB;
-      const otherId = localIsA ? msg.playerBId : msg.playerAId;
-      const otherMesh = this.remoteMeshes.get(otherId);
-
-      if (typeof window !== 'undefined' && window.__gloDebug) {
-        window.__gloDebug.lastKartCrash = {
-          playerAId: msg.playerAId,
-          playerBId: msg.playerBId,
-          localPlayerId: this.room?.sessionId || null,
-          localDamage,
-          remainingHealth,
-          severity,
-          otherId,
-        };
-      }
-
-      playSFX('crash');
-      if (localDamage > 0 || severity >= 2) {
-        this.flashDamage();
-        flashDamageVignette();
-        shakeCamera(this.camera, Math.min(0.95, 0.22 + severity * 0.05), 320);
-      }
-      if (typeof remainingHealth === 'number') {
-        this._localHealth = remainingHealth;
-        updateGUIHealthBar(this._localHealth);
-        if (localDamage > 0) {
-          flashGUIHealthDamage();
-          updateLowHealthWarning(this._localHealth);
-        }
-      }
-      if (otherMesh && this.localMesh) {
-        const dx = otherMesh.position.x - this.localMesh.position.x;
-        const dz = otherMesh.position.z - this.localMesh.position.z;
-        const angle = Math.atan2(dx, dz);
-        showDamageDirection(angle, 'wind_slash');
-      }
+      this._enqueueBurstMessage(this._queuedKartCrashes, msg, MAX_QUEUED_CRASH_EVENTS);
     });
 
     this.room.onMessage("effectApplied", (msg) => {
       console.log("[colyseus] Effect applied:", msg.type, "on", msg.target);
       if (typeof window !== 'undefined' && window.__gloDebug) window.__gloDebug.lastEffect = msg.type;
       if (msg.type === 'mirror') this._playAnomalyCue('mirror_realm_ready', 0.9);
-      if (msg.type === 'phased') this._playAnomalyCue('phase_shift_ready', 0.9);
-      if (msg.type === 'memory_leak') this._playAnomalyCue('memory_leak_cast', 0.95);
+      if (msg.type === 'phase_shift_swap') {
+        this._playAnomalyCue('phase_shift_ready', 0.95);
+        this._handlePhaseShiftSwap(msg);
+        return;
+      }
       if (this.room && msg.target === this.room.sessionId) {
         this.showEffectOverlay(msg.type, msg.duration || 2000);
       }
@@ -1459,6 +1561,8 @@ export class ColyseusBabylonClient {
     this.room.onMessage("shieldAbsorbed", (msg) => {
       console.log("[colyseus] Shield absorbed hit for", msg.victimId, "HP:", msg.shieldHP);
       if (typeof window !== 'undefined' && window.__gloDebug) window.__gloDebug.lastShieldAbsorbed = msg.victimId;
+      const projectileMesh = msg.projectileId ? this.entityMeshes.get(msg.projectileId) : null;
+      if (projectileMesh) projectileMesh._impactHandled = true;
       if (this.room && msg.victimId === this.room.sessionId) {
         this.flashShield();
         if (msg.shieldBroken && this.localMesh) emitShieldBreak(this.localMesh.position);
@@ -1478,15 +1582,22 @@ export class ColyseusBabylonClient {
       // Kill celebration VFX + multi-kill banner for local attacker
       if (this.room && msg.attackerId === this.room.sessionId) {
         if (this.localMesh) emitKillCelebration(this.localMesh.position);
-        playBattleSound('sparkle_hit');
-        const streak = msg.killStreak || 1;
+        playBattleSound('sparkle_hit', { volume: 0.48, cooldownMs: 80 });
+        const streak = msg.multiKill || msg.killStreak || 1;
         if (streak >= 2) showMultiKillBanner(streak);
       }
       // Death VFX at victim position
       const killVictimMesh = this.remoteMeshes.get(msg.victimId);
       if (killVictimMesh) {
-        emitBattleExplosion(killVictimMesh.position, msg.weapon);
-        playBattleSound('death');
+        const recentImpact = this._lastProjectileImpactMeta;
+        const duplicatedImpact = recentImpact
+          && recentImpact.victimId === msg.victimId
+          && recentImpact.subType === msg.weapon
+          && (performance.now() - recentImpact.at) < 260;
+        if (!duplicatedImpact) {
+          emitBattleExplosion(killVictimMesh.position, msg.weapon);
+        }
+        playBattleSound('death', { volume: 0.72, cooldownMs: 110 });
       }
     });
 
@@ -1495,7 +1606,6 @@ export class ColyseusBabylonClient {
       if (this.room && msg.victimId === this.room.sessionId) {
         shakeCamera(this.camera, 0.5, 600);
         flashDamageVignette();
-        playBattleSound('death');
         this._startDeathSequence(msg);
       }
     });
@@ -1712,10 +1822,14 @@ export class ColyseusBabylonClient {
     this._lowLevelTraceInstalled = true;
   }
 
-  _sendClientReadySignal() {
-    if (this._clientReadySent || !this.room || this.roomName !== 'battle_room') return;
+  _sendClientReadySignal(force = false) {
+    if (!this.room || this.roomName !== 'battle_room') return;
+    const now = Date.now();
+    if (!force && this._clientReadySent) return;
+    if (force && (now - this._lastReadySignalAt) < 1200) return;
     this.room.send('clientReady', { sentAt: Date.now() });
     this._clientReadySent = true;
+    this._lastReadySignalAt = now;
     if (typeof window !== 'undefined' && window.__gloDebug) {
       window.__gloDebug.readySignalSent = true;
     }
@@ -1739,6 +1853,15 @@ export class ColyseusBabylonClient {
       window.__gloDebug.playerCount = state.players.size;
       window.__gloDebug.readyCount = Number(state.readyCount || 0);
       window.__gloDebug.readyRequiredCount = Number(state.readyRequiredCount || 0);
+    }
+    if (
+      this.roomName === 'battle_room'
+      && !this.started
+      && !this._matchLiveHandled
+      && Number(state?.players?.size || 0) >= 2
+      && Number(state?.readyCount || 0) < Number(state?.readyRequiredCount || 0)
+    ) {
+      this._sendClientReadySignal(true);
     }
 
     if (PrematchLobby.isVisible() && state?.players) {
@@ -1884,30 +2007,84 @@ export class ColyseusBabylonClient {
 
   _ensureSyncDebugPanel() {
     if (this._syncDebugPanelEl || typeof document === 'undefined') return this._syncDebugPanelEl;
-    const panel = document.createElement('div');
-    panel.id = 'sync-debug-panel';
-    Object.assign(panel.style, {
+    const shell = document.createElement('div');
+    shell.id = 'sync-debug-shell';
+    Object.assign(shell.style, {
       position: 'fixed',
       top: '16px',
       left: '16px',
       zIndex: '90',
-      width: '220px',
-      padding: '12px 14px',
-      borderRadius: '14px',
-      background: 'rgba(12, 12, 18, 0.62)',
-      border: '1px solid rgba(255,255,255,0.12)',
+      pointerEvents: 'auto',
+    });
+
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.id = 'sync-debug-toggle';
+    button.setAttribute('aria-label', 'Toggle sync monitor');
+    Object.assign(button.style, {
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      minWidth: '42px',
+      height: '42px',
+      padding: '0 12px',
+      borderRadius: '21px',
+      border: '1px solid rgba(152,230,247,0.34)',
+      background: 'linear-gradient(132deg, rgba(72,58,44,0.92) 0%, rgba(48,42,36,0.82) 45%, rgba(22,26,34,0.8) 100%)',
+      color: '#dff7ff',
+      fontFamily: '"Rajdhani", "Exo 2", sans-serif',
+      fontSize: '11px',
+      fontWeight: '800',
+      letterSpacing: '0.14em',
+      textTransform: 'uppercase',
+      cursor: 'pointer',
+      boxShadow: '0 12px 28px rgba(0,0,0,0.28), inset 0 1px 0 rgba(245,232,210,0.12)',
+      backdropFilter: 'blur(12px) saturate(118%)',
+      WebkitBackdropFilter: 'blur(12px) saturate(118%)',
+    });
+    button.textContent = 'Sync';
+
+    const panel = document.createElement('div');
+    panel.id = 'sync-debug-panel';
+    Object.assign(panel.style, {
+      display: 'none',
+      marginTop: '10px',
+      width: '248px',
+      maxHeight: '80vh',
+      overflowY: 'auto',
+      padding: '14px 14px 12px',
+      borderRadius: '16px',
+      background: 'linear-gradient(132deg, rgba(72,58,44,0.86) 0%, rgba(48,42,36,0.72) 45%, rgba(22,26,34,0.72) 100%)',
+      border: '1px solid rgba(196,176,146,0.42)',
       color: '#ffffff',
-      fontFamily: '"Exo 2", "Poppins", sans-serif',
+      fontFamily: '"Rajdhani", "Exo 2", sans-serif',
       fontSize: '12px',
       lineHeight: '1.35',
-      boxShadow: '0 18px 44px rgba(0,0,0,0.42), inset 0 1px 0 rgba(255,255,255,0.08)',
-      backdropFilter: 'blur(18px) saturate(135%)',
-      WebkitBackdropFilter: 'blur(18px) saturate(135%)',
-      pointerEvents: 'none',
+      boxShadow: '0 16px 42px rgba(0,0,0,0.38), inset 0 1px 0 rgba(245,232,210,0.14)',
+      backdropFilter: 'blur(16px) saturate(120%)',
+      WebkitBackdropFilter: 'blur(16px) saturate(120%)',
+      pointerEvents: 'auto',
       opacity: '0.98',
     });
-    document.body.appendChild(panel);
+
+    const applyExpandedState = () => {
+      const expanded = !!this._syncDebugExpanded;
+      panel.style.display = expanded ? 'block' : 'none';
+      button.textContent = expanded ? 'Hide' : 'Sync';
+      button.style.color = expanded ? '#98e6f7' : '#dff7ff';
+    };
+
+    button.addEventListener('click', () => {
+      this._syncDebugExpanded = !this._syncDebugExpanded;
+      applyExpandedState();
+    });
+
+    shell.appendChild(button);
+    shell.appendChild(panel);
+    document.body.appendChild(shell);
+    applyExpandedState();
     this._syncDebugPanelEl = panel;
+    this._syncDebugToggleEl = button;
     return panel;
   }
 
@@ -1930,13 +2107,561 @@ export class ColyseusBabylonClient {
     ];
     panel.innerHTML = `
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;gap:12px;">
-        <div style="font-size:10px;font-weight:800;letter-spacing:0.22em;text-transform:uppercase;color:rgba(255,255,255,0.62);">Sync Monitor</div>
-        <div style="font-size:11px;font-weight:800;letter-spacing:0.12em;text-transform:uppercase;color:${this._networkStats.authoritative ? '#8fe6ff' : '#ff9db6'};">${this.roomName.replace('_room', '').toUpperCase()}</div>
+        <div style="font-size:10px;font-weight:800;letter-spacing:0.2em;text-transform:uppercase;color:rgba(245,232,210,0.84);">Sync Monitor</div>
+        <div style="font-size:10px;font-weight:800;letter-spacing:0.14em;text-transform:uppercase;color:${this._networkStats.authoritative ? '#98e6f7' : '#f0b1bf'};">${this.roomName.replace('_room', '').toUpperCase()}</div>
+      </div>
+      <div style="display:flex;align-items:center;justify-content:flex-end;margin-bottom:10px;">
+        <div style="width:152px;height:28px;border-radius:14px;border:1px solid rgba(152,230,247,0.34);background:rgba(78,94,92,0.24);display:flex;align-items:center;padding:0 10px;position:relative;overflow:hidden;">
+          <div style="font-size:10px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;color:rgba(198,234,245,0.86);">Scan</div>
+          <div style="position:absolute;right:12px;left:52px;height:2px;border-radius:2px;background:rgba(180,222,235,0.18);"></div>
+          <div style="position:absolute;left:56px;width:26px;height:2px;border-radius:2px;background:rgba(180,240,255,0.7);"></div>
+        </div>
       </div>
       <div style="display:grid;grid-template-columns:1fr auto;column-gap:14px;row-gap:5px;">
-        ${rows.map(([label, value]) => `<div style="font-size:10px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:rgba(255,255,255,0.56);">${label}</div><div style="font-size:12px;font-weight:700;color:#f6fbff;text-align:right;">${value}</div>`).join('')}
+        ${rows.map(([label, value]) => `<div style="font-size:10px;font-weight:700;letter-spacing:0.09em;text-transform:uppercase;color:rgba(245,232,210,0.7);">${label}</div><div style="font-size:12px;font-weight:700;color:#f2fbff;text-align:right;">${value}</div>`).join('')}
       </div>
     `;
+    this._renderWeaponLab(panel);
+  }
+
+  // ── Weapon Lab — individual pickup test mode ──────────────────────────
+  _renderWeaponLab(panel) {
+    if (this.roomName !== 'battle_room') return;
+
+    // Reuse or create the weapon lab container (avoid full re-render flicker)
+    let lab = panel.querySelector('#weapon-lab');
+    if (!lab) {
+      lab = document.createElement('div');
+      lab.id = 'weapon-lab';
+      panel.appendChild(lab);
+    }
+
+    const expanded = !!this._weaponLabExpanded;
+    const activeW2 = this._localCombatState?.weapon2 || '';
+    const activeW3 = this._localCombatState?.weapon3 || '';
+    const ammo2 = this._localCombatState?.ammo2 ?? 0;
+    const ammo3 = this._localCombatState?.ammo3 ?? 0;
+    const cooldown2 = this._localCombatState?.fireCooldown2 ?? 0;
+
+    // Group weapons by category
+    const categories = {};
+    for (const [id, info] of Object.entries(WEAPON_DISPLAY)) {
+      if (id === 'glo_burst' || id === 'shield' || id === 'banana' || id === 'ludicrous_mode') continue;
+      const cat = info.category || 'Other';
+      if (!categories[cat]) categories[cat] = [];
+      categories[cat].push({ id, ...info });
+    }
+
+    // Category display order
+    const catOrder = ['Elemental', 'Projectile', 'Trap', 'Melee', 'Debuff', 'Buff', 'Utility', 'Defence', 'Stream'];
+    const sorted = catOrder.filter(c => categories[c]).map(c => [c, categories[c]]);
+
+    // Current weapon status
+    const activeDisplay = WEAPON_DISPLAY[activeW2];
+    const statusIcon = activeDisplay ? activeDisplay.icon : '—';
+    const statusName = activeDisplay ? (activeDisplay.displayName || activeW2.replace(/_/g, ' ')) : 'NONE';
+    const statusColor = activeDisplay ? activeDisplay.hue : '#666';
+
+    const headerStyle = `display:flex;align-items:center;justify-content:space-between;margin-top:14px;padding-top:12px;border-top:1px solid rgba(152,230,247,0.18);cursor:pointer;user-select:none;`;
+
+    let html = `<div id="weapon-lab-header" style="${headerStyle}">
+      <div style="display:flex;align-items:center;gap:6px;">
+        <div style="font-size:10px;font-weight:800;letter-spacing:0.18em;text-transform:uppercase;color:rgba(245,210,160,0.9);">Weapon Lab</div>
+        <div style="font-size:12px;opacity:0.7;">${expanded ? '▾' : '▸'}</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:5px;">
+        <span style="font-size:13px;">${statusIcon}</span>
+        <span style="font-size:10px;font-weight:700;color:${statusColor};text-transform:uppercase;letter-spacing:0.06em;">${statusName}</span>
+        ${ammo2 > 0 ? `<span style="font-size:9px;font-weight:700;color:rgba(255,255,255,0.5);margin-left:2px;">×${ammo2}</span>` : ''}
+      </div>
+    </div>`;
+
+    if (expanded) {
+      // Fire + Clear buttons
+      html += `<div style="display:flex;gap:6px;margin:10px 0 8px;">
+        <button id="wlab-fire" style="flex:1;height:28px;border-radius:8px;border:1px solid rgba(255,120,80,0.6);background:rgba(255,80,40,0.25);color:#ffb899;font-family:inherit;font-size:10px;font-weight:800;letter-spacing:0.12em;text-transform:uppercase;cursor:pointer;">🔥 Fire</button>
+        <button id="wlab-fire-reserve" style="flex:1;height:28px;border-radius:8px;border:1px solid rgba(180,140,255,0.5);background:rgba(140,100,220,0.2);color:#d4bbff;font-family:inherit;font-size:10px;font-weight:800;letter-spacing:0.12em;text-transform:uppercase;cursor:pointer;">🔄 Swap+Fire</button>
+        <button id="wlab-clear" style="width:42px;height:28px;border-radius:8px;border:1px solid rgba(255,255,255,0.18);background:rgba(255,255,255,0.06);color:rgba(255,255,255,0.5);font-family:inherit;font-size:10px;font-weight:700;cursor:pointer;">✕</button>
+      </div>`;
+
+      // Weapon status detail
+      if (activeW2) {
+        html += `<div style="margin-bottom:10px;padding:6px 8px;border-radius:8px;background:rgba(${this._hexToRgb(statusColor)},0.12);border:1px solid rgba(${this._hexToRgb(statusColor)},0.3);">
+          <div style="font-size:9px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:rgba(255,255,255,0.5);margin-bottom:3px;">Equipped Secondary</div>
+          <div style="display:flex;align-items:center;gap:6px;">
+            <span style="font-size:16px;">${statusIcon}</span>
+            <div>
+              <div style="font-size:11px;font-weight:800;color:#fff;text-transform:uppercase;">${statusName}</div>
+              <div style="font-size:9px;color:rgba(255,255,255,0.5);">ammo ${ammo2} · cd ${Math.round(cooldown2)}ms</div>
+            </div>
+          </div>
+        </div>`;
+      }
+      if (activeW3) {
+        const resDisp = WEAPON_DISPLAY[activeW3];
+        html += `<div style="margin-bottom:10px;padding:4px 8px;border-radius:6px;background:rgba(140,100,220,0.1);border:1px solid rgba(140,100,220,0.2);">
+          <div style="font-size:9px;font-weight:700;color:rgba(200,180,255,0.7);text-transform:uppercase;">Reserve: ${resDisp?.icon || ''} ${activeW3.replace(/_/g, ' ')} ×${ammo3}</div>
+        </div>`;
+      }
+
+      // Weapon grid by category
+      for (const [cat, weapons] of sorted) {
+        html += `<div style="font-size:9px;font-weight:800;letter-spacing:0.16em;text-transform:uppercase;color:rgba(200,220,245,0.5);margin:8px 0 4px;">${cat}</div>`;
+        html += `<div style="display:flex;flex-wrap:wrap;gap:3px;">`;
+        for (const w of weapons) {
+          const isActive = w.id === activeW2;
+          const isReserve = w.id === activeW3;
+          const borderColor = isActive ? w.hue : isReserve ? '#a080e0' : 'rgba(255,255,255,0.12)';
+          const bgColor = isActive ? `rgba(${this._hexToRgb(w.hue)},0.25)` : isReserve ? 'rgba(140,100,220,0.15)' : 'rgba(255,255,255,0.04)';
+          const textColor = isActive ? '#fff' : 'rgba(255,255,255,0.7)';
+          const name = w.displayName || w.id.replace(/_/g, ' ');
+          html += `<button class="wlab-btn" data-weapon="${w.id}" title="${name}" style="display:flex;align-items:center;gap:3px;padding:3px 7px;border-radius:6px;border:1px solid ${borderColor};background:${bgColor};color:${textColor};font-family:inherit;font-size:9px;font-weight:700;text-transform:uppercase;cursor:pointer;white-space:nowrap;transition:background 0.15s,border-color 0.15s;">
+            <span style="font-size:12px;line-height:1;">${w.icon}</span>
+            <span style="letter-spacing:0.04em;">${name.length > 12 ? name.slice(0, 10) + '..' : name}</span>
+          </button>`;
+        }
+        html += `</div>`;
+      }
+
+      // Infinite ammo toggle
+      const infAmmo = !!this._weaponLabInfiniteAmmo;
+      html += `<div style="display:flex;align-items:center;gap:8px;margin-top:10px;padding-top:8px;border-top:1px solid rgba(152,230,247,0.12);">
+        <button id="wlab-inf-ammo" style="width:18px;height:18px;border-radius:4px;border:1px solid ${infAmmo ? '#98e6f7' : 'rgba(255,255,255,0.2)'};background:${infAmmo ? 'rgba(152,230,247,0.3)' : 'transparent'};color:${infAmmo ? '#98e6f7' : 'rgba(255,255,255,0.4)'};font-size:11px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;">${infAmmo ? '✓' : ''}</button>
+        <span style="font-size:9px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:rgba(255,255,255,0.5);">Infinite Ammo</span>
+      </div>`;
+    }
+
+    lab.innerHTML = html;
+
+    // Attach event listeners (delegated on the lab container)
+    const header = lab.querySelector('#weapon-lab-header');
+    if (header) {
+      header.onclick = () => {
+        this._weaponLabExpanded = !this._weaponLabExpanded;
+        this._renderWeaponLab(panel);
+      };
+    }
+
+    if (expanded) {
+      // Weapon buttons
+      lab.querySelectorAll('.wlab-btn').forEach(btn => {
+        btn.onmouseenter = () => { btn.style.filter = 'brightness(1.3)'; };
+        btn.onmouseleave = () => { btn.style.filter = ''; };
+        btn.onclick = () => {
+          const weaponId = btn.dataset.weapon;
+          if (!this.room) return;
+          const ammo = this._weaponLabInfiniteAmmo ? 999 : undefined;
+          this.room.send('debugGrantWeapon', {
+            targetId: this.room.sessionId,
+            weaponId,
+            ...(ammo !== undefined && { ammo }),
+          });
+          // Flash the button
+          btn.style.background = `rgba(152,230,247,0.4)`;
+          setTimeout(() => this._renderWeaponLab(panel), 300);
+        };
+      });
+
+      // Fire button
+      const fireBtn = lab.querySelector('#wlab-fire');
+      if (fireBtn) {
+        fireBtn.onclick = () => {
+          if (this.room && this.currentWeapon2) {
+            this.room.send("fireWeapon", { ...this._buildFirePayload('secondary'), slot: 'secondary' });
+          }
+          fireBtn.style.background = 'rgba(255,80,40,0.5)';
+          setTimeout(() => { fireBtn.style.background = 'rgba(255,80,40,0.25)'; }, 200);
+        };
+      }
+
+      // Swap+Fire button (swap reserve to active, then fire)
+      const swapFireBtn = lab.querySelector('#wlab-fire-reserve');
+      if (swapFireBtn) {
+        swapFireBtn.onclick = () => {
+          if (this.room && this.reserveWeapon) {
+            this.room.send("swapSecondaryWeapon", {});
+            setTimeout(() => {
+              if (this.room && this.currentWeapon2) {
+                this.room.send("fireWeapon", { ...this._buildFirePayload('secondary'), slot: 'secondary' });
+              }
+            }, 150);
+          }
+          swapFireBtn.style.background = 'rgba(140,100,220,0.4)';
+          setTimeout(() => { swapFireBtn.style.background = 'rgba(140,100,220,0.2)'; }, 200);
+        };
+      }
+
+      // Clear button
+      const clearBtn = lab.querySelector('#wlab-clear');
+      if (clearBtn) {
+        clearBtn.onclick = () => {
+          // Grant an empty/invalid weapon to clear the slot
+          if (this.room) {
+            this.room.send('debugGrantWeapon', { targetId: this.room.sessionId, weaponId: '__clear__' });
+          }
+        };
+      }
+
+      // Infinite ammo toggle
+      const infBtn = lab.querySelector('#wlab-inf-ammo');
+      if (infBtn) {
+        infBtn.onclick = () => {
+          this._weaponLabInfiniteAmmo = !this._weaponLabInfiniteAmmo;
+          this._renderWeaponLab(panel);
+        };
+      }
+    }
+  }
+
+  _enqueueBurstMessage(queue, msg, maxSize) {
+    queue.push(msg);
+    if (queue.length > maxSize) {
+      queue.splice(0, queue.length - maxSize);
+    }
+    if (typeof window !== 'undefined' && window.__gloDebug) {
+      window.__gloDebug.burstQueues = {
+        projectileFires: this._queuedProjectileFires.length,
+        projectileHits: this._queuedProjectileHits.length,
+        kartCrashes: this._queuedKartCrashes.length,
+      };
+    }
+  }
+
+  _drainBurstQueues() {
+    const tier = getTier();
+    const fireBudget = tier === TIER.LOW ? 4 : tier === TIER.MEDIUM ? 6 : 10;
+    const hitBudget = tier === TIER.LOW ? 2 : tier === TIER.MEDIUM ? 4 : 6;
+    const crashBudget = tier === TIER.LOW ? 1 : 2;
+
+    for (let i = 0; i < fireBudget && this._queuedProjectileFires.length > 0; i++) {
+      this._handleProjectileFiredMessage(this._queuedProjectileFires.shift());
+    }
+    for (let i = 0; i < hitBudget && this._queuedProjectileHits.length > 0; i++) {
+      this._handleProjectileHitMessage(this._queuedProjectileHits.shift());
+    }
+    for (let i = 0; i < crashBudget && this._queuedKartCrashes.length > 0; i++) {
+      this._handleKartCrashMessage(this._queuedKartCrashes.shift());
+    }
+
+    if (typeof window !== 'undefined' && window.__gloDebug) {
+      window.__gloDebug.burstQueues = {
+        projectileFires: this._queuedProjectileFires.length,
+        projectileHits: this._queuedProjectileHits.length,
+        kartCrashes: this._queuedKartCrashes.length,
+      };
+    }
+  }
+
+  _handleProjectileFiredMessage(msg) {
+    if (!msg) return;
+    console.log("[colyseus] Projectile fired:", msg.subType, "by", msg.ownerId);
+    if (areBattleAssetsLoaded()) playWeaponFireSound(msg.subType);
+    else playWeaponFireSFX(msg.subType);
+    if (typeof window !== 'undefined' && window.__gloDebug) window.__gloDebug.lastWeaponFired = msg.subType;
+
+    const firerMesh = (msg.ownerId === this.room?.sessionId)
+      ? this.localMesh
+      : this.remoteMeshes.get(msg.ownerId);
+    if (firerMesh) emitMuzzleFlash(firerMesh.position, msg.subType);
+  }
+
+  _handleProjectileHitMessage(msg) {
+    if (!msg) return;
+    console.log("[colyseus] Projectile hit:", msg.victimId, "for", msg.damage, "dmg", msg.subType);
+    if (areBattleAssetsLoaded()) {
+      playWeaponHitSound(msg.subType, { damage: msg.damage || 30 });
+      if (BATTLE_IMPACT_SYNTH_WEAPONS.has(msg.subType)) {
+        playWeaponImpactSynth(msg.subType, msg.damage || 30);
+      }
+    } else {
+      playWeaponHitSFX(msg.subType);
+      playWeaponImpactSynth(msg.subType, msg.damage || 30);
+    }
+    if (typeof window !== 'undefined' && window.__gloDebug) window.__gloDebug.lastHitVictimId = msg.victimId;
+    this._lastProjectileImpactMeta = {
+      victimId: msg.victimId,
+      subType: msg.subType,
+      at: performance.now(),
+    };
+    const projectileMesh = msg.projectileId ? this.entityMeshes.get(msg.projectileId) : null;
+    if (projectileMesh) projectileMesh._impactHandled = true;
+
+    const victimMesh = (msg.victimId === this.room?.sessionId)
+      ? this.localMesh
+      : this.remoteMeshes.get(msg.victimId);
+    const impactPosition = Number.isFinite(msg.hitX) && Number.isFinite(msg.hitY) && Number.isFinite(msg.hitZ)
+      ? new Vector3(msg.hitX, msg.hitY, msg.hitZ)
+      : victimMesh?.position;
+    const attackerMesh = (msg.attackerId === this.room?.sessionId)
+      ? this.localMesh
+      : this.remoteMeshes.get(msg.attackerId);
+    if (msg.subType === 'rock_barrage' && impactPosition) {
+      this._lastRockImpactTime = performance.now();
+      this._lastRockImpactPos = impactPosition.clone ? impactPosition.clone() : new Vector3(impactPosition.x, impactPosition.y, impactPosition.z);
+    }
+    if (victimMesh) {
+      const pos = impactPosition || victimMesh.position;
+      if (msg.subType === 'lightning_bolt') {
+        if (attackerMesh) {
+          emitTeslaArcBetween(
+            attackerMesh.position.add(new Vector3(0, 1.2, 0)),
+            pos.clone ? pos.clone() : new Vector3(pos.x, pos.y, pos.z),
+            1.05,
+          );
+        }
+        emitLightningStrike(pos);
+      } else if (msg.subType === 'glo_burst' || msg.subType === 'glow_thrower') {
+        emitStreamImpactVFX(pos, msg.subType);
+      } else {
+        emitWeaponImpactVFX(pos, msg.subType, msg.damage || 30);
+      }
+      const victimVFX = msg.victimId === this.room?.sessionId
+        ? this._localKartVFX
+        : this._remoteKartVFXs.get(msg.victimId);
+      if (victimVFX) {
+        victimVFX.emitHitBurst();
+        if (msg.subType === 'glo_burst') victimVFX.pulseDamage(260, 0.2);
+        else if (msg.subType === 'glow_thrower') victimVFX.pulseDamage(340, 0.18);
+        else if (msg.subType === 'lightning_bolt') victimVFX.emitStunBurst();
+      }
+    }
+    if (this.room && msg.victimId === this.room.sessionId) {
+      this.flashDamage();
+      flashDamageVignette();
+      if (!areBattleAssetsLoaded()) playSFX('crash');
+      if (this.localMesh && msg.subType === 'lightning_bolt' && attackerMesh) {
+        emitTeslaArcBetween(
+          attackerMesh.position.add(new Vector3(0, 1.2, 0)),
+          this.localMesh.position.add(new Vector3(0, 1.0, 0)),
+          1.15,
+        );
+      }
+      const shakeIntensity = Math.min(1.0, (msg.damage || 30) / 50);
+      shakeCamera(this.camera, shakeIntensity, 400);
+      this._triggerShockwave(msg.damage || 30);
+      if (typeof msg.remainingHealth === 'number') {
+        this._localHealth = msg.remainingHealth;
+        updateGUIHealthBar(this._localHealth);
+        flashGUIHealthDamage();
+        updateLowHealthWarning(this._localHealth);
+      }
+      const atkMesh = this.remoteMeshes.get(msg.attackerId);
+      if (atkMesh && this.localMesh) {
+        const dx = atkMesh.position.x - this.localMesh.position.x;
+        const dz = atkMesh.position.z - this.localMesh.position.z;
+        const angle = Math.atan2(dx, dz);
+        showDamageDirection(angle, msg.subType);
+        showOffscreenDamageArrow(angle);
+      }
+    }
+
+    if (this.room && msg.attackerId === this.room.sessionId) {
+      showHitConfirm(msg.damage || 30);
+      showHitMarkerVFX();
+      playHitConfirmSFX();
+    }
+  }
+
+  _handleKartCrashMessage(msg) {
+    if (!msg) return;
+    const impactPosition = Number.isFinite(msg.hitX) && Number.isFinite(msg.hitY) && Number.isFinite(msg.hitZ)
+      ? new Vector3(msg.hitX, msg.hitY, msg.hitZ)
+      : null;
+    const severity = Number(msg.severity || 0);
+    const playerAEntity = msg.playerAId === this.room?.sessionId
+      ? this._localKartEntity
+      : this._remoteKartEntities.get(msg.playerAId);
+    const playerBEntity = msg.playerBId === this.room?.sessionId
+      ? this._localKartEntity
+      : this._remoteKartEntities.get(msg.playerBId);
+
+    if (impactPosition) {
+      emitShockwaveRing(impactPosition, 6 + Math.min(10, severity * 0.6), [1, 0.58, 0.18]);
+      emitWeaponImpactVFX(impactPosition, 'wind_slash');
+    }
+
+    playerAEntity?.flashWhite(110);
+    playerBEntity?.flashWhite(110);
+    if (msg.playerAId === this.room?.sessionId) this._localKartVFX?.emitHitBurst();
+    if (msg.playerBId === this.room?.sessionId) this._localKartVFX?.emitHitBurst();
+    if (msg.playerAId !== this.room?.sessionId) this._remoteKartVFXs.get(msg.playerAId)?.emitHitBurst();
+    if (msg.playerBId !== this.room?.sessionId) this._remoteKartVFXs.get(msg.playerBId)?.emitHitBurst();
+
+    const localIsA = msg.playerAId === this.room?.sessionId;
+    const localIsB = msg.playerBId === this.room?.sessionId;
+    if (!localIsA && !localIsB) return;
+
+    const localDamage = localIsA ? Number(msg.damageA || 0) : Number(msg.damageB || 0);
+    const remainingHealth = localIsA ? msg.remainingHealthA : msg.remainingHealthB;
+    const otherId = localIsA ? msg.playerBId : msg.playerAId;
+    const otherMesh = this.remoteMeshes.get(otherId);
+
+    if (typeof window !== 'undefined' && window.__gloDebug) {
+      window.__gloDebug.lastKartCrash = {
+        playerAId: msg.playerAId,
+        playerBId: msg.playerBId,
+        localPlayerId: this.room?.sessionId || null,
+        localDamage,
+        remainingHealth,
+        severity,
+        otherId,
+      };
+    }
+
+    if (areBattleAssetsLoaded()) {
+      playBattleSound('rock_hit', {
+        volume: 0.42 + Math.min(0.18, severity * 0.03),
+        playbackRate: Math.max(0.78, 0.96 - Math.min(0.16, severity * 0.02)),
+        cooldownMs: 80,
+      });
+    } else {
+      playSFX('crash');
+    }
+    if (localDamage > 0 || severity >= 2) {
+      this.flashDamage();
+      flashDamageVignette();
+      shakeCamera(this.camera, Math.min(0.95, 0.22 + severity * 0.05), 320);
+    }
+    if (typeof remainingHealth === 'number') {
+      this._localHealth = remainingHealth;
+      updateGUIHealthBar(this._localHealth);
+      if (localDamage > 0) {
+        flashGUIHealthDamage();
+        updateLowHealthWarning(this._localHealth);
+      }
+    }
+    if (otherMesh && this.localMesh) {
+      const dx = otherMesh.position.x - this.localMesh.position.x;
+      const dz = otherMesh.position.z - this.localMesh.position.z;
+      const angle = Math.atan2(dx, dz);
+      showDamageDirection(angle, 'wind_slash');
+    }
+  }
+
+  _getRemoteProjectileVisualBudget() {
+    const tier = getTier();
+    const base = tier === TIER.LOW ? 18 : (tier === TIER.MEDIUM ? 32 : 52);
+    return Math.max(12, Math.round(base * runtimeFXBudget()));
+  }
+
+  _installBattleDebugHooks() {
+    if (typeof window === 'undefined' || !window.__gloDebug || !import.meta.env?.DEV) return;
+    window.__gloDebug.triggerMushroomCloud = (opts = {}) => {
+      if (!this.scene || !this.localMesh) return false;
+      const forward = this.localMesh.forward?.scale?.(opts.distance ?? 12) || new Vector3(0, 0, 12);
+      const pos = this.localMesh.position.add(forward);
+      emitNuclearFissionDetonation(pos);
+      window.__gloDebug.lastDebugScenario = { type: 'mushroom-cloud', at: Date.now(), x: pos.x, y: pos.y, z: pos.z };
+      return true;
+    };
+    window.__gloDebug.runBattleDebugScenario = (opts = {}) => this._runBattleDebugScenario(opts);
+    window.__gloDebug.clearBattleDebugScenario = () => { this._cleanupDebugScenario(); return true; };
+  }
+
+  _cleanupDebugScenario() {
+    if (this._debugScenarioTimer) {
+      clearTimeout(this._debugScenarioTimer);
+      this._debugScenarioTimer = null;
+    }
+    if (typeof this._debugScenarioCleanup === 'function') {
+      try { this._debugScenarioCleanup(); } catch (_) {}
+      this._debugScenarioCleanup = null;
+    }
+  }
+
+  _runBattleDebugScenario(opts = {}) {
+    if (!import.meta.env?.DEV || this.roomName !== 'battle_room' || !this.scene || !this.localMesh) return false;
+    this._cleanupDebugScenario();
+
+    const count = Math.max(4, Math.min(this._getRemoteProjectileVisualBudget(), Number(opts.count || 10)));
+    const radius = Math.max(6, Number(opts.radius || 14));
+    const durationMs = Math.max(450, Number(opts.durationMs || 1200));
+    const subTypes = Array.isArray(opts.subTypes) && opts.subTypes.length
+      ? opts.subTypes.map((id) => String(id || '').trim()).filter(Boolean)
+      : null;
+    const subType = opts.subType || subTypes?.[0] || 'super_nova';
+    const center = this.localMesh.position.add(this.localMesh.forward?.scale?.(10) || new Vector3(0, 0, 10));
+    const createdIds = [];
+
+    for (let i = 0; i < count; i++) {
+      const angle = (Math.PI * 2 * i) / count;
+      const id = `__debug_proj_${Date.now()}_${i}`;
+      const nextSubType = subTypes ? subTypes[i % subTypes.length] : subType;
+      const mesh = this._createProjectileMesh(id, nextSubType);
+      const px = center.x + Math.cos(angle) * radius;
+      const pz = center.z + Math.sin(angle) * radius;
+      mesh.position.set(px, center.y + 1.6, pz);
+      mesh._entityId = id;
+      mesh._entityType = 'projectile';
+      mesh._subType = nextSubType;
+      this.entityMeshes.set(id, mesh);
+      this._projectileTargets.set(id, {
+        pos: mesh.position.clone(),
+        vel: new Vector3(-Math.cos(angle) * 9, 0, -Math.sin(angle) * 9),
+        lastUpdate: performance.now(),
+        subType: nextSubType,
+        spawnTime: performance.now(),
+        lifespan: durationMs / 1000,
+        maxLifespan: durationMs / 1000,
+        targetId: '',
+      });
+      createdIds.push(id);
+    }
+
+    this._debugScenarioCleanup = () => {
+      for (const id of createdIds) {
+        const mesh = this.entityMeshes.get(id);
+        if (mesh) {
+          if (mesh._trailId) disposeProjectileTrail(mesh._trailId);
+          this._disposeProjectileVisual(mesh);
+          try { mesh.dispose(); } catch (_) {}
+        }
+        this.entityMeshes.delete(id);
+        this.entityAggregates.delete(id);
+        this._projectileTargets.delete(id);
+        this._suppressedEntityIds.delete(id);
+      }
+    };
+
+    this._debugScenarioTimer = setTimeout(() => {
+      this._cleanupDebugScenario();
+      if (subTypes?.includes('final_fission')) {
+        emitNuclearFissionDetonation(center);
+      } else if (!subTypes || subTypes.includes('super_nova')) {
+        emitWeaponImpactVFX(center, 'super_nova');
+      }
+      if (typeof window !== 'undefined' && window.__gloDebug) {
+        window.__gloDebug.lastDebugScenario = {
+          type: 'battle-burst',
+          at: Date.now(),
+          count,
+          subType,
+          subTypes,
+          x: center.x,
+          y: center.y,
+          z: center.z,
+        };
+      }
+    }, durationMs);
+
+    if (typeof window !== 'undefined' && window.__gloDebug) {
+      window.__gloDebug.lastDebugScenario = {
+        type: 'battle-burst-start',
+        at: Date.now(),
+        count,
+        subType,
+        subTypes,
+        x: center.x,
+        y: center.y,
+        z: center.z,
+      };
+    }
+    return true;
+  }
+
+  _hexToRgb(hex) {
+    const h = hex.replace('#', '');
+    return `${parseInt(h.substring(0, 2), 16)},${parseInt(h.substring(2, 4), 16)},${parseInt(h.substring(4, 6), 16)}`;
   }
 
   _publishWeaponDebugState() {
@@ -2027,7 +2752,7 @@ export class ColyseusBabylonClient {
     this._publishWeaponDebugState();
     updateGUIHealthBar(this._localHealth);
     updateGUILives(this._localLives);
-    updateGUIScore(Number(self.score || 0), this.gameType === 'balloon' ? 'KOs' : 'Kills');
+    updateGUIScore(Number(self.score || 0), 'Knock Outs');
     updateScoreDisplay(Number(self.score || 0), this.gameType === 'balloon' ? 'KOs' : 'Kills');
     if (changed) updateGUIWeapon(this._localCombatState, WEAPON_DISPLAY);
   }
@@ -2201,6 +2926,8 @@ export class ColyseusBabylonClient {
   }
 
   setupInputLoop() {
+    this._teardownInputLoop();
+
     // Track pressed keys
     this._onKeyDown = (e) => {
       this._keys[e.code] = true;
@@ -2232,8 +2959,18 @@ export class ColyseusBabylonClient {
       this._keys[e.code] = false;
       if (e.code === 'Tab') hideScoreboard();
     };
+    this._onWindowBlur = () => {
+      this._resetInputState({ sendNeutral: true });
+    };
+    this._onVisibilityChange = () => {
+      if (document.hidden) {
+        this._resetInputState({ sendNeutral: true });
+      }
+    };
     window.addEventListener("keydown", this._onKeyDown);
     window.addEventListener("keyup",   this._onKeyUp);
+    window.addEventListener("blur", this._onWindowBlur);
+    document.addEventListener("visibilitychange", this._onVisibilityChange);
 
     // Gamepad support (21.33)
     initGamepad((connected) => {
@@ -2250,7 +2987,7 @@ export class ColyseusBabylonClient {
     }, this._inputKeepaliveMs);
 
     // Per-frame input polling → sendInput()
-    this.scene.registerBeforeRender(() => {
+    this._setSceneBeforeRender("_inputPollingBeforeRender", () => {
       if (!this.localMesh || !this.room) return;
 
       // Block all input/physics until the match goes LIVE (avoids pre-match kart movement)
@@ -2300,7 +3037,8 @@ export class ColyseusBabylonClient {
       if (this._localHealth <= 25 && this._localHealth > 0) {
         this._heartbeatTimer -= this.engine.getDeltaTime() / 1000;
         if (this._heartbeatTimer <= 0) {
-          playHeartbeat();
+          if (areBattleAssetsLoaded()) playBattleSound('heartbeat');
+          else playHeartbeat();
           this._heartbeatTimer = 1.2;
         }
       }
@@ -2371,24 +3109,8 @@ export class ColyseusBabylonClient {
         }
       }
 
-      // Status effect VFX — use KartVFX state machine (parented to kart, follows movement)
-      if (this._localKartVFX && this._localCombatState.effectType) {
-        const eff = this._localCombatState.effectType;
-        if (eff === 'stunned' || eff === 'stun' || eff === 'spinout' || eff === 'knockback') {
-          this._localKartVFX.setState(VFXState.STUNNED);
-        } else if (eff === 'frozen' || eff === 'freeze') {
-          this._localKartVFX.setState(VFXState.FROZEN);
-        } else if (eff === 'burning' || eff === 'burn') {
-          this._localKartVFX.setState(VFXState.BURNING);
-        }
-      } else if (this._localKartVFX && !this._localCombatState.effectType) {
-        // Clear effect state when server clears the effect
-        if (this._localKartVFX.state === VFXState.STUNNED ||
-            this._localKartVFX.state === VFXState.FROZEN ||
-            this._localKartVFX.state === VFXState.BURNING) {
-          this._localKartVFX.setState(VFXState.IDLE);
-        }
-      }
+      // Status effect VFX — authoritative effect state drives local anchors.
+      this._applyKartEffectVFX(this._localKartVFX, this._localCombatState.effectType);
 
       // ── Dynamic forcefield shield (HP-based, green→red) ─────────────
       this._updateForceFieldShield();
@@ -2400,6 +3122,22 @@ export class ColyseusBabylonClient {
           ? this.localKartAggregate.body.getLinearVelocity().length()
           : 0;
         this._localKartVFX.update(dtVFX, speed, this._localHealth);
+      }
+      if (this.authoritativeState?.players?.forEach) {
+        this._remoteKartVFXTick = (this._remoteKartVFXTick || 0) + 1;
+        const remoteVFXStride = runtimePressure() > 0.72 ? 4 : runtimePressure() > 0.45 ? 2 : 1;
+        if ((this._remoteKartVFXTick % remoteVFXStride) === 0) {
+          this._remoteKartVFXs.forEach((remoteVFX, remoteId) => {
+            const remotePlayer = this.authoritativeState.players.get(remoteId);
+            if (!remotePlayer || !remoteVFX) return;
+            this._applyKartEffectVFX(remoteVFX, remotePlayer.effectType || '');
+            remoteVFX.update(
+              dtVFX * remoteVFXStride,
+              Math.hypot(Number(remotePlayer.vx || 0), Number(remotePlayer.vz || 0)),
+              Number(remotePlayer.health || 100),
+            );
+          });
+        }
       }
 
       // ── Ludicrous Mode VFX ──────────────────────────────────────────
@@ -2421,12 +3159,32 @@ export class ColyseusBabylonClient {
 
       // Send input when there is actual input, or idle heartbeat every 200ms
       const hasInput = throttle !== 0 || steer !== 0 || brake || firePrimary || fireSecondary || drift;
-      if (hasInput || this._wasSendingInput) {
+      const neutralInput = {
+        throttle: 0,
+        steer: 0,
+        brake: false,
+        firePrimary: false,
+        fireSecondary: false,
+        drift: false,
+      };
+      if (hasInput) {
         this.sendInput({ throttle, steer, brake, firePrimary, fireSecondary, drift });
-        this._wasSendingInput = hasInput;
+        this._wasSendingInput = true;
+        this._lastInputSendTime = performance.now();
+      } else if (this._wasSendingInput) {
+        // Release/idle packets should reach the server, but don't need client prediction
+        // or pending-input reconciliation churn.
+        this.sendInput(neutralInput, {
+          applyPrediction: false,
+          emitWeaponEvents: false,
+        });
+        this._wasSendingInput = false;
         this._lastInputSendTime = performance.now();
       } else if (!this._lastInputSendTime || performance.now() - this._lastInputSendTime > 200) {
-        this.sendInput({ throttle: 0, steer: 0, brake: false, firePrimary: false, fireSecondary: false, drift: false });
+        this.sendInput(neutralInput, {
+          applyPrediction: false,
+          emitWeaponEvents: false,
+        });
         this._lastInputSendTime = performance.now();
       }
 
@@ -2622,7 +3380,8 @@ export class ColyseusBabylonClient {
     // Explosion VFX + audio
     emitWeaponExplosion(pos, 100);
     showKOOverlay("KO'd!");
-    playEliminationSFX();
+    if (areBattleAssetsLoaded()) playBattleSound('death', { volume: 0.74, playbackRate: 0.92, cooldownMs: 180 });
+    else playEliminationSFX();
 
     // Clear weapon on death
     Object.assign(this._localCombatState, { weapon: '', displayWeapon: '', ammo: 0, fireCooldown: 0, effectType: '', shielded: false, maxCooldownMs: 0 });
@@ -2915,7 +3674,9 @@ export class ColyseusBabylonClient {
       requestAnimationFrame(() => { screen.style.opacity = '1'; });
 
       // Victory/defeat audio stinger
-      if (isSelfWinner) {
+      if (areBattleAssetsLoaded()) {
+        playBattleSound(isSelfWinner ? 'victory' : 'defeat');
+      } else if (isSelfWinner) {
         playSFX('race_win');
       } else {
         playSFX('race_finish');
@@ -3072,6 +3833,9 @@ export class ColyseusBabylonClient {
       this.checkLocalCollisions();
       this.applyLocalPrediction(payload);
       this.pendingInputs.push(payload);
+      if (this.pendingInputs.length > MAX_PENDING_INPUTS) {
+        this.pendingInputs.splice(0, this.pendingInputs.length - MAX_PENDING_INPUTS);
+      }
     }
     this.room.send("input", payload);
 
@@ -3082,10 +3846,27 @@ export class ColyseusBabylonClient {
     // ── Primary fire (Space) — glo_burst, continuous stream with overheat ──
     if (input.firePrimary && this.currentWeapon && !this._localCombatState.overheated) {
       const now = performance.now();
-      if (!this._lastStreamFireTime || now - this._lastStreamFireTime > 45) {
+      if (this.currentWeapon === 'glo_burst') {
+        if (!this._firePressedLastFrame) {
+          this._primaryWarmupUntil = now + GLO_BURST_WARMUP_MS;
+          this._lastPrimaryFireSentAt = 0;
+          if (areBattleAssetsLoaded()) {
+            playBattleSound('machine_gun', { volume: 0.16, playbackRate: 0.76, cooldownMs: 0 });
+          } else {
+            playSFX('machine_gun', 0.28);
+          }
+        }
+        if (now >= this._primaryWarmupUntil && (!this._lastPrimaryFireSentAt || (now - this._lastPrimaryFireSentAt) >= GLO_BURST_FIRE_INTERVAL_MS)) {
+          this.room.send("fireWeapon", { ...this._buildFirePayload("primary"), slot: "primary", warmupComplete: true });
+          this._lastPrimaryFireSentAt = now;
+        }
+      } else if (!this._lastStreamFireTime || now - this._lastStreamFireTime > STREAM_SECONDARY_FIRE_INTERVAL_MS) {
         this.room.send("fireWeapon", { ...this._buildFirePayload("primary"), slot: "primary" });
         this._lastStreamFireTime = now;
       }
+    } else {
+      this._primaryWarmupUntil = 0;
+      this._lastPrimaryFireSentAt = 0;
     }
 
     // ── Secondary fire (E) — pickup weapon ──
@@ -3093,7 +3874,7 @@ export class ColyseusBabylonClient {
       const isStream2 = this.currentWeapon2 === 'glow_thrower';
       if (isStream2) {
         const now = performance.now();
-        if (!this._lastStream2FireTime || now - this._lastStream2FireTime > 45) {
+        if (!this._lastStream2FireTime || now - this._lastStream2FireTime > STREAM_SECONDARY_FIRE_INTERVAL_MS) {
           this.room.send("fireWeapon", { ...this._buildFirePayload("secondary"), slot: "secondary" });
           this._lastStream2FireTime = now;
         }
@@ -3109,7 +3890,10 @@ export class ColyseusBabylonClient {
     const origin = this.localMesh?.position?.clone?.() || new Vector3(0, 0, 0);
     origin.y += 0.9;
 
-    const aimDir = this._getMissileAimDirection();
+    const weaponId = slot === 'secondary' ? this.currentWeapon2 : this.currentWeapon;
+    const aimDir = weaponId === 'tornado'
+      ? this._getGroundedAimDirection()
+      : this._getMissileAimDirection();
 
     origin.addInPlace(new Vector3(aimDir.x * 2.8, Math.max(0, aimDir.y) * 1.2, aimDir.z * 2.8));
 
@@ -3122,19 +3906,131 @@ export class ColyseusBabylonClient {
       dirZ: aimDir.z,
     };
 
-    if (slot === 'secondary' && this.currentWeapon2 === 'missile' && this._missileLockTargetId && this._missileLockProgress >= 1) {
+    const activeLockWeapon = this._getActiveLockWeapon();
+    if (slot === 'secondary' && activeLockWeapon && this._missileLockState?.locked && this._missileLockState?.targetId) {
       payload.targetId = this._missileLockTargetId;
     }
 
     return payload;
   }
 
-  _getMissileAimDirection() {
+  _sendNeutralRealtimeInput() {
+    if (!this.room || !this.localMesh || !this._kartReady || this._deathState || this._spectating) return;
+    this.sendInput({
+      throttle: 0,
+      steer: 0,
+      brake: false,
+      drift: false,
+      firePrimary: false,
+      fireSecondary: false,
+    }, {
+      applyPrediction: false,
+      emitWeaponEvents: false,
+    });
+    this._lastInputSendTime = performance.now();
+  }
+
+  _resetInputState(options = {}) {
+    const { sendNeutral = false } = options;
+    this._keys = {};
+    this._latestRealtimeInput = {
+      throttle: 0,
+      steer: 0,
+      brake: false,
+      drift: false,
+      firePrimary: false,
+      fireSecondary: false,
+    };
+    this._firePressedLastFrame = false;
+    this._fire2PressedLastFrame = false;
+    this._swapSecondaryPressedLastFrame = false;
+    this._gpScoreboardHeld = false;
+    this._gpPauseHeld = false;
+    this._wasSendingInput = false;
+    this._primaryWarmupUntil = 0;
+    this._lastPrimaryFireSentAt = 0;
+    this._lastStreamFireTime = 0;
+    this._lastStream2FireTime = 0;
+    hideScoreboard();
+    if (sendNeutral) {
+      this._sendNeutralRealtimeInput();
+    }
+  }
+
+  _teardownInputLoop() {
+    if (this._onKeyDown) window.removeEventListener("keydown", this._onKeyDown);
+    if (this._onKeyUp) window.removeEventListener("keyup", this._onKeyUp);
+    if (this._onWindowBlur) window.removeEventListener("blur", this._onWindowBlur);
+    if (this._onVisibilityChange) document.removeEventListener("visibilitychange", this._onVisibilityChange);
+    this._onKeyDown = null;
+    this._onKeyUp = null;
+    this._onWindowBlur = null;
+    this._onVisibilityChange = null;
+    disposeGamepad();
+    if (this._inputKeepaliveInterval) {
+      window.clearInterval(this._inputKeepaliveInterval);
+      this._inputKeepaliveInterval = null;
+    }
+    this._clearSceneBeforeRender("_inputPollingBeforeRender");
+    this._resetInputState();
+  }
+
+  _getGroundedAimDirection() {
     let aimDir = this.localMesh?.forward?.scale?.(-1) || new Vector3(0, 0, 1);
+    aimDir.y = 0;
     if (aimDir.lengthSquared() < 0.0001) {
-      aimDir = new Vector3(0, 0, 1);
+      return new Vector3(0, 0, 1);
     }
     aimDir.normalize();
+    return aimDir;
+  }
+
+  _getActiveLockWeapon() {
+    if (this.currentWeapon2 === 'missile' || this.currentWeapon2 === 'lightning_bolt') {
+      return this.currentWeapon2;
+    }
+    return '';
+  }
+
+  _syncLockConfigForWeapon(weaponId) {
+    const config = weaponId === 'lightning_bolt'
+      ? {
+          maxRange: 42,
+          minRange: 3,
+          halfAngle: Math.PI / 5.8,
+          acquireTime: 0.22,
+          loseTime: 0.18,
+          stickyBonus: 0.18,
+          maxScreenOffsetNorm: 0.42,
+          centerBias: 1.18,
+          edgePenalty: 1.75,
+          minAcquireScale: 0.28,
+        }
+      : {
+          maxRange: 85,
+          minRange: 4,
+          halfAngle: Math.PI / 5.2,
+          acquireTime: 0.52,
+          loseTime: 0.24,
+          stickyBonus: 0.2,
+          maxScreenOffsetNorm: 0.56,
+          centerBias: 0.92,
+          edgePenalty: 1.42,
+          minAcquireScale: 0.34,
+        };
+
+    Object.assign(this._missileLockState.config, config);
+  }
+
+  _getMissileAimDirection() {
+    let baseForward = this.localMesh?.forward?.scale?.(-1) || new Vector3(0, 0, 1);
+    if (baseForward.lengthSquared() < 0.0001) {
+      baseForward = new Vector3(0, 0, 1);
+    }
+    baseForward.y = Math.max(-0.12, Math.min(0.18, baseForward.y || 0));
+    baseForward.normalize();
+
+    let aimDir = baseForward.clone();
 
     const camRay = this.camera?.getForwardRay?.(120);
     if (camRay?.direction) {
@@ -3142,11 +4038,55 @@ export class ColyseusBabylonClient {
       projected.y = Math.max(-0.2, Math.min(0.35, projected.y));
       if (projected.lengthSquared() > 0.0001) {
         projected.normalize();
-        aimDir = projected;
+        const alignment = Vector3.Dot(projected, baseForward);
+        if (alignment > 0.2) {
+          const cameraInfluence = Math.min(0.42, Math.max(0.12, (alignment - 0.2) * 0.45));
+          aimDir = Vector3.Lerp(baseForward, projected, cameraInfluence);
+          if (aimDir.lengthSquared() > 0.0001) {
+            aimDir.normalize();
+          } else {
+            aimDir = baseForward.clone();
+          }
+        }
       }
     }
 
     return aimDir;
+  }
+
+  _resolveKartVFXState(effectType) {
+    const effect = String(effectType || '').toLowerCase();
+    if (!effect) return '';
+    if (effect === 'stunned' || effect === 'stun' || effect === 'spinout' || effect === 'knockback') {
+      return VFXState.STUNNED;
+    }
+    if (effect === 'frozen' || effect === 'freeze') {
+      return VFXState.FROZEN;
+    }
+    if (effect === 'burning' || effect === 'burn') {
+      return VFXState.BURNING;
+    }
+    if (effect === 'poison' || effect === 'poisoned') {
+      return VFXState.DAMAGED;
+    }
+    return '';
+  }
+
+  _applyKartEffectVFX(vfx, effectType) {
+    if (!vfx) return;
+    const nextState = this._resolveKartVFXState(effectType);
+    if (nextState) {
+      vfx.setState(nextState);
+      return;
+    }
+    if (
+      vfx.state === VFXState.STUNNED
+      || vfx.state === VFXState.FROZEN
+      || vfx.state === VFXState.BURNING
+      || vfx.state === VFXState.DAMAGED
+    ) {
+      vfx.setState(VFXState.IDLE);
+    }
   }
 
   _projectWorldToScreen(worldPos) {
@@ -3160,62 +4100,105 @@ export class ColyseusBabylonClient {
   }
 
   _updateMissileLockReticle(dt) {
-    if (this.currentWeapon2 !== 'missile' || !this.localMesh || !this.authoritativeState?.players || !this.camera) {
+    const activeLockWeapon = this._getActiveLockWeapon();
+    if (!activeLockWeapon || !this.localMesh || !this.authoritativeState?.players || !this.camera) {
+      this._missileLockState.targetId = null;
+      this._missileLockState.lockProgress = 0;
+      this._missileLockState.locked = false;
+      this._missileLockState.loseTimer = 0;
       this._missileLockTargetId = null;
       this._missileLockProgress = 0;
       this._missileLockScreenX = null;
       this._missileLockScreenY = null;
+      this._missileLockWasLocked = false;
       updateLockReticle(null, null, false);
+      updateGUILockTelemetry({ lockWeapon: activeLockWeapon || '', lockProgress: 0, locked: false, targetName: '' });
       return;
     }
 
+    this._syncLockConfigForWeapon(activeLockWeapon);
+
     const localPos = this.localMesh.position;
     const aimDir = this._getMissileAimDirection();
-    let bestTargetId = null;
-    let bestScreenPos = null;
-    let bestScore = -Infinity;
+    const candidates = [];
 
     this.authoritativeState.players.forEach((player, playerId) => {
       if (playerId === this.room?.sessionId) return;
       if (Number(player.health || 0) <= 0) return;
 
       const targetPos = new Vector3(player.x || 0, (player.y || 0) + 1.4, player.z || 0);
-      const toTarget = targetPos.subtract(localPos);
-      const distance = toTarget.length();
-      if (distance < 0.001 || distance > 70) return;
-
-      toTarget.scaleInPlace(1 / distance);
-      const facing = Vector3.Dot(aimDir, toTarget);
-      if (facing < 0.72) return;
-
       const screenPos = this._projectWorldToScreen(targetPos);
       if (!screenPos) return;
-
-      const score = facing * 2.2 - distance * 0.025;
-      if (score > bestScore) {
-        bestScore = score;
-        bestTargetId = playerId;
-        bestScreenPos = screenPos;
-      }
+      const halfWidth = Math.max(1, this.engine?.getRenderWidth?.() / 2 || 1);
+      const halfHeight = Math.max(1, this.engine?.getRenderHeight?.() / 2 || 1);
+      const offsetX = (screenPos.x - halfWidth) / halfWidth;
+      const offsetY = (screenPos.y - halfHeight) / halfHeight;
+      const screenOffsetNorm = Math.sqrt(offsetX * offsetX + offsetY * offsetY);
+      candidates.push({
+        id: playerId,
+        position: targetPos,
+        velocity: new Vector3(player.vx || 0, player.vy || 0, player.vz || 0),
+        screenPos,
+        screenOffsetNorm,
+      });
     });
 
-    if (!bestTargetId || !bestScreenPos) {
-      this._missileLockTargetId = null;
-      this._missileLockProgress = Math.max(0, this._missileLockProgress - dt * 2.5);
+    const lockResult = tickLockOn(this._missileLockState, localPos, aimDir, candidates, dt);
+    const trackedCandidate = lockResult.candidate && lockResult.candidate.id === lockResult.targetId
+      ? lockResult.candidate
+      : candidates.find((candidate) => candidate.id === lockResult.targetId) || null;
+
+    this._missileLockTargetId = lockResult.targetId;
+    this._missileLockProgress = lockResult.lockProgress;
+    const targetPlayer = lockResult.targetId ? this.authoritativeState.players.get(lockResult.targetId) : null;
+    const targetName = targetPlayer?.name || "";
+
+    if (!trackedCandidate?.screenPos) {
+      this._missileLockScreenX = null;
+      this._missileLockScreenY = null;
       updateLockReticle(null, null, false);
+      updateGUILockTelemetry({
+        lockWeapon: activeLockWeapon,
+        lockProgress: lockResult.lockProgress,
+        locked: lockResult.locked,
+        targetName,
+      });
+      this._missileLockWasLocked = false;
       return;
     }
 
-    if (bestTargetId === this._missileLockTargetId) {
-      this._missileLockProgress = Math.min(1, this._missileLockProgress + dt * 1.8);
-    } else {
-      this._missileLockTargetId = bestTargetId;
-      this._missileLockProgress = 0.2;
-    }
+    this._missileLockScreenX = trackedCandidate.screenPos.x;
+    this._missileLockScreenY = trackedCandidate.screenPos.y;
+    updateLockReticle(
+      trackedCandidate.screenPos.x,
+      trackedCandidate.screenPos.y,
+      lockResult.locked,
+      lockResult.lockProgress,
+    );
+    updateGUILockTelemetry({
+      lockWeapon: activeLockWeapon,
+      lockProgress: lockResult.lockProgress,
+      locked: lockResult.locked,
+      targetName,
+    });
 
-    this._missileLockScreenX = bestScreenPos.x;
-    this._missileLockScreenY = bestScreenPos.y;
-    updateLockReticle(bestScreenPos.x, bestScreenPos.y, this._missileLockProgress >= 1);
+    const now = performance.now();
+    const justLocked = lockResult.locked && !this._missileLockWasLocked;
+    if (lockResult.targetId) {
+      const intervalMs = lockResult.locked
+        ? 122
+        : Math.max(120, 620 - lockResult.lockProgress * 420);
+      if (!justLocked && (now - this._lastMissileLockToneAt) >= intervalMs) {
+        playMissileLockTone(lockResult.lockProgress, lockResult.locked);
+        this._lastMissileLockToneAt = now;
+      }
+    }
+    if (justLocked) {
+      playMissileLockTone(1, true);
+      playSFX('locked', 0.42);
+      this._lastMissileLockToneAt = now;
+    }
+    this._missileLockWasLocked = lockResult.locked;
   }
 
   checkLocalCollisions() {
@@ -3274,6 +4257,14 @@ export class ColyseusBabylonClient {
 
     // ── Delegate to shared kart-physics.js (eliminates inline duplication) ──
     const result = applyKartDriving(body, transform, input, dt, this._driftState, { spdMult, strMult });
+    updateGUIBattleTelemetry({
+      speedKPH: result.speedKPH,
+      driftTier: result.driftTier,
+      miniBoostTier: result.miniBoostTier,
+      boostActive: result.miniBoostActive,
+      isGrounded: result.isGrounded,
+      isReversing: result.isReversing,
+    });
 
     // ── Arena bounds enforcement ─────────────────────────────────────────
     if (this._arenaBoundsHalf) {
@@ -3492,7 +4483,7 @@ export class ColyseusBabylonClient {
   syncRemoteMeshes(state) {
     if (!this.scene || !state?.players || !this.room) return;
 
-    const connectedIds = Array.from(state.players.keys());
+    const connectedIds = new Set(state.players.keys());
 
     state.players.forEach((player, id) => {
       if (id === this.room.sessionId) return;
@@ -3513,6 +4504,11 @@ export class ColyseusBabylonClient {
           color: playerColor,
           scale: this._arenaKartScale || undefined,
         }).then((remoteEntity) => {
+            const activePlaceholder = this.remoteMeshes.get(id);
+            if (!this.scene || this.scene.isDisposed || !activePlaceholder || activePlaceholder !== placeholder) {
+              remoteEntity.dispose();
+              return;
+            }
             const realMesh = remoteEntity.rootMesh;
             realMesh.position = placeholder.position.clone();
             realMesh.rotationQuaternion = placeholder.rotationQuaternion ? placeholder.rotationQuaternion.clone() : new Quaternion();
@@ -3538,7 +4534,7 @@ export class ColyseusBabylonClient {
             }
 
             // ── Remote KartVFX ──
-            const remoteVFX = new KartVFX(this.scene, remoteEntity);
+            const remoteVFX = new KartVFX(this.scene, remoteEntity, { remote: true });
             this._remoteKartVFXs.set(id, remoteVFX);
 
             // ── GLO underglow for remote player ──
@@ -3548,6 +4544,9 @@ export class ColyseusBabylonClient {
                 color:  player.gloColor  || '#ff0080',
                 color2: player.gloColor2 || '#00e5ff',
                 id: id,
+                isRemote: true,
+                enableLight: false,
+                trailLength: 36,
               });
               setGloVisible(gloKit, true);
               this._remoteGloKits.set(id, gloKit);
@@ -3556,20 +4555,37 @@ export class ColyseusBabylonClient {
             console.log(`[realtime] Loaded remote kart for ${id} (KartEntity)`);
           })
           .catch((err) => {
+            if (this.remoteMeshes.get(id) === placeholder) {
+              try { placeholder.dispose(); } catch (_) {}
+              this.remoteMeshes.delete(id);
+            }
+            this._remoteTargets.delete(id);
             console.error(`[realtime] Failed to load remote kart for ${id}:`, err);
+          })
+          .finally(() => {
+            this.loadingPromises.delete(id);
           });
 
         this.loadingPromises.set(id, loadPromise);
       } else if (mesh && mesh.position) {
         // Store target for smooth interpolation (lerped in beforeRender)
         // Use server Y directly — it's authoritative. Don't override with _sampleSurfaceY.
-        this._remoteTargets.set(id, {
-          pos: new Vector3(player.x, player.y, player.z),
-          rot: new Quaternion(player.rx, player.ry, player.rz, player.rw),
-          vel: new Vector3(player.vx || 0, 0, player.vz || 0), // zero Y extrap to prevent bounce
-          steer: player.steer || 0,
-          renderPos: mesh.position.clone(),
-        });
+        let target = this._remoteTargets.get(id);
+        if (!target) {
+          target = {
+            pos: new Vector3(),
+            rot: new Quaternion(),
+            vel: new Vector3(),
+            steer: 0,
+            renderPos: mesh.position.clone(),
+          };
+          this._remoteTargets.set(id, target);
+        }
+        target.pos.set(player.x, player.y, player.z);
+        target.rot.copyFromFloats(player.rx, player.ry, player.rz, player.rw);
+        target.vel.set(player.vx || 0, 0, player.vz || 0); // zero Y extrap to prevent bounce
+        target.steer = player.steer || 0;
+        target.renderPos.copyFrom(mesh.position);
 
         // Remote shield forcefield bubble
         this._updateRemoteShieldBubble(id, mesh, !!player.shielded, Number(player.shieldHP || 0));
@@ -3578,7 +4594,7 @@ export class ColyseusBabylonClient {
 
     // Cleanup disconnected players
     for (const [id, mesh] of this.remoteMeshes.entries()) {
-      if (!connectedIds.includes(id)) {
+      if (!connectedIds.has(id)) {
         // Dispose KartVFX first (particle systems reference the mesh)
         const remoteVFX = this._remoteKartVFXs.get(id);
         if (remoteVFX) { remoteVFX.dispose(); this._remoteKartVFXs.delete(id); }
@@ -3596,7 +4612,7 @@ export class ColyseusBabylonClient {
         const remoteGlo = this._remoteGloKits.get(id);
         if (remoteGlo) { disposeGloUnderglow(remoteGlo); this._remoteGloKits.delete(id); }
         const remoteBubble = this._remoteShieldBubbles?.get(id);
-        if (remoteBubble) { remoteBubble.sphere.dispose(); this._remoteShieldBubbles.delete(id); }
+        if (remoteBubble) { this._disposeShieldParticleField(remoteBubble); this._remoteShieldBubbles.delete(id); }
         this._remoteWheelMeshes.delete(id);
         this.remoteMeshes.delete(id);
         this.loadingPromises.delete(id);
@@ -3607,9 +4623,23 @@ export class ColyseusBabylonClient {
 
   syncEntities(state) {
     if (!this.scene || !state?.entities) return;
-    const currentEntities = Array.from(state.entities.keys());
+    const currentEntities = new Set(state.entities.keys());
+    const projectileBudget = this._getRemoteProjectileVisualBudget();
+    let activeProjectileVisuals = 0;
+    for (const [id, mesh] of this.entityMeshes.entries()) {
+      if (!currentEntities.has(id) || !mesh?._entityType || !mesh.isEnabled?.()) continue;
+      if (mesh._entityType === 'projectile' && mesh._subType !== 'bubblegum' && mesh._subType !== 'banana') {
+        activeProjectileVisuals++;
+      }
+    }
     state.entities.forEach((entity, id) => {
+      const isProjectile = entity.type === "projectile";
+      const isTrap = isProjectile && (entity.subType === "bubblegum" || entity.subType === "banana");
       let mesh = this.entityMeshes.get(id);
+      if (!mesh && entity.active && isProjectile && !isTrap && activeProjectileVisuals >= projectileBudget) {
+        this._suppressedEntityIds.add(id);
+        return;
+      }
       if (!mesh) {
         if (entity.type === "projectile") {
           mesh = entity.subType === "gravity_well"
@@ -3625,9 +4655,20 @@ export class ColyseusBabylonClient {
         mesh._entityType = entity.type;
         mesh._subType = entity.subType || '';
         this.entityMeshes.set(id, mesh);
+        if (isProjectile && !isTrap) {
+          activeProjectileVisuals++;
+          this._suppressedEntityIds.delete(id);
+        }
 
         // Attach particle trail to remote projectiles (21.30)
-        if (entity.type === "projectile" && entity.subType !== "bubblegum" && entity.subType !== "banana") {
+        if (
+          entity.type === "projectile"
+          && entity.subType !== "bubblegum"
+          && entity.subType !== "banana"
+          && entity.subType !== "glow_thrower"
+          && entity.subType !== "lightning_bolt"
+          && entity.subType !== "glo_burst"
+        ) {
           const trailId = createProjectileTrail(entity.subType, mesh);
           if (trailId) mesh._trailId = trailId;
         }
@@ -3664,6 +4705,7 @@ export class ColyseusBabylonClient {
       }
       if (mesh && mesh.position) {
         if (entity.active) {
+          this._suppressedEntityIds.delete(id);
           if (entity.type === 'item_box') {
             this._pendingPickupBoxes.delete(id);
           }
@@ -3677,7 +4719,16 @@ export class ColyseusBabylonClient {
             // Store target for smooth interpolation in beforeRender
             let pt = this._projectileTargets.get(id);
             if (!pt) {
-              pt = { pos: new Vector3(), vel: new Vector3(), lastUpdate: 0, subType: entity.subType, spawnTime: performance.now() };
+              pt = {
+                pos: new Vector3(),
+                vel: new Vector3(),
+                lastUpdate: 0,
+                subType: entity.subType,
+                spawnTime: performance.now(),
+                lifespan: entity.lifespan || 0,
+                maxLifespan: entity.lifespan || 0,
+                targetId: entity.targetId || '',
+              };
               this._projectileTargets.set(id, pt);
               // Set initial position immediately on first appearance
               mesh.position.x = entity.x;
@@ -3687,6 +4738,9 @@ export class ColyseusBabylonClient {
             pt.pos.set(entity.x, entity.y, entity.z);
             pt.vel.set(entity.vx || 0, entity.vy || 0, entity.vz || 0);
             pt.lastUpdate = performance.now();
+            pt.lifespan = entity.lifespan || 0;
+            pt.maxLifespan = Math.max(pt.maxLifespan || 0, entity.lifespan || 0);
+            pt.targetId = entity.targetId || '';
             // Gravity well / anomaly still gets per-frame animation
             this._animateProjectileVisual(mesh, entity);
           } else {
@@ -3735,15 +4789,26 @@ export class ColyseusBabylonClient {
           }
         } else {
           mesh.setEnabled(false);
+          this._suppressedEntityIds.delete(id);
         }
       }
     });
+    for (const id of Array.from(this._suppressedEntityIds)) {
+      if (!currentEntities.has(id)) this._suppressedEntityIds.delete(id);
+    }
+    if (typeof window !== 'undefined' && window.__gloDebug) {
+      window.__gloDebug.remoteProjectileBudget = {
+        budget: projectileBudget,
+        active: activeProjectileVisuals,
+        suppressed: this._suppressedEntityIds.size,
+      };
+    }
     const pickupNow = Date.now();
     for (const [id, ts] of this._pendingPickupBoxes.entries()) {
       if (pickupNow - ts > 1500) this._pendingPickupBoxes.delete(id);
     }
     for (const [id, mesh] of this.entityMeshes.entries()) {
-      if (!currentEntities.includes(id)) {
+      if (!currentEntities.has(id)) {
         const entAgg = this.entityAggregates.get(id);
         if (entAgg) {
           // (22.3) WM-style: switch body to STATIC before dispose to stop
@@ -3757,7 +4822,7 @@ export class ColyseusBabylonClient {
           entAgg.dispose();
           this.entityAggregates.delete(id);
         }
-        if (mesh._subType === 'rock_barrage' && mesh.position) {
+        if (!mesh._impactHandled && mesh._subType === 'rock_barrage' && mesh.position) {
           const now = performance.now();
           const recentImpact = this._lastRockImpactPos
             && (now - this._lastRockImpactTime) < 250
@@ -3766,11 +4831,17 @@ export class ColyseusBabylonClient {
             emitWeaponImpactVFX(mesh.position.clone ? mesh.position.clone() : mesh.position, 'rock_barrage');
           }
         }
+        if (!mesh._impactHandled && mesh.position && mesh._subType === 'super_nova') {
+          emitWeaponImpactVFX(mesh.position.clone ? mesh.position.clone() : mesh.position, 'super_nova');
+        } else if (!mesh._impactHandled && mesh.position && (mesh._subType === 'missile' || mesh._subType === 'fireball')) {
+          emitWeaponImpactVFX(mesh.position.clone ? mesh.position.clone() : mesh.position, mesh._subType);
+        }
         if (mesh._trailId) disposeProjectileTrail(mesh._trailId);
         this._disposeProjectileVisual(mesh);
         mesh.dispose();
         this.entityMeshes.delete(id);
         this._projectileTargets.delete(id);
+        this._suppressedEntityIds.delete(id);
       }
     }
   }
@@ -3782,16 +4853,14 @@ export class ColyseusBabylonClient {
     const visualRoot = mesh.metadata?.visualRoot;
     const visualMeta = mesh.metadata?.visualMetadata || mesh.metadata || null;
 
-    if (visualMeta?.spinObserver && this.scene?.onBeforeRenderObservable) {
-      this.scene.onBeforeRenderObservable.remove(visualMeta.spinObserver);
-      visualMeta.spinObserver = null;
-    }
-    if (visualMeta?.updateObserver && this.scene?.onBeforeRenderObservable) {
-      this.scene.onBeforeRenderObservable.remove(visualMeta.updateObserver);
-      visualMeta.updateObserver = null;
+    const observerKeys = ['spinObserver', 'updateObserver', 'flickerObserver', 'expandObserver'];
+    for (const key of observerKeys) {
+      if (!visualMeta?.[key] || !this.scene?.onBeforeRenderObservable) continue;
+      this.scene.onBeforeRenderObservable.remove(visualMeta[key]);
+      visualMeta[key] = null;
     }
 
-    const disposableKeys = ['trailPS', 'debrisPS', 'sparksPS', 'mistPS'];
+    const disposableKeys = ['trailPS', 'debrisPS', 'sparksPS', 'mistPS', 'dripsPS'];
     for (const key of disposableKeys) {
       const resource = visualMeta?.[key];
       if (!resource) continue;
@@ -3818,7 +4887,7 @@ export class ColyseusBabylonClient {
 
   _createProjectileMesh(id, subType) {
     const modelWeaponId = PROJECTILE_MODEL_ALIASES[subType] || subType;
-    if (this.roomName === 'battle_room') {
+    if (this.roomName === 'battle_room' || subType === 'missile') {
       const visualRoot = createWeaponModel(modelWeaponId, this.scene);
       if (visualRoot) {
         const anchor = MeshBuilder.CreateSphere(`entity-${id}`, { diameter: 0.42, segments: 6 }, this.scene);
@@ -3853,6 +4922,7 @@ export class ColyseusBabylonClient {
       cake:         { shape: "box",    size: 0.6,      diffuse: [1, 0.85, 0.3], emissive: [0.6, 0.4, 0.1] },
       plunger:      { shape: "cylinder", diameter: 0.3, height: 0.8, diffuse: [0.9, 0.15, 0], emissive: [0.7, 0.1, 0] },
       nitro:        { shape: "cylinder", diameter: 0.35, height: 0.7, diffuse: [0, 0.9, 0.6], emissive: [0, 0.5, 0.3] },
+      tornado:      { shape: "cylinder", diameter: 1.8, height: 4.2, diffuse: [0.45, 0.62, 0.54], emissive: [0.12, 0.2, 0.16], alpha: 0.72 },
       bubblegum:    { shape: "sphere", diameter: 0.6,  diffuse: [1, 0.4, 0.75], emissive: [0.8, 0.2, 0.5] },
       banana:       { shape: "sphere", diameter: 0.45, diffuse: [1, 0.9, 0.1],  emissive: [0.7, 0.6, 0] },
     };
@@ -3870,6 +4940,9 @@ export class ColyseusBabylonClient {
     const mat = new StandardMaterial(`mat-${id}`, this.scene);
     mat.diffuseColor = new Color3(...vis.diffuse);
     if (vis.emissive) mat.emissiveColor = new Color3(...vis.emissive);
+    if (typeof vis.alpha === 'number') {
+      mat.alpha = vis.alpha;
+    }
     mesh.material = mat;
     // (22.8) WM-style mesh optimization flags — skip bounding info sync,
     // exclude from picking rays, prevent frustum culling on fast projectiles
@@ -3963,18 +5036,44 @@ export class ColyseusBabylonClient {
         break;
       }
       case 'missile': {
-        // Keep missiles readable and aggressive instead of floaty.
+        // Bank missiles based on actual course changes instead of an arbitrary wobble.
         const planarSpeed = Math.sqrt(pt.vel.x * pt.vel.x + pt.vel.z * pt.vel.z);
         if (planarSpeed > 0.1 || Math.abs(pt.vel.y) > 0.1) {
-          mesh.rotation.y = Math.atan2(pt.vel.x, pt.vel.z);
+          const targetYaw = Math.atan2(pt.vel.x, pt.vel.z);
+          if (Number.isFinite(pt._lastMissileYaw)) {
+            let yawDelta = targetYaw - pt._lastMissileYaw;
+            while (yawDelta > Math.PI) yawDelta -= Math.PI * 2;
+            while (yawDelta < -Math.PI) yawDelta += Math.PI * 2;
+            const bankTarget = Math.max(-0.32, Math.min(0.32, -yawDelta * 3.2));
+            pt._missileBank = (pt._missileBank || 0) * 0.84 + bankTarget * 0.16;
+          } else {
+            pt._missileBank = 0;
+          }
+          pt._lastMissileYaw = targetYaw;
+          mesh.rotation.y = targetYaw;
           mesh.rotation.x = -Math.atan2(pt.vel.y, Math.max(planarSpeed, 0.01));
         }
-        mesh.rotation.z = Math.sin(time * 18) * 0.03;
+        mesh.rotation.z = pt._missileBank || 0;
         if (age < 0.3) {
           const burst = 1.0 + (0.3 - age) * 0.5;
           mesh.scaling.setAll(burst);
         } else {
           mesh.scaling.setAll(1.0);
+        }
+        const thrusterGlow = mesh.metadata?.thrusterGlow || mesh.metadata?.visualMetadata?.thrusterGlow;
+        const thrusterMat = mesh.metadata?.thrusterMat || mesh.metadata?.visualMetadata?.thrusterMat;
+        const bandMat = mesh.metadata?.bandMat || mesh.metadata?.visualMetadata?.bandMat;
+        const flamePulse = 0.85 + Math.sin(time * 28) * 0.15;
+        if (thrusterGlow?.scaling) {
+          thrusterGlow.scaling.x = 0.9 + flamePulse * 0.18;
+          thrusterGlow.scaling.y = 0.9 + flamePulse * 0.18;
+          thrusterGlow.scaling.z = 1.35 + flamePulse * 0.45;
+        }
+        if (thrusterMat?.emissiveColor) {
+          thrusterMat.emissiveColor.set(1.0, 0.34 + flamePulse * 0.18, 0.05);
+        }
+        if (bandMat?.emissiveColor) {
+          bandMat.emissiveColor.set(0.75 + flamePulse * 0.2, 0.54 + flamePulse * 0.18, 0.12);
         }
         break;
       }
@@ -4010,13 +5109,53 @@ export class ColyseusBabylonClient {
         break;
       }
       case 'lightning_bolt': {
-        // Rapid flicker + slight jitter
-        mesh.rotation.z = (Math.random() - 0.5) * 0.15;
-        const children = mesh.getChildMeshes?.();
-        if (children) {
-          for (const child of children) {
-            if (child.material) {
-              child.material.alpha = 0.7 + Math.random() * 0.3;
+        // Radial electric plasma orb so the silhouette never skews sideways in flight.
+        const spearPulse = 0.9 + Math.sin(time * 34) * 0.08;
+        const uniformScale = 0.98 + spearPulse * 0.1;
+        mesh.scaling.set(uniformScale, uniformScale, uniformScale);
+        const visualMeta = mesh.metadata?.visualMetadata || mesh.metadata;
+        if (visualMeta?.coreOrb?.scaling) {
+          const corePulse = 0.96 + Math.sin(time * 40) * 0.08;
+          visualMeta.coreOrb.scaling.setAll(corePulse);
+        }
+        if (visualMeta?.innerShell?.scaling) {
+          const shellPulse = 0.94 + Math.cos(time * 23) * 0.06;
+          visualMeta.innerShell.scaling.setAll(shellPulse);
+        }
+        if (visualMeta?.coronaLayers) {
+          for (let i = 0; i < visualMeta.coronaLayers.length; i += 1) {
+            const plane = visualMeta.coronaLayers[i];
+            if (!plane) continue;
+            const pulse = 0.9 + Math.sin(time * (16 + i * 4) + i) * 0.12;
+            plane.scaling.x = pulse;
+            plane.scaling.y = pulse;
+            plane.rotation.z += dt * (4 + i * 2);
+          }
+        }
+        if (visualMeta?.arcRings) {
+          const [ringA, ringB] = visualMeta.arcRings;
+          if (ringA) {
+            ringA.rotation.z += dt * 8;
+            ringA.scaling.setAll(0.94 + Math.sin(time * 21) * 0.08);
+          }
+          if (ringB) {
+            ringB.rotation.x += dt * 11;
+            ringB.scaling.setAll(0.92 + Math.cos(time * 24) * 0.07);
+          }
+        }
+        if (visualMeta?.sparkNodes && visualMeta?.sparkOrbs) {
+          for (let i = 0; i < visualMeta.sparkNodes.length; i += 1) {
+            const node = visualMeta.sparkNodes[i];
+            const spark = visualMeta.sparkOrbs[i];
+            if (node) {
+              node.rotation.y += dt * (9 + i * 4);
+              node.rotation.x += dt * (5 + i * 2);
+            }
+            if (spark?.position) {
+              spark.position.x = 0.29 + Math.sin(time * (18 + i * 5) + i) * 0.05;
+            }
+            if (spark?.material) {
+              spark.material.alpha = 0.38 + Math.sin(time * (28 + i * 3) + i) * 0.16;
             }
           }
         }
@@ -4049,24 +5188,24 @@ export class ColyseusBabylonClient {
       }
       case 'tornado': {
         // Intense vortex spin — accelerates over time
-        const spinSpeed = 12 + Math.min(age * 4, 20);
+        const spinSpeed = 22 + Math.min(age * 7, 34);
         mesh.rotation.y += dt * spinSpeed;
         // Breathing pulse — vertical stretch + horizontal sway
-        const breathe = 1.0 + Math.sin(time * 5) * 0.12;
+        const breathe = 1.08 + Math.sin(time * 6.5) * 0.18;
         mesh.scaling.y = breathe;
-        const sway = 1.0 + Math.sin(time * 8) * 0.06;
+        const sway = 1.1 + Math.sin(time * 10.5) * 0.1;
         mesh.scaling.x = sway;
         mesh.scaling.z = sway;
         // Wobble — slight tilt oscillation for organic feel
-        mesh.rotation.x = Math.sin(time * 3.5) * 0.08;
-        mesh.rotation.z = Math.cos(time * 4.2) * 0.06;
+        mesh.rotation.x = Math.sin(time * 4.6) * 0.12;
+        mesh.rotation.z = Math.cos(time * 5.1) * 0.09;
         // Animate swirl rings if present
         const tornadoMeta = mesh.metadata?.visualMetadata || mesh.metadata;
         if (tornadoMeta?.swirlRings) {
           for (let i = 0; i < tornadoMeta.swirlRings.length; i++) {
             const r = tornadoMeta.swirlRings[i];
-            r.rotation.y += dt * (6 + i * 2) * (i % 2 === 0 ? 1 : -1);
-            const rScale = 1.0 + Math.sin(time * 7 + i) * 0.15;
+            r.rotation.y += dt * (12 + i * 4) * (i % 2 === 0 ? 1 : -1);
+            const rScale = 1.15 + Math.sin(time * 9 + i) * 0.22;
             r.scaling.setAll(rScale);
           }
         }
@@ -4075,8 +5214,17 @@ export class ColyseusBabylonClient {
       case 'toxic_cloud': {
         // Slow expanding rotation
         mesh.rotation.y += dt * 2;
-        const expand = Math.min(1.5, 1.0 + age * 0.15);
+        const expand = Math.min(runtimePressure() > 0.62 ? 1.24 : 1.5, 1.0 + age * 0.15);
         mesh.scaling.setAll(expand);
+        const visualMeta = mesh.metadata?.visualMetadata || mesh.metadata;
+        if (visualMeta?.trailPS) {
+          const budget = Math.max(0.24, runtimeFXBudget() * (runtimePressure() > 0.72 ? 0.55 : 0.75));
+          visualMeta.trailPS.emitRate = Math.max(10, Math.round(34 * budget));
+        }
+        if (visualMeta?.dripsPS) {
+          const budget = Math.max(0.24, runtimeFXBudget() * 0.7);
+          visualMeta.dripsPS.emitRate = Math.max(4, Math.round(9 * budget));
+        }
         break;
       }
       case 'nitro': {
@@ -4085,39 +5233,175 @@ export class ColyseusBabylonClient {
         break;
       }
       case 'super_nova': {
-        // Pulsing expanding sphere
-        const expand = Math.min(2.5, 1.0 + age * 0.8);
-        const pulse = expand + Math.sin(time * 10) * 0.1;
+        const lifeRatio = pt.maxLifespan > 0 ? Math.max(0, Math.min(1, pt.lifespan / pt.maxLifespan)) : 1;
+        const urgency = 1 - lifeRatio;
+        const pulseSpeed = 3 + urgency * 11;
+        const pulseAmp = 0.04 + urgency * 0.22;
+        const pulse = 1.0 + Math.sin(time * pulseSpeed * Math.PI) * pulseAmp;
         mesh.scaling.setAll(pulse);
-        mesh.rotation.y += dt * 4;
+        mesh.rotation.y += dt * (1.5 + urgency * 7);
+        mesh.position.y = Math.max(mesh.position.y, 0.55);
         break;
       }
       case 'glow_thrower': {
-        // Stretch stream segments into a continuous flame tongue.
+        // Firehose-style flame stream driven by particles, not stretched mesh tails.
         const flicker = 1.0 + Math.sin(time * 22) * 0.08 + Math.sin(time * 35) * 0.05;
-        mesh.scaling.x = 0.85 + flicker * 0.2;
-        mesh.scaling.y = 0.85 + flicker * 0.18;
-        mesh.scaling.z = 1.6 + flicker * 0.7;
-        mesh.rotation.z = Math.sin(time * 14) * 0.06;
-        const children = mesh.getChildMeshes?.();
-        if (children) {
-          for (const child of children) {
-            if (child.material?.emissiveColor) {
-              const pulse = 0.7 + Math.sin(time * 18) * 0.3;
-              child.material.emissiveColor.set(1.0, 0.45 * pulse, 0.05);
+        const visualMeta = mesh.metadata?.visualMetadata || mesh.metadata;
+        const pressure = runtimePressure();
+        const fxBudget = Math.max(0.2, runtimeFXBudget() * (pressure > 0.78 ? 0.5 : pressure > 0.58 ? 0.68 : 1));
+        const simplified = pressure > 0.62;
+        const baseScale = 0.96 + flicker * 0.08;
+        mesh.scaling.set(baseScale, baseScale, baseScale);
+        mesh.rotation.z = Math.sin(time * 8.5) * 0.015;
+
+        if (visualMeta?.heatOrb?.scaling) {
+          const heatPulse = 0.92 + Math.sin(time * 18) * 0.1;
+          visualMeta.heatOrb.scaling.set(heatPulse, 0.92 + Math.cos(time * 15) * 0.08, heatPulse);
+          if (visualMeta.heatOrb.material?.emissiveColor) {
+            visualMeta.heatOrb.material.emissiveColor.set(1.0, 0.32 + heatPulse * 0.18, 0.04);
+          }
+        }
+        if (visualMeta?.heatPlanes && !simplified) {
+          for (let i = 0; i < visualMeta.heatPlanes.length; i += 1) {
+            const plane = visualMeta.heatPlanes[i];
+            if (!plane) continue;
+            const wave = Math.sin(time * (8 + i * 2) + i * 0.9);
+            plane.position.x = wave * (0.11 + i * 0.028);
+            plane.position.y = (i - 2) * 0.04 + Math.cos(time * (6 + i * 1.8) + i) * 0.06;
+            plane.position.z = 0.74 + i * 0.4 + Math.abs(wave) * 0.12;
+            plane.scaling.x = 0.96 + Math.abs(wave) * 0.34;
+            plane.scaling.y = 1.02 + Math.sin(time * (10 + i * 3) + i) * 0.24;
+            if (plane.material?.emissiveColor) {
+              const pulse = 0.68 + Math.sin(time * (16 + i * 2) + i) * 0.2;
+              plane.material.emissiveColor.set(1.0, 0.4 + pulse * 0.18, 0.05);
             }
           }
+        }
+        if (visualMeta?.fanSheets && !simplified) {
+          for (let i = 0; i < visualMeta.fanSheets.length; i += 1) {
+            const sheet = visualMeta.fanSheets[i];
+            if (!sheet) continue;
+            const flare = Math.sin(time * (9 + i * 1.6) + i * 0.7);
+            const fanWidth = 0.92 + i * 0.18 + Math.abs(flare) * (0.18 + i * 0.04);
+            sheet.position.x = flare * (0.04 + i * 0.03);
+            sheet.position.y = -0.03 + i * 0.026 + Math.cos(time * (7 + i * 1.4) + i) * 0.03;
+            sheet.position.z = 0.54 + i * 0.58 + Math.abs(flare) * 0.08;
+            sheet.scaling.x = fanWidth;
+            sheet.scaling.y = 0.96 + Math.sin(time * (8.5 + i * 1.8) + i) * 0.14;
+            if (sheet.material?.emissiveColor) {
+              const warmth = 0.66 + Math.sin(time * (14 + i * 2.2) + i) * 0.16;
+              sheet.material.emissiveColor.set(1.0, 0.34 + warmth * 0.24, 0.04);
+            }
+          }
+        }
+        if (visualMeta?.muzzleCorona) {
+          const coronaPulse = 0.94 + Math.sin(time * 24) * 0.14;
+          visualMeta.muzzleCorona.scaling.x = 0.92 + coronaPulse * 0.34;
+          visualMeta.muzzleCorona.scaling.y = 0.92 + coronaPulse * 0.34;
+          visualMeta.muzzleCorona.position.z = 0.16 + Math.sin(time * 12) * 0.03;
+          visualMeta.muzzleCorona.rotation.z += dt * 5.5;
+        }
+        if (visualMeta?.pressureRings && !simplified) {
+          for (let i = 0; i < visualMeta.pressureRings.length; i += 1) {
+            const ring = visualMeta.pressureRings[i];
+            if (!ring) continue;
+            ring.position.z = 0.5 + i * 0.86 + Math.sin(time * (10 + i * 1.4) + i) * 0.08;
+            ring.scaling.x = 0.94 + Math.sin(time * (12 + i * 2.2) + i) * 0.12;
+            ring.scaling.y = 0.94 + Math.cos(time * (11 + i * 1.8) + i) * 0.12;
+            ring.rotation.z += dt * (6 + i * 2);
+          }
+        }
+        if (visualMeta?.trailPS) {
+          const flameSway = Math.sin(time * 11.5) * 0.16;
+          const flameLift = Math.cos(time * 9.5) * 0.09;
+          visualMeta.trailPS.direction1.x = -0.52 + flameSway * 1.35;
+          visualMeta.trailPS.direction2.x = 0.52 + flameSway * 1.7;
+          visualMeta.trailPS.direction1.y = -0.15 + flameLift;
+          visualMeta.trailPS.direction2.y = 0.36 + flameLift * 1.6;
+          visualMeta.trailPS.direction1.z = 4.2 + flicker * 1.1;
+          visualMeta.trailPS.direction2.z = 7.6 + flicker * 1.5;
+          visualMeta.trailPS.emitRate = Math.max(42, Math.round((118 + Math.sin(time * 14) * 18) * fxBudget));
+          visualMeta.trailPS.minSize = 0.28 + Math.abs(flameSway) * 0.07;
+          visualMeta.trailPS.maxSize = 0.96 + Math.abs(flameLift) * 0.22;
+          visualMeta.trailPS.minEmitPower = 2.7 + Math.abs(flameSway) * 0.55;
+          visualMeta.trailPS.maxEmitPower = 6.8 + Math.abs(flameLift) * 0.8;
+        }
+        if (visualMeta?.sparksPS) {
+          const emberSway = Math.sin(time * 13.2 + 0.8) * 0.12;
+          visualMeta.sparksPS.direction1.x = -0.38 + emberSway * 1.25;
+          visualMeta.sparksPS.direction2.x = 0.38 + emberSway * 1.35;
+          visualMeta.sparksPS.direction1.y = 0.03 + Math.cos(time * 10.4) * 0.06;
+          visualMeta.sparksPS.direction2.y = 0.42 + Math.sin(time * 8.2) * 0.14;
+          visualMeta.sparksPS.direction1.z = 2.6 + flicker * 0.6;
+          visualMeta.sparksPS.direction2.z = 4.8 + flicker * 0.8;
+          visualMeta.sparksPS.emitRate = Math.max(14, Math.round((32 + Math.cos(time * 18) * 8) * fxBudget));
         }
         break;
       }
       case 'glo_burst': {
-        // Tracer rounds stay thin and fast with a hard launch flash.
-        mesh.scaling.x = 0.7;
-        mesh.scaling.y = 0.7;
-        mesh.scaling.z = age < 0.08 ? 2.6 : 1.8;
-        mesh.rotation.z = Math.sin(time * 40) * 0.02;
-        if (age < 0.15) {
-          mesh.scaling.z += (0.15 - age) * 5;
+        // Tight tracer round with a bright core and a short hot wake.
+        const bloom = Math.min(1, age / 0.22);
+        const bloomScale = 0.8 + bloom * 0.16;
+        const tracerLength = 1.08 + bloom * 0.22 + Math.sin(time * 38) * 0.04;
+        mesh.scaling.set(bloomScale * 0.92, bloomScale * 0.92, tracerLength);
+        const visualMeta = mesh.metadata?.visualMetadata || mesh.metadata;
+        if (visualMeta?.tracerCore?.scaling) {
+          const corePulse = 0.98 + Math.sin(time * 48) * 0.09;
+          visualMeta.tracerCore.scaling.setAll(corePulse);
+        }
+        if (visualMeta?.tracerCoreShell?.scaling) {
+          const shellPulse = 0.94 + Math.cos(time * 36) * 0.08;
+          visualMeta.tracerCoreShell.scaling.set(shellPulse * 0.98, shellPulse * 0.98, 1.12 + shellPulse * 0.12);
+        }
+        if (visualMeta?.tracerHalo) {
+          const haloPulse = 0.94 + Math.sin(time * 40) * 0.14;
+          visualMeta.tracerHalo.scaling.x = 0.88 + haloPulse * 0.42;
+          visualMeta.tracerHalo.scaling.y = 0.54 + haloPulse * 0.24;
+          visualMeta.tracerHalo.rotation.z += dt * 11;
+        }
+        if (visualMeta?.tracerHaloRear) {
+          const rearPulse = 0.86 + Math.cos(time * 32) * 0.12;
+          visualMeta.tracerHaloRear.scaling.x = 0.62 + rearPulse * 0.24;
+          visualMeta.tracerHaloRear.scaling.y = 0.42 + rearPulse * 0.16;
+          visualMeta.tracerHaloRear.rotation.z -= dt * 8;
+        }
+        if (visualMeta?.tracerCoreGlow) {
+          const corePulse = 0.94 + Math.sin(time * 46) * 0.13;
+          const glowScale = 0.86 + corePulse * 0.2;
+          visualMeta.tracerCoreGlow.scaling.set(glowScale, glowScale, 1.08 + corePulse * 0.12);
+        }
+        if (visualMeta?.shockRing) {
+          visualMeta.shockRing.rotation.z += dt * 18;
+          visualMeta.shockRing.scaling.set(0.9 + Math.sin(time * 42) * 0.12, 0.9 + Math.sin(time * 42) * 0.12, 1);
+        }
+        if (visualMeta?.tracerStreak) {
+          const streakPulse = 1.02 + Math.sin(time * 52) * 0.1;
+          visualMeta.tracerStreak.scaling.set(1.0, 1.0, 0.9 + streakPulse * 0.5);
+          visualMeta.tracerStreak.position.z = -0.34 - streakPulse * 0.08;
+        }
+        if (visualMeta?.tracerWake) {
+          const wakePulse = 0.92 + Math.cos(time * 44) * 0.08;
+          visualMeta.tracerWake.scaling.x = 0.92 + wakePulse * 0.28;
+          visualMeta.tracerWake.scaling.y = 0.8 + wakePulse * 0.16;
+          visualMeta.tracerWake.position.z = -0.26 - wakePulse * 0.04;
+        }
+        if (visualMeta?.flarePlanes) {
+          for (let i = 0; i < visualMeta.flarePlanes.length; i += 1) {
+            const flare = visualMeta.flarePlanes[i];
+            if (!flare) continue;
+            flare.scaling.x = 1.02 + Math.sin(time * (36 + i * 5)) * 0.18;
+            flare.scaling.y = 0.76 + Math.cos(time * (30 + i * 4)) * 0.08;
+            flare.rotation.z += dt * (10 + i * 4);
+          }
+        }
+        if (visualMeta?.emberNodes && visualMeta?.emberOrbs) {
+          for (let i = 0; i < visualMeta.emberNodes.length; i += 1) {
+            const node = visualMeta.emberNodes[i];
+            const ember = visualMeta.emberOrbs[i];
+            if (node) node.rotation.y += dt * (11 + i * 5);
+            if (ember?.position) ember.position.x = 0.14 + Math.sin(time * (24 + i * 4) + i) * 0.035;
+            if (ember?.material) ember.material.alpha = 0.42 + Math.sin(time * (34 + i * 5) + i) * 0.18;
+          }
         }
         break;
       }
@@ -4295,7 +5579,7 @@ export class ColyseusBabylonClient {
       bubblegum: "🫧", banana: "🍌", swatter: "🪰", nitro: "💥",
       parachute: "🪂", anchor: "⚓", ludicrous_mode: "🔋", shield: "🛡️",
       fireball: "🔥", toxic_spread: "☣️", ice_lance: "🧊", tornado: "🌪️",
-      super_nova: "☀️", rock_barrage: "🪨", lightning_bolt: "⚡", wind_slash: "💨", toxic_cloud: "🧪",
+      super_nova: "☢️", rock_barrage: "🪨", lightning_bolt: "⚡", wind_slash: "💨", toxic_cloud: "🧪",
       glow_thrower: "🔥", glo_burst: "💫", pirateleportation: "🏴‍☠️",
     };
 
@@ -4391,37 +5675,99 @@ export class ColyseusBabylonClient {
 
     if (shielded && this.localMesh) {
       if (!this._shieldBubble) {
-        const sphere = MeshBuilder.CreateSphere("shield-bubble", { diameter: 4.2, segments: 16 }, this.scene);
-        const mat = new StandardMaterial("shield-bubble-mat", this.scene);
-        mat.alpha = 0.28;
-        mat.backFaceCulling = false;
-        mat.emissiveColor = new Color3(0, 1, 0);
-        mat.diffuseColor = new Color3(0, 0, 0);
-        mat.specularColor = new Color3(0.6, 0.6, 0.6);
-        mat.wireframe = false;
-        sphere.material = mat;
-        sphere.parent = this.localMesh;
-        sphere.position.y = 0.4;
-        sphere.isPickable = false;
-        this._shieldBubble = sphere;
-        this._shieldBubbleMat = mat;
+        this._shieldBubble = this._createShieldParticleField("shield-bubble", this.localMesh, true);
       }
-      // Color: green → yellow → red based on HP ratio
       const ratio = Math.max(0, Math.min(1, hp / 100));
-      const r = ratio > 0.5 ? (1 - ratio) * 2 : 1;
-      const g = ratio > 0.5 ? 1 : ratio * 2;
-      this._shieldBubbleMat.emissiveColor.set(r, g, 0);
-      // Pulse alpha slightly based on time
       const t = performance.now() * 0.003;
-      this._shieldBubbleMat.alpha = 0.22 + Math.sin(t) * 0.06;
-      // Scale pulse on low HP
-      const pulse = ratio < 0.3 ? 1 + Math.sin(t * 3) * 0.05 : 1;
-      this._shieldBubble.scaling.setAll(pulse);
+      this._styleShieldParticleField(this._shieldBubble, ratio, t, true);
     } else if (this._shieldBubble) {
-      this._shieldBubble.dispose();
+      this._disposeShieldParticleField(this._shieldBubble);
       this._shieldBubble = null;
       this._shieldBubbleMat = null;
     }
+  }
+
+  _getShieldParticleTexture() {
+    if (this._shieldParticleTexture) return this._shieldParticleTexture;
+    const tex = new DynamicTexture('shield-particle-tex', 64, this.scene, true);
+    const ctx = tex.getContext();
+    ctx.clearRect(0, 0, 64, 64);
+    const gradient = ctx.createRadialGradient(32, 32, 2, 32, 32, 32);
+    gradient.addColorStop(0, 'rgba(255,255,255,1)');
+    gradient.addColorStop(0.28, 'rgba(220,255,248,0.95)');
+    gradient.addColorStop(0.58, 'rgba(120,255,190,0.4)');
+    gradient.addColorStop(1, 'rgba(120,255,190,0)');
+    ctx.fillStyle = gradient;
+    ctx.beginPath();
+    ctx.arc(32, 32, 31, 0, Math.PI * 2);
+    ctx.fill();
+    tex.update();
+    this._shieldParticleTexture = tex;
+    return tex;
+  }
+
+  _createShieldParticleField(name, parent, isLocal = false) {
+    const emitter = MeshBuilder.CreateSphere(`${name}-emitter`, { diameter: 0.12, segments: 4 }, this.scene);
+    emitter.parent = parent;
+    emitter.position.y = 0.55;
+    emitter.isVisible = false;
+    emitter.isPickable = false;
+
+    const capacity = isLocal ? 80 : 56;
+    const ps = new ParticleSystem(`${name}-ps`, capacity, this.scene);
+    ps.particleTexture = this._getShieldParticleTexture();
+    ps.emitter = emitter;
+    ps.createSphereEmitter(1.42, 0);
+    ps.minEmitPower = 0.02;
+    ps.maxEmitPower = 0.08;
+    ps.minLifeTime = isLocal ? 0.2 : 0.24;
+    ps.maxLifeTime = isLocal ? 0.48 : 0.54;
+    ps.minSize = isLocal ? 0.08 : 0.09;
+    ps.maxSize = isLocal ? 0.16 : 0.18;
+    ps.gravity = Vector3.Zero();
+    ps.direction1 = new Vector3(-0.04, -0.03, -0.04);
+    ps.direction2 = new Vector3(0.04, 0.03, 0.04);
+    ps.blendMode = ParticleSystem.BLENDMODE_ADD;
+    ps.isBillboardBased = true;
+    ps.updateSpeed = 0.012;
+    ps.emitRate = isLocal ? 28 : 22;
+    ps.colorDead = new Color4(0, 0, 0, 0);
+    ps.start();
+
+    return {
+      emitter,
+      ps,
+      isLocal,
+      baseRadius: 1.42,
+      baseEmitRate: isLocal ? 28 : 22,
+      baseMinSize: isLocal ? 0.08 : 0.09,
+      baseMaxSize: isLocal ? 0.16 : 0.18,
+    };
+  }
+
+  _styleShieldParticleField(field, ratio, t, isLocal = false) {
+    if (!field?.ps || !field?.emitter) return;
+    const r = ratio > 0.5 ? (1 - ratio) * 2 : 1;
+    const g = ratio > 0.5 ? 1 : ratio * 2;
+    const tint = new Color4(
+      0.12 + r * 0.2,
+      0.24 + g * 0.34,
+      0.1 + ratio * 0.12,
+      isLocal ? 0.62 : 0.74,
+    );
+    const hotTint = new Color4(
+      Math.min(1, tint.r + 0.18),
+      Math.min(1, tint.g + 0.16),
+      Math.min(1, tint.b + 0.1),
+      isLocal ? 0.18 : 0.24,
+    );
+    const pulse = ratio < 0.3 ? 1.08 + Math.sin(t * 3.2) * 0.06 : 1 + Math.sin(t * 1.8) * 0.025;
+    field.emitter.scaling.set(1.02 * pulse, 0.78 * pulse, 1.02 * pulse);
+    field.ps.color1 = hotTint;
+    field.ps.color2 = tint;
+    field.ps.emitRate = Math.round(field.baseEmitRate * pulse * (isLocal ? 1 : 0.9));
+    field.ps.minSize = field.baseMinSize;
+    field.ps.maxSize = field.baseMaxSize * pulse;
   }
 
   _updateRemoteShieldBubble(playerId, mesh, shielded, hp) {
@@ -4430,30 +5776,26 @@ export class ColyseusBabylonClient {
     if (shielded) {
       let bubble = this._remoteShieldBubbles.get(playerId);
       if (!bubble) {
-        const sphere = MeshBuilder.CreateSphere(`rshield-${playerId}`, { diameter: 4.2, segments: 12 }, this.scene);
-        const mat = new StandardMaterial(`rshield-mat-${playerId}`, this.scene);
-        mat.alpha = 0.22;
-        mat.backFaceCulling = false;
-        mat.emissiveColor = new Color3(0, 1, 0);
-        mat.diffuseColor = new Color3(0, 0, 0);
-        sphere.material = mat;
-        sphere.parent = mesh;
-        sphere.position.y = 0.4;
-        sphere.isPickable = false;
-        bubble = { sphere, mat };
+        bubble = this._createShieldParticleField(`rshield-${playerId}`, mesh, false);
         this._remoteShieldBubbles.set(playerId, bubble);
       }
       const ratio = Math.max(0, Math.min(1, hp / 100));
-      const r = ratio > 0.5 ? (1 - ratio) * 2 : 1;
-      const g = ratio > 0.5 ? 1 : ratio * 2;
-      bubble.mat.emissiveColor.set(r, g, 0);
+      const t = performance.now() * 0.0022;
+      this._styleShieldParticleField(bubble, ratio, t, false);
     } else {
       const bubble = this._remoteShieldBubbles?.get(playerId);
       if (bubble) {
-        bubble.sphere.dispose();
+        this._disposeShieldParticleField(bubble);
         this._remoteShieldBubbles.delete(playerId);
       }
     }
+  }
+
+  _disposeShieldParticleField(field) {
+    if (!field) return;
+    try { field.ps?.stop(); } catch (_) {}
+    try { field.ps?.dispose(); } catch (_) {}
+    try { field.emitter?.dispose(); } catch (_) {}
   }
 
   // ── Ludicrous Mode VFX ─────────────────────────────────────────────
@@ -4510,11 +5852,537 @@ export class ColyseusBabylonClient {
     }
   }
 
+  _handlePhaseShiftSwap(msg) {
+    const localId = this.room?.sessionId;
+    const affectedIds = [msg.target, msg.partnerId].filter(Boolean);
+
+    for (const playerId of affectedIds) {
+      const mesh = playerId === localId ? this.localMesh : this.remoteMeshes.get(playerId);
+      if (!mesh) continue;
+      emitPhaseSwapBurst(mesh.position.add(new Vector3(0, 0.8, 0)));
+      this._fadeKartForPhaseSwap(mesh);
+    }
+
+    if (msg.target === localId && this.localKartAggregate?.body) {
+      this.localMesh.position.copyFromFloats(
+        Number.isFinite(msg.sourceX) ? msg.sourceX : this.localMesh.position.x,
+        Number.isFinite(msg.sourceY) ? msg.sourceY : this.localMesh.position.y,
+        Number.isFinite(msg.sourceZ) ? msg.sourceZ : this.localMesh.position.z,
+      );
+      this.localKartAggregate.body.setLinearVelocity(Vector3.Zero());
+      this.localKartAggregate.body.setAngularVelocity(Vector3.Zero());
+    } else if (msg.partnerId === localId && this.localKartAggregate?.body) {
+      this.localMesh.position.copyFromFloats(
+        Number.isFinite(msg.partnerX) ? msg.partnerX : this.localMesh.position.x,
+        Number.isFinite(msg.partnerY) ? msg.partnerY : this.localMesh.position.y,
+        Number.isFinite(msg.partnerZ) ? msg.partnerZ : this.localMesh.position.z,
+      );
+      this.localKartAggregate.body.setLinearVelocity(Vector3.Zero());
+      this.localKartAggregate.body.setAngularVelocity(Vector3.Zero());
+    }
+  }
+
+  _fadeKartForPhaseSwap(mesh) {
+    const materials = new Set();
+    if (mesh.material) materials.add(mesh.material);
+    if (typeof mesh.getChildMeshes === 'function') {
+      for (const child of mesh.getChildMeshes()) {
+        if (child.material) materials.add(child.material);
+      }
+    }
+    if (!materials.size) return;
+
+    const originals = [];
+    materials.forEach((mat) => {
+      originals.push({ mat, alpha: typeof mat.alpha === 'number' ? mat.alpha : 1 });
+      mat.alpha = Math.min(mat.alpha ?? 1, 0.22);
+    });
+
+    window.setTimeout(() => {
+      for (const { mat } of originals) {
+        mat.alpha = 0.58;
+      }
+      window.setTimeout(() => {
+        for (const { mat, alpha } of originals) {
+          mat.alpha = alpha;
+        }
+      }, 120);
+    }, 110);
+  }
+
+  _ensureStatusOverlayStyles() {
+    if (document.getElementById('tk-status-overlay-style')) return;
+    const styleEl = document.createElement('style');
+    styleEl.id = 'tk-status-overlay-style';
+    styleEl.textContent = `
+      @keyframes tkStatusPulse {
+        0% { transform: scale(0.96); opacity: 0.5; }
+        50% { transform: scale(1.02); opacity: 0.9; }
+        100% { transform: scale(0.98); opacity: 0.62; }
+      }
+      @keyframes tkStatusSweep {
+        from { transform: translateX(-110%) skewX(-18deg); opacity: 0; }
+        18% { opacity: 0.26; }
+        100% { transform: translateX(160%) skewX(-18deg); opacity: 0; }
+      }
+      .tk-status-overlay {
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        opacity: 0;
+        transition: opacity 320ms ease;
+      }
+      .tk-status-overlay.is-visible {
+        opacity: 1;
+      }
+      .tk-status-veil {
+        position: absolute;
+        inset: 0;
+        background: var(--tk-status-wash, transparent);
+      }
+      .tk-status-edge {
+        position: absolute;
+        inset: -12%;
+        background:
+          radial-gradient(circle at 50% 0%, var(--tk-status-edge, rgba(255,255,255,0.14)), transparent 42%),
+          linear-gradient(180deg, rgba(4, 6, 12, 0), rgba(4, 6, 12, 0.14));
+        filter: blur(36px);
+        opacity: 0.9;
+        animation: tkStatusPulse 2.6s ease-in-out infinite;
+      }
+      .tk-status-panel {
+        position: absolute;
+        top: 84px;
+        left: 50%;
+        transform: translateX(-50%) translateY(-10px) scale(0.985);
+        min-width: min(420px, calc(100vw - 32px));
+        max-width: min(520px, calc(100vw - 32px));
+        padding: 14px 18px 12px;
+        border-radius: 22px;
+        border: 1px solid var(--tk-status-border, rgba(255,255,255,0.15));
+        background:
+          linear-gradient(135deg, var(--tk-status-surface, rgba(10, 14, 22, 0.86)), rgba(8, 10, 18, 0.72));
+        box-shadow:
+          0 20px 46px rgba(0, 0, 0, 0.32),
+          inset 0 1px 0 rgba(255, 255, 255, 0.08);
+        backdrop-filter: blur(18px) saturate(140%);
+        -webkit-backdrop-filter: blur(18px) saturate(140%);
+        overflow: hidden;
+        transition: transform 360ms cubic-bezier(0.22, 1, 0.36, 1), opacity 320ms ease;
+      }
+      .tk-status-overlay.is-visible .tk-status-panel {
+        transform: translateX(-50%) translateY(0) scale(1);
+      }
+      .tk-status-panel::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(100deg, transparent 0%, rgba(255,255,255,0.16) 48%, transparent 100%);
+        transform: translateX(-110%) skewX(-18deg);
+        animation: tkStatusSweep 1.9s ease forwards;
+      }
+      .tk-status-header {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+      }
+      .tk-status-icon {
+        width: 42px;
+        height: 42px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex: 0 0 auto;
+        color: var(--tk-status-accent, #fff);
+        border: 1px solid rgba(255,255,255,0.14);
+        background:
+          radial-gradient(circle at 35% 35%, rgba(255,255,255,0.22), rgba(255,255,255,0) 52%),
+          rgba(255,255,255,0.04);
+        box-shadow:
+          0 0 0 1px rgba(255,255,255,0.03),
+          0 0 24px color-mix(in srgb, var(--tk-status-accent, #fff) 22%, transparent);
+        font-size: 17px;
+        font-weight: 700;
+      }
+      .tk-status-copy {
+        min-width: 0;
+        flex: 1 1 auto;
+      }
+      .tk-status-kicker {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 4px;
+        color: rgba(244, 247, 255, 0.7);
+        font-family: "Exo 2", sans-serif;
+        font-size: 10px;
+        font-weight: 800;
+        letter-spacing: 0.26em;
+        text-transform: uppercase;
+      }
+      .tk-status-kicker::before {
+        content: "";
+        width: 18px;
+        height: 1px;
+        background: color-mix(in srgb, var(--tk-status-accent, #fff) 60%, rgba(255,255,255,0.18));
+      }
+      .tk-status-title {
+        color: var(--tk-status-accent, #fff);
+        font-family: "Exo 2", sans-serif;
+        font-size: 17px;
+        font-weight: 800;
+        letter-spacing: 0.03em;
+        text-transform: uppercase;
+        text-shadow: 0 0 28px rgba(0, 0, 0, 0.34);
+      }
+      .tk-status-subtitle {
+        margin-top: 2px;
+        color: rgba(230, 236, 255, 0.76);
+        font-family: "Rajdhani", "Exo 2", sans-serif;
+        font-size: 13px;
+        font-weight: 600;
+        letter-spacing: 0.05em;
+      }
+      .tk-status-meter {
+        position: relative;
+        margin-top: 10px;
+        height: 3px;
+        border-radius: 999px;
+        overflow: hidden;
+        background: rgba(255,255,255,0.08);
+      }
+      .tk-status-meter-fill {
+        position: absolute;
+        inset: 0;
+        transform-origin: left center;
+        background: linear-gradient(90deg, var(--tk-status-accent, #fff), rgba(255,255,255,0.9));
+        box-shadow: 0 0 16px color-mix(in srgb, var(--tk-status-accent, #fff) 60%, transparent);
+      }
+      .tk-status-chip {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 4px 8px;
+        border-radius: 999px;
+        border: 1px solid rgba(255,255,255,0.12);
+        color: rgba(255,255,255,0.62);
+        font-family: "Exo 2", sans-serif;
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        background: rgba(255,255,255,0.04);
+        flex: 0 0 auto;
+      }
+      @media (max-width: 720px) {
+        .tk-status-panel {
+          top: 72px;
+          min-width: calc(100vw - 22px);
+          max-width: calc(100vw - 22px);
+          padding: 12px 14px 10px;
+          border-radius: 18px;
+        }
+        .tk-status-header {
+          gap: 10px;
+        }
+        .tk-status-icon {
+          width: 36px;
+          height: 36px;
+          font-size: 15px;
+        }
+        .tk-status-title {
+          font-size: 14px;
+        }
+        .tk-status-subtitle {
+          font-size: 11px;
+        }
+        .tk-status-chip {
+          display: none;
+        }
+      }
+    `;
+    document.head.appendChild(styleEl);
+  }
+
+  _createStatusOverlay({
+    scope = 'Status',
+    title,
+    subtitle = '',
+    chip = '',
+    icon = '•',
+    accent = '#ffffff',
+    surface = 'rgba(10, 14, 22, 0.88)',
+    border = 'rgba(255,255,255,0.14)',
+    wash = 'transparent',
+    edge = 'rgba(255,255,255,0.12)',
+    zIndex = 10001,
+    duration = 2000,
+  }) {
+    this._ensureStatusOverlayStyles();
+
+    const overlay = document.createElement('div');
+    overlay.className = 'tk-status-overlay';
+    overlay.style.zIndex = String(zIndex);
+    overlay.style.setProperty('--tk-status-accent', accent);
+    overlay.style.setProperty('--tk-status-surface', surface);
+    overlay.style.setProperty('--tk-status-border', border);
+    overlay.style.setProperty('--tk-status-wash', wash);
+    overlay.style.setProperty('--tk-status-edge', edge);
+
+    const veil = document.createElement('div');
+    veil.className = 'tk-status-veil';
+    overlay.appendChild(veil);
+
+    const edgeLayer = document.createElement('div');
+    edgeLayer.className = 'tk-status-edge';
+    overlay.appendChild(edgeLayer);
+
+    const panel = document.createElement('div');
+    panel.className = 'tk-status-panel';
+
+    const header = document.createElement('div');
+    header.className = 'tk-status-header';
+
+    const iconEl = document.createElement('div');
+    iconEl.className = 'tk-status-icon';
+    iconEl.textContent = icon;
+    header.appendChild(iconEl);
+
+    const copy = document.createElement('div');
+    copy.className = 'tk-status-copy';
+
+    const kicker = document.createElement('div');
+    kicker.className = 'tk-status-kicker';
+    kicker.textContent = scope;
+    copy.appendChild(kicker);
+
+    const titleEl = document.createElement('div');
+    titleEl.className = 'tk-status-title';
+    titleEl.textContent = title;
+    copy.appendChild(titleEl);
+
+    if (subtitle) {
+      const subtitleEl = document.createElement('div');
+      subtitleEl.className = 'tk-status-subtitle';
+      subtitleEl.textContent = subtitle;
+      copy.appendChild(subtitleEl);
+    }
+    header.appendChild(copy);
+
+    if (chip) {
+      const chipEl = document.createElement('div');
+      chipEl.className = 'tk-status-chip';
+      chipEl.textContent = chip;
+      header.appendChild(chipEl);
+    }
+
+    panel.appendChild(header);
+
+    const meter = document.createElement('div');
+    meter.className = 'tk-status-meter';
+    const meterFill = document.createElement('div');
+    meterFill.className = 'tk-status-meter-fill';
+    meter.appendChild(meterFill);
+    panel.appendChild(meter);
+
+    overlay.appendChild(panel);
+
+    requestAnimationFrame(() => {
+      overlay.classList.add('is-visible');
+      requestAnimationFrame(() => {
+        meterFill.style.transition = `transform ${Math.max(220, duration)}ms linear`;
+        meterFill.style.transform = 'scaleX(0)';
+      });
+    });
+
+    return overlay;
+  }
+
   showEffectOverlay(effectType, duration) {
+    const normalizedEffectType = String(effectType || '')
+      .trim()
+      .toLowerCase()
+      .replace(/[\s-]+/g, '_');
+    if (this.effectOverlayEl) {
+      this.effectOverlayEl.remove();
+      this.effectOverlayEl = null;
+    }
+    if (this._effectOverlayTimer) {
+      window.clearTimeout(this._effectOverlayTimer);
+      this._effectOverlayTimer = null;
+    }
+    if (
+      normalizedEffectType === 'phased'
+      || normalizedEffectType === 'phase_shift_swap'
+      || normalizedEffectType === 'no_weapon'
+      || normalizedEffectType === 'empty_weapon'
+    ) {
+      return;
+    }
+    this.activeEffect = normalizedEffectType || effectType;
+
+    const statusStyles = {
+      blind: {
+        accent: "#ff9d54",
+        icon: "◉",
+        title: "Visual Feed Interrupted",
+        subtitle: "Optics degraded. Drive by instinct.",
+        chip: "Impaired",
+        surface: "rgba(42, 22, 10, 0.86)",
+        border: "rgba(255, 157, 84, 0.22)",
+        wash: "radial-gradient(circle at 50% 52%, rgba(0,0,0,0.06), rgba(7,5,3,0.72) 76%)",
+        edge: "rgba(255, 124, 36, 0.2)",
+      },
+      stuck: {
+        accent: "#ff7fd7",
+        icon: "◎",
+        title: "Adhesion Lock",
+        subtitle: "Mobility compromised by sticky residue.",
+        chip: "Entrapped",
+        surface: "rgba(38, 12, 32, 0.84)",
+        border: "rgba(255, 127, 215, 0.22)",
+        wash: "radial-gradient(circle at 50% 0%, rgba(255,127,215,0.12), rgba(14,8,14,0.04) 32%, rgba(10,6,10,0.16) 100%)",
+        edge: "rgba(255, 127, 215, 0.18)",
+      },
+      spinout: {
+        accent: "#ffd25e",
+        icon: "↺",
+        title: "Handling Destabilized",
+        subtitle: "Spin recovery engaged.",
+        chip: "Skid",
+        surface: "rgba(40, 28, 8, 0.84)",
+        border: "rgba(255, 210, 94, 0.22)",
+        wash: "radial-gradient(circle at 50% 0%, rgba(255,208,92,0.12), rgba(9,8,5,0.04) 32%, rgba(14,10,5,0.14) 100%)",
+        edge: "rgba(255, 210, 94, 0.18)",
+      },
+      slow: {
+        accent: "#b8beff",
+        icon: "∿",
+        title: "Drag Field Active",
+        subtitle: "Acceleration dampened for a short burst.",
+        chip: "Debuff",
+        surface: "rgba(14, 18, 40, 0.84)",
+        border: "rgba(184, 190, 255, 0.2)",
+        wash: "radial-gradient(circle at 50% 0%, rgba(160,170,255,0.11), rgba(8,10,18,0.04) 30%, rgba(8,10,18,0.14) 100%)",
+        edge: "rgba(168, 178, 255, 0.16)",
+      },
+      heavy: {
+        accent: "#aeb8ca",
+        icon: "⬣",
+        title: "Mass Surge",
+        subtitle: "Weight spike detected across the chassis.",
+        chip: "Burdened",
+        surface: "rgba(16, 20, 28, 0.86)",
+        border: "rgba(174, 184, 202, 0.18)",
+        wash: "radial-gradient(circle at 50% 0%, rgba(174,184,202,0.08), rgba(8,10,16,0.02) 28%, rgba(8,10,16,0.16) 100%)",
+        edge: "rgba(174, 184, 202, 0.14)",
+      },
+      squash: {
+        accent: "#95ff6f",
+        icon: "▣",
+        title: "Compression Shock",
+        subtitle: "Profile reduced until the chassis rebounds.",
+        chip: "Crushed",
+        surface: "rgba(12, 28, 10, 0.84)",
+        border: "rgba(149, 255, 111, 0.2)",
+        wash: "radial-gradient(circle at 50% 0%, rgba(149,255,111,0.08), rgba(8,16,8,0.03) 30%, rgba(8,16,8,0.14) 100%)",
+        edge: "rgba(149, 255, 111, 0.16)",
+      },
+      boost: {
+        accent: "#45f5db",
+        icon: "»",
+        title: "Boost Window Open",
+        subtitle: "Output elevated. Keep the throttle pinned.",
+        chip: "Buff",
+        surface: "rgba(8, 22, 24, 0.84)",
+        border: "rgba(69, 245, 219, 0.22)",
+        wash: "radial-gradient(circle at 50% 0%, rgba(69,245,219,0.1), rgba(4,10,12,0.03) 34%, rgba(4,10,12,0.12) 100%)",
+        edge: "rgba(69, 245, 219, 0.18)",
+      },
+      ludicrous: {
+        accent: "#ff69f3",
+        icon: "∞",
+        title: "Ludicrous Engaged",
+        subtitle: "Overclocked thrust envelope now online.",
+        chip: "Overdrive",
+        surface: "rgba(28, 8, 34, 0.84)",
+        border: "rgba(255, 105, 243, 0.24)",
+        wash: "radial-gradient(circle at 50% 0%, rgba(255,105,243,0.12), rgba(10,4,12,0.03) 34%, rgba(10,4,12,0.16) 100%)",
+        edge: "rgba(255, 105, 243, 0.2)",
+      },
+      shielded: {
+        accent: "#6cc8ff",
+        icon: "◌",
+        title: "Shield Matrix Stable",
+        subtitle: "Deflection layer wrapped around the kart.",
+        chip: "Protected",
+        surface: "rgba(8, 18, 30, 0.84)",
+        border: "rgba(108, 200, 255, 0.22)",
+        wash: "radial-gradient(circle at 50% 0%, rgba(108,200,255,0.1), rgba(6,8,14,0.03) 34%, rgba(6,8,14,0.12) 100%)",
+        edge: "rgba(108, 200, 255, 0.18)",
+      },
+      mirror: {
+        accent: "#c4ecff",
+        icon: "◇",
+        title: "Mirror Drift",
+        subtitle: "Perception bent by reflected vectors.",
+        chip: "Disorient",
+        surface: "rgba(10, 20, 28, 0.82)",
+        border: "rgba(196, 236, 255, 0.2)",
+        wash: "radial-gradient(circle at 50% 0%, rgba(196,236,255,0.1), rgba(8,10,16,0.03) 34%, rgba(8,10,16,0.12) 100%)",
+        edge: "rgba(196, 236, 255, 0.16)",
+      },
+      pirateleportation: {
+        accent: "#c58dff",
+        icon: "☍",
+        title: "Signal Hijacked",
+        subtitle: "Position routing was tampered with mid-match.",
+        chip: "Pirated",
+        surface: "rgba(22, 10, 30, 0.84)",
+        border: "rgba(197, 141, 255, 0.22)",
+        wash: "radial-gradient(circle at 50% 0%, rgba(197,141,255,0.11), rgba(10,6,14,0.03) 34%, rgba(10,6,14,0.14) 100%)",
+        edge: "rgba(197, 141, 255, 0.18)",
+      },
+    };
+    const statusZoneByEffect = {
+      blind: 'health',
+      stuck: 'health',
+      spinout: 'health',
+      slow: 'health',
+      heavy: 'health',
+      squash: 'health',
+      shielded: 'health',
+      boost: 'primary',
+      ludicrous: 'primary',
+      mirror: 'pickup',
+      pirateleportation: 'pickup',
+    };
+    const statusStyle = statusStyles[normalizedEffectType] || {
+      accent: "#ffffff",
+      icon: "•",
+      title: String(effectType || "status").replace(/_/g, " ").replace(/\b\w/g, (m) => m.toUpperCase()),
+      subtitle: "System state updated.",
+      chip: "Status",
+    };
+    showGUIStatusLane({
+      title: statusStyle.title,
+      subtitle: statusStyle.subtitle,
+      chip: statusStyle.chip,
+      icon: statusStyle.icon,
+      accent: statusStyle.accent,
+      duration,
+      sourceZone: statusZoneByEffect[normalizedEffectType] || 'center',
+    });
+    return;
+
     // Remove existing overlay
     if (this.effectOverlayEl) {
       this.effectOverlayEl.remove();
       this.effectOverlayEl = null;
+    }
+    if (effectType === 'phased' || effectType === 'phase_shift_swap') {
+      return;
     }
     this.activeEffect = effectType;
 
@@ -4529,8 +6397,6 @@ export class ColyseusBabylonClient {
       ludicrous: { bg: "rgba(255,0,255,0.25)", text: "🔋 LUDICROUS MODE!", color: "#ff00ff" },
       shielded:{ bg: "rgba(80,180,255,0.1)", text: "🛡️ FORCEFIELD ON", color: "#55bbff" },
       mirror:  { bg: "rgba(145,214,255,0.14)", text: "🪞 MIRROR REALM", color: "#a6dfff" },
-      phased:  { bg: "rgba(158,242,208,0.14)", text: "👻 PHASE SHIFT", color: "#b8ffe6" },
-      memory_leak: { bg: "rgba(255,156,168,0.15)", text: "🧠 MEMORY LEAK", color: "#ffc2ca" },
       pirateleportation: { bg: "rgba(155,89,182,0.25)", text: "🏴‍☠️ PIRATED!", color: "#bb77dd" },
     };
 
@@ -4579,38 +6445,6 @@ export class ColyseusBabylonClient {
         overlay.appendChild(shard);
       }
     }
-    if (effectType === 'phased') {
-      for (let index = 0; index < 9; index += 1) {
-        const line = document.createElement('div');
-        Object.assign(line.style, {
-          position: 'fixed',
-          left: '0',
-          right: '0',
-          top: `${8 + index * 10}%`,
-          height: '1px',
-          background: 'linear-gradient(90deg, rgba(158,242,208,0), rgba(184,255,230,0.72), rgba(158,242,208,0))',
-          opacity: '0.4',
-        });
-        overlay.appendChild(line);
-      }
-    }
-    if (effectType === 'memory_leak') {
-      for (let index = 0; index < 10; index += 1) {
-        const glitch = document.createElement('div');
-        Object.assign(glitch.style, {
-          position: 'fixed',
-          width: `${18 + (index % 4) * 26}px`,
-          height: '9px',
-          left: `${5 + index * 9}%`,
-          top: `${20 + (index % 5) * 11}%`,
-          background: 'rgba(255,182,193,0.42)',
-          boxShadow: '0 0 14px rgba(255,156,168,0.5)',
-          opacity: `${0.22 + (index % 3) * 0.16}`,
-        });
-        overlay.appendChild(glitch);
-      }
-    }
-
     // Add pulse animation if not already present
     if (!document.getElementById("effect-pulse-style")) {
       const styleEl = document.createElement("style");
@@ -4638,6 +6472,47 @@ export class ColyseusBabylonClient {
 
   showArenaEffectOverlay(effectType, duration) {
     this._clearArenaEffectOverlay();
+
+    const statusStyles = {
+      arena_fog: {
+        title: "Fog Bank Rolling In",
+        subtitle: "Visibility softened across the arena floor.",
+        chip: "Arena",
+        icon: "◌",
+        accent: "#e6f1ff",
+        surface: "rgba(10, 16, 24, 0.8)",
+        border: "rgba(230, 241, 255, 0.16)",
+        wash: "radial-gradient(circle at 50% 0%, rgba(230,241,255,0.08), rgba(10,14,20,0.04) 28%, rgba(10,14,20,0.22) 100%)",
+        edge: "rgba(230, 241, 255, 0.12)",
+      },
+      arena_rain: {
+        title: "Rain Slick Active",
+        subtitle: "Traction is reduced on the racing line.",
+        chip: "Arena",
+        icon: "∕",
+        accent: "#a9d0ff",
+        surface: "rgba(8, 18, 30, 0.8)",
+        border: "rgba(169, 208, 255, 0.18)",
+        wash: "linear-gradient(180deg, rgba(70,120,255,0.08), rgba(10,18,36,0.18))",
+        edge: "rgba(169, 208, 255, 0.14)",
+      },
+    };
+    const statusStyle = statusStyles[effectType] || statusStyles.arena_fog;
+    showGUIArenaMood({
+      title: statusStyle.title,
+      subtitle: statusStyle.subtitle,
+      chip: statusStyle.chip,
+      icon: statusStyle.icon,
+      accent: statusStyle.accent,
+      duration,
+    });
+
+    this._arenaWeatherType = effectType || 'arena_fog';
+    this._applyArenaWeatherToScene(this._arenaWeatherType);
+    if (this._arenaEffectOverlayTimer) {
+      window.clearTimeout(this._arenaEffectOverlayTimer);
+      this._arenaEffectOverlayTimer = null;
+    }
     const overlay = document.createElement("div");
     this._arenaEffectOverlayEl = overlay;
 
@@ -4736,13 +6611,21 @@ export class ColyseusBabylonClient {
     }
     document.body.appendChild(overlay);
 
-    window.setTimeout(() => {
+    this._arenaEffectOverlayTimer = window.setTimeout(() => {
       if (this._arenaEffectOverlayEl === overlay) this._clearArenaEffectOverlay();
-    }, duration);
+    }, Math.max(1200, Number(duration || 0) + 250));
   }
 
   _clearArenaEffectOverlay() {
+    if (this._arenaEffectOverlayTimer) {
+      window.clearTimeout(this._arenaEffectOverlayTimer);
+      this._arenaEffectOverlayTimer = null;
+    }
+    this._arenaWeatherType = "";
+    this._restoreArenaWeatherScene();
+    clearGUIArenaMood();
     if (this._arenaEffectOverlayEl) {
+      this._arenaEffectOverlayEl.classList.remove('is-visible');
       this._arenaEffectOverlayEl.remove();
       this._arenaEffectOverlayEl = null;
     }
@@ -4752,15 +6635,15 @@ export class ColyseusBabylonClient {
     stopEngineSound();
     stopBGM();
     disposeAudio();
+    stopAdaptiveMonitor();
+    this._cleanupDebugScenario();
+    disposeBattleVFX();
+    disposeBattleAssets();
+    disposeWeaponFXEnhance();
     disposeParticles();
     this._stopNetworkSync();
 
-    // Remove keyboard listeners
-    if (this._onKeyDown) window.removeEventListener("keydown", this._onKeyDown);
-    if (this._onKeyUp)   window.removeEventListener("keyup",   this._onKeyUp);
-    this._onKeyDown = null;
-    this._onKeyUp = null;
-    this._keys = {};
+    this._teardownInputLoop();
 
     disposeControlsOverlay();
 
@@ -4772,13 +6655,31 @@ export class ColyseusBabylonClient {
       clearTimeout(this._autoStartTimer);
       this._autoStartTimer = null;
     }
+    if (this._effectOverlayTimer) {
+      clearTimeout(this._effectOverlayTimer);
+      this._effectOverlayTimer = null;
+    }
+    if (this.effectOverlayEl) {
+      this.effectOverlayEl.remove();
+      this.effectOverlayEl = null;
+    }
+    clearGUIStatusLane();
     if (this._stateCatchupTimer) {
       clearInterval(this._stateCatchupTimer);
       this._stateCatchupTimer = null;
     }
-    if (this._inputKeepaliveInterval) {
-      window.clearInterval(this._inputKeepaliveInterval);
-      this._inputKeepaliveInterval = null;
+    if (this._timeSyncInterval) {
+      clearInterval(this._timeSyncInterval);
+      this._timeSyncInterval = null;
+    }
+    if (this._metricsPollInterval) {
+      clearInterval(this._metricsPollInterval);
+      this._metricsPollInterval = null;
+    }
+    this._clearSceneBeforeRender("_remoteInterpolationBeforeRender");
+    if (this._onResize) {
+      window.removeEventListener("resize", this._onResize);
+      this._onResize = null;
     }
 
     if (this.room) {
@@ -4791,7 +6692,38 @@ export class ColyseusBabylonClient {
     this.remoteKartAggregates.forEach((agg) => agg.dispose());
     this.remoteKartAggregates.clear();
     this._remoteTargets.clear();
+    this._projectileTargets.clear();
+    this._queuedProjectileFires.length = 0;
+    this._queuedProjectileHits.length = 0;
+    this._queuedKartCrashes.length = 0;
+    this.pendingInputs.length = 0;
+    this._suppressedEntityIds.clear();
     this._remoteWheelMeshes.clear();
+    this._pendingPickupBoxes.clear();
+
+    if (this._localKartVFX) {
+      this._localKartVFX.dispose();
+      this._localKartVFX = null;
+    }
+    this._remoteKartVFXs.forEach((remoteVFX) => {
+      try { remoteVFX.dispose(); } catch (_) {}
+    });
+    this._remoteKartVFXs.clear();
+    this._remoteKartEntities.forEach((remoteEntity) => {
+      try { remoteEntity.dispose(); } catch (_) {}
+    });
+    this._remoteKartEntities.clear();
+    if (this._shieldBubble) {
+      this._disposeShieldParticleField(this._shieldBubble);
+      this._shieldBubble = null;
+      this._shieldBubbleMat = null;
+    }
+    if (this._remoteShieldBubbles) {
+      this._remoteShieldBubbles.forEach((bubble) => {
+        this._disposeShieldParticleField(bubble);
+      });
+      this._remoteShieldBubbles.clear();
+    }
 
     this.remoteMeshes.forEach((mesh) => mesh.dispose());
     this.remoteMeshes.clear();
@@ -4811,6 +6743,7 @@ export class ColyseusBabylonClient {
       this.effectOverlayEl.remove();
       this.effectOverlayEl = null;
     }
+    clearGUIStatusLane();
     this._clearArenaEffectOverlay();
     if (this._countdownEl) {
       this._countdownEl.remove();
@@ -4827,6 +6760,15 @@ export class ColyseusBabylonClient {
     this._remoteGloKits.clear();
     this._wheelMeshes  = [];
     document.getElementById('_glo-match-end')?.remove();
+    if (this._shieldParticleTexture) {
+      try { this._shieldParticleTexture.dispose(); } catch (_) {}
+      this._shieldParticleTexture = null;
+    }
+    if (typeof window !== 'undefined' && window.__gloDebug) {
+      delete window.__gloDebug.runBattleDebugScenario;
+      delete window.__gloDebug.triggerMushroomCloud;
+      delete window.__gloDebug.clearBattleDebugScenario;
+    }
 
     this.havokPlugin = null;
     this.scene?.dispose();

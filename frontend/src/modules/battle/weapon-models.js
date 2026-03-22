@@ -28,6 +28,9 @@ import { GPUParticleSystem } from '@babylonjs/core/Particles/gpuParticleSystem';
 import { SceneLoader } from '@babylonjs/core/Loading/sceneLoader';
 import { NodeMaterial } from '@babylonjs/core/Materials/Node/nodeMaterial';
 import { Effect } from '@babylonjs/core/Materials/effect';
+import { FresnelParameters } from '@babylonjs/core/Materials/fresnelParameters';
+import { tagMeshForGlow, createAdaptiveParticleSystem, isGPUParticleSupported } from './weapon-fx-enhance.js';
+import { scaleParticles, scaleTess, gpuParticlesEnabled, runtimeFXBudget, runtimePressure } from '../perf-tier.js';
 import { Engine } from '@babylonjs/core/Engines/engine';
 import '@babylonjs/core/Shaders/particles.vertex';
 import '@babylonjs/core/Shaders/particles.fragment';
@@ -41,13 +44,177 @@ const _externalGlbMissing = new Set();
 
 let _tornadoNoiseTexture = null;
 
+function heavyContinuousBudget(min = 0.2) {
+  const pressure = runtimePressure();
+  const pressureMul = pressure > 0.78 ? 0.55 : pressure > 0.58 ? 0.72 : 1;
+  return Math.max(min, runtimeFXBudget() * pressureMul);
+}
+
+// ── Tornado "Dots-Space" shader (inspired by playground.babylonjs.com/#UYS16D) ──
+// Single mesh + vertex-displaced funnel + layered rotating dot-clouds in fragment.
+if (!Effect.ShadersStore.tornadoFunnelVertexShader) {
+  Effect.ShadersStore.tornadoFunnelVertexShader = `
+    precision highp float;
+    attribute vec3 position;
+    attribute vec2 uv;
+    uniform mat4 worldViewProjection;
+    uniform float time;
+    varying vec2 vUV;
+    varying float vHeight;
+    varying float vAngle;
+
+    void main(void) {
+      vec3 p = position;
+      float h = (p.y + 6.0) / 12.0;           // normalise height 0..1
+      float angle = atan(p.z, p.x);
+      float baseR = length(p.xz);
+
+      // parabolic funnel: tight at bottom, flares at top
+      float funnel = 0.35 + h * h * 2.2;
+      // time-dependent twist increases with height
+      float twist = h * 4.0 + time * 1.8;
+      // fine turbulence ripples
+      float turb = sin(h * 12.0 + time * 5.0 + angle * 3.0) * 0.08 * h;
+      // wide low-freq wobble for organic sway
+      float wobX = sin(time * 0.7 + h * 2.0) * 0.15 * h;
+      float wobZ = cos(time * 0.9 + h * 2.5) * 0.15 * h;
+
+      float r = funnel + turb;
+      p.x = cos(angle + twist) * r + wobX;
+      p.z = sin(angle + twist) * r + wobZ;
+
+      vUV = uv;
+      vHeight = h;
+      vAngle = angle + twist;
+      gl_Position = worldViewProjection * vec4(p, 1.0);
+    }
+  `;
+
+  // Fragment: multi-layered rotating dots (from #UYS16D) + scrolling noise cloud
+  Effect.ShadersStore.tornadoFunnelFragmentShader = `
+    precision highp float;
+    varying vec2 vUV;
+    varying float vHeight;
+    varying float vAngle;
+    uniform float time;
+    uniform sampler2D noiseTex;
+
+    #define LAYERS 6.0
+    #define GRID   40.0
+
+    float rand1(float p) { return fract(sin(p * 78.233) * 43758.5453); }
+
+    mat2 rot(float a) {
+      float c = cos(a), s = sin(a);
+      return mat2(c, -s, s, c);
+    }
+
+    void main(void) {
+      // --- Layer 1: rotating dot cloud (playground #UYS16D technique) ---
+      vec2 baseUV = vUV * 2.0 - 1.0;   // centre UV
+      float dots = 0.0;
+      for (float i = 0.0; i < LAYERS; i++) {
+        vec2 iuv = baseUV * rot(time * (0.6 + i * 0.18));
+        vec2 guv = iuv * GRID;
+        vec2 gid = floor(guv);
+        float iF = rand1(i);
+        vec2 off = vec2(
+          rand1(gid.x * iF + gid.y * 2000.0 * iF),
+          rand1(gid.y * iF + gid.x * 1000.0 * iF)
+        ) * 0.5 - 0.25;
+        guv = fract(guv) - 0.5 - off;
+        float l = length(guv);
+        float pSize = rand1(gid.x * iF + gid.y * 7000.0 * iF) * 0.22;
+        float showW = sqrt(length(baseUV)) * 0.55;
+        float show = rand1(gid.x * 100.0 * iF + gid.y * 200.0 * iF) > showW ? 1.0 : 0.0;
+        dots += smoothstep(pSize, pSize - iF * 0.3, l) * show;
+      }
+      dots = clamp(dots, 0.0, 1.0);
+
+      // --- Layer 2: scrolling noise for cloud wisps ---
+      vec2 uv1 = vUV + vec2(time * 0.6,  -time * 0.25);
+      vec2 uv2 = vUV * vec2(4.0, 1.5) + vec2(-time * 0.4, time * 0.15);
+      float n1 = texture2D(noiseTex, uv1).r;
+      float n2 = texture2D(noiseTex, uv2).g;
+      float cloud = smoothstep(0.3, 0.7, n1) * smoothstep(0.25, 0.65, n2);
+
+      // --- Combine ---
+      float density = dots * 0.55 + cloud * 0.65;
+
+      // Edge / top / bottom fade
+      float edgeFade = smoothstep(0.0, 0.12, vUV.x) * smoothstep(0.0, 0.12, 1.0 - vUV.x);
+      float topFade  = smoothstep(0.0, 0.08, vUV.y) * smoothstep(0.0, 0.18, 1.0 - vUV.y);
+
+      // Colour: dark grey core, lighter turbulent edges
+      vec3 dark  = vec3(0.10, 0.12, 0.14);
+      vec3 mid   = vec3(0.32, 0.36, 0.40);
+      vec3 light = vec3(0.55, 0.62, 0.68);
+      vec3 col = mix(dark, mid, cloud);
+      col = mix(col, light, dots * 0.4);
+      // subtle blue tint at top
+      col += vec3(-0.02, 0.0, 0.06) * vHeight;
+
+      float alpha = density * edgeFade * topFade * 0.88;
+      // Lightning flash: brief full-white flicker
+      float flash = step(0.97, sin(time * 23.7) * sin(time * 7.3));
+      col = mix(col, vec3(1.0), flash * 0.6 * step(0.4, vHeight));
+
+      gl_FragColor = vec4(col, alpha);
+    }
+  `;
+
+  // Ground dust disc shader
+  Effect.ShadersStore.tornadoDustVertexShader = `
+    precision highp float;
+    attribute vec3 position;
+    attribute vec2 uv;
+    uniform mat4 worldViewProjection;
+    varying vec2 vUV;
+    void main(void) {
+      vUV = uv;
+      gl_Position = worldViewProjection * vec4(position, 1.0);
+    }
+  `;
+
+  Effect.ShadersStore.tornadoDustFragmentShader = `
+    precision highp float;
+    varying vec2 vUV;
+    uniform float time;
+    uniform sampler2D noiseTex;
+
+    mat2 rot(float a) {
+      float c = cos(a), s = sin(a);
+      return mat2(c, -s, s, c);
+    }
+
+    void main(void) {
+      vec2 uv = vUV * 2.0 - 1.0;           // -1..1 centred
+      float dist = length(uv);
+
+      // Rotating dust rings
+      vec2 ruv = uv * rot(time * 1.2);
+      float ring1 = texture2D(noiseTex, ruv * 0.8 + 0.5 + vec2(time * 0.1, 0.0)).r;
+      vec2 ruv2 = uv * rot(-time * 0.8);
+      float ring2 = texture2D(noiseTex, ruv2 * 1.2 + 0.5 + vec2(0.0, time * 0.15)).g;
+      float cloud = smoothstep(0.25, 0.65, ring1) * smoothstep(0.2, 0.6, ring2);
+
+      // Radial falloff: visible in a ring from 0.15 to 0.95
+      float radial = smoothstep(0.95, 0.6, dist) * smoothstep(0.08, 0.3, dist);
+
+      vec3 col = mix(vec3(0.28, 0.24, 0.18), vec3(0.45, 0.40, 0.32), cloud);
+      float alpha = cloud * radial * 0.5;
+
+      gl_FragColor = vec4(col, alpha);
+    }
+  `;
+}
+
+// Legacy tornado vortex shaders (used by createTornadoModelLegacy)
 if (!Effect.ShadersStore.tornadoVortexVertexShader) {
   Effect.ShadersStore.tornadoVortexVertexShader = `
     precision highp float;
-
     attribute vec3 position;
     attribute vec2 uv;
-
     uniform mat4 world;
     uniform mat4 worldViewProjection;
     uniform float time;
@@ -56,61 +223,49 @@ if (!Effect.ShadersStore.tornadoVortexVertexShader) {
     uniform float parabolAmplitude;
     uniform float radiusScale;
     uniform float turbulence;
-
     varying vec2 vUV;
     varying float vHeight;
-
     void main(void) {
       vec3 p = position;
       float angle = atan(p.z, p.x);
       float elevation = p.y;
       float radius = (parabolStrength * pow(max(0.0, elevation - parabolOffset), 2.0) + parabolAmplitude) * radiusScale;
       radius += sin((elevation - time) * 20.0 + angle * 2.0) * turbulence;
-
       vec3 twisted = vec3(
         cos(angle + elevation * 0.65 + time * 0.85) * radius,
         elevation,
         sin(angle + elevation * 0.65 + time * 0.85) * radius
       );
-
       vUV = uv;
       vHeight = elevation;
       gl_Position = worldViewProjection * vec4(twisted, 1.0);
     }
   `;
-
   Effect.ShadersStore.tornadoVortexFragmentShader = `
     precision highp float;
-
     varying vec2 vUV;
     varying float vHeight;
-
     uniform sampler2D noiseTex;
     uniform vec3 emissiveColor;
     uniform float time;
     uniform float alphaScale;
     uniform float darkLayer;
-
     vec2 skewUv(vec2 inUv, vec2 skew) {
       return vec2(inUv.x + inUv.y * skew.x, inUv.y + inUv.x * skew.y);
     }
-
     void main(void) {
       vec2 uv1 = vUV + vec2(time, -time);
       uv1 = skewUv(uv1, vec2(-1.0, 0.0)) * vec2(2.0, 0.25);
       float noise1 = smoothstep(0.45, 0.7, texture2D(noiseTex, uv1).r);
-
       vec2 uv2 = vUV + vec2(time * 0.5, -time);
       uv2 = skewUv(uv2, vec2(-1.0, 0.0)) * vec2(5.0, 1.0);
       float noise2 = smoothstep(0.45, 0.7, texture2D(noiseTex, uv2).g);
-
       float outerFade = min(
         smoothstep(0.0, darkLayer > 0.5 ? 0.2 : 0.1, vUV.y),
         smoothstep(0.0, 0.4, 1.0 - vUV.y)
       );
       float radialFade = smoothstep(0.02, 0.25, vUV.x * (1.0 - vUV.x) + 0.03);
       float effect = noise1 * noise2 * outerFade * radialFade;
-
       vec3 color = darkLayer > 0.5 ? vec3(0.05, 0.08, 0.09) : emissiveColor;
       float alpha = smoothstep(0.0, darkLayer > 0.5 ? 0.01 : 0.1, effect) * alphaScale;
       gl_FragColor = vec4(color, alpha);
@@ -232,340 +387,134 @@ export function createBowlingBallModel(scene) {
   return root;
 }
 
+/**
+ * Tornado — shader-driven funnel (inspired by playground #UYS16D / #6Q89LE).
+ * Total draw calls: 2 meshes + 1 tiny particle system.
+ * All visual density comes from the GPU (layered rotating dots + noise).
+ */
 export function createTornadoModel(scene) {
   const root = new TransformNode('mdl_tornado', scene);
-  root.scaling.set(0.95, 1.0, 0.95);
 
   const ownedMaterials = [];
   const ownedSystems = [];
 
-  const outerShell = MeshBuilder.CreateCylinder('torn_outer_v2', {
-    diameterTop: 2.2,
-    diameterBottom: 2.2,
-    height: 12.6,
-    tessellation: 40,
-    subdivisions: 28,
+  // ── 1. Funnel mesh — single cylinder, all visuals via shader ──
+  const funnel = MeshBuilder.CreateCylinder('torn_funnel', {
+    diameterTop: 2.8,
+    diameterBottom: 2.8,
+    height: 15.5,
+    tessellation: scaleTess(24),
+    subdivisions: scaleTess(18),
     arc: 1,
     enclose: false,
   }, scene);
-  outerShell.position.y = 5.85;
-  outerShell.parent = root;
-  outerShell.isPickable = false;
-  outerShell.material = _createTornadoShaderMaterial(
-    'torn_outerMat_v2',
-    scene,
-    new Color3(0.74, 0.95, 1.0),
-    {
-      parabolStrength: 0.155,
-      parabolOffset: 0.24,
-      parabolAmplitude: 0.14,
-      radiusScale: 1.06,
-      turbulence: 0.08,
-      alphaScale: 0.78,
-      darkLayer: false,
-    }
-  );
-  ownedMaterials.push(outerShell.material);
+  funnel.position.y = 0;
+  funnel.parent = root;
+  funnel.isPickable = false;
 
-  const midShell = MeshBuilder.CreateCylinder('torn_mid_v2', {
-    diameterTop: 1.9,
-    diameterBottom: 1.9,
-    height: 11.8,
-    tessellation: 34,
-    subdivisions: 24,
-    arc: 1,
-    enclose: false,
-  }, scene);
-  midShell.position.y = 5.55;
-  midShell.scaling.x = 0.84;
-  midShell.scaling.z = 0.84;
-  midShell.parent = root;
-  midShell.isPickable = false;
-  midShell.material = _createTornadoShaderMaterial(
-    'torn_midMat_v2',
-    scene,
-    new Color3(0.46, 0.76, 0.86),
-    {
-      parabolStrength: 0.148,
-      parabolOffset: 0.34,
-      parabolAmplitude: 0.16,
-      radiusScale: 0.94,
-      turbulence: 0.06,
-      alphaScale: 0.54,
-      darkLayer: false,
-    }
-  );
-  ownedMaterials.push(midShell.material);
+  const noiseTex = _getTornadoNoiseTexture(scene);
 
-  const darkCore = MeshBuilder.CreateCylinder('torn_darkCore_v2', {
-    diameterTop: 1.4,
-    diameterBottom: 1.4,
-    height: 10.9,
-    tessellation: 26,
-    subdivisions: 22,
-    arc: 1,
-    enclose: false,
-  }, scene);
-  darkCore.position.y = 5.25;
-  darkCore.scaling.x = 0.62;
-  darkCore.scaling.z = 0.62;
-  darkCore.parent = root;
-  darkCore.isPickable = false;
-  darkCore.material = _createTornadoShaderMaterial(
-    'torn_darkCoreMat_v2',
-    scene,
-    new Color3(0.08, 0.11, 0.13),
-    {
-      parabolStrength: 0.142,
-      parabolOffset: 0.36,
-      parabolAmplitude: 0.18,
-      radiusScale: 0.72,
-      turbulence: 0.04,
-      alphaScale: 0.48,
-      darkLayer: true,
-    }
-  );
-  ownedMaterials.push(darkCore.material);
-
-  const eyeGlow = MeshBuilder.CreateCylinder('torn_eyeGlow_v2', {
-    diameterTop: 0.08,
-    diameterBottom: 0.58,
-    height: 8.8,
-    tessellation: 18,
-  }, scene);
-  const eyeGlowMat = mat('torn_eyeGlowMat_v2', new Color3(0.9, 0.98, 1.0), scene, { emissive: 0.95, alpha: 0.16 });
-  eyeGlowMat.backFaceCulling = false;
-  eyeGlow.material = eyeGlowMat;
-  ownedMaterials.push(eyeGlowMat);
-  eyeGlow.position.y = 4.7;
-  eyeGlow.parent = root;
-  eyeGlow.isPickable = false;
-
-  const baseCore = MeshBuilder.CreateCylinder('torn_baseCore_v2', {
-    diameterTop: 1.35,
-    diameterBottom: 2.9,
-    height: 1.1,
-    tessellation: 24,
-  }, scene);
-  const baseCoreMat = mat('torn_baseCoreMat_v2', new Color3(0.22, 0.34, 0.36), scene, { emissive: 0.45, alpha: 0.42 });
-  baseCoreMat.backFaceCulling = false;
-  baseCore.material = baseCoreMat;
-  ownedMaterials.push(baseCoreMat);
-  baseCore.position.y = 0.55;
-  baseCore.parent = root;
-  baseCore.isPickable = false;
-
-  const shockRing = MeshBuilder.CreateTorus('torn_shockRing_v2', {
-    diameter: 4.5,
-    thickness: 0.12,
-    tessellation: 56,
-  }, scene);
-  const shockRingMat = mat('torn_shockRingMat_v2', new Color3(0.86, 0.99, 0.98), scene, { emissive: 0.92, alpha: 0.3 });
-  shockRingMat.backFaceCulling = false;
-  shockRing.material = shockRingMat;
-  ownedMaterials.push(shockRingMat);
-  shockRing.parent = root;
-  shockRing.position.y = 0.18;
-  shockRing.rotation.x = Math.PI * 0.5;
-  shockRing.isPickable = false;
-
-  const swirlSpecs = [
-    { y: 1.2, diameter: 3.3, thickness: 0.18, speed: 1.0 },
-    { y: 3.6, diameter: 2.45, thickness: 0.13, speed: -1.35 },
-    { y: 6.7, diameter: 1.55, thickness: 0.1, speed: 1.8 },
-  ];
-  const swirlRings = swirlSpecs.map((spec, index) => {
-    const ring = MeshBuilder.CreateTorus(`torn_swirl_v2_${index}`, {
-      diameter: spec.diameter,
-      thickness: spec.thickness,
-      tessellation: 40,
-    }, scene);
-    const ringMat = mat(
-      `torn_swirlMat_v2_${index}`,
-      new Color3(0.68 + index * 0.08, 0.9 + index * 0.02, 0.95 + index * 0.015),
-      scene,
-      { emissive: 0.85, alpha: 0.24 - index * 0.03 }
-    );
-    ringMat.backFaceCulling = false;
-    ring.material = ringMat;
-    ownedMaterials.push(ringMat);
-    ring.parent = root;
-    ring.position.y = spec.y;
-    ring.rotation.x = Math.PI * 0.5;
-    ring.rotation.z = index % 2 === 0 ? Math.PI * 0.18 : -Math.PI * 0.14;
-    ring.isPickable = false;
-    ring.metadata = { spinDirection: spec.speed };
-    return ring;
+  const funnelMat = new ShaderMaterial('torn_funnelMat', scene, {
+    vertex: 'tornadoFunnel',
+    fragment: 'tornadoFunnel',
+  }, {
+    attributes: ['position', 'uv'],
+    uniforms: ['worldViewProjection', 'time'],
+    samplers: ['noiseTex'],
+    needAlphaBlending: true,
   });
+  funnelMat.backFaceCulling = false;
+  funnelMat.alphaMode = Engine.ALPHA_ADD;
+  funnelMat.setTexture('noiseTex', noiseTex);
+  funnelMat.setFloat('time', 0);
+  funnel.material = funnelMat;
+  ownedMaterials.push(funnelMat);
 
-  const mistEmitter = new TransformNode('torn_mistEmitter_v2', scene);
-  mistEmitter.parent = root;
-  mistEmitter.position.y = 4.1;
+  // ── 2. Ground dust disc — flat plane with radial dust shader ──
+  const dustDisc = MeshBuilder.CreateDisc('torn_dust', {
+    radius: 5.8,
+    tessellation: scaleTess(24),
+  }, scene);
+  dustDisc.rotation.x = Math.PI * 0.5;
+  dustDisc.position.y = 0.05;
+  dustDisc.parent = root;
+  dustDisc.isPickable = false;
 
-  const sparkEmitter = new TransformNode('torn_sparkEmitter_v2', scene);
-  sparkEmitter.parent = root;
-  sparkEmitter.position.y = 4.7;
-
-  const mist = _createTornadoParticleSystem('torn_mist_v2', scene, mistEmitter, {
-    useGPU: true,
-    capacity: 180,
-    emitRate: 88,
-    emitterShape: 'cylinder',
-    emitterRadius: 2.25,
-    emitterHeight: 8.8,
-    radiusRange: 1,
-    directionRandomizer: 0.2,
-    minLifeTime: 0.22,
-    maxLifeTime: 0.72,
-    minSize: 0.2,
-    maxSize: 0.72,
-    sizeStart: 0.08,
-    sizeMid: 0.58,
-    sizeEnd: 0.14,
-    minEmitPower: 1.2,
-    maxEmitPower: 4.8,
-    gravity: new Vector3(0, 1.2, 0),
-    direction1: new Vector3(-1.9, 2.8, -1.9),
-    direction2: new Vector3(1.9, 10.4, 1.9),
-    color1: new Color4(0.84, 0.97, 1.0, 0.72),
-    color2: new Color4(0.48, 0.82, 0.92, 0.34),
-    colorDead: new Color4(0.12, 0.22, 0.28, 0),
-    angularStart: -6,
-    angularEnd: 8,
-    velocityGradients: [[0, 0.22], [0.55, 1.0], [1, 0.34]],
+  const dustMat = new ShaderMaterial('torn_dustMat', scene, {
+    vertex: 'tornadoDust',
+    fragment: 'tornadoDust',
+  }, {
+    attributes: ['position', 'uv'],
+    uniforms: ['worldViewProjection', 'time'],
+    samplers: ['noiseTex'],
+    needAlphaBlending: true,
   });
-  ownedSystems.push(mist);
+  dustMat.backFaceCulling = false;
+  dustMat.alphaMode = Engine.ALPHA_ADD;
+  dustMat.setTexture('noiseTex', noiseTex);
+  dustMat.setFloat('time', 0);
+  dustDisc.material = dustMat;
+  ownedMaterials.push(dustMat);
 
-  const debris = _createTornadoParticleSystem('torn_debris_v2', scene, root, {
+  // ── 3. Tiny debris particle system (only flying chunks, ~20 particles) ──
+  const debrisEmitter = new TransformNode('torn_debrisEmit', scene);
+  debrisEmitter.parent = root;
+  debrisEmitter.position.y = 2.0;
+
+  const debris = _createTornadoParticleSystem('torn_debris_v3', scene, debrisEmitter, {
     useGPU: false,
-    capacity: 84,
-    emitRate: 34,
+    capacity: 24,
+    emitRate: 12,
     emitterShape: 'cylinder',
-    emitterRadius: 2.8,
-    emitterHeight: 1.1,
-    radiusRange: 1,
-    directionRandomizer: 0.12,
-    minLifeTime: 0.32,
-    maxLifeTime: 0.95,
-    minSize: 0.18,
-    maxSize: 0.58,
-    sizeStart: 0.14,
-    sizeMid: 0.44,
-    sizeEnd: 0.08,
-    minEmitPower: 0.7,
-    maxEmitPower: 3.8,
-    gravity: new Vector3(0, -0.9, 0),
-    direction1: new Vector3(-3.4, 0.25, -3.4),
-    direction2: new Vector3(3.4, 2.1, 3.4),
-    color1: new Color4(0.54, 0.46, 0.35, 0.48),
-    color2: new Color4(0.38, 0.33, 0.25, 0.28),
-    colorDead: new Color4(0.18, 0.18, 0.18, 0),
+    emitterRadius: 2.2,
+    emitterHeight: 3.0,
+    radiusRange: 0.8,
+    directionRandomizer: 0.3,
+    minLifeTime: 0.5,
+    maxLifeTime: 1.2,
+    minSize: 0.12,
+    maxSize: 0.4,
+    sizeStart: 0.08,
+    sizeMid: 0.35,
+    sizeEnd: 0.04,
+    minEmitPower: 2.0,
+    maxEmitPower: 6.0,
+    gravity: new Vector3(0, -1.5, 0),
+    direction1: new Vector3(-3.5, 1.0, -3.5),
+    direction2: new Vector3(3.5, 4.0, 3.5),
+    color1: new Color4(0.45, 0.38, 0.28, 0.6),
+    color2: new Color4(0.32, 0.28, 0.22, 0.35),
+    colorDead: new Color4(0.2, 0.18, 0.16, 0),
     blendMode: ParticleSystem.BLENDMODE_STANDARD,
-    angularStart: -2,
-    angularEnd: 3,
+    angularStart: -4,
+    angularEnd: 5,
   });
   ownedSystems.push(debris);
 
-  const sparks = _createTornadoParticleSystem('torn_sparks_v2', scene, sparkEmitter, {
-    useGPU: true,
-    capacity: 64,
-    emitRate: 20,
-    emitterShape: 'cylinder',
-    emitterRadius: 0.85,
-    emitterHeight: 7.6,
-    radiusRange: 0.65,
-    directionRandomizer: 0.08,
-    minLifeTime: 0.06,
-    maxLifeTime: 0.18,
-    minSize: 0.05,
-    maxSize: 0.16,
-    sizeStart: 0.04,
-    sizeMid: 0.12,
-    sizeEnd: 0.02,
-    minEmitPower: 6,
-    maxEmitPower: 18,
-    gravity: new Vector3(0, 0, 0),
-    direction1: new Vector3(-0.9, -0.6, -0.9),
-    direction2: new Vector3(0.9, 0.9, 0.9),
-    color1: new Color4(1.0, 1.0, 1.0, 0.92),
-    color2: new Color4(0.58, 0.88, 1.0, 0.6),
-    colorDead: new Color4(0.2, 0.42, 0.72, 0),
-    angularStart: -10,
-    angularEnd: 10,
-  });
-  ownedSystems.push(sparks);
-
-  const outerMat = outerShell.material;
-  const midMat = midShell.material;
-  const darkMat = darkCore.material;
+  // ── Per-frame observer: update 2 time uniforms + slow root spin ──
+  root.scaling.set(1.18, 1.18, 1.18);
   let elapsed = Math.random() * Math.PI * 2;
   const spinObserver = scene.onBeforeRenderObservable.add(() => {
     const dt = scene.getEngine().getDeltaTime() * 0.001;
     elapsed += dt;
-
-    const surge = 1.0 + Math.sin(elapsed * 3.3) * 0.05;
-    const shear = 0.96 + Math.sin(elapsed * 5.8) * 0.05;
-
-    outerMat.setFloat('time', elapsed * 1.05);
-    outerMat.setFloat('radiusScale', 1.04 * surge);
-    midMat.setFloat('time', elapsed * 1.42 + 1.3);
-    midMat.setFloat('radiusScale', 0.92 * shear);
-    darkMat.setFloat('time', elapsed * 1.86 + 2.1);
-    darkMat.setFloat('radiusScale', 0.7 + Math.sin(elapsed * 4.4) * 0.03);
-
-    root.rotation.y += dt * 0.85;
-    eyeGlow.rotation.y -= dt * 3.2;
-    baseCore.rotation.y += dt * 1.8;
-
-    const ringPulse = 1.0 + Math.sin(elapsed * 8.4) * 0.08;
-    shockRing.scaling.x = ringPulse;
-    shockRing.scaling.y = ringPulse;
-    shockRing.scaling.z = 0.86 + Math.sin(elapsed * 6.1) * 0.05;
-    shockRing.position.y = 0.12 + Math.sin(elapsed * 7.2) * 0.04;
-
-    swirlRings.forEach((ring, index) => {
-      const ringTime = elapsed * (3.5 + index * 0.55);
-      ring.rotation.y += dt * (5.6 + index * 2.3) * (ring.metadata?.spinDirection ?? 1);
-      const pulse = 1.0 + Math.sin(ringTime) * (0.1 - index * 0.015);
-      ring.scaling.x = pulse;
-      ring.scaling.y = pulse;
-      ring.scaling.z = pulse;
-      ring.position.x = Math.sin(ringTime * 0.45) * 0.08 * (index + 1);
-      ring.position.z = Math.cos(ringTime * 0.45) * 0.08 * (index + 1);
-    });
+    funnelMat.setFloat('time', elapsed);
+    dustMat.setFloat('time', elapsed);
+    root.rotation.y += dt * 1.25;
+    // Orbit the debris emitter around the base
+    debrisEmitter.position.x = Math.sin(elapsed * 2.1) * 0.85;
+    debrisEmitter.position.z = Math.cos(elapsed * 2.1) * 0.85;
   });
 
   root.onDisposeObservable.add(() => {
-    if (spinObserver) {
-      scene.onBeforeRenderObservable.remove(spinObserver);
-    }
-    ownedSystems.forEach((system) => {
-      try {
-        system.stop();
-      } catch {}
-      try {
-        system.dispose();
-      } catch {}
-    });
-    ownedMaterials.forEach((material) => {
-      try {
-        material.dispose();
-      } catch {}
-    });
+    if (spinObserver) scene.onBeforeRenderObservable.remove(spinObserver);
+    ownedSystems.forEach((s) => { try { s.stop(); } catch {} try { s.dispose(); } catch {} });
+    ownedMaterials.forEach((m) => { try { m.dispose(); } catch {} });
   });
 
   root.metadata = {
     visualType: 'tornado',
-    mistPS: mist,
-    debrisPS: debris,
-    sparksPS: sparks,
     spinObserver,
-    swirlRings,
-    shockRing,
-    outerShell,
-    midShell,
-    darkCore,
-    eyeGlow,
+    debrisPS: debris,
   };
 
   return root;
@@ -825,6 +774,13 @@ export function createGuidedMissileModel(scene) {
   nozzle.position.z = -0.55;
   nozzle.parent = root;
 
+  const thrusterGlow = MeshBuilder.CreateSphere('thrusterGlow', { diameter: 0.16, segments: 8 }, scene);
+  const thrusterMat = mat('thrusterMat', new Color3(1.0, 0.48, 0.05), scene, { alpha: 0.82, emissive: 0.85, backface: false });
+  thrusterGlow.material = thrusterMat;
+  thrusterGlow.position.z = -0.66;
+  thrusterGlow.scaling.set(0.9, 0.9, 1.6);
+  thrusterGlow.parent = root;
+
   // Fins (4 fins at 90° intervals)
   const finMat = mat('finMat', new Color3(0.5, 0.05, 0.05), scene);
   for (let i = 0; i < 4; i++) {
@@ -842,6 +798,40 @@ export function createGuidedMissileModel(scene) {
   band.rotation.x = Math.PI / 2;
   band.position.z = 0.1;
   band.parent = root;
+
+  // Smoke contrail — GPU particles for dense missile exhaust
+  const { ps: missileTrail, isGPU: missileTrailGPU } = createAdaptiveParticleSystem('missile_trail', 1000, scene);
+  missileTrail.particleTexture = _tryTex('/textures/battle/particles/smoke_04.png', scene);
+  missileTrail.emitter = root;
+  missileTrail.minEmitBox = new Vector3(-0.05, -0.05, -0.6);
+  missileTrail.maxEmitBox = new Vector3(0.05, 0.05, -0.5);
+  missileTrail.minLifeTime = 0.2;
+  missileTrail.maxLifeTime = 0.6;
+  missileTrail.minSize = 0.1;
+  missileTrail.maxSize = 0.45;
+  const missileTrailBudget = Math.max(0.28, runtimeFXBudget());
+  missileTrail.emitRate = missileTrailGPU ? Math.round(24 * missileTrailBudget) : scaleParticles(14);
+  missileTrail.color1 = new Color4(0.9, 0.9, 0.9, 0.7);
+  missileTrail.color2 = new Color4(0.5, 0.5, 0.5, 0.3);
+  missileTrail.colorDead = new Color4(0.2, 0.2, 0.2, 0);
+  missileTrail.minEmitPower = 1.5;
+  missileTrail.maxEmitPower = 3.5;
+  missileTrail.direction1 = new Vector3(-0.2, -0.2, -2);
+  missileTrail.direction2 = new Vector3(0.2, 0.2, -1);
+  missileTrail.gravity = new Vector3(0, 0.8, 0);
+  missileTrail.blendMode = ParticleSystem.BLENDMODE_STANDARD;
+  if (missileTrailGPU) missileTrail.maxActiveParticleCount = Math.max(18, Math.round(24 * missileTrailBudget));
+  missileTrail.start();
+
+  root.metadata = {
+    weaponType: 'guided_missile',
+    thrusterGlow,
+    thrusterMat,
+    bandMat: band.material,
+    finMat,
+    trailPS: missileTrail,
+    isGPUTrail: missileTrailGPU,
+  };
 
   return root;
 }
@@ -1055,7 +1045,7 @@ export function createItemBoxModel(scene) {
   _spawnCarouselItem(carouselNode, scene);
 
   // ── Orbiting sparkle particle system ──────────────────────────────────
-  const sparklePS = new ParticleSystem('itemBoxSparkles', 20, scene);
+  const sparklePS = new ParticleSystem('itemBoxSparkles', scaleParticles(20), scene);
   sparklePS.particleTexture = new Texture(
     'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==',
     scene
@@ -1063,7 +1053,7 @@ export function createItemBoxModel(scene) {
   sparklePS.emitter = root;
   sparklePS.minEmitBox = new Vector3(-1.0, -1.0, -1.0);
   sparklePS.maxEmitBox = new Vector3(1.0, 1.0, 1.0);
-  sparklePS.emitRate = 5;
+  sparklePS.emitRate = scaleParticles(5);
   sparklePS.minLifeTime = 0.8;
   sparklePS.maxLifeTime = 1.4;
   sparklePS.minSize = 0.05;
@@ -1124,20 +1114,38 @@ export function createBananaModel(scene) {
 }
 
 /**
- * Shield Bubble — transparent blue sphere with hex-pattern hint.
+ * Shield Bubble — Fresnel energy sphere with hex-glow and pulsing inner shell.
  */
 export function createShieldModel(scene) {
   const root = new TransformNode('mdl_shield', scene);
 
   const bubble = MeshBuilder.CreateSphere('shield', { diameter: 3.0, segments: 16 }, scene);
-  bubble.material = mat('shieldMat', new Color3(0.3, 0.6, 1), scene, { alpha: 0.25, emissive: 0.4, backface: false });
+  const shieldMat = mat('shieldMat', new Color3(0.3, 0.6, 1), scene, { alpha: 0.18, emissive: 0.4, backface: false });
+  // Fresnel edge glow — visible rim brightens at glancing angles
+  shieldMat.emissiveFresnelParameters = new FresnelParameters({
+    bias: 0.05, power: 3.0,
+    leftColor: new Color3(0.15, 0.4, 1.0),
+    rightColor: new Color3(0.6, 0.9, 1.0),
+  });
+  shieldMat.opacityFresnelParameters = new FresnelParameters({
+    bias: 0.15, power: 2.0,
+  });
+  bubble.material = shieldMat;
   bubble.parent = root;
 
   // Inner glow sphere
   const glow = MeshBuilder.CreateSphere('shieldGlow', { diameter: 2.85, segments: 12 }, scene);
-  glow.material = mat('glowMat', new Color3(0.5, 0.8, 1), scene, { alpha: 0.1, emissive: 0.6, backface: false });
+  const glowMat2 = mat('glowMat', new Color3(0.5, 0.8, 1), scene, { alpha: 0.08, emissive: 0.6, backface: false });
+  glowMat2.emissiveFresnelParameters = new FresnelParameters({
+    bias: 0.0, power: 4.0,
+    leftColor: new Color3(0.2, 0.5, 1.0),
+    rightColor: new Color3(0.8, 0.95, 1.0),
+  });
+  glow.material = glowMat2;
   glow.parent = root;
 
+  tagMeshForGlow(bubble, 0.4);
+  tagMeshForGlow(glow, 0.6);
   return root;
 }
 
@@ -1231,14 +1239,14 @@ function _createTornadoShaderMaterial(name, scene, color, opts = {}) {
 
 function _createTornadoParticleSystem(name, scene, emitter, opts = {}) {
   const useGPU = (opts.useGPU ?? true) && GPUParticleSystem.IsSupported;
-  const capacity = opts.capacity ?? 96;
+  const capacity = scaleParticles(opts.capacity ?? 96);
   const ps = useGPU
     ? new GPUParticleSystem(name, { capacity }, scene)
     : new ParticleSystem(name, capacity, scene);
 
   ps.particleTexture = _tryTex(opts.texture || '/textures/battle/fx/wind-sprites.png', scene);
   ps.emitter = emitter;
-  ps.emitRate = opts.emitRate ?? 32;
+  ps.emitRate = scaleParticles(opts.emitRate ?? 32);
   ps.minLifeTime = opts.minLifeTime ?? 0.2;
   ps.maxLifeTime = opts.maxLifeTime ?? 0.7;
   ps.minSize = opts.minSize ?? 0.12;
@@ -1292,39 +1300,48 @@ export function createFireballModel(scene) {
   const root = new TransformNode('mdl_fireball', scene);
 
   // Core ember sphere
-  const core = MeshBuilder.CreateSphere('fb_core', { diameter: 0.9, segments: 12 }, scene);
+  const core = MeshBuilder.CreateSphere('fb_core', { diameter: 1.2, segments: 14 }, scene);
   const coreMat = mat('fb_coreMat', new Color3(1, 0.45, 0), scene, { emissive: 0.9 });
   core.material = coreMat;
   core.parent = root;
 
   // Outer glow shell (larger, translucent)
-  const glow = MeshBuilder.CreateSphere('fb_glow', { diameter: 1.4, segments: 10 }, scene);
+  const glow = MeshBuilder.CreateSphere('fb_glow', { diameter: 1.9, segments: 12 }, scene);
   const glowMat = mat('fb_glowMat', new Color3(1, 0.3, 0), scene, { emissive: 0.8, alpha: 0.35 });
   glowMat.backFaceCulling = false;
   glow.material = glowMat;
   glow.parent = root;
 
-  // Attached fire trail particle system (follows the projectile)
-  const ps = new ParticleSystem('fb_trail', 50, scene);
+  const corona = MeshBuilder.CreateTorus('fb_corona', { diameter: 1.55, thickness: 0.12, tessellation: 24 }, scene);
+  corona.rotation.x = Math.PI / 2;
+  corona.material = mat('fb_coronaMat', new Color3(1, 0.75, 0.2), scene, { emissive: 1.0, alpha: 0.55 });
+  corona.parent = root;
+
+  // Attached fire trail — GPU particles on supported tiers, CPU fallback
+  const { ps, isGPU: fbIsGPU } = createAdaptiveParticleSystem('fb_trail', 1500, scene);
   ps.particleTexture = _tryTex('/textures/battle/particles/flame_03.png', scene);
   ps.emitter = root;
-  ps.minLifeTime = 0.15;
-  ps.maxLifeTime = 0.45;
-  ps.minSize = 0.2;
-  ps.maxSize = 0.6;
-  ps.emitRate = 40;
-  ps.color1 = new Color4(1, 0.6, 0, 1);
-  ps.color2 = new Color4(1, 0.2, 0, 0.8);
+  ps.minLifeTime = 0.18;
+  ps.maxLifeTime = 0.55;
+  ps.minSize = 0.22;
+  ps.maxSize = 0.82;
+  const fireballTrailBudget = Math.max(0.28, runtimeFXBudget());
+  ps.emitRate = fbIsGPU ? Math.round(42 * fireballTrailBudget) : scaleParticles(18);
+  ps.color1 = new Color4(1, 0.76, 0.08, 1);
+  ps.color2 = new Color4(1, 0.24, 0, 0.82);
   ps.colorDead = new Color4(0.3, 0.05, 0, 0);
-  ps.minEmitPower = 0.5;
-  ps.maxEmitPower = 1.5;
-  ps.direction1 = new Vector3(-0.3, 0.5, -0.3);
-  ps.direction2 = new Vector3(0.3, 1.5, 0.3);
-  ps.gravity = new Vector3(0, 2, 0);
+  ps.minEmitPower = 0.8;
+  ps.maxEmitPower = 2.2;
+  ps.direction1 = new Vector3(-0.45, 0.4, -1.2);
+  ps.direction2 = new Vector3(0.45, 1.8, -0.35);
+  ps.gravity = new Vector3(0, 2.5, 0);
   ps.blendMode = ParticleSystem.BLENDMODE_ADD;
+  if (fbIsGPU) ps.maxActiveParticleCount = Math.max(24, Math.round(42 * fireballTrailBudget));
   ps.start();
 
-  root.metadata = { trailPS: ps };
+  root.metadata = { trailPS: ps, isGPUTrail: fbIsGPU };
+  tagMeshForGlow(core, 0.8);
+  tagMeshForGlow(glow, 0.5);
   return root;
 }
 
@@ -1350,14 +1367,14 @@ export function createToxicSpreadModel(scene) {
   }
 
   // Poison smoke trail
-  const ps = new ParticleSystem('tox_trail', 30, scene);
+  const ps = new ParticleSystem('tox_trail', scaleParticles(30), scene);
   ps.particleTexture = _tryTex('/textures/battle/particles/smoke_04.png', scene);
   ps.emitter = root;
   ps.minLifeTime = 0.3;
   ps.maxLifeTime = 0.8;
   ps.minSize = 0.15;
   ps.maxSize = 0.4;
-  ps.emitRate = 25;
+  ps.emitRate = scaleParticles(25);
   ps.color1 = new Color4(0.2, 0.8, 0.1, 0.7);
   ps.color2 = new Color4(0.1, 0.6, 0, 0.4);
   ps.colorDead = new Color4(0, 0.2, 0, 0);
@@ -1380,11 +1397,20 @@ export function createToxicSpreadModel(scene) {
 export function createIceLanceModel(scene) {
   const root = new TransformNode('mdl_ice_lance', scene);
 
-  // Sharp crystal shard (elongated octahedron)
+  // Sharp crystal shard (elongated octahedron) with Fresnel ice effect
   const shard = MeshBuilder.CreatePolyhedron('ice_shard', { type: 1, size: 0.3 }, scene);
   shard.scaling.set(0.6, 0.6, 2.0);
   const shardMat = mat('ice_shardMat', new Color3(0.5, 0.85, 1), scene, { emissive: 0.5, alpha: 0.8 });
   shardMat.backFaceCulling = false;
+  // Fresnel rim-glow for icy translucency
+  shardMat.emissiveFresnelParameters = new FresnelParameters({
+    bias: 0.1, power: 2.0,
+    leftColor: new Color3(0.3, 0.7, 1.0),
+    rightColor: new Color3(0.9, 0.97, 1.0),
+  });
+  shardMat.opacityFresnelParameters = new FresnelParameters({
+    bias: 0.4, power: 1.5,
+  });
   shard.material = shardMat;
   shard.parent = root;
 
@@ -1394,14 +1420,14 @@ export function createIceLanceModel(scene) {
   core.parent = root;
 
   // Frost particle trail
-  const ps = new ParticleSystem('ice_trail', 35, scene);
+  const ps = new ParticleSystem('ice_trail', scaleParticles(35), scene);
   ps.particleTexture = _tryTex('/textures/battle/fx/ice_vfx.png', scene);
   ps.emitter = root;
   ps.minLifeTime = 0.2;
   ps.maxLifeTime = 0.5;
   ps.minSize = 0.08;
   ps.maxSize = 0.25;
-  ps.emitRate = 30;
+  ps.emitRate = scaleParticles(30);
   ps.color1 = new Color4(0.5, 0.9, 1, 0.8);
   ps.color2 = new Color4(0.8, 0.95, 1, 0.5);
   ps.colorDead = new Color4(0.6, 0.8, 1, 0);
@@ -1414,6 +1440,8 @@ export function createIceLanceModel(scene) {
   ps.start();
 
   root.metadata = { trailPS: ps };
+  tagMeshForGlow(shard, 0.5);
+  tagMeshForGlow(core, 0.7);
   return root;
 }
 
@@ -1428,8 +1456,8 @@ function createTornadoModelLegacy(scene) {
     diameterTop: 2.0,
     diameterBottom: 2.0,
     height: 11.5,
-    tessellation: 32,
-    subdivisions: 22,
+    tessellation: scaleTess(32),
+    subdivisions: scaleTess(22),
     arc: 1,
     enclose: false,
   }, scene);
@@ -1447,8 +1475,8 @@ function createTornadoModelLegacy(scene) {
     diameterTop: 2.0,
     diameterBottom: 2.0,
     height: 10.8,
-    tessellation: 28,
-    subdivisions: 20,
+    tessellation: scaleTess(28),
+    subdivisions: scaleTess(20),
     arc: 1,
     enclose: false,
   }, scene);
@@ -1465,7 +1493,7 @@ function createTornadoModelLegacy(scene) {
   );
 
   const coreGlow = MeshBuilder.CreateCylinder('torn_coreGlow', {
-    diameterTop: 0.08, diameterBottom: 0.6, height: 8.4, tessellation: 18,
+    diameterTop: 0.08, diameterBottom: 0.6, height: 8.4, tessellation: scaleTess(18),
   }, scene);
   const glowMat = mat('torn_coreGlowMat', new Color3(0.85, 0.98, 1.0), scene, { emissive: 0.9, alpha: 0.16 });
   glowMat.backFaceCulling = false;
@@ -1475,7 +1503,7 @@ function createTornadoModelLegacy(scene) {
   coreGlow.isPickable = false;
 
   // Debris cloud at base — darker, heavier particles
-  const debris = new ParticleSystem('torn_debris', 60, scene);
+  const debris = new ParticleSystem('torn_debris', scaleParticles(60), scene);
   debris.particleTexture = _tryTex('/textures/battle/fx/wind-sprites.png', scene);
   debris.emitter = root;
   debris.createCylinderEmitter(3.0, 1, 0, 0);
@@ -1483,7 +1511,7 @@ function createTornadoModelLegacy(scene) {
   debris.maxLifeTime = 1.0;
   debris.minSize = 0.2;
   debris.maxSize = 0.6;
-  debris.emitRate = 40;
+  debris.emitRate = scaleParticles(40);
   debris.color1 = new Color4(0.5, 0.4, 0.3, 0.5);
   debris.color2 = new Color4(0.35, 0.3, 0.25, 0.3);
   debris.colorDead = new Color4(0.2, 0.2, 0.2, 0);
@@ -1496,7 +1524,7 @@ function createTornadoModelLegacy(scene) {
   debris.start();
 
   // Lightning sparks inside the funnel
-  const sparks = new ParticleSystem('torn_sparks', 30, scene);
+  const sparks = new ParticleSystem('torn_sparks', scaleParticles(30), scene);
   sparks.particleTexture = _tryTex('/textures/battle/fx/wind-sprites.png', scene);
   sparks.emitter = root;
   sparks.createCylinderEmitter(1.0, 8, 0, 0);
@@ -1504,7 +1532,7 @@ function createTornadoModelLegacy(scene) {
   sparks.maxLifeTime = 0.15;
   sparks.minSize = 0.05;
   sparks.maxSize = 0.15;
-  sparks.emitRate = 12;
+  sparks.emitRate = scaleParticles(12);
   sparks.color1 = new Color4(1, 1, 1, 0.9);
   sparks.color2 = new Color4(0.7, 0.85, 1, 0.6);
   sparks.colorDead = new Color4(0.4, 0.6, 1, 0);
@@ -1540,64 +1568,78 @@ export function createSuperNovaModel(scene) {
   const root = new TransformNode('mdl_super_nova', scene);
 
   // Nova sphere with sun_surface texture
-  const sphere = MeshBuilder.CreateSphere('nova_sphere', { diameter: 2, segments: 16 }, scene);
+  const sphere = MeshBuilder.CreateCylinder('nova_sphere', {
+    diameterTop: 0.42, diameterBottom: 0.9, height: 1.75, tessellation: 18,
+  }, scene);
   const novaMat = new StandardMaterial('nova_mat', scene);
-  novaMat.diffuseTexture = _tryTex('/textures/battle/fx/sun_surface.png', scene);
-  novaMat.emissiveColor = new Color3(1, 0.5, 0);
-  novaMat.emissiveTexture = _tryTex('/textures/battle/fx/fire.jpg', scene);
-  novaMat.alpha = 0.85;
-  novaMat.backFaceCulling = false;
-  novaMat.disableLighting = true;
+  novaMat.diffuseColor = new Color3(0.18, 0.2, 0.24);
+  novaMat.emissiveColor = new Color3(0.12, 0.12, 0.1);
+  novaMat.specularColor = new Color3(0.35, 0.35, 0.28);
   sphere.material = novaMat;
+  sphere.rotation.z = Math.PI / 2;
   sphere.parent = root;
+
+  const nose = MeshBuilder.CreateSphere('nova_nose', { diameter: 0.5, segments: 10 }, scene);
+  nose.scaling.z = 0.6;
+  nose.position.x = 0.78;
+  nose.material = mat('nova_noseMat', new Color3(0.14, 0.16, 0.18), scene, { specPow: 28 });
+  nose.parent = root;
+
+  const finTop = MeshBuilder.CreateBox('nova_fin_top', { width: 0.14, height: 0.54, depth: 0.18 }, scene);
+  finTop.position.x = -0.62;
+  finTop.position.y = 0.42;
+  finTop.material = mat('nova_fin_topMat', new Color3(0.92, 0.86, 0.22), scene, { emissive: 0.18 });
+  finTop.parent = root;
+  const finBottom = finTop.clone('nova_fin_bottom');
+  finBottom.position.y = -0.42;
+  finBottom.parent = root;
 
   // Outer corona ring
   const corona = MeshBuilder.CreateTorus('nova_corona', {
     diameter: 2.5, thickness: 0.2, tessellation: 32,
   }, scene);
-  corona.material = mat('nova_coronaMat', new Color3(1, 0.4, 0), scene, { emissive: 0.9, alpha: 0.6 });
+  corona.material = mat('nova_coronaMat', new Color3(1, 0.9, 0.25), scene, { emissive: 1.0, alpha: 0.22 });
   corona.parent = root;
+  corona.scaling.z = 0.45;
 
-  // Fire particles
-  const ps = new ParticleSystem('nova_fire', 80, scene);
-  ps.particleTexture = _tryTex('/textures/battle/particles/flame_03.png', scene);
-  ps.emitter = root;
-  ps.createSphereEmitter(1.5);
-  ps.minLifeTime = 0.2;
-  ps.maxLifeTime = 0.6;
-  ps.minSize = 0.2;
-  ps.maxSize = 0.7;
-  ps.emitRate = 50;
-  ps.color1 = new Color4(1, 0.6, 0, 1);
-  ps.color2 = new Color4(1, 0.2, 0, 0.7);
-  ps.colorDead = new Color4(0.2, 0, 0, 0);
-  ps.minEmitPower = 2;
-  ps.maxEmitPower = 6;
-  ps.gravity = new Vector3(0, 1, 0);
-  ps.blendMode = ParticleSystem.BLENDMODE_ADD;
-  ps.start();
+  const beacon = MeshBuilder.CreateSphere('nova_beacon', { diameter: 0.24, segments: 8 }, scene);
+  beacon.material = mat('nova_beaconMat', new Color3(1.0, 0.95, 0.35), scene, { emissive: 1.2, alpha: 0.9 });
+  beacon.parent = root;
+
+  // Fire particles — GPU path for high-count nova expansion
+  const { ps: novaPS, isGPU: novaIsGPU } = createAdaptiveParticleSystem('nova_fire', 2000, scene);
+  novaPS.particleTexture = _tryTex('/textures/battle/particles/flame_03.png', scene);
+  novaPS.emitter = root;
+  novaPS.createSphereEmitter(0.8);
+  novaPS.minLifeTime = 0.15;
+  novaPS.maxLifeTime = 0.42;
+  novaPS.minSize = 0.12;
+  novaPS.maxSize = 0.42;
+  const novaTrailBudget = Math.max(0.24, runtimeFXBudget());
+  novaPS.emitRate = novaIsGPU ? Math.round(38 * novaTrailBudget) : scaleParticles(12);
+  novaPS.color1 = new Color4(1, 0.82, 0.16, 0.95);
+  novaPS.color2 = new Color4(1, 0.42, 0.06, 0.6);
+  novaPS.colorDead = new Color4(0.2, 0, 0, 0);
+  novaPS.minEmitPower = 0.5;
+  novaPS.maxEmitPower = 1.8;
+  novaPS.gravity = new Vector3(0, 1.2, 0);
+  novaPS.blendMode = ParticleSystem.BLENDMODE_ADD;
+  if (novaIsGPU) novaPS.maxActiveParticleCount = Math.max(20, Math.round(38 * novaTrailBudget));
+  novaPS.start();
 
   // Expand animation — bounce easing like WM super-nova
-  let _started = false;
   const expandObs = scene.onBeforeRenderObservable.add(() => {
-    if (!_started) {
-      _started = true;
-      root.scaling.setAll(0.1);
-    }
-    const current = root.scaling.x;
-    if (current < 7) {
-      // Bounce easing: fast initial growth, overshoot, settle
-      const target = 7;
-      const speed = scene.getEngine().getDeltaTime() * 0.006;
-      const overshoot = 1.2;
-      const next = current + (target * overshoot - current) * speed;
-      root.scaling.setAll(Math.min(next, target));
-    }
+    const t = performance.now() * 0.001;
+    const pulse = 1.0 + Math.sin(t * 5.4) * 0.08;
+    beacon.scaling.setAll(0.82 + pulse * 0.55);
+    corona.scaling.x = 1.0 + pulse * 0.22;
+    corona.scaling.y = 1.0 + pulse * 0.22;
+    root.rotation.x = Math.sin(t * 1.4) * 0.04;
+    root.rotation.y += scene.getEngine().getDeltaTime() * 0.0015;
   });
-  root.metadata = { trailPS: ps, expandObserver: expandObs };
-
-  // Attempt to load fire-nova node material asynchronously
-  _loadFireNovaMaterial(sphere, scene);
+  root.metadata = { trailPS: novaPS, isGPUTrail: novaIsGPU, expandObserver: expandObs };
+  tagMeshForGlow(beacon, 0.9);
+  tagMeshForGlow(corona, 0.4);
 
   return root;
 }
@@ -1621,15 +1663,15 @@ export function createRockBarrageModel(scene) {
   const root = new TransformNode('mdl_rock', scene);
 
   // Heavy floor-rolling boulder silhouette.
-  const rock = MeshBuilder.CreateIcoSphere('rock_body', { radius: 0.62, subdivisions: 2 }, scene);
-  rock.scaling.set(1.35, 1.0, 1.15);
+  const rock = MeshBuilder.CreateIcoSphere('rock_body', { radius: 0.54, subdivisions: 2 }, scene);
+  rock.scaling.set(1.18, 0.92, 1.04);
   rock.material = mat('rock_bodyMat', new Color3(0.46, 0.37, 0.28), scene, { specPow: 12 });
   rock.parent = root;
   rock.position.y = 0.2;
 
   const rim = MeshBuilder.CreateTorus('rock_rim', { diameter: 1.28, thickness: 0.12, tessellation: 18 }, scene);
   rim.rotation.x = Math.PI / 2;
-  rim.position.y = -0.05;
+  rim.position.y = -0.03;
   rim.material = mat('rock_rimMat', new Color3(0.32, 0.24, 0.18), scene, { emissive: 0.08 });
   rim.parent = root;
 
@@ -1644,14 +1686,14 @@ export function createRockBarrageModel(scene) {
   }
 
   // Dust trail
-  const ps = new ParticleSystem('rock_trail', 25, scene);
+  const ps = new ParticleSystem('rock_trail', scaleParticles(25), scene);
   ps.particleTexture = _tryTex('/textures/battle/particles/dust.png', scene);
   ps.emitter = root;
   ps.minLifeTime = 0.2;
   ps.maxLifeTime = 0.6;
   ps.minSize = 0.16;
   ps.maxSize = 0.45;
-  ps.emitRate = 26;
+  ps.emitRate = scaleParticles(26);
   ps.color1 = new Color4(0.6, 0.5, 0.4, 0.7);
   ps.color2 = new Color4(0.4, 0.35, 0.25, 0.4);
   ps.colorDead = new Color4(0.3, 0.25, 0.2, 0);
@@ -1674,53 +1716,85 @@ export function createRockBarrageModel(scene) {
 export function createLightningBoltModel(scene) {
   const root = new TransformNode('mdl_lightning', scene);
 
-  // Bright bolt core (thin cylinder pointed forward)
-  const bolt = MeshBuilder.CreateCylinder('lt_bolt', {
-    diameterTop: 0.05, diameterBottom: 0.15, height: 3.0, tessellation: 6,
-  }, scene);
-  const boltMat = mat('lt_boltMat', new Color3(0.9, 0.95, 1), scene, { emissive: 1.0 });
-  boltMat.disableLighting = true;
-  bolt.material = boltMat;
-  bolt.rotation.x = Math.PI / 2; // Point along Z
-  bolt.parent = root;
+  // Keep the silhouette radial so it reads correctly from every trajectory.
+  const coreOrb = MeshBuilder.CreateSphere('lt_core_orb', { diameter: 0.34, segments: 8 }, scene);
+  const coreOrbMat = mat('lt_core_orb_mat', new Color3(0.86, 0.94, 1.0), scene, { emissive: 1.2, alpha: 0.9 });
+  coreOrbMat.disableLighting = true;
+  coreOrb.material = coreOrbMat;
+  coreOrb.parent = root;
 
-  // Outer glow tube
-  const outer = MeshBuilder.CreateCylinder('lt_outer', {
-    diameterTop: 0.2, diameterBottom: 0.4, height: 3.2, tessellation: 8,
-  }, scene);
-  const outerMat = mat('lt_outerMat', new Color3(0.7, 0.8, 1), scene, { emissive: 0.8, alpha: 0.3 });
+  const innerShell = MeshBuilder.CreateSphere('lt_inner_shell', { diameter: 0.58, segments: 6 }, scene);
+  const innerShellMat = mat('lt_inner_shell_mat', new Color3(0.7, 0.85, 1.0), scene, { emissive: 1.0, alpha: 0.26 });
+  innerShellMat.backFaceCulling = false;
+  innerShell.material = innerShellMat;
+  innerShell.parent = root;
+
+  const outer = MeshBuilder.CreateSphere('lt_outer', { diameter: 0.86, segments: 6 }, scene);
+  outer.scaling.setAll(1.0);
+  const outerMat = mat('lt_outerMat', new Color3(0.7, 0.8, 1), scene, { emissive: 0.9, alpha: 0.12 });
   outerMat.backFaceCulling = false;
   outer.material = outerMat;
-  outer.rotation.x = Math.PI / 2;
   outer.parent = root;
 
-  // Spark particles
-  const ps = new ParticleSystem('lt_sparks', 40, scene);
-  ps.particleTexture = _tryTex('/textures/battle/particles/spark_05.png', scene);
-  ps.emitter = root;
-  ps.minLifeTime = 0.05;
-  ps.maxLifeTime = 0.2;
-  ps.minSize = 0.05;
-  ps.maxSize = 0.15;
-  ps.emitRate = 50;
-  ps.color1 = new Color4(0.9, 0.95, 1, 1);
-  ps.color2 = new Color4(0.7, 0.8, 1, 0.8);
-  ps.colorDead = new Color4(0.5, 0.6, 0.8, 0);
-  ps.minEmitPower = 3;
-  ps.maxEmitPower = 8;
-  ps.direction1 = new Vector3(-1, -0.5, -1);
-  ps.direction2 = new Vector3(1, 1, 1);
-  ps.gravity = Vector3.Zero();
-  ps.blendMode = ParticleSystem.BLENDMODE_ADD;
-  ps.start();
+  const coronaLayers = [];
+  const coronaSizes = [0.9, 1.15, 1.42];
+  for (let i = 0; i < coronaSizes.length; i += 1) {
+    const corona = MeshBuilder.CreatePlane(`lt_corona_${i}`, { width: coronaSizes[i], height: coronaSizes[i] }, scene);
+    const coronaMat = mat(`lt_corona_${i}_mat`, new Color3(0.88, 0.95, 1.0), scene, { emissive: 1.1 + i * 0.08, alpha: 0.14 - i * 0.02 });
+    coronaMat.backFaceCulling = false;
+    corona.material = coronaMat;
+    corona.billboardMode = Mesh.BILLBOARDMODE_ALL;
+    corona.parent = root;
+    coronaLayers.push(corona);
+  }
 
-  // Flicker animation
+  const arcRingA = MeshBuilder.CreateTorus('lt_arc_ring_a', { diameter: 0.66, thickness: 0.035, tessellation: 24 }, scene);
+  arcRingA.rotation.x = Math.PI / 2;
+  arcRingA.material = mat('lt_arc_ring_a_mat', new Color3(0.74, 0.86, 1.0), scene, { emissive: 0.95, alpha: 0.45 });
+  arcRingA.parent = root;
+
+  const arcRingB = MeshBuilder.CreateTorus('lt_arc_ring_b', { diameter: 0.5, thickness: 0.028, tessellation: 18 }, scene);
+  arcRingB.rotation.y = Math.PI / 2;
+  arcRingB.material = mat('lt_arc_ring_b_mat', new Color3(0.94, 0.98, 1.0), scene, { emissive: 1.05, alpha: 0.38 });
+  arcRingB.parent = root;
+
+  const sparkNodes = [];
+  const sparkOrbs = [];
+  for (let i = 0; i < 3; i += 1) {
+    const sparkNode = new TransformNode(`lt_spark_node_${i}`, scene);
+    sparkNode.parent = root;
+    sparkNode.rotation.z = (Math.PI * 2 * i) / 3;
+    sparkNode.rotation.y = (Math.PI / 5) * i;
+    const spark = MeshBuilder.CreateSphere(`lt_spark_${i}`, { diameter: 0.1 + i * 0.015, segments: 4 }, scene);
+    spark.material = mat(`lt_spark_${i}_mat`, new Color3(0.95, 0.99, 1.0), scene, { emissive: 1.25, alpha: 0.8 });
+    spark.position.x = 0.34 + i * 0.05;
+    spark.parent = sparkNode;
+    sparkNodes.push(sparkNode);
+    sparkOrbs.push(spark);
+  }
+
   const flickerObs = scene.onBeforeRenderObservable.add(() => {
-    const flicker = Math.random() > 0.3 ? 1 : 0.3;
-    boltMat.alpha = flicker;
-    outerMat.alpha = 0.3 * flicker;
+    const flicker = Math.random() > 0.24 ? 1 : 0.34;
+    coreOrbMat.alpha = 0.58 + flicker * 0.24;
+    innerShellMat.alpha = 0.16 + flicker * 0.12;
+    outerMat.alpha = 0.08 + flicker * 0.08;
+    sparkOrbs.forEach((spark, index) => {
+      if (!spark.material) return;
+      spark.material.alpha = 0.28 + flicker * (0.26 + index * 0.04);
+    });
   });
-  root.metadata = { trailPS: ps, flickerObserver: flickerObs };
+  root.metadata = {
+    flickerObserver: flickerObs,
+    coreOrb,
+    innerShell,
+    coronaLayers,
+    arcRings: [arcRingA, arcRingB],
+    sparkNodes,
+    sparkOrbs,
+    cleanup: () => scene.onBeforeRenderObservable.remove(flickerObs),
+  };
+  tagMeshForGlow(coreOrb, 0.9);
+  tagMeshForGlow(innerShell, 0.6);
 
   return root;
 }
@@ -1751,14 +1825,14 @@ export function createWindSlashModel(scene) {
   edge.parent = root;
 
   // Wind trail particles
-  const ps = new ParticleSystem('ws_trail', 30, scene);
+  const ps = new ParticleSystem('ws_trail', scaleParticles(30), scene);
   ps.particleTexture = _tryTex('/textures/battle/fx/wind-sprites.png', scene);
   ps.emitter = root;
   ps.minLifeTime = 0.15;
   ps.maxLifeTime = 0.4;
   ps.minSize = 0.1;
   ps.maxSize = 0.3;
-  ps.emitRate = 25;
+  ps.emitRate = scaleParticles(25);
   ps.color1 = new Color4(0.7, 1, 0.8, 0.6);
   ps.color2 = new Color4(0.5, 0.9, 0.6, 0.3);
   ps.colorDead = new Color4(0.4, 0.6, 0.5, 0);
@@ -1797,29 +1871,31 @@ export function createToxicCloudModel(scene) {
   dome.material = domeMat;
   dome.parent = root;
 
-  // Toxic fog particles filling the cloud
-  const ps = new ParticleSystem('tc_fog', 60, scene);
-  ps.particleTexture = _tryTex('/textures/battle/particles/cloud.png', scene);
-  ps.emitter = root;
-  ps.createSphereEmitter(3);
-  ps.minLifeTime = 0.8;
-  ps.maxLifeTime = 2.0;
-  ps.minSize = 0.5;
-  ps.maxSize = 1.5;
-  ps.emitRate = 25;
-  ps.color1 = new Color4(0.2, 0.7, 0.1, 0.5);
-  ps.color2 = new Color4(0.1, 0.5, 0, 0.3);
-  ps.colorDead = new Color4(0, 0.2, 0, 0);
-  ps.minEmitPower = 0.3;
-  ps.maxEmitPower = 1;
-  ps.direction1 = new Vector3(-1, 0.2, -1);
-  ps.direction2 = new Vector3(1, 0.8, 1);
-  ps.gravity = new Vector3(0, 0.3, 0);
-  ps.blendMode = ParticleSystem.BLENDMODE_STANDARD;
-  ps.start();
+  // Toxic fog particles filling the cloud — GPU path for dense volumetric feel
+  const { ps: tcPS, isGPU: tcIsGPU } = createAdaptiveParticleSystem('tc_fog', 2000, scene);
+  const toxicBudget = heavyContinuousBudget(0.22);
+  tcPS.particleTexture = _tryTex('/textures/battle/particles/cloud.png', scene);
+  tcPS.emitter = root;
+  tcPS.createSphereEmitter(3);
+  tcPS.minLifeTime = 0.8;
+  tcPS.maxLifeTime = 2.0;
+  tcPS.minSize = 0.5;
+  tcPS.maxSize = 1.5;
+  tcPS.emitRate = tcIsGPU ? Math.round(44 * toxicBudget) : scaleParticles(14);
+  tcPS.color1 = new Color4(0.2, 0.7, 0.1, 0.5);
+  tcPS.color2 = new Color4(0.1, 0.5, 0, 0.3);
+  tcPS.colorDead = new Color4(0, 0.2, 0, 0);
+  tcPS.minEmitPower = 0.3;
+  tcPS.maxEmitPower = 1;
+  tcPS.direction1 = new Vector3(-1, 0.2, -1);
+  tcPS.direction2 = new Vector3(1, 0.8, 1);
+  tcPS.gravity = new Vector3(0, 0.3, 0);
+  tcPS.blendMode = ParticleSystem.BLENDMODE_STANDARD;
+  if (tcIsGPU) tcPS.maxActiveParticleCount = Math.max(20, Math.round(44 * toxicBudget));
+  tcPS.start();
 
   // Bubbling drips at ground level
-  const drips = new ParticleSystem('tc_drips', 20, scene);
+  const drips = new ParticleSystem('tc_drips', scaleParticles(20), scene);
   drips.particleTexture = _tryTex('/textures/battle/particles/circle_03.png', scene);
   drips.emitter = root;
   drips.createSphereEmitter(2.5);
@@ -1827,7 +1903,7 @@ export function createToxicCloudModel(scene) {
   drips.maxLifeTime = 1.2;
   drips.minSize = 0.1;
   drips.maxSize = 0.3;
-  drips.emitRate = 15;
+  drips.emitRate = scaleParticles(Math.max(6, Math.round(12 * toxicBudget)));
   drips.color1 = new Color4(0.3, 0.8, 0.1, 0.8);
   drips.color2 = new Color4(0.1, 0.5, 0, 0.5);
   drips.colorDead = new Color4(0, 0.2, 0, 0);
@@ -1839,7 +1915,7 @@ export function createToxicCloudModel(scene) {
   drips.blendMode = ParticleSystem.BLENDMODE_STANDARD;
   drips.start();
 
-  root.metadata = { trailPS: ps, dripsPS: drips };
+  root.metadata = { trailPS: tcPS, isGPUTrail: tcIsGPU, dripsPS: drips };
 
   // Attempt to load toxic-cloud node material asynchronously
   _loadToxicCloudMaterial(dome, scene);
@@ -1865,53 +1941,125 @@ async function _loadToxicCloudMaterial(mesh, scene) {
 // ═════════════════════════════════════════════════════════════════════════════
 
 /**
- * Glow Thrower — flame-plume segment with a bright core and hot wake.
+ * Glow Thrower — forward fire-stream segment built from flowing flame particles.
  */
 export function createGlowThrowerModel(scene) {
   const root = new TransformNode('mdl_glow_thrower', scene);
-  const core = MeshBuilder.CreateSphere('gt_core', { diameter: 0.34, segments: 8 }, scene);
-  core.scaling.set(0.7, 0.7, 2.2);
-  const coreMat = mat('gt_coreMat', new Color3(1, 0.62, 0.08), scene, { emissive: 1.0, alpha: 0.95 });
-  coreMat.backFaceCulling = false;
+  const core = MeshBuilder.CreateSphere('gt_core', { diameter: 0.22, segments: 6 }, scene);
+  const coreMat = mat('gt_coreMat', new Color3(1.0, 0.92, 0.56), scene, { emissive: 1.25, alpha: 0.96 });
   core.material = coreMat;
   core.parent = root;
 
-  const throat = MeshBuilder.CreateCylinder('gt_throat', { diameterTop: 0.08, diameterBottom: 0.22, height: 0.9, tessellation: 10 }, scene);
-  throat.rotation.x = Math.PI / 2;
-  throat.position.z = -0.28;
-  throat.material = mat('gt_throatMat', new Color3(1, 0.28, 0.02), scene, { emissive: 0.8, alpha: 0.75 });
-  throat.material.backFaceCulling = false;
-  throat.parent = root;
+  const heatOrb = MeshBuilder.CreateSphere('gt_heat_orb', { diameter: 0.46, segments: 6 }, scene);
+  const heatOrbMat = mat('gt_heatOrbMat', new Color3(1.0, 0.44, 0.08), scene, { emissive: 1.0, alpha: 0.18 });
+  heatOrbMat.backFaceCulling = false;
+  heatOrb.material = heatOrbMat;
+  heatOrb.parent = root;
 
-  const glow = MeshBuilder.CreateSphere('gt_glow', { diameter: 0.75, segments: 6 }, scene);
-  glow.scaling.set(1.0, 1.0, 2.8);
-  glow.material = mat('gt_glowMat', new Color3(1, 0.22, 0.02), scene, { emissive: 0.9, alpha: 0.18 });
-  glow.material.backFaceCulling = false;
-  glow.parent = root;
+  const heatPlanes = [];
+  for (let i = 0; i < 5; i += 1) {
+    const plane = MeshBuilder.CreatePlane(`gt_heat_plane_${i}`, { width: 0.82, height: 1.7 }, scene);
+    const planeMat = mat(`gt_heat_plane_${i}_mat`, new Color3(1.0, 0.58, 0.08), scene, { emissive: 1.02, alpha: 0.16 });
+    planeMat.backFaceCulling = false;
+    plane.material = planeMat;
+    plane.billboardMode = Mesh.BILLBOARDMODE_ALL;
+    plane.parent = root;
+    plane.position.z = 0.72 + i * 0.42;
+    plane.position.y = (i - 2) * 0.05;
+    heatPlanes.push(plane);
+  }
 
-  const ember = MeshBuilder.CreateSphere('gt_ember', { diameter: 0.18, segments: 6 }, scene);
-  ember.position.z = 0.42;
-  ember.material = mat('gt_emberMat', new Color3(1, 0.95, 0.5), scene, { emissive: 1.2, alpha: 0.9 });
-  ember.parent = root;
+  const fanSheets = [];
+  for (let i = 0; i < 4; i += 1) {
+    const width = 0.42 + i * 0.38;
+    const height = 0.78 + i * 0.34;
+    const sheet = MeshBuilder.CreatePlane(`gt_fan_sheet_${i}`, { width, height }, scene);
+    const sheetMat = mat(`gt_fan_sheet_${i}_mat`, new Color3(1.0, 0.5, 0.08), scene, { emissive: 1.0, alpha: 0.12 - i * 0.014 });
+    sheetMat.backFaceCulling = false;
+    sheet.material = sheetMat;
+    sheet.billboardMode = Mesh.BILLBOARDMODE_ALL;
+    sheet.parent = root;
+    sheet.position.z = 0.52 + i * 0.62;
+    sheet.position.y = -0.02 + i * 0.03;
+    fanSheets.push(sheet);
+  }
 
-  const ps = new ParticleSystem('gt_trail', 42, scene);
-  ps.emitter = root;
-  ps.minLifeTime = 0.06;
-  ps.maxLifeTime = 0.18;
-  ps.minSize = 0.12;
-  ps.maxSize = 0.36;
-  ps.emitRate = 68;
-  ps.color1 = new Color4(1, 0.62, 0.08, 0.92);
-  ps.color2 = new Color4(1, 0.18, 0.02, 0.55);
-  ps.colorDead = new Color4(0.2, 0.02, 0, 0);
-  ps.minEmitPower = 0.4;
-  ps.maxEmitPower = 1.2;
-  ps.direction1 = new Vector3(-0.12, -0.05, -1.1);
-  ps.direction2 = new Vector3(0.12, 0.18, -0.35);
-  ps.gravity = new Vector3(0, 0.35, 0);
-  ps.blendMode = ParticleSystem.BLENDMODE_ADD;
-  ps.start();
-  root.metadata = { trailPS: ps };
+  const muzzleCorona = MeshBuilder.CreatePlane('gt_muzzle_corona', { width: 0.74, height: 0.74 }, scene);
+  const muzzleCoronaMat = mat('gt_muzzle_corona_mat', new Color3(1.0, 0.76, 0.22), scene, { emissive: 1.18, alpha: 0.2 });
+  muzzleCoronaMat.backFaceCulling = false;
+  muzzleCorona.material = muzzleCoronaMat;
+  muzzleCorona.billboardMode = Mesh.BILLBOARDMODE_ALL;
+  muzzleCorona.parent = root;
+  muzzleCorona.position.z = 0.18;
+
+  const pressureRings = [];
+  for (let i = 0; i < 2; i += 1) {
+    const ring = MeshBuilder.CreateTorus(`gt_pressure_ring_${i}`, { diameter: 0.38 + i * 0.34, thickness: 0.03, tessellation: 20 }, scene);
+    ring.rotation.x = Math.PI / 2;
+    ring.position.z = 0.54 + i * 0.9;
+    ring.material = mat(`gt_pressure_ring_${i}_mat`, new Color3(1.0, 0.7, 0.12), scene, { emissive: 1.02, alpha: 0.32 - i * 0.08 });
+    ring.parent = root;
+    pressureRings.push(ring);
+  }
+
+  // Flame stream — GPU particles for dense volumetric fire
+  const { ps: flamePS, isGPU: gtFlameGPU } = createAdaptiveParticleSystem('gt_stream', 3000, scene);
+  const glowThrowerBudget = heavyContinuousBudget(0.18);
+  flamePS.particleTexture = _tryTex('/textures/battle/particles/flame_03.png', scene);
+  flamePS.emitter = root;
+  flamePS.minEmitBox = new Vector3(-0.22, -0.12, -0.1);
+  flamePS.maxEmitBox = new Vector3(0.22, 0.14, 0.24);
+  flamePS.minLifeTime = 0.1;
+  flamePS.maxLifeTime = 0.24;
+  flamePS.minSize = 0.3;
+  flamePS.maxSize = 1.02;
+  flamePS.emitRate = gtFlameGPU ? Math.round(180 * glowThrowerBudget) : scaleParticles(68);
+  flamePS.color1 = new Color4(1.0, 0.92, 0.35, 0.95);
+  flamePS.color2 = new Color4(1.0, 0.38, 0.06, 0.72);
+  flamePS.colorDead = new Color4(0.2, 0.02, 0.0, 0);
+  flamePS.minEmitPower = 2.8;
+  flamePS.maxEmitPower = 6.8;
+  flamePS.direction1 = new Vector3(-0.5, -0.14, 4.1);
+  flamePS.direction2 = new Vector3(0.5, 0.34, 7.4);
+  flamePS.gravity = new Vector3(0, 0.62, 0);
+  flamePS.blendMode = ParticleSystem.BLENDMODE_ADD;
+  if (gtFlameGPU) flamePS.maxActiveParticleCount = Math.max(42, Math.round(180 * glowThrowerBudget));
+  flamePS.start();
+
+  // Ember sparks — GPU when available
+  const { ps: emberPS, isGPU: gtEmberGPU } = createAdaptiveParticleSystem('gt_embers', 1200, scene);
+  emberPS.particleTexture = _tryTex('/textures/battle/particles/spark_05.png', scene);
+  emberPS.emitter = root;
+  emberPS.minEmitBox = new Vector3(-0.18, -0.08, -0.04);
+  emberPS.maxEmitBox = new Vector3(0.18, 0.1, 0.18);
+  emberPS.minLifeTime = 0.14;
+  emberPS.maxLifeTime = 0.3;
+  emberPS.minSize = 0.05;
+  emberPS.maxSize = 0.22;
+  emberPS.emitRate = gtEmberGPU ? Math.round(48 * glowThrowerBudget) : scaleParticles(24);
+  emberPS.color1 = new Color4(1.0, 0.82, 0.24, 0.85);
+  emberPS.color2 = new Color4(1.0, 0.18, 0.02, 0.44);
+  emberPS.colorDead = new Color4(0.18, 0.02, 0.0, 0);
+  emberPS.minEmitPower = 1.6;
+  emberPS.maxEmitPower = 4.4;
+  emberPS.direction1 = new Vector3(-0.34, 0.02, 2.5);
+  emberPS.direction2 = new Vector3(0.34, 0.46, 4.8);
+  emberPS.gravity = new Vector3(0, 0.92, 0);
+  emberPS.blendMode = ParticleSystem.BLENDMODE_ADD;
+  if (gtEmberGPU) emberPS.maxActiveParticleCount = Math.max(16, Math.round(48 * glowThrowerBudget));
+  emberPS.start();
+
+  root.metadata = {
+    trailPS: flamePS,
+    sparksPS: emberPS,
+    heatOrb,
+    heatPlanes,
+    fanSheets,
+    muzzleCorona,
+    pressureRings,
+  };
+  tagMeshForGlow(core, 0.9);
+  tagMeshForGlow(heatOrb, 0.5);
   return root;
 }
 
@@ -1920,24 +2068,158 @@ export function createGlowThrowerModel(scene) {
  */
 export function createGloBurstModel(scene) {
   const root = new TransformNode('mdl_glo_burst', scene);
-  const bullet = MeshBuilder.CreateCylinder('gb_bullet', { diameter: 0.11, height: 0.72, tessellation: 8 }, scene);
-  bullet.rotation.x = Math.PI / 2;
-  const bulletMat = mat('gb_bulletMat', new Color3(1, 0.92, 0.45), scene, { emissive: 1.0 });
-  bullet.material = bulletMat;
-  bullet.parent = root;
+  const core = MeshBuilder.CreateSphere('gb_core', { diameter: 0.18, segments: 6 }, scene);
+  const coreMat = mat('gb_core_mat', new Color3(1.0, 0.94, 0.72), scene, { emissive: 1.18, alpha: 0.98 });
+  core.material = coreMat;
+  core.parent = root;
 
-  const tip = MeshBuilder.CreateSphere('gb_tip', { diameter: 0.16, segments: 6 }, scene);
-  tip.material = mat('gb_tipMat', new Color3(1, 1, 0.75), scene, { emissive: 1.1, alpha: 0.75 });
-  tip.position.z = 0.38;
-  tip.parent = root;
+  const innerShell = MeshBuilder.CreateSphere('gb_inner_shell', { diameter: 0.28, segments: 6 }, scene);
+  innerShell.material = mat('gb_inner_shell_mat', new Color3(1.0, 0.82, 0.24), scene, { emissive: 1.08, alpha: 0.34 });
+  innerShell.material.backFaceCulling = false;
+  innerShell.parent = root;
 
-  const streak = MeshBuilder.CreateCylinder('gb_streak', { diameterTop: 0.02, diameterBottom: 0.09, height: 0.95, tessellation: 8 }, scene);
-  streak.rotation.x = Math.PI / 2;
-  streak.position.z = -0.24;
-  streak.material = mat('gb_streakMat', new Color3(1, 0.7, 0.18), scene, { emissive: 0.9, alpha: 0.32 });
-  streak.material.backFaceCulling = false;
-  streak.parent = root;
+  const coreGlow = MeshBuilder.CreateSphere('gb_core_glow', { diameter: 0.4, segments: 6 }, scene);
+  coreGlow.material = mat('gb_coreGlowMat', new Color3(1.0, 0.88, 0.3), scene, { emissive: 1.15, alpha: 0.15 });
+  coreGlow.material.backFaceCulling = false;
+  coreGlow.parent = root;
 
+  const halo = MeshBuilder.CreatePlane('gb_halo', { width: 0.5, height: 0.5 }, scene);
+  halo.material = mat('gb_haloMat', new Color3(1.0, 0.92, 0.5), scene, { emissive: 1.1, alpha: 0.22 });
+  halo.material.backFaceCulling = false;
+  halo.billboardMode = Mesh.BILLBOARDMODE_ALL;
+  halo.parent = root;
+
+  const haloRear = MeshBuilder.CreatePlane('gb_halo_rear', { width: 0.34, height: 0.34 }, scene);
+  haloRear.material = mat('gb_haloRearMat', new Color3(1.0, 0.72, 0.18), scene, { emissive: 0.95, alpha: 0.16 });
+  haloRear.material.backFaceCulling = false;
+  haloRear.billboardMode = Mesh.BILLBOARDMODE_ALL;
+  haloRear.parent = root;
+
+  const shockRing = MeshBuilder.CreateTorus('gb_shock_ring', { diameter: 0.34, thickness: 0.03, tessellation: 20 }, scene);
+  shockRing.rotation.x = Math.PI / 2;
+  shockRing.material = mat('gb_shock_ring_mat', new Color3(1.0, 0.84, 0.28), scene, { emissive: 1.06, alpha: 0.46 });
+  shockRing.parent = root;
+
+  const tracerStreak = MeshBuilder.CreateBox('gb_streak', { width: 0.08, height: 0.08, depth: 0.9 }, scene);
+  tracerStreak.material = mat('gb_streak_mat', new Color3(1.0, 0.88, 0.34), scene, { emissive: 1.18, alpha: 0.24 });
+  tracerStreak.parent = root;
+  tracerStreak.position.z = -0.36;
+
+  const tracerWake = MeshBuilder.CreatePlane('gb_wake', { width: 0.38, height: 0.14 }, scene);
+  tracerWake.material = mat('gb_wake_mat', new Color3(1.0, 0.74, 0.22), scene, { emissive: 1.0, alpha: 0.14 });
+  tracerWake.material.backFaceCulling = false;
+  tracerWake.parent = root;
+  tracerWake.position.z = -0.28;
+
+  const flarePlanes = [];
+  for (let i = 0; i < 2; i += 1) {
+    const flare = MeshBuilder.CreatePlane(`gb_flare_${i}`, { width: 0.62, height: 0.16 }, scene);
+    flare.material = mat(`gb_flare_${i}_mat`, new Color3(1.0, 0.9, 0.38), scene, { emissive: 1.04, alpha: 0.2 });
+    flare.material.backFaceCulling = false;
+    flare.billboardMode = Mesh.BILLBOARDMODE_ALL;
+    flare.parent = root;
+    flare.rotation.z = i === 0 ? 0 : Math.PI / 2;
+    flarePlanes.push(flare);
+  }
+
+  const emberNodes = [];
+  const emberOrbs = [];
+  for (let i = 0; i < 3; i += 1) {
+    const emberNode = new TransformNode(`gb_ember_node_${i}`, scene);
+    emberNode.parent = root;
+    emberNode.rotation.z = (Math.PI * 2 * i) / 3;
+    const ember = MeshBuilder.CreateSphere(`gb_ember_${i}`, { diameter: 0.055, segments: 4 }, scene);
+    ember.material = mat(`gb_ember_${i}_mat`, new Color3(1.0, 0.96, 0.76), scene, { emissive: 1.22, alpha: 0.88 });
+    ember.position.x = 0.18 + i * 0.025;
+    ember.parent = emberNode;
+    emberNodes.push(emberNode);
+    emberOrbs.push(ember);
+  }
+
+  root.metadata = {
+    tracerCore: core,
+    tracerCoreShell: innerShell,
+    tracerHalo: halo,
+    tracerHaloRear: haloRear,
+    tracerCoreGlow: coreGlow,
+    shockRing,
+    tracerStreak,
+    tracerWake,
+    flarePlanes,
+    emberNodes,
+    emberOrbs,
+  };
+  tagMeshForGlow(core, 0.8);
+  tagMeshForGlow(coreGlow, 0.5);
+  return root;
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+//  FINAL FISSION — Nuclear fission detonation weapon model
+//  Glowing critical-mass sphere with pulsing Cherenkov-blue inner glow
+// ═════════════════════════════════════════════════════════════════════════════
+
+export function createFinalFissionModel(scene) {
+  const root = new TransformNode('mdl_final_fission', scene);
+
+  // Core — dense critical mass (hot white-yellow)
+  const core = MeshBuilder.CreateSphere('ff_core', { diameter: 1.2, segments: 16 }, scene);
+  const coreMat = new StandardMaterial('ff_coreMat', scene);
+  coreMat.diffuseColor = new Color3(1.0, 0.95, 0.8);
+  coreMat.emissiveColor = new Color3(1.0, 0.9, 0.6);
+  coreMat.specularPower = 128;
+  coreMat.alpha = 0.95;
+  // Fresnel: brilliant edge glow simulating Cherenkov radiation (blue edge)
+  coreMat.emissiveFresnelParameters = new FresnelParameters({
+    bias: 0.15, power: 2.5,
+    leftColor: new Color3(0.3, 0.5, 1.0),  // blue Cherenkov edge
+    rightColor: new Color3(1.0, 0.95, 0.7), // hot white center
+  });
+  core.material = coreMat;
+  core.parent = root;
+
+  // Outer containment shell — semi-transparent with blue-white Fresnel
+  const shell = MeshBuilder.CreateSphere('ff_shell', { diameter: 1.8, segments: 12 }, scene);
+  const shellMat = new StandardMaterial('ff_shellMat', scene);
+  shellMat.diffuseColor = new Color3(0.6, 0.7, 1.0);
+  shellMat.emissiveColor = new Color3(0.2, 0.3, 0.8);
+  shellMat.alpha = 0.2;
+  shellMat.backFaceCulling = false;
+  shellMat.emissiveFresnelParameters = new FresnelParameters({
+    bias: 0.0, power: 4.0,
+    leftColor: new Color3(0.4, 0.6, 1.0),
+    rightColor: new Color3(0, 0, 0),
+  });
+  shellMat.opacityFresnelParameters = new FresnelParameters({
+    bias: 0.1, power: 2.0,
+    leftColor: Color3.White(),
+    rightColor: Color3.Black(),
+  });
+  shell.material = shellMat;
+  shell.parent = root;
+
+  // Hazard ring — rotating warning band
+  const hazardRing = MeshBuilder.CreateTorus('ff_hazard', {
+    diameter: 2.2, thickness: 0.08, tessellation: 24,
+  }, scene);
+  hazardRing.material = mat('ff_hazardMat', new Color3(1.0, 0.8, 0.1), scene, { emissive: 0.8, alpha: 0.5 });
+  hazardRing.rotation.x = Math.PI / 2;
+  hazardRing.parent = root;
+
+  // Pulse animation — single observer for critical mass throb
+  const expandObs = scene.onBeforeRenderObservable.add(() => {
+    const t = performance.now() * 0.001;
+    const pulse = 1.0 + Math.sin(t * 6) * 0.06;
+    core.scaling.setAll(pulse);
+    shell.scaling.setAll(0.95 + Math.sin(t * 3.2) * 0.05);
+    hazardRing.rotation.y += scene.getEngine().getDeltaTime() * 0.003;
+    // Cherenkov flicker
+    coreMat.emissiveColor.r = 0.9 + Math.sin(t * 12) * 0.1;
+  });
+
+  root.metadata = { expandObserver: expandObs };
+  tagMeshForGlow(core, 0.9);
+  tagMeshForGlow(shell, 0.4);
   return root;
 }
 
@@ -1970,6 +2252,13 @@ export const WEAPON_MODEL_FACTORIES = {
   // Stream weapons
   glow_thrower:    createGlowThrowerModel,
   glo_burst:       createGloBurstModel,
+  // Ultimate weapons
+  final_fission:   createFinalFissionModel,
+};
+
+const WEAPON_MODEL_ALIASES = {
+  bowling_ball: 'bowling',
+  missile: 'guided_missile',
 };
 
 /**
@@ -1978,7 +2267,8 @@ export const WEAPON_MODEL_FACTORIES = {
  * then falls back to a colored sphere if nothing else is available.
  */
 export function createWeaponModel(weaponId, scene) {
-  const factory = WEAPON_MODEL_FACTORIES[weaponId];
+  const resolvedWeaponId = WEAPON_MODEL_ALIASES[weaponId] || weaponId;
+  const factory = WEAPON_MODEL_FACTORIES[resolvedWeaponId];
   if (factory) return factory(scene);
 
   // Unknown weapon — return colored sphere fallback

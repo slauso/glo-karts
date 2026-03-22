@@ -1,0 +1,4 @@
+label,generatedAt,roomName,endpoint,players,patchAvg,patchP95,patchMax,patchSamples,fullStateAvg,fullStateMax,fullStateSamples,rttAvg,rttP95,rttMax,rttSamples,avgTickDriftMs,avgInputAgeMs,maxInputAgeMs,staleInputDrops,outOfOrderInputDrops,patchRateMs,authoritative,metricSamples
+browser-pass,2026-03-12T17:37:29.898Z,battle_room,ws://127.0.0.1:2567,2,112.85,135,234,1043,755.5,832,2,0.92,2,2,24,8.98,37.11,66,0,0,16.67,true,12
+browser-pass,2026-03-12T17:37:29.898Z,battle_room,ws://127.0.0.1:2567,6,298.66,342,832,2534,1059.17,1442,6,0.43,1,2,72,7.28,35.52,64,0,0,22.22,true,12
+browser-pass,2026-03-12T17:37:29.898Z,battle_room,ws://127.0.0.1:2567,12,568.1,639,2217,3442,1521.67,2372,12,1.26,3,7,144,7.09,36.69,64,0,0,33.33,true,12

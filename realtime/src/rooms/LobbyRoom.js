@@ -30,7 +30,6 @@ export class LobbyRoom extends Room {
     state.privacy = options.privacy === "open" ? "open" : "private";
     state.gameMode = normalizeGameMode(options.gameMode);
     state.modeId = String(options.modeId || defaultModeId(state.gameMode));
-    state.singlePlayerMode = !!options.singlePlayerMode;
     state.trackId = String(options.trackId || DEFAULT_TRACK);
     state.arenaId = String(options.arenaId || DEFAULT_ARENA);
     state.arenaTheme = String(options.arenaTheme || "nuclear_desert");
@@ -66,7 +65,6 @@ export class LobbyRoom extends Room {
 
       this.state.gameMode = normalizeGameMode(data.gameMode);
       this.state.modeId = String(data.modeId || this.state.modeId || defaultModeId(this.state.gameMode));
-      this.state.singlePlayerMode = !!data.singlePlayerMode;
       this.state.trackId = String(data.trackId || this.state.trackId || DEFAULT_TRACK);
       this.state.arenaId = String(data.arenaId || this.state.arenaId || DEFAULT_ARENA);
       this.state.arenaTheme = String(data.arenaTheme || this.state.arenaTheme || "nuclear_desert");
@@ -215,7 +213,6 @@ export class LobbyRoom extends Room {
       const gameConfig = {
         type: "startGame",
         modeId: this.state.modeId,
-        singlePlayerMode: this.state.singlePlayerMode,
         gameMode: this.state.gameMode,
         trackId: this.state.trackId,
         arenaId: this.state.arenaId,

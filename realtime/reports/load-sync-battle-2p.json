@@ -1,0 +1,94 @@
+{
+  "label": "",
+  "generatedAt": "2026-03-15T16:03:08.637Z",
+  "endpoint": "ws://127.0.0.1:2567",
+  "roomName": "battle_room",
+  "liveDurationMs": 12000,
+  "scenarios": [
+    2
+  ],
+  "results": [
+    {
+      "players": 2,
+      "roomName": "battle_room",
+      "endpoint": "ws://127.0.0.1:2567",
+      "patchBytes": {
+        "avg": 108.66,
+        "p95": 128,
+        "max": 236,
+        "samples": 1004
+      },
+      "fullStateBytes": {
+        "avg": 797.5,
+        "max": 876,
+        "samples": 2
+      },
+      "rttMs": {
+        "avg": 0.54,
+        "p95": 1,
+        "max": 2,
+        "samples": 24
+      },
+      "serverMetrics": {
+        "avgTickDriftMs": 10.68,
+        "avgInputAgeMs": 40.34,
+        "maxInputAgeMs": 63,
+        "staleInputDrops": 0,
+        "outOfOrderInputDrops": 0,
+        "anomalyProjectilesFired": 1,
+        "anomalyProjectileHits": 0,
+        "anomalyEffectsApplied": 5,
+        "arenaEffectsApplied": 1,
+        "apocalypseBursts": 0,
+        "anomalyCoreCollections": 0,
+        "anomalyChainBursts": 0,
+        "patchRateMs": 16.67,
+        "authoritative": true,
+        "samples": 12
+      },
+      "battleMetrics": {
+        "pickups": 19,
+        "shotsFired": 2,
+        "hitsLanded": 1,
+        "damageDealt": 20,
+        "damageTaken": 20,
+        "kills": 0,
+        "deaths": 0,
+        "eliminations": 0,
+        "effectsApplied": 5,
+        "effectsTaken": 5,
+        "shieldsBlocked": 0,
+        "shotsBlocked": 0,
+        "pickupWeapons": {
+          "lightning_bolt": 1,
+          "memory_leak": 4,
+          "weather_dominion": 2,
+          "zipper": 2,
+          "gravity_well": 2,
+          "shield": 1,
+          "mirror_realm": 2,
+          "phase_shift": 2,
+          "tornado": 1,
+          "wind_slash": 1,
+          "toxic_cloud": 1
+        },
+        "weaponShots": {
+          "gravity_well": 1,
+          "wind_slash": 1
+        },
+        "weaponHits": {
+          "wind_slash": 1
+        }
+      },
+      "anomalyEvents": {
+        "total": 18,
+        "payloadBytes": 1526,
+        "projectileFired": 2,
+        "projectileHit": 0,
+        "effectApplied": 12,
+        "arenaEffectApplied": 4,
+        "apocalypseTriggered": 0
+      }
+    }
+  ]
+}

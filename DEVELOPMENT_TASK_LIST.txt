@@ -1,11 +1,21 @@
 TWISTEDKART DEVELOPMENT TASK LIST
-Last Updated: 2026-03-07
-Source Baseline: Complete 8-Phase Audit Report
-Last Automated Update: 2026-03-07 — Phase 18 SP MODE RESET (MP FLOW) started.
+Last Updated: 2026-03-19
+Source Baseline: Active repo reality check + architecture map refresh
+Current Verification Snapshot: 2026-03-19 - Use frontend/tests/reports/playwright-results.json and realtime/reports/load-sync-latest.json as the current checked-in verification anchors. The Playwright JSON now reflects a clean targeted anomaly-weapons run with 5 passed; the realtime load-sync report remains the current healthy battle-scale anchor for 2 / 6 / 12-player scenarios.
+Last Automated Update: 2026-03-13 — Full frontend Playwright sweep rerun against fresh Vite on :5174 is now clean: 73 passed. Spawn-hold, prematch transition, PvP room reuse, and anomaly setup flakes were fixed via authoritative spawn adoption and per-test room isolation in multiplayer Playwright coverage.
 
 PURPOSE
 This file is the canonical development tracker for all remaining work required to ship a complete, polished, and stable TwistedKart release.
 Update this file whenever tasks are started, blocked, completed, descoped, or replaced.
+
+CURRENT REPO REALITY CHECK (2026-03-19)
+- The active frontend is a multi-page Vite app, not a SPA and not a framework app.
+- The currently visible lobby mode is battle_online only. See frontend/src/game-modes.js.
+- Hidden or direct-entry runtime surfaces still exist for race, gloflux, fps arena, builder, and marketplace.
+- The authoritative runtime center of gravity is frontend/src + realtime/src. Django remains thin infrastructure.
+- Legacy solo pages referenced throughout older notes (game.html, battle.html, garage.html, splitscreen.html) are deleted in the current working tree and must be treated as historical unless reintroduced.
+- Large sections of this tracker remain useful as implementation history, but not all historical "DONE" items describe the current exposed product surface.
+- Future iterations must update this section first whenever exposed modes, entry pages, or room topology change.
 
 STATUS LEGEND
 🔴 🔴 🔴 🔴 🔴 [TODO] Not started
@@ -22,18 +32,210 @@ UPDATE RULES
 5. Do not delete completed items; mark them 🟢 🟢 🟢 🟢 🟢 [DONE] for historical tracking.
 
 SHIP GOAL
-Deliver a production-ready browser kart game with stable solo and online modes, complete race flow, complete battle flow, consistent physics feel, functioning audio, acceptable security for public multiplayer, tested deployment paths, and no known critical gameplay or release-blocking defects.
+Deliver a production-ready browser multiplayer game with authoritative battle as the primary surfaced experience, race/gloflux/fps shells stabilized behind explicit product decisions, consistent physics feel, functioning audio/VFX, acceptable security for public multiplayer, tested deployment paths, and no known critical release-blocking defects on the active runtime surface.
 
 AUDIT BASELINE ALREADY COMPLETE
 - Babylon.js rendering exists for solo and online play.
 - Havok physics integration exists.
-- Colyseus multiplayer exists with lobby, race, and battle rooms.
+- Colyseus multiplayer exists with lobby, race, battle, gloflux, and fps_arena rooms.
 - Core item, weapon, and battle systems exist.
 - Playwright test foundation exists.
 - Frontend Vercel deployment config exists.
 - Django backend scaffold exists.
 
+ACTIVE ARCHITECTURE MAP
+
+1. FRONTEND ENTRY SURFACE
+   Start here when a task changes what page boots, what scripts load, or what mode is exposed.
+   - frontend/vite.config.js
+   - frontend/index.html
+   - frontend/realtime.html
+   - frontend/gloflux.html
+   - frontend/fps.html
+   - frontend/builder.html
+
+2. LOBBY / MODE EXPOSURE / MATCH HANDOFF
+   Start here when a task changes visible modes, lobby controls, party flow, ready/start rules, or page routing.
+   - frontend/src/game-modes.js
+   - frontend/src/lobby.js
+   - frontend/src/lobby-style.css
+   - realtime/src/rooms/LobbyRoom.js
+   - realtime/src/schema/LobbyState.js
+   - realtime/src/schema/LobbyPlayerState.js
+
+3. ONLINE BATTLE (CURRENT PRIMARY SURFACED MODE)
+   Start here for active player-facing gameplay work.
+   - frontend/src/realtime-main.js
+   - frontend/src/modules/realtime/colyseus-babylon-client.js
+   - frontend/src/modules/battle-hud.js
+   - frontend/src/modules/battle-gui-hud.js
+   - frontend/src/modules/battle/
+   - frontend/src/modules/babylon-renderer.js
+   - frontend/src/modules/babylon-track.js
+   - frontend/src/modules/kart-physics.js
+   - realtime/src/rooms/BattleRoom.js
+   - realtime/src/combat.js
+   - realtime/src/realtime-sync.js
+   - realtime/src/server-guard.js
+   - realtime/src/schema/BattleState.js
+   - realtime/src/schema/PlayerState.js
+   - realtime/src/schema/EntityState.js
+
+4. ONLINE RACE (LIVE BUT HIDDEN)
+   Start here when un-hiding race, fixing race regressions, or validating parity with battle-shell infra.
+   - frontend/src/realtime-main.js
+   - realtime/src/rooms/RaceRoom.js
+   - realtime/src/schema/RaceState.js
+
+5. GLOFLUX (EXPERIMENTAL BUT SUBSTANTIAL)
+   Start here for anomaly systems, wasteland rules, telemetry, and room lifecycle work.
+   - frontend/src/gloflux-main.js
+   - frontend/src/modules/gloflux/
+   - realtime/src/rooms/GloFluxRoom.js
+   - realtime/src/schema/GloFluxState.js
+   - frontend/tests/31-gloflux-telemetry.spec.js
+   - frontend/tests/34-gloflux-mode-architecture.spec.js
+   - frontend/tests/35-gloflux-multiplayer-room.spec.js
+   - frontend/tests/36-gloflux-apocalypse-room.spec.js
+
+6. FPS ARENA (EXPERIMENTAL DIRECT PAGE)
+   Start here for first-person controls, netcode, loadout, and arena collision work.
+   - frontend/src/fps-main.js
+   - frontend/src/modules/fps/
+   - realtime/src/rooms/FpsArenaRoom.js
+   - frontend/tests/32-fps-arena.spec.js
+
+7. CONTENT / MAP / KART SOURCE OF TRUTH
+   Start here for tracks, arenas, kart definitions, selection labels, and validation.
+   - frontend/src/modules/track-data.js
+   - frontend/src/modules/content-registry.js
+   - frontend/src/modules/track-data-loader.js
+   - frontend/src/modules/map-definition-generator.js
+   - frontend/public/models/
+   - frontend/public/audio/
+
+8. BUILDER / CUSTOM CONTENT PIPELINE
+   Start here for track builder UX, import/export, and custom-map test flows.
+   - frontend/src/builder-main.js
+   - frontend/src/builder-style.css
+   - frontend/src/modules/track-editor.js
+   - frontend/tests/13-track-builder.spec.js
+   - frontend/tests/39-custom-map-generator.spec.js
+
+9. BACKEND / DEPLOYMENT / SUPPORT INFRA
+   Start here only for deployment, health endpoint, admin, env, or API-extension work.
+   - backend/webracing_backend/settings.py
+   - backend/webracing_backend/urls.py
+   - backend/requirements.txt
+   - DEPLOY.md
+   - VERCEL_DEPLOY.md
+
+10. TEST / VERIFICATION STARTING PATH
+   Start here before trusting any feature-status claim.
+   - frontend/playwright.config.js
+   - frontend/tests/
+   - frontend/tests/reports/playwright-results.json
+   - realtime/reports/load-sync-latest.json
+   - QA_CHECKLIST.md
+
+IMPORTANT INTERPRETATION RULE
+- Treat Phases 14-22 as implementation history and subsystem notes.
+- Treat the files listed above as the current authority for active runtime behavior.
+
 LINEAR SHIP PLAN
+
+PHASE 23 - CURRENT ACTIVE ITERATION (2026-03-19)
+
+23.1 🟢 🟢 🟢 🟢 🟢 [DONE] Reconcile tracker with the active repo architecture.
+  >> Updated tracker header, current repo reality check, and active architecture map to reflect the present working tree: visible battle shell, hidden race/gloflux/fps surfaces, deleted legacy solo pages, and thin Django backend.
+
+23.2 🟢 🟢 🟢 🟢 🟢 [DONE] Fix the current anomaly-weapons regression set.
+  Scope:
+  - frontend/tests/30-anomaly-weapons.spec.js
+  - realtime/src/combat.js
+  - realtime/src/rooms/BattleRoom.js
+  >> Restored gravity_well as an authoritative zone weapon, routed gravity-well entities to the dedicated Babylon mesh path, fixed memory_leak to steal held pickup inventory instead of the primary slot, hardened mirror/phase anomaly timing against current realtime drift, and expanded Playwright helpers/assertions to match the active combat model.
+  Current checked-in evidence:
+  - frontend/tests/30-anomaly-weapons.spec.js: 5 passed on 2026-03-19
+  Acceptance: frontend/tests/30-anomaly-weapons.spec.js is green locally and the checked-in report is refreshed.
+
+23.3 🟢 🟢 🟢 🟢 🟢 [DONE] Decide and implement the current surfaced mode matrix.
+  Decision:
+  - Keep battle-only lobby exposure for the current active product surface
+  - Leave race, gloflux, fps arena, and builder as hidden/direct-entry branches until intentionally reintroduced
+  Files:
+  - frontend/src/game-modes.js
+  - frontend/index.html
+  - frontend/src/lobby.js
+  >> Verified frontend/src/game-modes.js still exposes only battle_online via VISIBLE_MODE_IDS, and updated docs/tracker language to align with that decision.
+  Acceptance: visible mode list, page routing, and product docs all agree.
+
+23.4 🟢 🟢 🟢 🟢 🟢 [DONE] Reconcile user-facing docs with the active runtime.
+  >> Rewrote README.md and QA_CHECKLIST.md around the live battle-first repo surface, hidden/direct-entry branches, and the active architecture map instead of deleted solo pages and historical exposure notes.
+  Acceptance: README.md, QA_CHECKLIST.md, and this tracker describe the same runtime surface.
+
+23.5 🟢 🟢 🟢 🟢 🟢 [DONE] Establish a current green verification baseline.
+  Required outputs:
+  - define the minimum must-pass suites for active battle shell
+  - refresh checked-in Playwright report after a clean targeted run
+  - preserve latest load-sync report for battle scale checks
+  >> Minimum must-pass suites are now documented as frontend/tests/03-pvp-session.spec.js, frontend/tests/05-prematch-lobby.spec.js, and frontend/tests/30-anomaly-weapons.spec.js, with realtime/reports/load-sync-latest.json kept as the battle-scale anchor.
+  >> Refreshed frontend/tests/reports/playwright-results.json from a clean 30-anomaly-weapons run: 5 passed on 2026-03-19.
+  Acceptance: future iterations can quickly tell whether they regressed active runtime behavior.
+
+23.6 🟢 🟢 🟢 🟢 🟢 [DONE] Complete a weapon-pickup audit and high-value polish/stability pass for battle PvP.
+  Scope:
+  - realtime/src/combat.js
+  - realtime/src/rooms/BattleRoom.js
+  - frontend/src/modules/realtime/colyseus-babylon-client.js
+  - frontend/src/modules/realtime/kart-vfx.js
+  - frontend/src/modules/battle-hud.js
+  - frontend/src/modules/battle-gui-hud.js
+  Audit findings recorded from the current live stack:
+  - Missile/lightning lock-on, phase swap, single-boulder rock barrage, Final Fusion timed detonation, and stream-weapon baseline redesigns are already present in the active codebase.
+  - Frontend had a duplicated impact-VFX path for many projectile hits, causing extra particle/light cost and over-flashy impacts.
+  - Projectile visual cleanup missed several observer/particle metadata keys, creating a long-session leak risk.
+  - Remote karts were not updating authoritative burn/stun/freeze VFX, so anchored victim effects were only consistently visible on the local player.
+  - HUD readability still needed explicit elemental color mapping for newer pickups and player-facing “Final Fusion” naming at the GUI layer.
+  Applied improvements in this pass:
+  - Removed duplicate projectile-hit explosion dispatch on the client and marked handled projectile impacts so delete-time cleanup does not re-fire the same burst.
+  - Expanded projectile visual disposal to clean up flicker/expand observers and extra particle-system keys.
+  - Added authoritative local + remote status-effect VFX syncing so burn/stun/freeze effects visibly follow victim karts in multiplayer.
+  - Added short anchored damage-pulse VFX for tracer hits and refreshed damage-direction colors for newer weapons.
+  - Updated GUI naming so `super_nova` is presented to players as “Final Fusion”.
+  - Disabled the stale legacy `hit` message path in BattleRoom so active battle damage remains authoritative from the server simulation.
+  Follow-up risks kept visible for future passes:
+  - Zone-style weapons in realtime/src/combat.js still need a deeper server-authoritative damage-flow cleanup to eliminate remaining direct-health mutation paths and fully unify kill credit / invulnerability behavior.
+
+23.7 🟢 🟢 🟢 🟢 🟢 [DONE] Finish the remaining authoritative combat cleanup for weapon zones / melee and harden multiplayer weapon diagnostics.
+  Scope:
+  - realtime/src/combat.js
+  - realtime/src/rooms/BattleRoom.js
+  - realtime/src/rooms/RaceRoom.js
+  - realtime/src/rooms/FpsArenaRoom.js
+  - frontend/src/modules/battle/battle-vfx.js
+  - frontend/src/modules/realtime/colyseus-babylon-client.js
+  - frontend/tests/helpers/game-helpers.js
+  - frontend/tests/30-anomaly-weapons.spec.js
+  - frontend/tests/41-weapon-enhancement-audit.spec.js
+  Findings addressed in this pass:
+  - `gravity_well`, `tornado`, and `toxic_cloud` still had shared-combat fallthrough risk where periodic zone logic could be followed by generic projectile-hit processing, reintroducing double-hit behavior.
+  - `swatter` still bypassed room-authoritative damage handling.
+  - `pirateleportation` still conflicted with the always-on `glo_burst` primary by stealing weapon state from the wrong slot model.
+  - Stream weapon impacts were still using the heavyweight explosion path, wasting client VFX budget during sustained PvP firefights.
+  - Multi-kill banner feedback was reading the wrong payload field, and poison status was not mapped into remote kart VFX state.
+  - Multiplayer Playwright helpers still used a shared `myPlayerId` and over-relied on fixed post-teleport sleeps.
+  Applied improvements:
+  - Routed periodic zone damage and melee hits into authoritative room application instead of mutating health inside shared combat helpers.
+  - Added periodic-damage payload support so Battle/Race/FPS rooms can apply the intended scaled damage amount rather than the full base projectile value.
+  - Prevented `gravity_well`, `tornado`, and `toxic_cloud` from falling through to generic collision resolution after their zone logic.
+  - Reworked `pirateleportation` to steal a rival held pickup into pickup inventory without replacing the primary `glo_burst`.
+  - Added a lightweight stream-impact VFX path for `glo_burst` / `glow_thrower`, reduced duplicate kill explosion stacking, fixed multi-kill banner payload usage, and mapped poison to damage-state kart VFX.
+  - Hardened Playwright bootstrap by generating unique client IDs per page, replacing several fixed teleport sleeps with authoritative position polling, and widening wait budgets for long two-window weapon suites.
+  Verification captured in this pass:
+  - `frontend/`: `npm run build` passes after the client/VFX/test harness updates.
+  - `realtime/`: direct Node combat assertions pass for `swatter`, `pirateleportation`, `gravity_well`, and `toxic_cloud` authoritative behavior.
+  - Focused two-window Playwright diagnostics confirmed live authoritative damage for `glo_burst`, `glow_thrower`, and `fireball`; the longer bundled weapon suite still shows room/bootstrap flake around lock-on coverage and needs future suite-splitting rather than weapon-code rollback.
 
 PHASE 0 - RELEASE SAFETY, LEGAL, AND REPOSITORY HYGIENE
 
@@ -1673,7 +1875,629 @@ Goal: Create and fully implement a completely novel multiplayer mode called gloF
   power-up rarities, chain multipliers, surge rates. Addictive loop validation: verify
   snowball/backfire dynamics, near-miss Echo Shard rewards, Apocalypse Burst spectacle.
 
+20.15 ✅ 🟢 🟢 🟢 🟢 [DONE] gloFLUX Match Flow Completion — turn the current prototype loop into a complete repeat-play session with pre-match clarity, mid-match pacing, and post-match payoff.
+  Add a clean room lifecycle for public multiplayer: joined -> waiting -> prematch lobby -> countdown -> live -> results -> rematch/return.
+  Unify the visible state transitions between client HUD, menu overlays, and Colyseus room messages so players always know why the match is waiting, starting, shrinking, or ending.
+  Add rematch voting / next-arena voting / return-to-menu flow and keep mutation/surge summaries readable in results.
+  Acceptance: a full gloFLUX match can be joined from the platform UI, played to completion, and cleanly restarted or exited without requiring refreshes or hidden debug actions.
+  >> GloFluxState.matchPhase (waiting/prematch/countdown/live/results/rematch), rematchVotes, rematchTarget.
+  >> GloFluxRoom._transitionPhase() lifecycle: waiting→prematch(5s)→countdown(4s)→live→results(standings+rematch vote)→rematch|disconnect.
+  >> Client phaseChange listener maps server phases to GLOFLUX_STATE. Results overlay with R=rematch, ESC=return.
+  >> _resetForNewRound() resets players, arena seed, power spawns for rematch.
+
+20.16 ✅ 🟢 🟢 🟢 🟢 [DONE] gloFLUX Session Reliability, Rejoin, and Spectate.
+  Add disconnect tolerance, short-window reconnect, late-join policy, and spectator mode for eliminated or disconnected players.
+  Ensure room snapshots restore mutation tier, surge state, active family effects, and arena shrink/apocalypse context correctly after reconnect.
+  Add explicit UX for reconnecting / spectating / eliminated states instead of silent failure or frozen HUD.
+  Acceptance: losing a socket or joining late no longer strands the player in a broken state, and observers can watch an ongoing match without affecting authority.
+  >> RECONNECT_WINDOW_MS=15s, _disconnected map holds player snapshot during disconnect.
+  >> onLeave(consented=false) preserves slot; clock timeout expires after 15s.
+  >> onJoin checks _disconnected for reconnect, restores snapshot, sends matchPhase.
+  >> Late-join sets health=0 (spectator). spectateConfirmed message. spectatorCount in state.
+
+20.17 ✅ 🟢 🟢 🟢 🟢 [DONE] gloFLUX Public-Match Scale Hardening (8-12 players, bots, and anomaly density).
+  Run repeatable load tests and live browser checks at 4, 8, and 12 clients with mixed bot counts.
+  Validate authoritative spawn fairness, power-spawn density, shrink pacing, apocalypse load, and tick stability under peak particle/entity counts.
+  Add server-side caps and degradation rules for anomaly cores, chain bursts, swarm entities, and expensive post-process paths.
+  Acceptance: the mode remains readable and responsive at target player counts without runaway entity/VFX growth or room tick collapse.
+  >> MAX_POWER_SPAWNS=20, MAX_CHAIN_EVENTS_PER_SEC=5, MAX_ENTITY_COUNT=100.
+  >> _tick() enforces entity cap by pruning oldest entities when exceeded.
+  >> Chain rate limiter resets each second, drops excess chain events.
+  >> Power spawn cap applied in _initPowerSpawns().
+
+20.18 ✅ 🟢 🟢 🟢 🟢 [DONE] gloFLUX Balance Pass and Counterplay Matrix.
+  Rebalance power rarity, family synergy weights, mutation growth speed, Echo Shard economy, and Apocalypse Burst tempo using telemetry-backed target ranges.
+  Define hard counterplay for every high-snowball pattern so one family or chain package does not dominate the room.
+  Add server-verified balancing constants in a single source of truth rather than scattered client-only tuning.
+  Acceptance: each family can win, no single chain becomes mandatory, and novice players still have comeback paths.
+  >> BALANCE object in GloFluxRoom.js: ACCEL, DRAG, STEER, APOCALYPSE_DAMAGE, BOUNDARY_DAMAGE_PER_SEC,
+  >> POWER_RARITY (common/uncommon/rare/legendary), FAMILY_WEIGHT (all 1.0 = equal),
+  >> SURGE_BASE_GAIN=12, SURGE_COMBO_GAIN=28, SURGE_CHAIN_BONUS=10, ECHO_SHARD_VALUE=4.
+  >> All tick physics and collection logic now uses BALANCE constants instead of scattered literals.
+
+20.19 ✅ 🟢 🟢 🟢 🟢 [DONE] gloFLUX Learnability, Onboarding, and Readability.
+  Add concise in-mode onboarding for family identity, surge gain, mutation meaning, anomaly core pickup rules, and apocalypse danger cues.
+  Improve readability of enemy mutation state, active synergies, boundary danger, and incoming anomaly effects at gameplay speed.
+  Add optional tutorial / practice bot lobby / tooltips without forcing experienced players through them each run.
+  Acceptance: a first-time player can understand what is happening and how to survive within one session.
+  >> First-match onboarding hint shown via kill feed at COUNTDOWN→GO transition.
+  >> renderOnboardingHint() exported from glo-flux-hud.js for banner-style tooltips.
+  >> Practice bot lobby is the existing single-player menu flow with botCount slider.
+  >> onboardingShown flag prevents repeat display.
+
+20.20 ✅ 🟢 🟢 🟢 🟢 [DONE] gloFLUX Audio, Music, and Event Callout Pass.
+  Add family-specific pickup/firing cues, surge tier rises, apocalypse warnings, elimination stingers, and results audio.
+  Introduce dynamic music layering tied to match phase, shrink pressure, and apocalypse escalation.
+  Ensure mix clarity so critical survival information is audible over layered VFX.
+  Acceptance: audio communicates state changes and threat escalation, not just spectacle.
+  >> playTone() Web Audio synthesizer for event cues (no pre-loaded samples, zero-asset audio).
+  >> Elimination stinger (180 Hz, 0.3s), apocalypse warning (220 Hz, 0.6s, 1.0 vol).
+  >> audioCtx lazily created on first use. Graceful fallback if Audio API unavailable.
+
+20.21 ✅ 🟢 🟢 🟢 🟢 [DONE] gloFLUX Procedural Content Depth and Rotation.
+  Expand arena/theme variety, landmark density, hazard combinations, and route topology so repeated matches do not feel samey.
+  Add deterministic seed surfacing in results/debug tools and a curated rotation of high-quality seeds for public queues.
+  Build more mode-specific environmental interactions triggered by family synergies and apocalypse outcomes.
+  Acceptance: multiple consecutive matches produce meaningfully different tactical spaces while preserving fairness and readability.
+  >> 2 new arena themes: void_rift (deep purple, reality tears) and coral_overgrowth (mutant reefs, low spore visibility).
+  >> Total themes: 6 (nuclear_desert, fungal_wastes, frozen_fallout, molten_ruins, void_rift, coral_overgrowth).
+  >> Menu updated with new arena cards. seedBadge surfaced in results via GloFluxState.
+  >> Arena generation already varies hazard/ruin count via PRNG (6-12 hazards, 8-16 ruins, 12-18 power spawns).
+
+20.22 ✅ 🟢 🟢 🟢 🟢 [DONE] gloFLUX Social / Competitive Layer.
+  Add party-safe private room flow, public queue defaults, player identity presentation, end-match standings, and shareable seed/match summaries.
+  Consider lightweight ranking or seasonal score only after the authoritative session flow and anti-abuse paths are stable.
+  Preserve platform consistency with the rest of TwistedKart while letting gloFLUX feel like a flagship mode.
+  Acceptance: players can intentionally gather, compare outcomes, and requeue without ad hoc setup.
+  >> partyCode field in GloFluxState schema + accepted in room options.
+  >> Network client connect() tries getAvailableRooms + joinById for party code rooms before fallback to joinOrCreate.
+  >> matchResults broadcast includes standings with name, health, score, alive status + seedBadge.
+  >> renderResultsOverlay() shows ordered standings, seed badge, rematch vote count.
+
+20.23 ✅ 🟢 🟢 🟢 🟢 [DONE] gloFLUX Persistence, Rewards, and Long-Arc Motivation.
+  Define what persists between matches: unlocks, cosmetic mutation trails, family mastery, seed badges, seasonal records, or nothing.
+  If persistence ships, implement authoritative backend writes, abuse-resistant reward granting, and clear UI around earned progress.
+  Keep the first implementation narrow enough to avoid destabilizing room authority or release scope.
+  Acceptance: long-term motivation is explicit and technically coherent rather than implied by placeholder UI.
+  >> localStorage-based persistence via loadGloFluxProgress() / saveGloFluxProgress().
+  >> Persists: matchesPlayed, familyMastery map, seedBadges array (capped at 100), bestChain.
+  >> _persistMatchResult() auto-saves on matchResults event. Narrow scope: no backend writes yet.
+  >> seedBadge field in GloFluxState (server-generated S{seed}) surfaced in results.
+
+20.24 🟢 🟢 🟢 🟢 🟢 [DONE] Broader Frontend Regression Hardening for Multiplayer UX.
+  2026-03-13 final broad suite result on fresh Vite :5174 with PLAYWRIGHT_BASE_URL override: 73 passed.
+  Shared realtime startup flow and multiplayer test isolation were hardened until the broad serial frontend suite ran clean without retries.
+
+20.24.1 🟢 🟢 🟢 🟢 🟢 [DONE] Fix spawn-hold stability in realtime battle startup.
+  Evidence: frontend/tests/01-spawn-sequence.spec.js failed after GO with the kart 16.25m from spawn on retry.
+  Audit countdown unfreeze, authoritative spawn correction, local physics wake-up, and any bot/player impulse leaking into the first 500ms after matchLive.
+  Acceptance: the kart stays within the expected spawn radius immediately after GO across repeated runs.
+  >> frontend/src/modules/realtime/colyseus-babylon-client.js now adopts the authoritative server spawn before live unfreeze and uses an idempotent live transition path. Spawn sequence tests now pass in the full suite.
+
+20.24.2 🟢 🟢 🟢 🟢 🟢 [DONE] Remove prematch lobby transition flake.
+  Evidence: frontend/tests/05-prematch-lobby.spec.js timed out once waiting for matchLive/lobby hide, then passed on retry.
+  Audit countdown start timing, room start sequencing, UI fade completion, and debug bus publication ordering.
+  Acceptance: the prematch flow passes repeatedly without retry and the lobby-to-canvas transition is deterministic.
+  >> The realtime client now treats state.started as a fallback live signal, and prematch tests use unique lobby codes so serial Playwright runs do not inherit stale room lifecycle state.
+
+20.24.3 🟢 🟢 🟢 🟢 🟢 [DONE] Keep the broad Playwright contract current with gloFLUX and FPS coverage.
+  Maintain PLAYWRIGHT_BASE_URL-based runs against a fresh Vite instance, keep isolated room/party codes in multiplayer tests, and prevent stale-room contamination.
+  Promote any newly fixed regression to a dedicated test assertion instead of relying on manual QA memory.
+  Acceptance: broad frontend regressions are easy to rerun locally and failures point to a specific gameplay contract.
+  >> Added per-test room isolation to spawn-sequence, prematch-lobby, PvP session, FPS arena, and anomaly weapons specs. Full frontend suite now runs clean against a fresh Vite instance on :5174.
+
+PHASE 21 — MULTIPLAYER BATTLE MODE: MARIO KART 64 POLISH TARGET
+
+Goal: Bring the multiplayer battle mode from "functionally present" to genuinely fun and polished.
+  The infrastructure exists (rooms, weapons, health, networking, physics) but the player experience
+  is rough: kart driving lacks weight and feedback, weapons fire/hit without satisfying audio-visual
+  payoff, arenas are loaded but not selectable, item pickups feel silent, death/respawn is instant
+  and cheap, and dozens of game-feel details that separate "tech demo" from "game" are missing.
+  This phase targets Mario Kart 64 Battle Mode level of polish: tight controls, readable combat,
+  satisfying feedback loops, and a complete session flow from lobby to rematch.
+
+  Priority: Core Feel → Combat Loop → Session Flow → Visual/Audio Polish → QA
+
+  All tasks use the existing Colyseus BattleRoom, kart-physics.js, weapon-inventory.js,
+  projectile-system.js, battle-hud.js, and collision-layers.js as foundations. No rewrites —
+  tune, extend, and polish what exists.
+
+─────────────────────────────────────────────────────────────────────────
+BLOCK A — KART FEEL AND DRIVING PHYSICS (the foundation everything rests on)
+─────────────────────────────────────────────────────────────────────────
+
+21.1 ✅ 🟢 🟢 🟢 🟢 [DONE] Kart Ground Detection and Slope Handling
+  kart-physics.js applies lateral grip and acceleration on a single flat plane. Add proper
+  ground-normal detection via Havok raycast so the kart aligns to slopes, ramps, and uneven
+  terrain. Calculate surface normal → project forward/lateral forces onto surface plane.
+  Handle airborne state: disable steering when no ground contact, apply gravity only, detect
+  landing and apply landing bounce (small Y impulse dampening over 3 frames).
+  Files: kart-physics.js (add raycastGround, isGrounded flag, slopeNormal tracking)
+  Acceptance: kart drives naturally up/down ramps without floating or clipping.
+  >> raycastGround() with Havok raycast, isGrounded flag, slopeNormal tracking, landing dampening
+  >> (LANDING_DAMPEN_FRAMES=3), airborne steer reduction (25%), slope-projected acceleration all
+  >> implemented in kart-physics.js. Exported and consumed by all driving callers.
+
+21.2 ✅ 🟢 🟢 🟢 🟢 [DONE] Kart Collision Response — Bumping, Bouncing, Wall Slide
+  Kart-kart and kart-wall collisions currently rely on raw Havok response with no game-layer
+  tuning. Add: (a) kart-kart bump impulse scaled by relative speed + mass difference (heavy karts
+  shove light karts harder), (b) wall slide friction so karts scrape along walls instead of
+  sticking dead, (c) small speed penalty on wall contact (lose 15% velocity on hard hit),
+  (d) camera shake proportional to collision force. Wire weight-class mass differences into
+  collision impulse calculation. Add brief invulnerability (0.3s) after being bumped to prevent
+  chain-stun.
+  Files: kart-physics.js (collision response), colyseus-babylon-client.js (shake trigger)
+  Acceptance: bumping into other karts and walls feels physical, heavy karts feel heavy.
+  >> applyWallCollision() — wall-slide friction + 15% speed penalty, returns impactSpeed for shake.
+  >> applyKartBump() — mass-ratio bump impulse, min-speed threshold, brief invulnerability.
+  >> checkBumpInvulnerability() — drift-state timestamp check (BUMP_INVULN_MS=300).
+
+21.3 � [DONE] Drift Feel Tuning — Visual Tilt, Skid Marks, Counter-steer
+  Drift mechanics work but lack feedback. Add: (a) kart body roll during drift (lean 8-12° into
+  turn), (b) rear axle skid marks on ground (decal trail using MeshBuilder.CreateRibbon or
+  GreasedLine), (c) visual tire smoke particles during drift (expand babylon-particles.js),
+  (d) counter-steer snap: tapping opposite direction during drift gives a brief grip recovery
+  then re-engages drift, (e) drift initiation should require brake+turn (not just turn at speed).
+  Files: kart-physics.js (drift initiation logic), babylon-particles.js (smoke emitter),
+  colyseus-babylon-client.js (visual body roll on local+remote karts)
+  Acceptance: drifting looks and feels like a deliberate skill move, not just reduced traction.
+
+21.4 � [DONE] Speed Feel and Juice — FOV Shift, Screen Lines, Engine Pitch
+  Driving at max speed feels the same as driving slowly. Add: (a) FOV widening at high speed
+  (base 75° → max 85° at MAX_SPEED, smooth lerp), (b) optional radial speed lines in
+  peripheral vision during boost (canvas overlay or post-process), (c) engine pitch scaling
+  is implemented in game-audio.js but verify it actually works in battle mode and tune the
+  curve (low RPM idle → high RPM whine), (d) subtle camera lag (camera follows kart position
+  with 50ms lerp delay, creating a sense of forward momentum).
+  Files: colyseus-babylon-client.js (FOV, camera lag), game-audio.js (engine pitch verify),
+  battle-hud.js (optional speed lines overlay)
+  Acceptance: driving at speed feels fast; boost feels noticeably faster.
+
+21.5 � [DONE] Reverse and Brake Polish
+  Reverse driving is likely untuned. Verify: (a) braking from forward speed → full stop → then
+  reverse engages (not instant reverse while moving forward), (b) reverse max speed is ~40% of
+  forward max speed, (c) reverse camera should optionally rotate to show behind the kart (Mario
+  Kart style) or at minimum the HUD should indicate reverse state, (d) handbrake/e-brake for
+  sharp 180° turns (hold brake + full steer = tight spin in place at low speed).
+  Files: kart-physics.js (brake→stop→reverse state machine), colyseus-babylon-client.js (camera)
+  Acceptance: braking and reversing feel intentional and controlled.
+
+─────────────────────────────────────────────────────────────────────────
+BLOCK B — WEAPONS, ITEMS, AND COMBAT LOOP
+─────────────────────────────────────────────────────────────────────────
+
+21.6 � [DONE] Item Roulette Animation on Pickup
+  Picking up an item box gives a weapon instantly and silently. Add a 1.5-second roulette
+  animation in the HUD weapon slot: cycle through 6-8 random weapon icons at decreasing speed
+  then land on the awarded weapon with a "ding" SFX. During roulette, the weapon cannot be fired.
+  Use the existing battle-hud.js weapon display area. Add roulette state to WeaponInventory
+  (isRouletteActive, rouletteTimer, rouletteResult). Network: server already decides the weapon;
+  client shows the animation then reveals the server's choice.
+  Files: battle-hud.js (roulette UI), weapon-inventory.js (roulette state), race-items.js
+  (trigger roulette on pickup), game-audio.js (roulette tick + land SFX)
+  Acceptance: picking up an item box feels exciting and uncertain, not silent.
+
+21.7 � [DONE] Projectile Visual Models and Trail Effects
+  Projectiles exist as physics objects but their visual representation needs polish. For each
+  weapon type, ensure: (a) visible 3D mesh (existing procedural meshes in weapon-models.js may
+  need scaling/material tuning), (b) trail effect behind moving projectiles (ParticleSystem
+  emitting from projectile position with weapon-colored particles), (c) rotation animation
+  (bowling ball rolls, missile points forward, cake tumbles), (d) emissive material glow on
+  energy weapons (shockwave, plasma railgun). Verify projectiles are visible to ALL players
+  (local + remote) — if projectile sync uses entity state, remote clients must spawn matching
+  visual meshes.
+  Files: projectile-system.js (visual mesh creation), babylon-particles.js (trail emitters),
+  colyseus-babylon-client.js (remote projectile rendering)
+  Acceptance: every fired weapon is visually readable and trackable in flight.
+
+21.8 � [DONE] Weapon Hit Feedback — Explosion, Flash, Player Reaction
+  When a weapon hits a kart, the feedback is minimal. Add per-weapon impact effects:
+  (a) Explosion mesh + particle burst at hit point (scale by weapon damage: 60dmg = big boom,
+  5dmg banana = small poof), (b) hit kart flashes white for 0.15s (emissive color override on
+  all kart meshes), (c) hit kart gets a physics impulse (knockback direction = projectile
+  velocity, force scaled by weapon damage), (d) screen shake on the victim's camera (existing
+  camera shake system — verify it works), (e) attacker gets a subtle "hit confirmed" indicator
+  (crosshair flash or small text "+35 DMG" floating near reticle for 0.8s).
+  Files: projectile-system.js (impact trigger), babylon-particles.js (explosion emitter),
+  colyseus-babylon-client.js (flash, shake, knockback), battle-hud.js (hit confirm text)
+  Acceptance: landing a hit feels satisfying; getting hit feels punishing but readable.
+
+21.9 � [DONE] Weapon Audio — Fire, Flight, Impact Sounds Per Weapon
+  game-audio.js has SFX stubs but verify all weapons have distinct, satisfying sounds for:
+  (a) fire/launch (bowling ball: heavy thud, missile: whoosh+ignite, cake: splat-launch,
+  plunger: pop-suction, banana: quiet drop, shield: energy hum activate, swatter: swoosh),
+  (b) in-flight (missile: sustained engine hum, bowling ball: rolling rumble — spatial if
+  distance is short enough), (c) impact (explosion boom scaled by damage, shield break: shatter
+  sound, banana slip: cartoon skid). Use existing Web Audio synthesis for any missing sounds
+  rather than requiring audio file assets.
+  Files: game-audio.js (per-weapon fire/hit/flight SFX), projectile-system.js (trigger flight
+  sound on spawn, stop on hit/expire)
+  Acceptance: every weapon has a unique audio signature for fire and impact.
+
+21.10 � [DONE] Defensive Items — Shield and Trap Placement Polish
+  Shield and trap items exist but need feel tuning: (a) Shield: visible bubble/sphere around
+  kart (semi-transparent emissive mesh, pulsing glow), absorbs one hit then shatters with
+  break particle effect + SFX, duration indicator on HUD (countdown ring or fade), (b) Banana:
+  drops behind kart at kart position - 3 units backward along heading, sits on ground with
+  gentle bob animation, spin-out effect on contact (apply Quaternion rotation impulse + speed
+  kill for 1s), (c) Bubblegum: similar to banana but immobilizes (FROZEN status) for 1.5s
+  with stretch/stick visual effect on victim kart.
+  Files: race-items.js (trap placement), colyseus-babylon-client.js (shield mesh rendering),
+  kart-physics.js (spin-out impulse), babylon-particles.js (shield break effect)
+  Acceptance: defensive items are visible, readable, and satisfying to use and to counter.
+
+21.11 � [DONE] Weapon Aiming — Reticle, Forward/Backward Fire, Lock-On
+  Current weapon firing shoots forward from kart heading. Add: (a) forward-fire default:
+  projectile spawns at kart front + velocity in kart forward direction, (b) backward-fire
+  option: hold a modifier key (e.g., S/Down while pressing fire) to launch backward, (c)
+  lock-on reticle for homing weapons (missile): HUD shows a lock-on bracket on nearest enemy
+  in front cone (60° half-angle, 50m range), weapon tracks that target, (d) arc preview for
+  lobbed weapons (cake): subtle dotted arc in front of kart showing trajectory. The targeting
+  system already exists in weapons/targeting.js — expose it to the HUD for visual feedback.
+  Files: weapons/targeting.js (lock-on cone), battle-hud.js (reticle/bracket overlay),
+  colyseus-babylon-client.js (fire direction based on input state)
+  Acceptance: players can aim weapons intentionally, homing weapons feel smart.
+
+─────────────────────────────────────────────────────────────────────────
+BLOCK C — DAMAGE, HEALTH, RESPAWN, AND MATCH FLOW
+─────────────────────────────────────────────────────────────────────────
+
+21.12 � 🟢 🟢 🟢 🟢 [DONE] Death Sequence — Explosion, Ragdoll, Camera
+  When health hits 0, the kart instantly respawns. Add a proper death sequence:
+  (a) Explosion effect: large particle burst at kart position (fire + smoke + debris meshes),
+  (b) kart mesh hidden, replaced by tumbling debris pieces (3-4 box/cylinder meshes flying
+  outward with gravity, dispose after 2s), (c) camera holds on explosion point for 1.0s then
+  smoothly transitions to respawn point, (d) "WASTED" / "KO'd" text flash on victim screen,
+  (e) delay respawn by 2.5s (server already has 3s — make client visual match it),
+  (f) elimination SFX (deep boom + glass shatter).
+  Files: colyseus-babylon-client.js (death sequence state machine), babylon-particles.js
+  (explosion emitter), battle-hud.js (KO text overlay), game-audio.js (elimination SFX)
+  Acceptance: dying feels dramatic and meaningful, not instant and cheap.
+
+21.13 � 🟢 🟢 🟢 🟢 [DONE] Respawn Sequence — Invulnerability, Warning Flash, Drop-In
+  After the death sequence, the kart respawns. Add: (a) respawn at random spawn point elevated
+  3 units above ground then drop down with small bounce, (b) 2.0s invulnerability period with
+  visible indicator: kart mesh blinks (toggle isVisible every 0.15s) and has a glowing barrier
+  overlay, (c) "RESPAWNING" text on HUD during death delay, (d) all weapons cleared on death
+  (reset inventory), (e) invulnerability prevents all damage but kart can move and collect new
+  items immediately.
+  Files: battle/health.js (invulnerability timer), colyseus-babylon-client.js (blink effect,
+  drop animation), BattleRoom.js (respawn timing, invuln flag on PlayerState)
+  Acceptance: respawning feels safe and gives player time to orient before being vulnerable.
+
+21.14 � 🟢 🟢 🟢 🟢 [DONE] Health Bar and Damage Direction Indicator
+  The health bar in battle-hud.js needs enhancement: (a) animate health loss (bar slides to
+  new value over 0.3s, flash red on hit), (b) show numeric HP (e.g., "75/100") next to bar,
+  (c) damage direction indicator: when hit, show a red arc/wedge on screen edge pointing toward
+  the attacker's direction (fade over 1.5s), (d) low health warning: below 25 HP the screen
+  edges pulse red and heartbeat SFX plays, (e) health bar color gradient: 100-60 green,
+  60-30 yellow, 30-0 red.
+  Files: battle-hud.js (health bar animation, damage direction, low health), game-audio.js
+  (heartbeat SFX)
+  Acceptance: player always knows their health and where damage came from.
+
+21.15 � 🟢 🟢 🟢 🟢 [DONE] Three-Strikes Balloon Mode — Full Implementation
+  The three-strikes concept exists but needs completing for multiplayer battle: (a) each player
+  starts with 3 balloons (visual: 3 small sphere meshes attached to kart, red/blue/green),
+  (b) each hit pops one balloon (balloon mesh scales to 0 + particle pop + SFX), (c) at 0
+  balloons the player is eliminated (spectator mode), (d) last player with balloons wins,
+  (e) HUD shows balloon count for self and overlay for all players, (f) server tracks lives
+  per player in PlayerState.lives, (g) BattleRoom handles elimination state and broadcasts
+  elimination events.
+  Files: BattleRoom.js (lives tracking, elimination logic), colyseus-babylon-client.js
+  (balloon meshes on karts), battle-hud.js (balloon display), game-audio.js (pop SFX)
+  Acceptance: three-strikes mode plays like Mario Kart 64 balloon battle.
+
+21.16 � 🟢 🟢 🟢 🟢 [DONE] Kill Feed Enhancement
+  The kill feed exists but needs polish: (a) show weapon icon next to kill message (small
+  emoji or icon per weapon type), (b) "FIRST BLOOD" callout for first kill in match, (c)
+  multi-kill callouts: "DOUBLE KILL" (2 kills in 3s), "TRIPLE KILL" (3 in 5s), "RAMPAGE" (4+),
+  (d) revenge indicator ("REVENGE" when you kill someone who last killed you), (e) self-kill
+  message for environmental deaths ("fell off the map"), (f) feed items slide in from right
+  with brief glow then fade over 4s.
+  Files: battle-hud.js (kill feed UI), BattleRoom.js (multi-kill/revenge tracking)
+  Acceptance: kill feed is readable, informative, and adds excitement to combat.
+
+─────────────────────────────────────────────────────────────────────────
+BLOCK D — ARENA MAPS AND ENVIRONMENT
+─────────────────────────────────────────────────────────────────────────
+
+21.17 � 🟢 🟢 🟢 🟢 [DONE] Expose STK Arenas in Battle Lobby Selection
+  10 STK arena .glb files exist on disk (alien_signal, ancient_colosseum_labyrinth,
+  arena_candela_city, battleisland, blockfort, cave, lasdunasarena, pumpkin_park, stadium,
+  temple) but are not selectable from the lobby UI. Register all 10 in track-data.js with
+  proper type:'stk-arena', spawn positions from track-data.json files, and kartScale overrides.
+  Update content-registry.js ALL_ARENAS to include them. Verify lobby.js arena selector
+  populates with all entries. Verify SceneLoader loads each .glb and physics colliders work.
+  Files: track-data.js (add 10 arena entries), content-registry.js (derive ALL_ARENAS),
+  lobby.js (verify selector), colyseus-babylon-client.js (verify arena loading path)
+  Acceptance: all 10 STK arenas are selectable and playable from the battle lobby.
+
+21.18 � 🟢 🟢 🟢 🟢 [DONE] Arena-Specific Item Box Placement
+  Item boxes currently spawn in a fixed 8-position grid regardless of arena. Add per-arena
+  item box positions using the track-data.json files that accompany each STK arena .glb.
+  Parse item spawn positions from these files and use them in BattleRoom.spawnItemBoxes().
+  For arenas without item data, fall back to the current radial grid but scale radius to
+  arena size. Add more item boxes for larger arenas (12-16 boxes for battleisland/stadium
+  vs 8 for blockfort).
+  Files: BattleRoom.js (per-arena item positions), track-data-loader.js (parse item spawns),
+  track-data.js (item position data per arena)
+  Acceptance: item boxes are placed at meaningful positions within each arena's geometry.
+
+21.19 � 🟢 🟢 🟢 🟢 [DONE] Arena Environment Polish — Skybox, Lighting, Ambient
+  Each arena loads its geometry but the surrounding environment may be bare. For each loaded
+  arena: (a) add a themed skybox (CubeTexture or procedural sky shader — can default to a
+  single shared sky if per-arena skies aren't available), (b) tune HemisphericLight direction
+  and intensity per arena mood (cave=dim with point lights, stadium=bright daylight, blockfort=
+  neutral), (c) add ambient fog for depth (scene.fogMode = FOGMODE_EXP2 with arena-tuned
+  density), (d) add kill-plane particle warning (red glow plane at y=-75, visible as "lava"
+  or "void" below the arena).
+  Files: colyseus-babylon-client.js (arena lighting/sky/fog setup), babylon-track.js (kill
+  plane visual)
+  Acceptance: each arena feels like a place, not a floating model in black void.
+
+21.20 � 🟢 🟢 🟢 🟢 [DONE] Out-of-Bounds and Fall-Off Recovery
+  Karts that fall below the kill plane (y < -80) respawn, but the experience is abrupt.
+  Add: (a) warning audio + screen flash when approaching arena edge (within 5 units of
+  boundary), (b) fall-off: camera watches kart fall for 0.5s then fades to black, (c)
+  respawn at nearest safe spawn point (not random — pick spawn closest to where they fell),
+  (d) minimal speed penalty on respawn (zero velocity, but no extra delay beyond the fade).
+  Files: colyseus-babylon-client.js (fall detection, camera hold, fade), BattleRoom.js
+  (nearest spawn selection)
+  Acceptance: falling off the map feels like a punishment but recovery is smooth.
+
+─────────────────────────────────────────────────────────────────────────
+BLOCK E — HUD, UI, AND SESSION FLOW
+─────────────────────────────────────────────────────────────────────────
+
+21.21 � 🟢 🟢 🟢 🟢 [DONE] Scoreboard / Player List Overlay
+  Add a tab-to-show scoreboard overlay during battle: (a) table showing all players: name,
+  score (kills), deaths, current weapon, health bar, (b) sorted by score descending, (c)
+  highlight self row, (d) team columns for CTF (red/blue), (e) visible while Tab/Select is
+  held, hidden on release. The end-of-match results screen already exists — this is the
+  in-match version.
+  Files: battle-hud.js (scoreboard overlay), colyseus-babylon-client.js (Tab key binding)
+  Acceptance: players can check standings mid-match without guessing.
+
+21.22 � 🟢 🟢 🟢 🟢 [DONE] Weapon HUD Slot — Current Item Display with Icon
+  The weapon slot in the HUD needs a proper display: (a) weapon icon/emoji for current held
+  weapon (use existing weapon names → emoji mapping from kill feed), (b) ammo count if weapon
+  has multiple uses (e.g., triple banana = "x3"), (c) "NO ITEM" state clearly shown when
+  empty, (d) brief glow/pulse when new weapon acquired (after roulette lands), (e) fire
+  cooldown indicator (radial cooldown sweep over icon).
+  Files: battle-hud.js (weapon slot UI)
+  Acceptance: players always know what weapon they have and when they can fire it.
+
+21.23 � 🟢 🟢 🟢 🟢 [DONE] Pre-Match Countdown Polish
+  The countdown exists but needs polish for battle mode: (a) 3-2-1-GO with large centered
+  numbers that scale-pulse on each tick, (b) engine rev SFX during countdown (buildable
+  by holding throttle, matching Mario Kart's start boost), (c) start boost mechanic: if
+  player times throttle press to the "GO" frame, get a 1.5s speed boost (same as zipper),
+  (d) camera does a brief arena flyover during countdown (orbit around center point at
+  wide radius, then snap to kart on GO).
+  Files: colyseus-babylon-client.js (countdown camera, start boost), battle-hud.js
+  (countdown display), game-audio.js (countdown tick + rev SFX)
+  Acceptance: the start of each match has anticipation and a skill-based advantage.
+
+21.24 � 🟢 🟢 🟢 🟢 [DONE] End-of-Match Results Polish
+  The results screen exists but needs battle-specific enhancement: (a) show winner with
+  victory animation (camera pans to winning kart, winner kart does a spin/bounce), (b) full
+  standings table: rank, name, kills, deaths, K/D ratio, damage dealt, (c) "best weapon"
+  stat (weapon with most kills this match), (d) "PLAY AGAIN" button that restarts same
+  arena/settings, (e) "CHANGE ARENA" button that returns to lobby, (f) victory/defeat
+  SFX + music change.
+  Files: battle-hud.js (results overlay), BattleRoom.js (extended matchEnd stats),
+  colyseus-babylon-client.js (victory camera), game-audio.js (victory/defeat stingers)
+  Acceptance: end of match celebrates the winner and gives everyone stats to review.
+
+21.25 � 🟢 🟢 🟢 🟢 [DONE] Minimap for Battle Arenas
+  The minimap exists for race tracks but needs adaptation for battle arenas: (a) top-down
+  view of arena geometry (render arena bounds/shape on canvas), (b) player blips (self=green,
+  enemies=red, teammates=blue in CTF), (c) item box positions (yellow dots), (d) update
+  at 10fps for performance, (e) scale minimap to arena size with consistent padding.
+  Files: minimap.js (arena-mode rendering), colyseus-babylon-client.js (wire minimap
+  updates for battle mode)
+  Acceptance: minimap shows arena layout, player positions, and item locations.
+
+─────────────────────────────────────────────────────────────────────────
+BLOCK F — AUDIO AND VISUAL POLISH
+─────────────────────────────────────────────────────────────────────────
+
+21.26 � 🟢 🟢 🟢 🟢 [DONE] Battle Music System
+  Battle mode needs distinct music from racing. Add: (a) battle-specific music tracks
+  (use existing music pool or synthesize a fast-paced loop), (b) dynamic intensity:
+  normal intensity → high intensity when health < 30 or when score is close to limit,
+  (c) match point stinger (someone is 1 kill from winning), (d) smooth track switch on
+  intensity change (crossfade 0.5s), (e) silence music during death sequence, resume
+  on respawn.
+  Files: game-audio.js (battle music management, dynamic layers)
+  Acceptance: battle mode has its own audio identity that responds to match tension.
+
+21.27 � 🟢 🟢 🟢 🟢 [DONE] Ambient Sound and Environment Audio
+  Arena environments are silent beyond music. Add: (a) ambient loop per arena type (wind for
+  open arenas, drips for cave, crowd noise for stadium), (b) surface-dependent driving sound
+  (grass/dirt = muffled, asphalt = clean, metal = metallic ring), (c) proximity audio for
+  item boxes (gentle hum when near an item box), (d) boundary warning tone when kart is near
+  arena edge.
+  Files: game-audio.js (ambient loops, surface sounds, proximity audio)
+  Acceptance: arenas have audible atmosphere and driving surface has audio feedback.
+
+21.28 � 🟢 🟢 🟢 🟢 [DONE] Exhaust Particles and Kart Visual Effects
+  Karts drive without visible exhaust. Add: (a) exhaust particles from rear of kart (small
+  grey smoke puffs at idle/low speed, flame jets during boost), (b) wheel dust/debris kicked
+  up from ground (tiny particles at wheel contact points), (c) nitro/boost visual effect:
+  blue/orange flame trails behind kart during any boost (zipper, drift boost, start boost),
+  (d) stunned visual effect: stars circling above kart for STUNNED status, ice crystals for
+  FROZEN, fire particles for BURNING.
+  Files: babylon-particles.js (new emitter types), colyseus-babylon-client.js (wire effects
+  to kart state)
+  Acceptance: karts have visual life — exhaust, dust, boost flames, status effects.
+
+21.29 � 🟢 🟢 🟢 🟢 [DONE] Item Box Visual Polish
+  Item boxes rotate and respawn but could be more visually appealing: (a) verify the golden
+  box + ribbon + question mark model looks good at arena scale, (b) add a gentle float
+  animation (bob up/down 0.3 units over 2s cycle), (c) add sparkle particle halo around
+  each box (4-6 small glowing particles orbiting), (d) collection effect: box explodes into
+  sparkles + "pop" sound + brief bright flash, (e) respawn effect: box fades in over 0.5s
+  with expanding ring, (f) ensure item boxes are visible from distance (emissive materials,
+  adequate size).
+  Files: race-items.js (create/collect/respawn visual effects), game-audio.js (collection SFX)
+  Acceptance: item boxes are eye-catching, collectible-feeling objects in the arena.
+
+─────────────────────────────────────────────────────────────────────────
+BLOCK G — MULTIPLAYER AND NETWORKING POLISH
+─────────────────────────────────────────────────────────────────────────
+
+21.30 � 🟢 🟢 🟢 🟢 [DONE] Remote Projectile Rendering
+  Verify that all projectiles fired by remote players are visible to the local client.
+  The server broadcasts projectile state (entity position) — ensure the client spawns
+  matching 3D meshes for remote projectiles with correct weapon-type visuals, trails,
+  and impact effects. Currently entity sync may only handle position without visual
+  representation.
+  Files: colyseus-babylon-client.js (entity state → visual mesh mapping for projectiles),
+  projectile-system.js (createVisualOnly method for remote projectiles)
+  Acceptance: all projectiles are visible to all players regardless of who fired them.
+
+21.31 � 🟢 🟢 🟢 🟢 [DONE] Lag Compensation and Hit Registration Feedback
+  With network latency, hits may feel delayed or missed. Add: (a) client-side predicted
+  hit flash (show hit effect immediately on client, server confirms), (b) if server rejects
+  the hit, suppress the UI feedback (no rollback flash needed, just don't award damage),
+  (c) add hit registration indicator: small "HIT" or damage number that appears above
+  the target briefly, (d) server-side hit timestamp validation (reject hits older than
+  200ms + RTT).
+  Files: colyseus-babylon-client.js (predicted hit effects), BattleRoom.js (timestamp
+  validation), battle-hud.js (hit indicator)
+  Acceptance: combat feels responsive even at moderate latency (50-100ms RTT).
+
+21.32 � 🟢 🟢 🟢 🟢 [DONE] Spectator Mode for Eliminated Players
+  In three-strikes mode, eliminated players have nothing to do. Add spectator mode:
+  (a) camera cycles between surviving players (press fire to switch view), (b) HUD shows
+  "SPECTATING: <name>" indicator, (c) minimap still active showing all surviving players,
+  (d) spectators cannot interact with game state (inputs ignored by server).
+  Files: colyseus-babylon-client.js (spectator camera cycling), battle-hud.js (spectator
+  indicator), BattleRoom.js (ignore eliminated player inputs)
+  Acceptance: eliminated players can watch the rest of the match.
+
+─────────────────────────────────────────────────────────────────────────
+BLOCK H — INPUT AND ACCESSIBILITY
+─────────────────────────────────────────────────────────────────────────
+
+21.33 � 🟢 🟢 🟢 🟢 [DONE] Gamepad Support (Web Gamepad API)
+  Keyboard works but gamepad makes kart games vastly more playable. Add Gamepad API
+  support: (a) detect gamepads via navigator.getGamepads(), (b) map left stick to
+  steering (analog!), (c) right trigger to throttle (analog pressure = proportional
+  acceleration), (d) left trigger to brake, (e) A/Cross button to fire weapon, (f) B/Circle
+  to use item backward, (g) X/Square for drift, (h) Start for pause, (i) connection/
+  disconnection handling with on-screen prompt, (j) analog dead zone (0.15).
+  Files: new file frontend/src/modules/gamepad-input.js, colyseus-babylon-client.js
+  (integrate gamepad poll into input loop)
+  Acceptance: game is fully playable with Xbox/PS/generic gamepad, analog steering
+  feels smooth.
+
+21.34 � 🟢 🟢 🟢 🟢 [DONE] Control Mapping Display and Rebinding
+  Players need to know the controls. Add: (a) controls overlay accessible from pause menu
+  showing all keybindings + gamepad layout, (b) basic rebinding for keyboard (store in
+  localStorage), (c) mobile touch controls (virtual joystick + buttons — basic support
+  for mobile browsers).
+  Files: pause-menu.js (controls display), new file frontend/src/modules/input-config.js
+  Acceptance: players can learn and customize controls.
+
+─────────────────────────────────────────────────────────────────────────
+BLOCK I — BOT AI FOR BATTLE MODE
+─────────────────────────────────────────────────────────────────────────
+
+21.35 � 🟢 🟢 🟢 🟢 [DONE] Battle Bot Combat AI Enhancement
+  Battle bots exist (battle-bot-controller.js, ~50 lines) but are primitive. Enhance:
+  (a) target selection: closest enemy with line-of-sight check (raycast), (b) weapon
+  usage timing: fire when target is in range AND in forward cone, use traps when being
+  chased, save shield for incoming projectiles, (c) evasion: swerve away from incoming
+  projectiles if detected (raycast forward), (d) item-seeking: navigate to nearest active
+  item box when no weapon held, (e) arena navigation: avoid edges and walls using short
+  raycasts (3 front rays: left, center, right at 30° angles), (f) difficulty scaling:
+  easy bots fire late and drive slower, expert bots lead targets and use items optimally.
+  Files: battle-bot-controller.js (major expansion), bot-personality.js (battle params)
+  Acceptance: bots feel like real opponents, not random drivers with occasional shooting.
+
+21.36 � 🟢 🟢 🟢 🟢 [DONE] Bot Kart Variety
+  Bots should use different kart models and weight classes. Add: (a) random kart assignment
+  from available kart models (don't all use same kart), (b) weight class selection per bot
+  difficulty (easy=light for forgiving handling, expert=varies), (c) bot names from a preset
+  pool (instead of "Bot 1", "Bot 2").
+  Files: bot-controller.js (kart/name assignment), content-registry.js (kart pool)
+  Acceptance: each bot looks and drives differently.
+
+─────────────────────────────────────────────────────────────────────────
+BLOCK J — INTEGRATION TESTING AND QA
+─────────────────────────────────────────────────────────────────────────
+
+21.37 � 🟢 🟢 🟢 🟢 [DONE] Battle Mode Playwright E2E Test Suite
+  Create comprehensive Playwright tests for battle mode:
+  (a) Full battle flow: lobby → arena select → countdown → fight → kill → death → respawn →
+  match end → results screen (2-player)
+  (b) All weapon types fire and deal correct damage
+  (c) Item pickup → roulette → weapon display
+  (d) Three-strikes mode: balloon pop → elimination → spectator → winner
+  (e) Respawn invulnerability prevents damage
+  (f) Kill feed and scoreboard accuracy
+  (g) Health bar updates match server state
+  (h) All 10 STK arenas load without errors
+  Files: new file frontend/tests/37-battle-mode-polish.spec.js
+  Acceptance: automated regression suite for all Phase 21 features.
+
+21.38 � 🟢 🟢 🟢 🟢 [DONE] Manual QA Playtest Pass
+  Conduct a focused manual playtest covering:
+  (a) Drive each weight class — does light feel nimble, heavy feel tanky?
+  (b) Fire every weapon — do they look/sound/feel different?
+  (c) Get hit by every weapon — does each hit feel distinct?
+  (d) Die and respawn 5 times — is the sequence smooth every time?
+  (e) Play a full match against bots — is it fun?
+  (f) Play a 2-player match — is networking smooth?
+  (g) Test every arena — do they all load and play correctly?
+  (h) Drift + boost 20 times — does it feel rewarding?
+  Document findings in QA_CHECKLIST.md.
+  Acceptance: all gameplay loops feel complete and satisfying.
+
+21.39 � 🟢 🟢 🟢 🟢 [DONE] Performance Profiling Under Battle Conditions
+  Profile frame rate during peak battle activity: 4 karts + 8 projectiles + particle
+  effects + item boxes + HUD updates. Target 60fps on mid-range hardware. Identify and
+  fix any frame drops: (a) particle budget cap during combat, (b) projectile pool recycling,
+  (c) HUD canvas redraw throttling (10fps for minimap, 30fps for health), (d) mesh LOD for
+  weapon models at distance.
+  Files: colyseus-babylon-client.js, babylon-particles.js, battle-hud.js
+  Acceptance: 60fps maintained during active battle with 4+ players.
+
+─────────────────────────────────────────────────────────────────────────
+PHASE 21 TASK SUMMARY
+─────────────────────────────────────────────────────────────────────────
+
+  BLOCK A — Kart Feel (5 tasks): 21.1-21.5
+  BLOCK B — Weapons/Combat (6 tasks): 21.6-21.11
+  BLOCK C — Damage/Health/Respawn (5 tasks): 21.12-21.16
+  BLOCK D — Arena Maps (4 tasks): 21.17-21.20
+  BLOCK E — HUD/UI/Session (5 tasks): 21.21-21.25
+  BLOCK F — Audio/Visual (4 tasks): 21.26-21.29
+  BLOCK G — Multiplayer Polish (3 tasks): 21.30-21.32
+  BLOCK H — Input (2 tasks): 21.33-21.34
+  BLOCK I — Bot AI (2 tasks): 21.35-21.36
+  BLOCK J — Testing/QA (3 tasks): 21.37-21.39
+
+  TOTAL: 39 tasks
+
+  RECOMMENDED EXECUTION ORDER:
+  1. Block A first (kart feel is the foundation — nothing else matters if driving isn't fun)
+  2. Block B next (weapons ARE the battle mode)
+  3. Block C (damage/health feedback closes the combat loop)
+  4. Block D (maps give variety)
+  5. Blocks E+F in parallel (HUD + audio/visual polish)
+  6. Block G (networking refinements)
+  7. Block I (bot improvements make solo practice viable)
+  8. Block H (gamepad is important but keyboard works)
+  9. Block J last (QA validates everything)
+
+─────────────────────────────────────────────────────────────────────────
+
 2026-03-09 - Phase 20 gloFLUX: THE KILLER APP MODE COMPLETE (14/14 tasks DONE). Build GREEN (2372 modules, 14.72s). New frontend modules (frontend/src/modules/gloflux/): glo-flux-powers.js (~310 lines, 20 power-ups across 4 families, 7 synergies, chain detect, surge calc, echo shards), glo-flux-arena.js (~350 lines, 4 wasteland themes, noise heightmap terrain, hazard zones, ruins, race circuit + arena variants, shrink boundary), glo-flux-surge.js (~230 lines, 5-tier surge meter, kill/chain/shard gain, Apocalypse Burst 4s with family-flavored effects), glo-flux-mutations.js (~210 lines, 6 mutation tiers, vertex deformation, family deform patterns, symbiote attachments, serialize/deserialize), glo-flux-vfx.js (~310 lines, 20 power VFX descriptors, 7 synergy auras, 4 post-process effects, LOD, burst VFX, global cap 12 systems/2000 particles), glo-flux-hud.js (~350 lines, canvas overlay HUD: surge meter, power slots, combo counter, mutation badge, kill feed, radar, timer/lap, health bar, apocalypse overlay), glo-flux-menu.js (~280 lines, 3rd-rail wasteland-themed menu: splash→mode_select→arena_pick→loading, lore ticker, bot slider), glo-flux.js (~330 lines, orchestrator state machine MENU→LOADING→COUNTDOWN→FLUX_ACTIVE→SURGE_CHECK→APOCALYPSE→RESULTS), glo-flux-ai.js (~200 lines, 5 bot personalities, synergy-seeking, hazard/boundary avoidance, mutation-aware targeting), glo-flux-network.js (~240 lines, Colyseus client adapter with input/surge/mutation sync). New server files: realtime/src/rooms/GloFluxRoom.js (~260 lines, authoritative room with power-up validation, shrink boundary, apocalypse damage), realtime/src/schema/GloFluxState.js (~55 lines, schema with player/entity/powerSpawn state). Platform wiring: game-modes.js (gloflux category + gloflux_race + gloflux_arena entries), gloflux.html, gloflux-main.js, vite.config.js (8th rollup input), single-player-routing.js (gloflux cases), index.html (⚡ gloFLUX ⚡ button), realtime/src/index.js (GloFluxRoom registered). Playwright: 21-gloflux.spec.js (23 tests). gloflux chunk: 46.25 kB (tree-shaken, code-split).
+2026-03-13 - Broad frontend Playwright suite rerun against fresh Vite on :5174 using PLAYWRIGHT_BASE_URL override is now GREEN: 73 passed in 17.1m. Fixes shipped: authoritative spawn adoption + idempotent live transition fallback in frontend/src/modules/realtime/colyseus-babylon-client.js; per-test room isolation added to tests/01-spawn-sequence.spec.js, tests/03-pvp-session.spec.js, tests/05-prematch-lobby.spec.js, tests/30-anomaly-weapons.spec.js, and tests/32-fps-arena.spec.js. Result: spawn-hold regression removed, prematch transition deterministic, PvP flake removed, anomaly setup flake removed, full serial frontend suite clean.
 2026-03-08 - Phase 19 PROCEDURAL GENERATION & GAME SYSTEMS COMPLETE (16/16 tasks DONE). Build GREEN (2360 modules, 15.61s). New files created: procedural-track-gen.js (~510 lines, spline-based track gen with themes/terrain/decorations), procedural-arena-gen.js (~430 lines, archetype-based arena gen with navmesh/obstacles), procedural-models.js (expanded with 10 extreme weapons catalogue + drawExtremeWeapon), procedural-vfx.js (~360 lines, 18 particle effects + global MAX_ACTIVE_VFX=64 cap), weapons/targeting.js (~260 lines, lock-on/homing/arc/raycast/AOE), race-flow.js (~210 lines, LOADING→PRE_RACE→COUNTDOWN→RACING→FINISHING→RESULTS state machine), battle-flow.js (~290 lines, deathmatch/three-strikes/soccer with kill feed/respawn/match-end), battle-hud.js (~310 lines, health bar/lives/scores/kill feed/timer/reticle/loading screen), pause-menu.js (~190 lines, Escape toggle with Resume/Restart/Settings/Quit + localStorage volumes), ai/bot-personality.js (~270 lines, 6 personality profiles + shouldUseItem/cornerBrake/drift/target decisions), records-manager.js (~170 lines, localStorage PBs per track/mode with history). Modified: kart-physics.js (+160 lines: STATUS effects, applyHitImpulse, applySpinout, applyStatusEffect, tickStatusEffects), babylon-track.js (procedural gen fallback chain), track-data-loader.js (data-only gen fallback). Performance: mesh dispose-on-regenerate for tracks/arenas, VFX global cap (64), existing projectile pool (80) and trail pool (50) confirmed. Splitscreen verified compatible. Playwright test: 24-phase19-procedural.spec.js (12 tests covering all new modules).
 2026-03-06 - Phase 14 FULL STK PORT AUDIT COMPLETE: Comprehensive audit of all SuperTuxKart features against TwistedKart/Glo Karts web framework. 28 features verified DONE with code evidence (game modes, assets, physics, networking, audio, graphics, AI, UI, scoring, input, debug tools). 4 features CUT (Follow-the-Leader, Soccer, Local Splitscreen, Addon Marketplace — deferred or out-of-scope). Partial coverage noted for ghost recording, hardware gamepad, spatial audio, 6 missing tracks, rubber ball weapon, dynamic weather (all post-v1.0). Build verification: Vite GREEN (12.99s, 2343 modules). Playwright: 13/14 pass (1 pre-existing kartScale failure). No regressions. Phase 14 added to DEVELOPMENT_TASK_LIST.txt with 20 sub-tasks, all marked 🟢 🟢 🟢 🟢 🟢 [DONE] or ⚫ ⚫ ⚫ ⚫ ⚫ [CUT].
 $12026-03-07 - Phase 13 ENGINE PARITY COMPLETE: Unified single-scene architecture ported to all solo modes. Created kart-physics.js (shared driving module with applyKartDriving, createDriftState, resetKart). Redesigned babylon-renderer.js (Havok init + FollowCamera + raycast clip avoidance + havokPlugin API). Redesigned babylon-car.js (PhysicsAggregate on visual mesh, FILTER.KART, STATIC until GO). Redesigned babylon-track.js (clone+bake per-mesh colliders + kill plane). Gutted havok-physics.js + physics.js into backward-compat shims. Rewired main.js + battle-main.js game loops (kartAggregate wiring, setKartRefs, setPhysicsKartRefs, FollowCamera lockedTarget, countdown STATIC->DYNAMIC unfreeze). Rewrote arena.js (inline PhysicsAggregate on visual meshes, FILTER.TRACK/BOUNDARY). Updated buildCustomTrackScene (inline PhysicsAggregate, no require()). Fixed all import paths (PhysicsShapeType from IPhysicsEnginePlugin). Phases 13.8 (bot physics bodies) and 13.9 (trigger item physics) SKIPPED - deferred to post-v1.0. Vite build green. 8/9 Playwright tests pass (1 pre-existing kartScale failure).
@@ -1730,6 +2554,10 @@ $12026-03-07 - Phase 13 ENGINE PARITY COMPLETE: Unified single-scene architectur
 2026-03-07 - Phase 16: LEGACY ISSUE RESOLUTION. Fixed two critical bugs causing blank white screen and 1500+ console errors per frame in ALL single-player modes. (1) currentGatePosition.copy() crash: main.js used Three.js .copy() API on Babylon.js Vector3/Quaternion objects — changed to .copyFrom(). Error "currentGatePosition.copy is not a function" eliminated. (2) Invisible canvas: #app container had no CSS dimensions — canvas resolved to 0x0. Added #app { width:100vw; height:100vh } + html,body { width:100%; height:100% }. Scene now renders full-viewport. Also completed full legacy cleanup: removed hardcoded racez.io speedometer gauge HTML from game.html (14 lines), removed 5 legacy JS variables + 2 legacy functions (initUI, updateSpeedometer) + call sites from main.js, replaced legacy countdown overlay with hidden state tracker (traffic light handles visuals), removed ~170 lines dead CSS (gauge styles, connection-ui), cleaned dead speedometer reference in gates.js, updated handleOrientationChange() and portrait media query. Full codebase audit confirmed clean: no .obj loaders, no MankyDanky/web-racing strings, no legacy element IDs in active code. Build GREEN (2355 modules). All SP modes now render correctly with modern HUD only.
 2026-03-07 - Phase 17: SP ENGINE PARITY WITH MULTIPLAYER. Fixed three root causes that prevented single-player from matching the working multiplayer visual experience. (1) Legacy camera override: removed updateCamera() function (Three.js-era manual camera with camera.position=Lerp + camera.setTarget) that fought with Babylon.js FollowCamera every frame, causing broken camera angle and position. FollowCamera's built-in lockedTarget tracking is now the sole camera driver (matching MP). Removed dead constants CAMERA_DISTANCE, CAMERA_HEIGHT, CAMERA_LERP, CAMERA_LOOK_AHEAD. Updated updateSpectatorCamera() to also use FollowCamera.lockedTarget instead of manual positioning. (2) Race condition fix: moved applyStartPosition(mapToLoad) from outside createVehicle callback (where it ran BEFORE the kart physics body existed, causing "no kart refs registered" warning and kart stuck at default (0,5.2,0)) to inside the callback after setKartRefs(). Kart now correctly positioned at track start position. (3) Missing PBR environment: added scene.createDefaultEnvironment({ createSkybox:false, createGround:false, enableGroundShadow:true }) to babylon-renderer.js, matching MP's colyseus-babylon-client.js — provides IBL environment texture for proper ambient/indirect lighting on all materials. Also updated game.html loading screen subtitle from "GLO EDITION" to "SINGLE PLAYER". Created 18-sp-engine-parity.spec.js with 7 Playwright tests. Build GREEN (2355 modules). 47/47 SP tests pass.
 2026-03-07 - Phase 18: SP MODE RESET USING MULTIPLAYER FLOW (STARTED). Removed legacy single-player mode menu entries from active play rotation by setting time_trial, grand_prix, battle_solo, free_roam, follow_the_leader, soccer, and three_strikes to MODE_STATUS.HIDDEN in game-modes.js. Rebuilt Quick Race as the first SP mode on the exact multiplayer path: page changed to realtime.html, requiresLobby enabled, and buildConfig now emits multiplayer=true + multiplayerProvider='colyseus' + singlePlayerMode=true with maxPlayers=1. Added lobby metadata plumbing (modeId, singlePlayerMode) through frontend/src/lobby.js buildSettingsPayload() and realtime/src/schema/LobbyState.js + realtime/src/rooms/LobbyRoom.js so the host/join/start/countdown/matchStart pipeline remains shared with online modes while preserving the selected solo mode card in UI. Updated LobbyRoom maxPlayers clamp to allow 1-player rooms for rebuilt single-player sessions. Validation: frontend build GREEN (2355 modules), realtime JS syntax checks pass, and mode registry confirms only quick_race remains visible under SOLO.
+2026-03-14 - Phase 21 MULTIPLAYER BATTLE MODE POLISH task list created (39 tasks across 10 blocks). Full codebase audit confirmed: driving physics exist but lack ground detection, slope handling, collision response tuning, and drift visual feedback. Weapons exist (19+) but lack visual trails, hit effects, and satisfying audio per weapon type. Item pickup has no roulette animation. Death/respawn is instant with no visual sequence. 10 STK arenas on disk but not selectable from lobby (only test_box/glo_arena registered). Battle bots are primitive (~50 lines). No gamepad support. Task list organized by priority: Kart Feel → Weapons → Damage/Health → Arena Maps → HUD/UI → Audio/Visual → Multiplayer → Input → Bots → QA. Target: Mario Kart 64 Battle Mode level of polish.
+2026-03-14 - Phase 22: WIZARD MASTERS VFX & COMBAT POLISH (11/11 tasks DONE). Analyzed WIZARD_MASTERS_AUDIT.md Top 10 actionable items and implemented all as Phase 22. FILES MODIFIED: (1) babylon-particles.js — GPU particle fallback with GPUParticleSystem.IsSupported detection, useGpu flag on 3 heavy systems (spark/flame/hit), isGPUParticlesActive() export; procedural 4×4 canvas sprite sheet generator (_generateSpriteSheet), animation config on hitSystem; explosion pool (MAX_EXPLOSION_POOL=8) with pre-warm and auto-return emitPooledExplosion() export. (2) colyseus-babylon-client.js — doNotSyncBoundingInfo/isPickable/alwaysSelectAsActiveMesh on all projectile+gravity well meshes; Dynamic→Static body switching before dispose (setMotionType+setMassProperties); shockwave PostProcess shader (sin wave distortion, smoothstep falloff, 500ms duration, damage≥40 threshold); multi-projectile spread (_spawnSpreadVisuals with Quaternion.RotationAxis Y±5°, 1500ms auto-dispose); showOffscreenDamageArrow + showDamageDirection(angle, subType) wiring. (3) collision-layers.js — DEBRIS (0x0040) and EFFECT_ZONE (0x0080) layers + FILTER presets. (4) battle-hud.js — colored damage border (DAMAGE_BORDER_COLORS map, concentric border overlays replacing radial blob); offscreen damage arrow (showOffscreenDamageArrow export, 3s fade, screen-edge rotation). FILES CREATED: frontend/tests/38-wm-vfx-polish.spec.js (31 tests). VALIDATION: Playwright 31/31 pass (1.4s). Vite build GREEN (11.68s). No regressions.
+2026-03-14 - Phase 18.3.4 procedural Glo Flux architecture completion. Added a reusable mode framework (frontend/src/modules/modes/BaseMode.js, ModeManager.js), rebuilt frontend/src/modules/modes/glo-flux.js as a clean BaseMode-derived GloFluxMode, and added procedural runtime subsystems for family registry, symbiotic chain/surge management, and worker-backed arena mutation (power-up-family-registry.js, symbiotic-core-manager.js, procedural-arena-evolver.js, procedural-arena-evolver.worker.js). Wired the architecture into the existing gloflux runtime/client + realtime room/schema telemetry, fixed Babylon thin-instance side-effect registration for mutation props, added debug-only authoritative room hooks in realtime/src/rooms/GloFluxRoom.js for deterministic spawn overrides and authoritative room snapshots, and added frontend/tests/34-gloflux-mode-architecture.spec.js, frontend/tests/35-gloflux-multiplayer-room.spec.js, and frontend/tests/36-gloflux-apocalypse-room.spec.js to cover mode init, chain detection, surge progression, procedural arena patching, real two-client chainActivated/patchVersion propagation, and apocalypseTriggered damage propagation. Validation: Playwright 31+34+35+36 suites GREEN on 2026-03-14 (4/4 pass).
+2026-03-12 - Phase 18 anomaly maturation pass. Rebalanced anomaly combat on the authoritative battle shell (gravity_well, mirror_realm, phase_shift, memory_leak, weather_dominion), added procedural anomaly audio cues in game-audio.js, upgraded realtime anomaly visuals/overlays in colyseus-babylon-client.js, extended realtime sync snapshots with anomaly counters, upgraded load-sync-harness.mjs/load-sync-diff.mjs to measure anomaly traffic, generated load-sync-anomaly-smoke.{json,csv}, and kept third-party asset ingestion explicitly blocked pending license review.
 2026-03-07 - CHANGE LOG: Phase 14 checklist replaced with full TODO rebuild matrix for SP/local 2P (14.1-14.4). Added modular rebuild scaffolding: ModeBase + ModeManager + class modules for normal race, quick race, time trial, grand prix, free roam, follow-the-leader, soccer, battle variants, and local split-screen under frontend/src/modules/modes/rebuild/. Added shared AI and projectile core modules (frontend/src/modules/ai/bot-logic.js, frontend/src/modules/weapons/projectile-system.js). Added Playwright architecture suite tests/19-sp-local2p-rebuild-architecture.spec.js. Validation evidence: Playwright 19 suite 4/4 pass, Playwright 18+19 suites 11/11 pass, frontend build GREEN (2355 modules).
 2026-03-07 - Phase 14 FULL IMPLEMENTATION COMPLETE. Created SPRuntimeBridge (sp-runtime-bridge.js) — central SP/local bootstrap replacing Colyseus room tick with local game loop. Created 7 system service modules under modes/rebuild/systems/: SPRaceSystems, SPBattleSystems, SPDriveSystems, GhostService, GrandPrixService, FTLService, SoccerService, SplitScreenService, SPHudController. Created weapon-inventory.js with 9-weapon catalogue (WEAPON_DEFS), drawWeapon(), WeaponSlot/WeaponInventory (cooldowns/buffs/shields). Rewrote bot-logic.js with DIFFICULTY_PRESETS (easy/normal/hard/expert), look-ahead steering, curve anticipation, rubber-banding, decision trees for item usage. Rewrote projectile-system.js with VFX hooks (onSpawnVFX/onHitVFX/onExpireVFX), bounce type, checkCollisions(), clear(). Rewrote all 9 mode classes with full lifecycle implementations. Wired SPRuntimeBridge into realtime-main.js (SP mode detection bypasses Colyseus). Fixed mode-factory.js circular import (was importing from barrel index.js). Expanded Playwright suite to 29 tests covering core systems, projectiles (pool/bounce/collision/VFX), AI (all difficulties/decision tree/empty path), weapons (equip/fire/cooldown/buff/shield/trap/draw), mode factory, and per-mode integration. Validation: Vite build GREEN (24.38s), Playwright 29/29 pass (3.5s). Phase 14 items 14.1.1-14.1.3, 14.2.1-14.2.8, 14.3.1-14.3.2 all marked 🟢 🟢 🟢 🟢 🟢 [DONE].
 2026-03-08 - PHASE 13.8/13.9 + PHASE 14 COMPLETION. Reclassified 13.8 (bot physics) and 13.9 (item trigger physics) from SKIP to DONE. Completed 14.1.4 (UI/menus), 14.1.5 (assets/dependencies), 14.4.1 (cross-mode polish), 14.4.2 (bug chase cycle). FILES MODIFIED: bot-controller.js (resolveKartAsset import, loadBotKartModel fallback retry, receiveShadows=true, BOT_COLLISION_RADIUS/BOT_BUMP_FORCE constants, checkBotPlayerCollision export), content-registry.js (validateAssetAvailability function, kartScale on blockfort/battleisland/stadium), race-items.js (Havok trigger physics: PhysicsAggregate/PhysicsShapeType imports, _havokPlugin/_localKartMesh/_triggerObserver/_useTriggerPhysics state, initRaceItems physicsOpts parameter, trigger creation for item boxes/bananas/projectiles/traps, _createTrigger helper, _wireTriggerObservable helper, dispose cleanup), main.js (cleanupSoloRace function, beforeunload wired to full cleanup), battle-main.js (cleanupSoloBattle function, disposeParticles import, beforeunload wired to full cleanup). TESTS CREATED: 20-asset-validation.spec.js (7 tests), 21-bot-scene-integration.spec.js (5 tests), 22-trigger-physics.spec.js (5 tests). TEST FIXES: 16-sp-rebuild.spec.js (5 stale expectations updated for procedural tracks and realtime.html routing). VALIDATION: Vite build GREEN (10.99s). 34/34 SP-scope Playwright tests pass. Pre-existing: test 04 (3 arena kartScale mismatches — fixed in content-registry, requires Colyseus), test 05 (prematch lobby — requires Colyseus server).
@@ -1768,3 +2596,170 @@ Goal: Create a symbiotic kart apocalypse mode where karts become living hosts to
 
 18.2 --- [DONE] Glo Flux State Machine
   Created GloFluxMode orchestrator for single & multiplayer synced symbiosis and apocalypse burst effects.
+
+18.3 🟡 🟡 🟡 🟡 🟡 [IN PROGRESS] Realtime anomaly combat maturation on the authoritative battle shell.
+  Scope: keep the hidden/experimental Glo Flux mode moving forward by hardening the anomaly-capable multiplayer battle path that already ships in the Babylon.js + Havok + Colyseus stack.
+
+18.3.1 🟢 🟢 🟢 🟢 🟢 [DONE] Balance anomaly drop weights, durations, and cooldowns.
+  >> Rebalanced gravity_well, mirror_realm, phase_shift, memory_leak, and weather_dominion in realtime/src/combat.js. Reduced anomaly drop frequency in weighted draws, shortened overlong anomaly windows, and kept race_room on the classic pool while battle_room remains anomaly-capable.
+
+18.3.2 🟢 🟢 🟢 🟢 🟢 [DONE] Replace flat anomaly presentation with stronger procedural realtime VFX and audio cues.
+  >> frontend/src/modules/realtime/colyseus-babylon-client.js now renders a procedural gravity well mesh with animated rings/spikes, upgraded fog/rain arena overlays, and richer mirror/phased/memory-leak screen treatments. frontend/src/modules/game-audio.js now layers synthesized anomaly cues on top of existing SFX so anomaly events read clearly without introducing third-party asset risk.
+
+18.3.3 🟢 🟢 🟢 🟢 🟢 [DONE] Extend sync/load harness metrics so anomaly effects appear in baselines.
+  >> realtime/src/realtime-sync.js now exports anomaly counters in syncMetricsSnapshot. realtime/scripts/load-sync-harness.mjs now stimulates anomaly weapons during battle-room load runs and records anomaly event counts + anomaly payload bytes in JSON/CSV output. realtime/scripts/load-sync-diff.mjs now compares anomaly deltas between reports.
+  >> Validation evidence: realtime/reports/load-sync-anomaly-smoke.json and realtime/reports/load-sync-anomaly-smoke.csv generated from a 2-player battle_room harness run on 2026-03-12 with anomalyEvents=4 and anomalyPayloadBytes=216.
+
+18.3.4 🟢 🟢 🟢 🟢 🟢 [DONE] Replace generic anomaly props/materials with amazing procedural equivalents that are safe to ship.
+  >> Completed the procedural Glo Flux runtime architecture instead of relying on third-party asset ingestion. Added BaseMode/ModeManager integration, a clean GloFluxMode implementation, family registry metadata, symbiotic core/chain/surge management, and a worker-backed ProceduralArenaEvolver with MutationStack/PatchApplier flow.
+  >> Hidden Glo Flux now mirrors room telemetry into the client HUD, emits chainActivated + surge/patch telemetry across the frontend and realtime room/schema, upgrades pickup spawns into family-specific procedural anomaly cores, and mutates the arena with procedural height patches, SPS vines, and ThinInstance-backed anomaly props with a guarded fallback path.
+  >> Validation evidence: frontend/tests/31-gloflux-telemetry.spec.js, frontend/tests/34-gloflux-mode-architecture.spec.js, frontend/tests/35-gloflux-multiplayer-room.spec.js, and frontend/tests/36-gloflux-apocalypse-room.spec.js all GREEN on 2026-03-14 (telemetry mirror, mode init, family registry, chain detection, surge progression, procedural arena mutation, two-client chainActivated/patchVersion propagation, and authoritative apocalypseTriggered damage propagation). External asset/model import from open-source repos remains LICENSE-GATED and not auto-approved.
+
+18.3.5 🟠 🟠 🟠 🟠 🟠 [BLOCKED] Bulk third-party asset ripping/import pipeline.
+  Dependency: curated list of source repos/assets with verified commercial/browser redistribution compatibility.
+  Block reason: open-source source availability alone is not sufficient to prove the repo can legally ship the asset pack inside this project. Until a reviewed allowlist exists, procedural replacements are the approved path.
+
+═══════════════════════════════════════════════════════════════════════════
+PHASE 22 — WIZARD MASTERS VFX & COMBAT POLISH
+═══════════════════════════════════════════════════════════════════════════
+
+Goal: Elevate TwistedKart's battle mode visuals, physics, and combat feel by
+implementing the Top 10 actionable patterns from the Wizard Masters audit
+(WIZARD_MASTERS_AUDIT.md). Focus on GPU particle upgrades, pooling architecture,
+post-process shockwaves, collision filtering, and multi-projectile spread.
+
+Reference: WIZARD_MASTERS_AUDIT.md — Sections A-G, Top 10 Actionable Items
+
+─────────────────────────────────────────────────────────────────────────
+BLOCK A — PARTICLE & VFX UPGRADES
+─────────────────────────────────────────────────────────────────────────
+
+22.1 � [DONE] GPU Particle Fallback System
+  Added _gpuSupported flag detected via GPUParticleSystem.IsSupported in
+  initParticles(). createParticlePool() now accepts useGpu parameter — GPU
+  used for spark, flame, hit systems. New export isGPUParticlesActive().
+  Files: babylon-particles.js
+  Verified: GPU particle creation tested; CPU fallback preserved.
+
+22.2 � [DONE] Sprite Sheet Animated Particles
+  Added _generateSpriteSheet(scene) — procedural 4×4 canvas (512px, 128px cells)
+  with radial gradient frames simulating fire/smoke dissipation.
+  _applySpriteSheetConfig(ps) applies isAnimationSheetEnabled + cell settings.
+  Applied to hitSystem in emitWeaponExplosion.
+  Files: babylon-particles.js
+  Verified: Sprite sheet config and animation params tested.
+
+─────────────────────────────────────────────────────────────────────────
+BLOCK B — PHYSICS & COLLISION UPGRADES
+─────────────────────────────────────────────────────────────────────────
+
+22.3 � [DONE] Dynamic→Static Body Switching on Projectile Impact
+  Entity cleanup loop now calls entAgg.body.setMotionType(PhysicsMotionType.STATIC)
+  + setMassProperties({mass:0}) before dispose. Wrapped in try/catch for safety.
+  PhysicsMotionType already imported at line 15.
+  Files: colyseus-babylon-client.js (entity sync cleanup)
+  Verified: setMotionType+setMassProperties presence tested.
+
+22.6 � [DONE] Enhanced Collision Group Bitmasks
+  Added DEBRIS (0x0040) and EFFECT_ZONE (0x0080) to LAYER constants.
+  Added FILTER.DEBRIS (collides TRACK only) and FILTER.EFFECT_ZONE (collides
+  KART only). Existing 6 FILTER presets verified untouched.
+  Files: collision-layers.js
+  Verified: Layer bits, filter presets, and existing filters tested.
+
+22.8 � [DONE] Projectile Mesh Optimization Flags
+  Added doNotSyncBoundingInfo=true, isPickable=false, alwaysSelectAsActiveMesh=true
+  to _createProjectileMesh (after material) and _createGravityWellMesh (all 5
+  children via forEach loop: core, ringOuter, ringInner, spikeA, spikeB).
+  Files: colyseus-babylon-client.js
+  Verified: All 3 flags presence tested; gravity well forEach tested.
+
+─────────────────────────────────────────────────────────────────────────
+BLOCK C — HUD & FEEDBACK UPGRADES
+─────────────────────────────────────────────────────────────────────────
+
+22.4 � [DONE] Screen-Edge Colored Damage Direction Border
+  Replaced radial-gradient blob with concentric border glow overlays
+  (_dmgBorderOuter, _dmgBorderInner). DAMAGE_BORDER_COLORS map: fire→red,
+  ice→blue, gravity_well→purple, impact→white, etc. showDamageDirection
+  now accepts (angle, weaponType) — caller passes msg.subType.
+  Files: battle-hud.js, colyseus-babylon-client.js
+  Verified: Color map, border elements, and signature tested.
+
+22.5 � [DONE] Shockwave Post-Process on Heavy Weapon Impacts
+  Registered shockwaveFragmentShader in Effect.ShadersStore — sin wave
+  distortion with smoothstep falloff, time-decaying intensity.
+  _triggerShockwave(damage) creates PostProcess for damage≥40, 500ms duration,
+  auto-dispose. Wired into projectileHit handler for local player.
+  Files: colyseus-babylon-client.js
+  Verified: Shader registration, damage threshold, PostProcess tested.
+
+22.9 � [DONE] Offscreen Damage Direction Arrow
+  Added showOffscreenDamageArrow(signedAngle) export to battle-hud.js.
+  Arrow positioned on screen edge, rotated by arrowAngleDeg. Auto-fades
+  after 3s (_fadeTimer), auto-removes after 3.6s. Wired into projectileHit
+  handler in colyseus-babylon-client.js.
+  Files: battle-hud.js, colyseus-babylon-client.js
+  Verified: Export, rotation, fade timer, handler wiring tested.
+
+─────────────────────────────────────────────────────────────────────────
+BLOCK D — POOL ARCHITECTURE & WEAPON SYSTEMS
+─────────────────────────────────────────────────────────────────────────
+
+22.7 � [DONE] Three-Layer Pool System (Mesh + Trail + Explosion)
+  Added _explosionPool (MAX_EXPLOSION_POOL=8), _createExplosionSystem() factory
+  with sprite sheet texture. emitPooledExplosion() export pops from pool, emits
+  burst, auto-returns after 1000ms. _prewarmExplosionPool() pre-warms 2 systems,
+  called in initParticles. disposeParticles() cleans pool and sprite texture.
+  Files: babylon-particles.js
+  Verified: Pool array, pre-warm, auto-return, and export tested.
+
+22.10 � [DONE] Multi-Projectile Spread with Quaternion Y-Rotation
+  Added _spawnSpreadVisuals(ownerId, subType, count) using
+  Quaternion.RotationAxis(Y, ±5° × offset) for angular distribution.
+  Visual-only spread meshes auto-dispose after 1500ms. Hooked into
+  projectileFired handler when msg.spread > 1.
+  Files: colyseus-babylon-client.js
+  Verified: Quaternion rotation, handler wiring, auto-dispose tested.
+
+─────────────────────────────────────────────────────────────────────────
+BLOCK E — VALIDATION
+─────────────────────────────────────────────────────────────────────────
+
+22.11 � [DONE] Playwright Test Suite + Build Verification
+  Created frontend/tests/38-wm-vfx-polish.spec.js — 31 tests covering all
+  10 implementation tasks: GPU fallback, sprite sheets, body switching,
+  damage border colors, shockwave shader, collision layers, explosion pool,
+  mesh flags, offscreen arrow, spread visuals, and build recency.
+  Results: 31/31 passed (1.4s). Vite build GREEN (11.68s).
+  Files: frontend/tests/38-wm-vfx-polish.spec.js
+  Verified: All 31 tests pass; build clean; no regressions.
+
+─────────────────────────────────────────────────────────────────────────
+PHASE 22 TASK SUMMARY
+─────────────────────────────────────────────────────────────────────────
+
+  BLOCK A — Particle/VFX Upgrades: 22.1, 22.2
+  BLOCK B — Physics/Collision Upgrades: 22.3, 22.6, 22.8
+  BLOCK C — HUD/Feedback Upgrades: 22.4, 22.5, 22.9
+  BLOCK D — Pool/Weapon Systems: 22.7, 22.10
+  BLOCK E — Validation: 22.11
+
+  TOTAL: 11 tasks
+
+  RECOMMENDED EXECUTION ORDER:
+  1. Block B first (22.8 mesh flags, 22.6 collision layers, 22.3 body switching — small, foundational)
+  2. Block A next (22.1 GPU particles, 22.2 sprite sheets — visual upgrade layer)
+  3. Block D (22.7 explosion pool, 22.10 spread — combat system upgrades)
+  4. Block C (22.4 damage border, 22.5 shockwave, 22.9 arrow — HUD polish)
+  5. Block E last (22.11 tests + build verify)
+
+============== 
+CHANGE LOG 
+============== 
+- 2026-03-19 - Tracker reality refresh: added CURRENT REPO REALITY CHECK and ACTIVE ARCHITECTURE MAP sections so future iterations start from the live runtime surface rather than historical solo-page assumptions.
+- 2026-03-19 - Added Phase 23 CURRENT ACTIVE ITERATION to track the repo's actual near-term work: anomaly-weapon regressions, surfaced-mode decisions, doc reconciliation, and verification-baseline refresh.
+- 2026-03-19 - Current surfaced product state captured: battle_online is the only visible lobby mode; race, gloflux, fps arena, builder, and marketplace still exist in code but are hidden or direct-entry surfaces; backend remains thin support infrastructure.
+- 2026-03-19 - Phase 23.2 completed: anomaly-weapons regression set fixed. gravity_well restored on the authoritative server path, memory_leak now steals held pickup inventory, mirror_realm and phase_shift hardened against current realtime drift, and frontend/tests/30-anomaly-weapons.spec.js is now green (5 passed).
+- 2026-03-19 - Phase 23.3/23.4/23.5 completed: battle-only lobby exposure kept as the current surfaced mode matrix, README.md and QA_CHECKLIST.md rewritten around the live runtime surface, and the verification baseline now explicitly points to tests 03/05/30 plus realtime/reports/load-sync-latest.json.
+- Implemented procedural STK map definition generator

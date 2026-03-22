@@ -1,0 +1,14 @@
+
+> frontend@0.0.0 prepreview
+> npm run prepare:havok
+
+
+> frontend@0.0.0 prepare:havok
+> node scripts/prepare-havok-wasm.mjs
+
+[prepare-havok-wasm] Copied to C:\Users\laptop\twistedkart\frontend\public\havok\HavokPhysics.wasm
+
+> frontend@0.0.0 preview
+> vite preview --host 127.0.0.1 --port 4173
+
+  [32m➜[39m  [1mLocal[22m:   [36mhttp://127.0.0.1:[1m4173[22m/[39m

@@ -103,13 +103,30 @@ function _swatter(scene) {
 // ── Pickup/Item Models ──────────────────────────────────────────────────────
 
 function _itemBox(scene) {
-  const box = MeshBuilder.CreateBox('item-box', { size: 1.2 }, scene);
-  const mat = _glow(scene, 'item-box-mat', 0.9, 0.75, 0.1, 0.5);
-  mat.alpha = 0.85;
-  box.material = mat;
-  const inner = MeshBuilder.CreateBox('item-inner', { size: 0.4 }, scene);
-  inner.material = _glow(scene, 'item-inner-mat', 0.1, 0.1, 0.4, 0.6);
+  // Enhanced MK-style question block with holographic glow
+  const box = MeshBuilder.CreateBox('item-box', { size: 1.5 }, scene);
+  const boxMat = new StandardMaterial('item-box-mat', scene);
+  boxMat.diffuseColor = new Color3(0.12, 0.35, 0.85);
+  boxMat.emissiveColor = new Color3(0.12, 0.45, 0.95);
+  boxMat.specularColor = new Color3(0.6, 0.6, 0.8);
+  boxMat.specularPower = 64;
+  boxMat.alpha = 0.82;
+  boxMat.backFaceCulling = false;
+  box.material = boxMat;
+
+  // Wireframe edge overlay
+  const wireBox = MeshBuilder.CreateBox('item-wire', { size: 1.54 }, scene);
+  wireBox.material = _emissiveOnly(scene, 'item-wire-mat', 0.4, 0.75, 1.0, 0.7);
+  wireBox.material.wireframe = true;
+  wireBox.material.alpha = 0.5;
+  wireBox.parent = box;
+
+  // Inner glow core
+  const inner = MeshBuilder.CreateSphere('item-inner', { diameter: 0.6, segments: 8 }, scene);
+  inner.material = _emissiveOnly(scene, 'item-inner-mat', 0.9, 0.85, 0.3, 0.8);
+  inner.material.alpha = 0.7;
   inner.parent = box;
+
   return box;
 }
 

@@ -543,45 +543,6 @@ function generateSimpleNavmesh(spline) {
 // ── Public API ──────────────────────────────────────────────────────────────
 
 /**
- * Generate the Glo Circuit demo course (race track variant).
- * @param {BABYLON.Scene} scene - Scene with Havok physics enabled
- * @param {object} [opts]
- * @param {number} [opts.laps=3]
- * @returns {{ root: TransformNode, trackData: object }}
- */
-export function generateDemoCourse(scene, opts = {}) {
-  if (_lastRoot) {
-    _lastRoot.getChildMeshes().forEach(m => m.dispose());
-    _lastRoot.dispose();
-    _lastRoot = null;
-  }
-
-  const seed = seedHash('glo_circuit');
-  const rand = mulberry32(seed);
-  const laps = opts.laps || 3;
-
-  const root = new TransformNode('demoCourseRoot', scene);
-  const spline = sampleSpline(DEMO_CONTROL_POINTS, SPLINE_SAMPLES);
-  const mats = createMaterials(scene);
-
-  buildRoadMesh(scene, root, spline, mats);
-  buildWalls(scene, root, spline, mats);
-  buildStartFinish(scene, root, spline, mats);
-  buildBoostPads(scene, root, spline, mats);
-  buildTerrain(scene, root, mats);
-  buildDecorations(scene, root, spline, rand);
-
-  const trackData = extractTrackData(spline, laps);
-  buildPowerUpBoxes(scene, root, trackData.items, mats);
-  createKillPlane(scene);
-
-  console.log(`[demo-course] Generated Glo Circuit (${SPLINE_SAMPLES} points, ${trackData.checkpoints.length} checkpoints, ${trackData.items.length} items)`);
-
-  _lastRoot = root;
-  return { root, trackData, theme: 'glo' };
-}
-
-/**
  * Generate the Glo Arena demo course (battle arena variant).
  * Reuses the same terrain/track but provides arena-specific data.
  * @param {BABYLON.Scene} scene
@@ -642,14 +603,6 @@ export function generateDemoArena(scene, opts = {}) {
 
   _lastRoot = root;
   return { root, arenaData, theme: 'glo' };
-}
-
-/**
- * Generate track data only (no geometry) for pre-caching.
- */
-export function generateDemoCourseDataOnly(laps = 3) {
-  const spline = sampleSpline(DEMO_CONTROL_POINTS, SPLINE_SAMPLES);
-  return extractTrackData(spline, laps);
 }
 
 /**

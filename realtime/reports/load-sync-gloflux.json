@@ -1,0 +1,60 @@
+{
+  "label": "gloflux-telemetry",
+  "generatedAt": "2026-03-13T13:02:40.346Z",
+  "endpoint": "ws://127.0.0.1:2567",
+  "roomName": "gloflux",
+  "liveDurationMs": 22000,
+  "scenarios": [
+    2
+  ],
+  "results": [
+    {
+      "players": 2,
+      "roomName": "gloflux",
+      "endpoint": "ws://127.0.0.1:2567",
+      "patchBytes": {
+        "avg": 89.71,
+        "p95": 93,
+        "max": 142,
+        "samples": 631
+      },
+      "fullStateBytes": {
+        "avg": 727.5,
+        "max": 797,
+        "samples": 2
+      },
+      "rttMs": {
+        "avg": 1.32,
+        "p95": 3,
+        "max": 3,
+        "samples": 22
+      },
+      "serverMetrics": {
+        "avgTickDriftMs": 0,
+        "avgInputAgeMs": 27.89,
+        "maxInputAgeMs": 68,
+        "staleInputDrops": 0,
+        "outOfOrderInputDrops": 0,
+        "anomalyProjectilesFired": 0,
+        "anomalyProjectileHits": 0,
+        "anomalyEffectsApplied": 0,
+        "arenaEffectsApplied": 0,
+        "apocalypseBursts": 0,
+        "anomalyCoreCollections": 15,
+        "anomalyChainBursts": 14,
+        "patchRateMs": 16.67,
+        "authoritative": false,
+        "samples": 11
+      },
+      "anomalyEvents": {
+        "total": 0,
+        "payloadBytes": 0,
+        "projectileFired": 0,
+        "projectileHit": 0,
+        "effectApplied": 0,
+        "arenaEffectApplied": 0,
+        "apocalypseTriggered": 0
+      }
+    }
+  ]
+}
