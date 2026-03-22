@@ -1,6 +1,6 @@
-# TwistedKart — Full-Stack Deployment Guide
+# GLO KARTS — Full-Stack Deployment Guide
 
-TwistedKart consists of three services that must be deployed and configured together:
+GLO KARTS consists of three services that must be deployed and configured together:
 
 | Service | Technology | Default Port | Recommended Host |
 |---------|-----------|-------------|-----------------|
@@ -58,7 +58,7 @@ SECRET_KEY=your-long-random-secret-key-here
 DEBUG=False
 
 # Allowed Hosts (optional - defaults to .koyeb.app)
-ALLOWED_HOSTS=GLOKarts.koyeb.app,www.GLOKarts.koyeb.app
+ALLOWED_HOSTS=glo-karts.koyeb.app,www.glo-karts.koyeb.app
 
 # CORS (if frontend is on different domain)
 CORS_ALLOWED_ORIGINS=https://your-frontend.com
@@ -125,11 +125,11 @@ python manage.py runserver 8002
 
 ```bash
 cd realtime
-docker build -t twistedkart-realtime .
+docker build -t glo-karts-realtime .
 docker run -d -p 2567:2567 \
   -e NODE_ENV=production \
   -e CORS_ORIGIN=https://your-frontend.vercel.app \
-  twistedkart-realtime
+  glo-karts-realtime
 ```
 
 ### Platform Deployment
