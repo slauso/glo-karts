@@ -1,7 +1,9 @@
-// Simple battle health system for Twisted Kart battle mode
+// Simple battle health system for GLO KARTS battle mode
 // Keeps logic isolated from race code
 
-export function createHealthSystem({ ammo, getCarBody, onRespawn, maxHealth = 100, invulnMs = 2000 }) {
+import { resetKart } from '../havok-physics.js';
+
+export function createHealthSystem({ onRespawn, maxHealth = 100, invulnMs = 2000 }) {
   let health = maxHealth;
   let invulnerable = false;
 
@@ -25,23 +27,8 @@ export function createHealthSystem({ ammo, getCarBody, onRespawn, maxHealth = 10
   }
 
   function respawn() {
-    const body = getCarBody && getCarBody();
-    if (!ammo || !body) return { health, invulnerable };
-
-    // Zero velocities
-    const zero = new ammo.btVector3(0,0,0);
-    body.setLinearVelocity(zero);
-    body.setAngularVelocity(zero);
-
-    // Center spawn; game can override via onRespawn
-    const t = new ammo.btTransform();
-    t.setIdentity();
-    t.setOrigin(new ammo.btVector3(0, 3, 0));
-    const q = new ammo.btQuaternion(0, 0, 0, 1);
-    t.setRotation(q);
-    body.setWorldTransform(t);
-    const ms = body.getMotionState && body.getMotionState();
-    if (ms) ms.setWorldTransform(t);
+    // Reset kart to center spawn; game can override via onRespawn
+    resetKart({ x: 0, y: 3, z: 0 }, 0);
 
     // Callback for custom spawn behavior/FX
     if (onRespawn) onRespawn();
@@ -49,10 +36,6 @@ export function createHealthSystem({ ammo, getCarBody, onRespawn, maxHealth = 10
     health = maxHealth;
     invulnerable = true;
     setTimeout(() => { invulnerable = false; }, invulnMs);
-
-    ammo.destroy(zero);
-    ammo.destroy(t);
-    ammo.destroy(q);
 
     return { health, invulnerable };
   }

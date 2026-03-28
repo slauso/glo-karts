@@ -14,7 +14,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Bungee&family=Exo+2:wght@400;700&display=swap" rel="stylesheet">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.min.js"></script>
-  <script src="https://kit.fontawesome.com/1ab8f48e0a.js" crossorigin="anonymous"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" integrity="sha512-Evv84Mr4kqVGRNSgIGL/F/aIDqQb7xQ2vcrdIwxfjThSH8CSR7PBEakCr51Ck+w+/U6swU2Im1vVX0SVk9ABhg==" crossorigin="anonymous" referrerpolicy="no-referrer" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Funnel+Sans:ital,wght@0,300..800;1,300..800&family=Poppins:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900&display=swap" rel="stylesheet">
@@ -106,6 +106,13 @@
 
           <!-- Inline Setup Section — appears below mode cards when a mode is selected -->
           <div id="inline-setup" class="inline-setup hidden">
+            <!-- Back to Main Menu Header -->
+            <div class="setup-header">
+              <button id="back-to-modes-btn" class="glass-back-btn">
+                <i class="fas fa-chevron-left"></i> Main Menu
+              </button>
+              <h3 id="active-mode-title" class="active-mode-title"></h3>
+            </div>
 
             <!-- Track / Arena Carousel -->
             <div class="map-selector-container">
@@ -116,14 +123,14 @@
                 <p class="track-carousel-title">SELECT TRACK</p>
                 <div class="track-nav-row">
                   <button id="track-prev-btn" class="kart-nav-btn" aria-label="Previous track">
-                    <i class="fas fa-chevron-left"></i>
+                    <svg class="nav-arrow" viewBox="0 0 24 24" fill="currentColor"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
                   </button>
                   <div class="track-name-display">
                     <span id="track-carousel-name">Pompeii Ruins</span>
                     <span id="track-carousel-index" class="track-carousel-index">1 / 3</span>
                   </div>
                   <button id="track-next-btn" class="kart-nav-btn" aria-label="Next track">
-                    <i class="fas fa-chevron-right"></i>
+                    <svg class="nav-arrow" viewBox="0 0 24 24" fill="currentColor"><path d="M8.59 16.59L10 18l6-6-6-6-1.41 1.41L13.17 12z"/></svg>
                   </button>
                 </div>
               </div>
@@ -152,40 +159,82 @@
 
             <!-- Battle Settings (Online Battle) -->
             <div id="battle-settings" class="battle-settings hidden">
-              <h3 class="battle-settings-title">BATTLE SETTINGS</h3>
-              <div class="battle-setting-group">
-                <label for="battle-type-select">Game Type</label>
-                <select id="battle-type-select">
-                  <option value="deathmatch" selected>Deathmatch</option>
-                  <option value="ctf">Capture The Flag</option>
-                </select>
+              <h3 class="battle-settings-title">BATTLE</h3>
+
+              <div class="battle-minimal-shell">
+                <!-- Game Type Cards (like MK8 battle mode picker) -->
+                <div class="battle-mode-grid" role="radiogroup" aria-label="Game type">
+                  <button type="button" class="battle-mode-card battle-preset-btn active" data-rule-preset="classic" aria-pressed="true">
+                    <span class="battle-mode-icon" aria-hidden="true">🏁</span>
+                    <span class="battle-mode-name">Kart Tag</span>
+                    <span class="battle-mode-desc">Free-for-all battle</span>
+                  </button>
+                  <button type="button" class="battle-mode-card battle-preset-btn" data-rule-preset="golden-gun" aria-pressed="false">
+                    <span class="battle-mode-icon" aria-hidden="true">👑</span>
+                    <span class="battle-mode-name">Golden Kart</span>
+                    <span class="battle-mode-desc">One hit, one win</span>
+                  </button>
+                  <button type="button" class="battle-mode-card battle-preset-btn" data-rule-preset="mayhem" aria-pressed="false">
+                    <span class="battle-mode-icon" aria-hidden="true">🚩</span>
+                    <span class="battle-mode-name">Flag Frenzy</span>
+                    <span class="battle-mode-desc">Team capture chaos</span>
+                  </button>
+                </div>
+
+                <!-- Quick Tune (players + win target) -->
+                <div class="battle-tune-bar">
+                  <label class="battle-tune-item" for="battle-max-players-range">
+                    <span class="battle-tune-head">
+                      <span class="battle-tune-label">Players</span>
+                      <output id="battle-max-players-output" class="battle-tune-num" for="battle-max-players-range">8</output>
+                    </span>
+                    <input id="battle-max-players-range" class="battle-tune-slider" type="range" min="2" max="8" step="1" value="8" />
+                  </label>
+                  <label class="battle-tune-item" for="battle-score-limit-range">
+                    <span class="battle-tune-head">
+                      <span id="battle-score-limit-unit" class="battle-tune-label">Knockouts</span>
+                      <output id="battle-score-limit-output" class="battle-tune-num" for="battle-score-limit-range">5</output>
+                    </span>
+                    <input id="battle-score-limit-range" class="battle-tune-slider" type="range" min="1" max="20" step="1" value="5" />
+                  </label>
+                </div>
               </div>
+
               <input type="hidden" id="battle-arena-select" value="battleisland" />
-              <div class="battle-setting-group">
-                <label for="battle-max-players">Player Cap</label>
-                <select id="battle-max-players">
-                  <option value="12" selected>12 Players</option>
-                </select>
-              </div>
-              <div class="battle-setting-group">
-                <label for="battle-bot-count">Bots (solo only)</label>
-                <input type="number" id="battle-bot-count" value="6" min="0" max="11" />
-              </div>
-              <div class="battle-setting-group">
-                <label class="battle-settings-title">WEAPON LOADOUT</label>
-                <div id="weapon-loadout-row" class="weapon-loadout-row"></div>
-              </div>
-              <div class="battle-setting-group">
-                <label class="toggle-label">
-                  <input type="checkbox" id="battle-collision-damage" checked>
-                  <span>Collision Damage</span>
-                </label>
-              </div>
-              <div class="battle-setting-group">
-                <label for="battle-score-limit">Score / KOs to Win</label>
-                <input type="number" id="battle-score-limit" value="5" min="1" max="50" />
-              </div>
-              <p class="battle-hint">All players ready up, then host starts the match.</p>
+              <select id="battle-type-select" class="hidden" aria-hidden="true" tabindex="-1">
+                <option value="deathmatch" selected>Kart Tag</option>
+                <option value="ctf">Capture The Flag</option>
+              </select>
+
+              <select id="battle-max-players" class="hidden" aria-hidden="true" tabindex="-1">
+                <option value="2">2 Players</option>
+                <option value="3">3 Players</option>
+                <option value="4">4 Players</option>
+                <option value="5">5 Players</option>
+                <option value="6">6 Players</option>
+                <option value="7">7 Players</option>
+                <option value="8" selected>8 Players</option>
+              </select>
+              <input id="battle-score-limit" class="hidden" aria-hidden="true" tabindex="-1" type="number" value="5" min="1" max="50" />
+              <input id="battle-bot-count" class="hidden" aria-hidden="true" tabindex="-1" type="number" value="0" min="0" max="11" />
+
+              <input id="battle-collision-damage" class="hidden" aria-hidden="true" tabindex="-1" type="checkbox" checked />
+              <input id="battle-radar-enabled" class="hidden" aria-hidden="true" tabindex="-1" type="checkbox" checked />
+              <input id="battle-auto-aim" class="hidden" aria-hidden="true" tabindex="-1" type="checkbox" checked />
+              <input id="battle-random-spawns" class="hidden" aria-hidden="true" tabindex="-1" type="checkbox" checked />
+              <input id="battle-power-weapons" class="hidden" aria-hidden="true" tabindex="-1" type="checkbox" checked />
+              <input id="battle-friendly-fire" class="hidden" aria-hidden="true" tabindex="-1" type="checkbox" />
+              <input id="battle-one-hit-kills" class="hidden" aria-hidden="true" tabindex="-1" type="checkbox" />
+
+              <select id="battle-match-length" class="hidden" aria-hidden="true" tabindex="-1">
+                <option value="8" selected>8 min</option>
+              </select>
+              <select id="battle-health-multiplier" class="hidden" aria-hidden="true" tabindex="-1">
+                <option value="1" selected>100% Standard</option>
+              </select>
+              <select id="battle-respawn-time" class="hidden" aria-hidden="true" tabindex="-1">
+                <option value="4" selected>4s Standard</option>
+              </select>
             </div>
 
             <!-- GloFLUX Settings -->
@@ -246,14 +295,14 @@
             <p class="kart-selector-title">SELECT KART</p>
             <div class="kart-nav-row">
               <button id="kart-prev-btn" class="kart-nav-btn" aria-label="Previous kart">
-                <i class="fas fa-chevron-left"></i>
+                <svg class="nav-arrow" viewBox="0 0 24 24" fill="currentColor"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
               </button>
               <div class="kart-name-display">
                 <span id="kart-name">Tux</span>
                 <span id="kart-index" class="kart-index">1 / 18</span>
               </div>
               <button id="kart-next-btn" class="kart-nav-btn" aria-label="Next kart">
-                <i class="fas fa-chevron-right"></i>
+                <svg class="nav-arrow" viewBox="0 0 24 24" fill="currentColor"><path d="M8.59 16.59L10 18l6-6-6-6-1.41 1.41L13.17 12z"/></svg>
               </button>
             </div>
             <p class="kart-selector-title">RACER NAME</p>

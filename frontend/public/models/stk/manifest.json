@@ -1,0 +1,351 @@
+{
+  "version": "1.5",
+  "generated": "2026-03-04T03:54:52.954589Z",
+  "karts": [
+    {
+      "id": "tux",
+      "name": "Tux",
+      "sizeBytes": 1345892
+    },
+    {
+      "id": "adiumy",
+      "name": "Adiumy",
+      "sizeBytes": 588316
+    },
+    {
+      "id": "nolok",
+      "name": "Nolok",
+      "sizeBytes": 1443576
+    },
+    {
+      "id": "wilber",
+      "name": "Wilber",
+      "sizeBytes": 635296
+    },
+    {
+      "id": "xue",
+      "name": "Xue",
+      "sizeBytes": 549284
+    },
+    {
+      "id": "hexley",
+      "name": "Hexley",
+      "sizeBytes": 516640
+    },
+    {
+      "id": "gavroche",
+      "name": "Gavroche",
+      "sizeBytes": 983120
+    },
+    {
+      "id": "emule",
+      "name": "Emule",
+      "sizeBytes": 1054160
+    },
+    {
+      "id": "kiki",
+      "name": "Kiki",
+      "sizeBytes": 1807836
+    },
+    {
+      "id": "beastie",
+      "name": "Godette",
+      "sizeBytes": 2641508
+    },
+    {
+      "id": "amanda",
+      "name": "Amanda",
+      "sizeBytes": 1167500
+    },
+    {
+      "id": "suzanne",
+      "name": "Suzanne",
+      "sizeBytes": 389664
+    },
+    {
+      "id": "gnu",
+      "name": "Gnu",
+      "sizeBytes": 727672
+    },
+    {
+      "id": "konqi",
+      "name": "Konqi",
+      "sizeBytes": 1145032
+    },
+    {
+      "id": "sara_the_racer",
+      "name": "Pepper",
+      "sizeBytes": 1710704
+    },
+    {
+      "id": "sara_the_wizard",
+      "name": "Sara",
+      "sizeBytes": 701780
+    },
+    {
+      "id": "puffy",
+      "name": "Puffy",
+      "sizeBytes": 674304
+    },
+    {
+      "id": "pidgin",
+      "name": "Pidgin",
+      "sizeBytes": 1792780
+    }
+  ],
+  "tracks": [
+    {
+      "id": "cocoa_temple",
+      "name": "Cocoa Temple",
+      "sizeBytes": 4136980
+    },
+    {
+      "id": "hacienda",
+      "name": "Hacienda",
+      "sizeBytes": 3291856
+    },
+    {
+      "id": "minigolf",
+      "name": "Mini Golf",
+      "sizeBytes": 3990328
+    },
+    {
+      "id": "sandtrack",
+      "name": "Sand Track",
+      "sizeBytes": 2482852
+    },
+    {
+      "id": "snowtuxpeak",
+      "name": "Snow Tux Peak",
+      "sizeBytes": 1034136
+    },
+    {
+      "id": "zengarden",
+      "name": "Zen Garden",
+      "sizeBytes": 7365220
+    },
+    {
+      "id": "lighthouse",
+      "name": "Lighthouse",
+      "sizeBytes": 7711556
+    },
+    {
+      "id": "olivermath",
+      "name": "Oliver's Math Class",
+      "sizeBytes": 2350204
+    },
+    {
+      "id": "black_forest",
+      "name": "Black Forest",
+      "sizeBytes": 8256332
+    },
+    {
+      "id": "xr591",
+      "name": "XR591",
+      "sizeBytes": 2207920
+    },
+    {
+      "id": "oasis",
+      "name": "Oasis",
+      "sizeBytes": 3263900
+    },
+    {
+      "id": "gran_paradiso_island",
+      "name": "Gran Paradiso Island",
+      "sizeBytes": 4853996
+    },
+    {
+      "id": "mines",
+      "name": "Mines",
+      "sizeBytes": 12322840
+    },
+    {
+      "id": "snowmountain",
+      "name": "Snow Mountain",
+      "sizeBytes": 893000
+    },
+    {
+      "id": "abyss",
+      "name": "Abyss",
+      "sizeBytes": 5365280
+    },
+    {
+      "id": "cornfield_crossing",
+      "name": "Cornfield Crossing",
+      "sizeBytes": 3718652
+    },
+    {
+      "id": "volcano_island",
+      "name": "Volcano Island",
+      "sizeBytes": 12010712
+    },
+    {
+      "id": "ravenbridge_mansion",
+      "name": "Ravenbridge Mansion",
+      "sizeBytes": 5869864
+    }
+  ],
+  "arenas": [
+    {
+      "id": "battleisland",
+      "name": "Battle Island",
+      "sizeBytes": 1894984
+    },
+    {
+      "id": "lasdunasarena",
+      "name": "Las Dunas Arena",
+      "sizeBytes": 2807884
+    },
+    {
+      "id": "cave",
+      "name": "Cave X",
+      "sizeBytes": 1940964
+    },
+    {
+      "id": "pumpkin_park",
+      "name": "Pumpkin Park",
+      "sizeBytes": 3222384
+    },
+    {
+      "id": "arena_candela_city",
+      "name": "Candela City",
+      "sizeBytes": 2571120
+    },
+    {
+      "id": "ancient_colosseum_labyrinth",
+      "name": "Ancient Colosseum",
+      "sizeBytes": 8748176
+    },
+    {
+      "id": "stadium",
+      "name": "The Stadium",
+      "sizeBytes": 438244
+    },
+    {
+      "id": "alien_signal",
+      "name": "Alien Signal",
+      "sizeBytes": 2453176
+    },
+    {
+      "id": "temple",
+      "name": "Temple",
+      "sizeBytes": 1469684
+    }
+  ],
+  "profiles": {
+    "lite": {
+      "karts": [
+        "tux",
+        "adiumy",
+        "nolok",
+        "wilber",
+        "xue",
+        "hexley"
+      ],
+      "tracks": [
+        "cocoa_temple",
+        "hacienda",
+        "minigolf",
+        "sandtrack",
+        "snowtuxpeak",
+        "zengarden"
+      ],
+      "arenas": [
+        "battleisland",
+        "lasdunasarena"
+      ],
+      "weaponSet": "stk-lite"
+    },
+    "balanced": {
+      "karts": [
+        "tux",
+        "adiumy",
+        "nolok",
+        "wilber",
+        "xue",
+        "hexley",
+        "gavroche",
+        "emule",
+        "kiki",
+        "beastie",
+        "amanda",
+        "suzanne"
+      ],
+      "tracks": [
+        "cocoa_temple",
+        "hacienda",
+        "minigolf",
+        "sandtrack",
+        "snowtuxpeak",
+        "zengarden",
+        "lighthouse",
+        "olivermath",
+        "black_forest",
+        "xr591",
+        "oasis",
+        "gran_paradiso_island"
+      ],
+      "arenas": [
+        "battleisland",
+        "lasdunasarena",
+        "cave",
+        "pumpkin_park"
+      ],
+      "weaponSet": "stk-classic"
+    },
+    "full": {
+      "karts": [
+        "tux",
+        "adiumy",
+        "nolok",
+        "wilber",
+        "xue",
+        "hexley",
+        "gavroche",
+        "emule",
+        "kiki",
+        "beastie",
+        "amanda",
+        "suzanne",
+        "gnu",
+        "konqi",
+        "sara_the_racer",
+        "sara_the_wizard",
+        "puffy",
+        "pidgin"
+      ],
+      "tracks": [
+        "cocoa_temple",
+        "hacienda",
+        "minigolf",
+        "sandtrack",
+        "snowtuxpeak",
+        "zengarden",
+        "lighthouse",
+        "olivermath",
+        "black_forest",
+        "xr591",
+        "oasis",
+        "gran_paradiso_island",
+        "mines",
+        "snowmountain",
+        "abyss",
+        "cornfield_crossing",
+        "volcano_island",
+        "ravenbridge_mansion"
+      ],
+      "arenas": [
+        "battleisland",
+        "lasdunasarena",
+        "cave",
+        "pumpkin_park",
+        "arena_candela_city",
+        "ancient_colosseum_labyrinth",
+        "stadium",
+        "alien_signal",
+        "temple"
+      ],
+      "weaponSet": "stk-classic"
+    }
+  }
+}

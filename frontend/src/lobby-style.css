@@ -512,7 +512,7 @@ body::before {
 
 .lens-pill {
   flex: 1;
-  padding: 8px 12px;
+  padding: 12px 16px;
   border: 1px solid var(--lg-border);
   border-top-color: rgba(255,255,255,0.18);
   border-radius: 12px;
@@ -1209,7 +1209,7 @@ body::before {
   width: 48%;
   flex: 1 1 48%;
   min-width: 0;
-  height: 100%;
+  height: calc(100% + 100px);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1233,12 +1233,12 @@ body::before {
   /* Liquid Glass — center panel with a single uniform full-card GLO wash */
   background:
     radial-gradient(
-      ellipse 135% 115% at 50% 44%,
-      rgba(var(--glo-rgb), 0.26) 0%,
-      rgba(var(--glo-rgb), 0.18) 34%,
-      rgba(var(--glo-rgb), 0.12) 62%,
-      rgba(var(--glo-rgb), 0.09) 82%,
-      rgba(var(--glo-rgb), 0.07) 100%
+      ellipse 160% 140% at 50% 40%,
+      rgba(var(--glo-rgb), 0.32) 0%,
+      rgba(var(--glo-rgb), 0.24) 25%,
+      rgba(var(--glo-rgb), 0.16) 50%,
+      rgba(var(--glo-rgb), 0.12) 72%,
+      rgba(var(--glo-rgb), 0.09) 100%
     ),
     linear-gradient(
       180deg,
@@ -1254,9 +1254,10 @@ body::before {
   border-bottom-color: rgba(0,0,0,0.15);
 
   box-shadow:
-    /* Subtle support bloom only — main uniform wash now lives in background */
-    inset 0  0  56px 20px rgba(var(--glo-rgb), 0.035),
-    inset 0 32px 96px 24px rgba(var(--glo-rgb), 0.025),
+    /* Full-card GLO wash — inset shadows fill edge-to-edge, not clipped by overflow */
+    inset 0  0  80px 36px rgba(var(--glo-rgb), 0.06),
+    inset 0 20px 120px 40px rgba(var(--glo-rgb), 0.045),
+    inset 0 -30px 100px 30px rgba(var(--glo-rgb), 0.04),
     0  1px  0   rgba(255,255,255,0.17) inset,
     0 -1px  0   rgba(0,0,0,0.21)       inset,
     0 20px 60px rgba(0,0,0,0.36),
@@ -1295,7 +1296,7 @@ body::before {
 .center-panel .kart-selector {
   transform: translate(
     calc(var(--cp-tilt-x, 0) * -0.5px),
-    calc(var(--cp-tilt-y, 0) * 0.4px)
+    calc(var(--cp-tilt-y, 0) * 0.4px - 50%)
   );
   transition: transform 0.10s linear;
   backface-visibility: hidden;
@@ -1375,7 +1376,6 @@ body::before {
   max-height: 780px;
   padding-bottom: 35%;
   overflow: visible;
-  contain: layout;
 
   /* Rotating turntable spotlight — tinted by GLO colour */
   background:
@@ -1390,6 +1390,10 @@ body::before {
       transparent 360deg
     ),
     radial-gradient(ellipse 70% 55% at 50% 70%, rgba(var(--glo-rgb), 0.18) 0%, transparent 65%);
+
+  /* Fade out bottom edge so the spotlight doesn't cut off abruptly */
+  -webkit-mask-image: linear-gradient(to bottom, #fff 0%, #fff 70%, transparent 100%);
+  mask-image: linear-gradient(to bottom, #fff 0%, #fff 70%, transparent 100%);
 
   animation: spotSpin 12s linear infinite;
   backface-visibility: hidden;
@@ -1428,12 +1432,12 @@ body::before {
   #car-model-container::after {
     content: "";
     position: absolute;
-    bottom: -18%;
-    left: 2%;
-    width: 96%;
-    height: 62%;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: 70%;
     background: radial-gradient(
-      ellipse 70% 42% at 50% 78%,
+      ellipse 80% 50% at 50% 85%,
       rgba(var(--glo-rgb), 0.34) 0%,
       rgba(var(--glo-rgb), 0.18) 38%,
       rgba(var(--glo-rgb), 0.08) 62%,
@@ -1566,7 +1570,7 @@ body::before {
 
 .icon-btn, .join-btn, .stop-btn {
   --btn-radius-local: 12px;
-  --btn-min-height-local: 38px;
+  --btn-min-height-local: 48px;
   font-size: 0.92rem;
   letter-spacing: 0.95px;
 }
@@ -1666,7 +1670,7 @@ body::before {
   font-size: 1.1rem;
   letter-spacing: 2px;
   border-radius: 14px;
-  margin-top: 6px;
+  margin-top: 31px;
   /* Liquid glass style — match kart-nav-btn aesthetic */
   background:
     linear-gradient(180deg, rgba(255,255,255,0.055) 0%, rgba(255,255,255,0.018) 100%);
@@ -2059,7 +2063,7 @@ body::before {
 input[type="text"], input[type="number"] {
   width: 100%;
   max-width: 260px;
-  padding: 9px 14px;
+  padding: 12px 14px;
   border-radius: var(--r-input);
   background: rgba(255,255,255,0.07);
   backdrop-filter: blur(14px) saturate(140%);
@@ -2090,32 +2094,38 @@ input::placeholder { color: var(--text-muted); font-size: 0.88rem; }
 /* Player name — compact field inside kart-selector */
 #player-name-input {
   width: 100%;
-  max-width: 200px;
-  padding: 6px 10px;
-  font-size: 0.78rem;
+  max-width: 260px;
+  min-height: 48px;
+  padding: 10px 14px;
+  font-size: 0.92rem;
   font-weight: 600;
-  letter-spacing: 0.5px;
-  border-radius: 8px;
-  background: rgba(255,255,255,0.06);
-  border: 1px solid rgba(255,255,255,0.12);
-  border-top-color: rgba(255,255,255,0.18);
+  letter-spacing: 0.7px;
+  border-radius: 12px;
+  background: rgba(255,255,255,0.10);
+  border: 1px solid rgba(var(--glo-rgb), 0.26);
+  border-top-color: rgba(255,255,255,0.24);
   color: #fff;
   text-align: center;
   outline: none;
   transition: border-color 0.2s, background 0.2s, box-shadow 0.2s;
-  box-shadow: 0 1px 0 rgba(255,255,255,0.04) inset, 0 2px 6px rgba(0,0,0,0.18);
+  box-shadow:
+    0 1px 0 rgba(255,255,255,0.08) inset,
+    0 0 0 1px rgba(var(--glo-rgb), 0.08),
+    0 4px 12px rgba(0,0,0,0.20);
 }
 #player-name-input:focus {
-  background: rgba(255,255,255,0.10);
-  border-color: rgba(var(--glo-rgb), 0.50);
-  box-shadow: 0 0 8px rgba(var(--glo-rgb), 0.15);
+  background: rgba(255,255,255,0.14);
+  border-color: rgba(var(--glo-rgb), 0.58);
+  box-shadow:
+    0 0 0 2px rgba(var(--glo-rgb), 0.14),
+    0 0 14px rgba(var(--glo-rgb), 0.18);
 }
 #player-name-input::placeholder {
   color: var(--text-muted);
-  opacity: 0.5;
-  letter-spacing: 1.2px;
+  opacity: 0.82;
+  letter-spacing: 1.4px;
   text-transform: uppercase;
-  font-size: 0.62rem;
+  font-size: 0.74rem;
   font-weight: 600;
   transition: opacity 0.3s ease;
 }
@@ -2136,7 +2146,7 @@ input::placeholder { color: var(--text-muted); font-size: 0.88rem; }
 .color-carousel { text-align: center; width: 100%; max-width: 320px; }
 .color-options { display: flex; justify-content: center; gap: 10px; margin: 8px 0; }
 .color-option {
-  width: 28px; height: 28px;
+  width: 36px; height: 36px;
   border-radius: 50%;
   cursor: pointer;
   transition: all 0.2s ease;
@@ -2756,6 +2766,64 @@ input::placeholder { color: var(--text-muted); font-size: 0.88rem; }
   box-shadow: var(--panel-shadow);
 }
 
+/* ── Active Mode State (Hide modes list when a mode is picked) ── */
+.simplified-left-panel:not(.mode-initial) .mode-selector-container {
+  display: none !important;
+}
+
+/* ── Inline Setup Back Button Header ── */
+.setup-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgba(255,255,255,0.1);
+}
+.glass-back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.15);
+  border-top-color: rgba(255,255,255,0.25);
+  border-radius: 10px;
+  color: var(--text-sub);
+  padding: 12px 16px;
+  font-family: var(--font-ui);
+  font-weight: 700;
+  font-size: 0.78rem;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.34,1.56,0.64,1);
+  box-shadow: 
+    inset 0 1px 0 rgba(255,255,255,0.1),
+    0 4px 10px rgba(0,0,0,0.2);
+}
+.glass-back-btn:hover {
+  background: rgba(255,255,255,0.15);
+  color: #fff;
+  border-color: rgba(255,255,255,0.4);
+  transform: translateX(-3px);
+  box-shadow: 
+    inset 0 1px 0 rgba(255,255,255,0.2),
+    0 6px 14px rgba(0,0,0,0.3);
+}
+.glass-back-btn:active {
+  transform: translateX(1px) scale(0.96);
+  box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+}
+.active-mode-title {
+  font-family: var(--font-display);
+  font-size: 0.95rem;
+  color: #fff;
+  margin: 0;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  text-shadow: 0 1px 4px rgba(0,0,0,0.8);
+}
+
 /* 2×2 mode card grid */
 .mode-cards-row {
   display: grid !important;
@@ -2798,7 +2866,7 @@ input::placeholder { color: var(--text-muted); font-size: 0.88rem; }
   padding: 1px 5px;
 }
 
-/* ── Initial landing state: 5×1 iPad-style square icons ── */
+/* ── Initial landing state: 4 full-width modes + 2 balanced tool tiles ── */
 .mode-initial .mode-selector-container {
   flex: 1 1 auto;
   display: flex;
@@ -2809,39 +2877,197 @@ input::placeholder { color: var(--text-muted); font-size: 0.88rem; }
 }
 .mode-initial .mode-cards-row {
   flex: 1;
-  grid-template-columns: 1fr !important;
-  grid-template-rows: repeat(5, 1fr);
-  gap: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  /* Give main game modes more height breathing room compared to the tool tiles row */
+  grid-template-rows: repeat(4, minmax(0, 1.15fr)) minmax(0, 0.85fr);
+  gap: 12px;
   align-content: stretch;
 }
+
+/* 🏎️ THEMATIC PORTAL STYLING FOR MODE CARDS */
+.mode-initial .mode-card[data-mode-id="quick_race"] { --portal-rgb: 255, 195, 0; }
+.mode-initial .mode-card[data-mode-id="battle_online"] { --portal-rgb: 255, 0, 70; }
+.mode-initial .mode-card[data-mode-id="local_2p_race"] { --portal-rgb: 0, 160, 255; }
+.mode-initial .mode-card[data-mode-id="gloflux_race"] { --portal-rgb: 190, 0, 255; }
+.mode-initial .mode-card[data-mode-id="track_builder"] { --portal-rgb: 0, 255, 170; }
+.mode-initial .mode-card[data-mode-id="garage"] { --portal-rgb: 255, 120, 0; }
+
 .mode-initial .mode-cards-row .mode-card {
+  --portal-rgb: 255, 255, 255; /* fallback */
+  grid-column: 1 / -1;
   min-height: 0;
   aspect-ratio: auto;
-  padding: 8px 14px;
-  gap: 10px;
-  border-radius: 14px;
-  /* Horizontal: icon left, label right */
+  padding: 10px 16px;
+  gap: 14px;
+  border-radius: 16px;
   grid-template-columns: auto 1fr auto;
   grid-template-rows: 1fr;
   justify-items: start;
   align-items: center;
   text-align: left;
-}
-.mode-initial .mode-cards-row .mode-card-icon {
-  width: 44px;
-  height: 44px;
-  border-radius: 12px;
-  font-size: 1.1rem;
   position: relative;
   overflow: hidden;
+  transition: all 0.35s cubic-bezier(0.25, 0.8, 0.25, 1);
+  
+  /* Portal base appearance */
+  background: radial-gradient(120% 100% at 50% 0%, rgba(var(--portal-rgb), 0.08) 0%, rgba(0,0,0,0.4) 100%), rgba(255,255,255,0.02);
+  border: 1px solid rgba(var(--portal-rgb), 0.15);
+  box-shadow: 
+    inset 0 1px 1px rgba(255,255,255,0.1),
+    inset 0 -5px 15px rgba(0,0,0,0.5),
+    0 4px 15px rgba(0,0,0,0.3);
 }
+
+/* Ensure text and icon stay above the background effects */
+.mode-initial .mode-cards-row .mode-card > * {
+  position: relative;
+  z-index: 2;
+}
+
+/* Disable generic .mode-card sweep effect */
+.mode-initial .mode-cards-row .mode-card::before {
+  display: none !important;
+}
+
+/* Moving speedlines / tech-grid effect inside the portal */
+.mode-initial .mode-cards-row .mode-card::after {
+  content: "";
+  position: absolute;
+  inset: -150px;
+  background: repeating-linear-gradient(45deg, transparent, transparent 15px, rgba(var(--portal-rgb), 0.04) 16px, rgba(var(--portal-rgb), 0.04) 18px);
+  opacity: 0;
+  z-index: 1;
+  transition: opacity 0.5s ease;
+  pointer-events: none;
+  animation: portalSpeedLines 15s linear infinite;
+  display: block !important;
+}
+
+.mode-initial .mode-cards-row .mode-card:hover {
+  transform: translateY(-3px) scale(1.02);
+  border-color: rgba(var(--portal-rgb), 0.5);
+  background: radial-gradient(120% 100% at 50% 0%, rgba(var(--portal-rgb), 0.18) 0%, rgba(0,0,0,0.7) 100%), rgba(var(--portal-rgb), 0.05);
+  box-shadow: 
+    inset 0 1px 1px rgba(255,255,255,0.2),
+    inset 0 0 25px rgba(var(--portal-rgb), 0.2),
+    0 8px 25px rgba(0,0,0,0.5),
+    0 0 20px rgba(var(--portal-rgb), 0.35);
+}
+
+.mode-initial .mode-cards-row .mode-card:hover::after {
+  opacity: 1;
+}
+
+.mode-initial .mode-cards-row .mode-card:active:not(.disabled) {
+  transform: scale(0.98) translateY(1px);
+  box-shadow: 0 4px 10px rgba(0,0,0,0.5), 0 0 10px rgba(var(--portal-rgb), 0.2);
+}
+
+@keyframes portalSpeedLines {
+  0% { transform: translateY(0) translateX(0); }
+  100% { transform: translateY(-50px) translateX(-50px); }
+}
+
+.mode-initial .mode-cards-row .mode-card-icon {
+  width: 52px;
+  height: 52px;
+  border-radius: 12px;
+  font-size: 1.35rem;
+  position: relative;
+  overflow: hidden;
+  transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  border: 1px solid rgba(var(--portal-rgb), 0.15);
+  background: linear-gradient(135deg, rgba(var(--portal-rgb), 0.12) 0%, rgba(var(--portal-rgb), 0.02) 100%);
+  color: rgba(var(--portal-rgb), 0.85);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.mode-initial .mode-cards-row .mode-card:hover .mode-card-icon {
+  transform: scale(1.15) rotate(4deg);
+  background: linear-gradient(135deg, rgba(var(--portal-rgb), 0.6) 0%, rgba(var(--portal-rgb), 0.15) 100%);
+  color: #fff;
+  border-color: rgba(var(--portal-rgb), 0.8);
+  box-shadow: 0 0 16px rgba(var(--portal-rgb), 0.6), inset 0 0 8px rgba(255,255,255,0.4);
+}
+
 .mode-initial .mode-cards-row .mode-card-label {
-  font-size: 0.78rem;
-  letter-spacing: 0.6px;
+  font-size: 0.88rem;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  transition: all 0.3s ease;
+  text-shadow: 0 1px 4px rgba(0,0,0,0.8);
 }
+
+.mode-initial .mode-cards-row .mode-card:hover .mode-card-label {
+  color: #fff;
+  text-shadow: 0 0 8px rgba(var(--portal-rgb), 0.6), 0 0 16px rgba(var(--portal-rgb), 0.4);
+  transform: translateX(2px);
+}
+
 .mode-initial .mode-cards-row .mode-card-badge {
   font-size: 0.52rem;
-  padding: 2px 6px;
+  padding: 3px 8px;
+  background: rgba(var(--portal-rgb), 0.2);
+  border: 1px solid rgba(var(--portal-rgb), 0.4);
+  color: #fff;
+  transition: all 0.3s ease;
+}
+
+.mode-initial .mode-cards-row .mode-card:hover .mode-card-badge {
+  background: rgba(var(--portal-rgb), 0.8);
+  box-shadow: 0 0 10px rgba(var(--portal-rgb), 0.6);
+  transform: scale(1.05);
+}
+
+/* Tool Tiles Specfic Tweaks */
+.mode-initial .mode-cards-row .mode-card.mode-card-tool {
+  grid-column: auto;
+  grid-template-columns: 1fr;
+  grid-template-rows: auto auto;
+  justify-items: center;
+  align-items: center;
+  text-align: center;
+  padding: 12px 10px 14px;
+  gap: 10px;
+  border-radius: 14px;
+  background: radial-gradient(circle at 50% 120%, rgba(var(--portal-rgb), 0.1) 0%, rgba(0,0,0,0.3) 100%), rgba(255,255,255,0.015);
+}
+
+.mode-initial .mode-cards-row .mode-card.mode-card-tool::after {
+  inset: -100px;
+  background: repeating-linear-gradient(90deg, transparent, transparent 8px, rgba(var(--portal-rgb), 0.05) 9px, rgba(var(--portal-rgb), 0.05) 11px);
+}
+
+.mode-initial .mode-cards-row .mode-card.mode-card-tool .mode-card-icon {
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  min-height: 36px;
+  border-radius: 10px;
+  font-size: 0.95rem;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.1), 0 4px 10px rgba(0,0,0,0.4);
+}
+
+.mode-initial .mode-cards-row .mode-card.mode-card-tool:hover .mode-card-icon {
+  transform: scale(1.15) translateY(-2px);
+  rotate: 0deg; /* Tool icons look better without rotation */
+}
+
+.mode-initial .mode-cards-row .mode-card.mode-card-tool .mode-card-info {
+  text-align: center;
+}
+
+.mode-initial .mode-cards-row .mode-card.mode-card-tool .mode-card-label {
+  font-size: 0.68rem;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+}
+
+.mode-initial .mode-cards-row .mode-card.mode-card-tool:hover .mode-card-label {
+  transform: translateY(-1px);
 }
 /* Per-icon animated accents in initial state */
 .mode-initial .mode-card[data-mode-id="quick_race"] .mode-card-icon::after {
@@ -2908,6 +3134,19 @@ input::placeholder { color: var(--text-muted); font-size: 0.88rem; }
 @keyframes modeIconBuildShimmer {
   0%, 100% { opacity: 0.3; transform: translateY(0); }
   50%      { opacity: 0.9; transform: translateY(-2px); }
+}
+.mode-initial .mode-card[data-mode-id="garage"] .mode-card-icon::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(circle at 50% 35%, rgba(255,210,120,0.22) 0%, rgba(255,140,0,0.10) 55%, transparent 100%);
+  animation: modeIconGarageGlow 3.2s ease-in-out infinite;
+  pointer-events: none;
+}
+@keyframes modeIconGarageGlow {
+  0%, 100% { opacity: 0.35; transform: scale(0.96); }
+  50% { opacity: 0.85; transform: scale(1.06); }
 }
 
 /* Inline setup section — scrollable area below pinned mode cards */
@@ -3137,7 +3376,7 @@ input::placeholder { color: var(--text-muted); font-size: 0.88rem; }
 
 .player-list { list-style: none; }
 .player-list li {
-  padding: 8px 12px; margin-bottom: 5px;
+  padding: 12px 16px; margin-bottom: 5px;
   border-radius: 10px; color: #fff;
   display: flex; align-items: center; gap: 8px;
   font-family: var(--font-ui); font-weight: 600; font-size: 0.82rem;
@@ -3275,13 +3514,572 @@ input::placeholder { color: var(--text-muted); font-size: 0.88rem; }
   border: 1px solid var(--lg-border);
   border-top-color: rgba(255,255,255,0.11);
   border-radius: 12px;
-  padding: 8px 10px;
+  padding: 12px 14px;
   box-shadow: 0 1px 0 rgba(255,255,255,0.045) inset, 0 4px 16px rgba(0,0,0,0.17);
 }
 .battle-settings-title { font-family: var(--font-ui); font-weight: 700; font-size: 0.6rem; letter-spacing: 2.5px; text-transform: uppercase; color: var(--text-muted); margin-bottom: 4px; }
 .battle-setting-group { display: flex; flex-direction: column; margin-bottom: 4px; gap: 1px; }
 .battle-setting-group label, .toggle-label { font-size: 0.72rem; font-weight: 600; color: var(--text-sub); display: flex; align-items: center; gap: 6px; cursor: pointer; }
-.battle-setting-group input[type="number"] { padding: 5px 10px; font-size: 0.85rem; max-width: 160px; min-height: 30px; }
+.battle-setting-group input[type="number"] { padding: 5px 10px; font-size: 0.85rem; max-width: 160px; min-height: 48px; }
+.battle-grid-core,
+.battle-grid-advanced {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.battle-summary-bar {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.battle-summary-chip {
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 24px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,0.14);
+  background: rgba(255,255,255,0.06);
+  font-size: 0.56rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.86);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 0 6px;
+}
+
+.battle-carocle {
+  margin-bottom: 10px;
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 12px;
+  padding: 8px;
+  background: linear-gradient(175deg, rgba(255,255,255,0.05), rgba(8,10,20,0.72));
+}
+
+.battle-carocle-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.battle-carocle-head h4 {
+  margin: 0;
+  font-size: 0.58rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.74);
+}
+
+.battle-carocle-track {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(92px, 1fr);
+  gap: 7px;
+  overflow-x: auto;
+  padding-bottom: 3px;
+  scroll-snap-type: x mandatory;
+}
+
+.battle-carocle-track > * {
+  scroll-snap-align: start;
+}
+
+.battle-carocle-track::-webkit-scrollbar {
+  height: 5px;
+}
+
+.battle-carocle-track::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(var(--glo-rgb), 0.35);
+}
+
+.battle-range-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.battle-range-card {
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 10px;
+  padding: 8px;
+  display: grid;
+  gap: 5px;
+  background: rgba(255,255,255,0.03);
+}
+
+.battle-range-label {
+  font-size: 0.56rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.68);
+}
+
+.battle-range-card output {
+  justify-self: start;
+  font-size: 0.76rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: #fff;
+}
+
+.battle-range-card input[type="range"] {
+  width: 100%;
+  accent-color: rgb(var(--glo-rgb));
+}
+
+.battle-view-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.battle-view-tab {
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 999px;
+  background: rgba(255,255,255,0.04);
+  color: rgba(255,255,255,0.74);
+  min-height: 28px;
+  text-align: center;
+  font-size: 0.56rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+
+.battle-view-tab.active,
+.battle-view-tab:hover {
+  border-color: rgba(var(--glo-rgb), 0.42);
+  background: rgba(var(--glo-rgb), 0.2);
+  color: #fff;
+}
+
+.battle-view-panel {
+  display: none;
+}
+
+.battle-view-panel.active {
+  display: block;
+}
+
+.battle-type-segment {
+  display: contents;
+}
+
+.battle-type-pill {
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 999px;
+  background: linear-gradient(165deg, rgba(255,255,255,0.08), rgba(10,14,28,0.95));
+  color: rgba(255,255,255,0.86);
+  text-align: center;
+  padding: 8px 10px;
+  min-height: 44px;
+  font-family: var(--font-ui);
+  cursor: pointer;
+  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.battle-type-pill:hover {
+  transform: translateY(-1px);
+  border-color: rgba(var(--glo-rgb), 0.32);
+  box-shadow: 0 8px 16px rgba(0,0,0,0.25), 0 0 14px rgba(var(--glo-rgb), 0.12);
+}
+
+.battle-type-pill.active {
+  border-color: rgba(var(--glo-rgb), 0.52);
+  box-shadow: 0 0 0 1px rgba(var(--glo-rgb), 0.28), 0 10px 18px rgba(0,0,0,0.28);
+  background: linear-gradient(165deg, rgba(var(--glo-rgb), 0.28), rgba(18, 12, 28, 0.96));
+}
+
+.battle-type-pill-title {
+  display: block;
+  font-weight: 800;
+  font-size: 0.77rem;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.battle-type-pill-sub {
+  display: none;
+}
+
+.battle-preset-row {
+  display: contents;
+}
+
+.battle-preset-btn {
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 999px;
+  background: rgba(255,255,255,0.05);
+  color: rgba(255,255,255,0.76);
+  min-height: 30px;
+  font-size: 0.58rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.battle-preset-btn:hover,
+.battle-preset-btn.active {
+  color: #fff;
+  border-color: rgba(var(--glo-rgb), 0.45);
+  background: rgba(var(--glo-rgb), 0.18);
+}
+
+.battle-inline-toggles.compact {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-bottom: 8px;
+}
+
+.battle-minimal-shell {
+  display: grid;
+  gap: 14px;
+  padding-top: 4px;
+}
+
+/* ── Game Type Cards (MK8-style mode picker) ── */
+.battle-mode-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+.battle-mode-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 132px;
+  padding: 22px 12px 18px;
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 18px;
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.06), rgba(8,11,22,0.92));
+  color: rgba(255,255,255,0.6);
+  font-family: var(--font-ui);
+  cursor: pointer;
+  text-align: center;
+  overflow: hidden;
+  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease, color 0.2s ease;
+}
+
+.battle-mode-card::after {
+  content: "";
+  position: absolute;
+  inset: -40% auto auto 50%;
+  width: 100px;
+  height: 100px;
+  transform: translateX(-50%);
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(var(--glo-rgb), 0.18), transparent 70%);
+  filter: blur(16px);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.battle-mode-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(var(--glo-rgb), 0.3);
+  box-shadow: 0 12px 28px rgba(0,0,0,0.28);
+}
+
+.battle-mode-card.active {
+  color: #fff;
+  border-color: rgba(var(--glo-rgb), 0.5);
+  background:
+    radial-gradient(circle at 50% 15%, rgba(var(--glo-rgb), 0.22), transparent 55%),
+    linear-gradient(180deg, rgba(var(--glo-rgb), 0.12), rgba(8,11,22,0.95));
+  box-shadow:
+    0 0 0 1px rgba(var(--glo-rgb), 0.18),
+    0 16px 32px rgba(0,0,0,0.3),
+    0 0 48px rgba(var(--glo-rgb), 0.08);
+}
+
+.battle-mode-card.active::after {
+  opacity: 1;
+}
+
+.battle-mode-icon {
+  font-size: 1.8rem;
+  line-height: 1;
+  filter: grayscale(0.5) brightness(0.8);
+  transition: filter 0.2s ease;
+}
+
+.battle-mode-card.active .battle-mode-icon {
+  filter: grayscale(0) brightness(1);
+}
+
+.battle-mode-name {
+  font-size: 0.82rem;
+  font-weight: 900;
+  letter-spacing: 0.02em;
+  line-height: 1.1;
+}
+
+.battle-mode-desc {
+  font-size: 0.54rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: rgba(255,255,255,0.36);
+  transition: color 0.2s ease;
+}
+
+.battle-mode-card.active .battle-mode-desc {
+  color: rgba(255,255,255,0.58);
+}
+
+/* ── Quick Tune Bar ── */
+.battle-tune-bar {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.battle-tune-item {
+  display: grid;
+  gap: 10px;
+  padding: 14px 16px;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 14px;
+  background: rgba(255,255,255,0.025);
+  cursor: pointer;
+}
+
+.battle-tune-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+
+.battle-tune-label {
+  font-size: 0.56rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.48);
+}
+
+.battle-tune-num {
+  font-size: 1.5rem;
+  font-weight: 900;
+  letter-spacing: -0.04em;
+  color: #fff;
+  line-height: 1;
+}
+
+.battle-tune-slider {
+  width: 100%;
+  margin: 0;
+  appearance: none;
+  background: transparent;
+}
+
+.battle-tune-slider::-webkit-slider-runnable-track {
+  height: 8px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(var(--glo-rgb), 0.5), rgba(255,255,255,0.12));
+}
+
+.battle-tune-slider::-webkit-slider-thumb {
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  margin-top: -4px;
+  border: none;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(var(--glo-rgb), 0.2), 0 6px 16px rgba(0,0,0,0.26);
+}
+
+.battle-tune-slider::-moz-range-track {
+  height: 8px;
+  border: none;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(var(--glo-rgb), 0.5), rgba(255,255,255,0.12));
+}
+
+.battle-tune-slider::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border: none;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(var(--glo-rgb), 0.2), 0 6px 16px rgba(0,0,0,0.26);
+}
+
+@media (max-width: 900px) {
+  .battle-mode-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .battle-mode-card {
+    min-height: 80px;
+    flex-direction: row;
+    gap: 12px;
+    padding: 14px 18px;
+  }
+
+  .battle-mode-icon {
+    font-size: 1.4rem;
+  }
+
+  .battle-mode-card .battle-mode-name,
+  .battle-mode-card .battle-mode-desc {
+    text-align: left;
+  }
+
+  .battle-tune-bar {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Old meter styles removed — replaced by .battle-tune-* above */
+
+.battle-advanced-block {
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 12px;
+  margin-bottom: 8px;
+  background: rgba(8, 12, 24, 0.55);
+  overflow: hidden;
+}
+
+.battle-advanced-block summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 8px 10px;
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.9);
+  background: linear-gradient(90deg, rgba(var(--glo-rgb), 0.20), rgba(255,255,255,0.02));
+}
+
+.battle-advanced-block summary::-webkit-details-marker { display: none; }
+
+.battle-advanced-block > *:not(summary) {
+  padding: 8px 10px 10px;
+}
+
+.battle-inline-toggles {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.toggle-label {
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 10px;
+  padding: 7px 8px;
+  background: rgba(255,255,255,0.03);
+  font-size: 0.66rem;
+}
+
+.custom-weapon-panel {
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 10px;
+  padding: 8px;
+  background: rgba(0,0,0,0.18);
+  margin-top: 6px;
+  margin-bottom: 8px;
+}
+
+.custom-weapon-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.custom-weapon-title {
+  font-size: 0.64rem;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.88);
+}
+
+.custom-weapon-count {
+  font-size: 0.58rem;
+  color: rgba(255,255,255,0.62);
+}
+
+.custom-weapon-count.warn { color: #ff7b9f; }
+
+.custom-weapon-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.custom-weapon-chip {
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 9px;
+  min-height: 34px;
+  background: rgba(255,255,255,0.03);
+  color: rgba(255,255,255,0.78);
+  font-size: 0.62rem;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 7px;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+
+.custom-weapon-chip:hover {
+  transform: translateY(-1px);
+  border-color: rgba(var(--glo-rgb), 0.38);
+}
+
+.custom-weapon-chip.active {
+  border-color: rgba(var(--glo-rgb), 0.52);
+  color: #fff;
+  background: rgba(var(--glo-rgb), 0.22);
+}
+
+.custom-weapon-icon {
+  width: 18px;
+  text-align: center;
+}
+
+.custom-weapon-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 900px) {
+  .battle-grid-core,
+  .battle-grid-advanced,
+  .battle-inline-toggles,
+  .custom-weapon-grid,
+  .battle-summary-bar,
+  .battle-view-tabs {
+    grid-template-columns: 1fr;
+  }
+
+  .battle-inline-toggles.compact,
+  .battle-range-grid {
+    grid-template-columns: 1fr;
+  }
+}
 .simplified-left-panel .kart-nav-btn { width: 34px; height: 34px; border-radius: 10px; font-size: 0.9rem; }
 
 .glass-dropdown,
@@ -3293,7 +4091,7 @@ input::placeholder { color: var(--text-muted); font-size: 0.88rem; }
 .glass-dropdown-button,
 .gloflux-dropdown-button {
   width: 100%;
-  min-height: 30px;
+  min-height: 48px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -3480,13 +4278,13 @@ input::placeholder { color: var(--text-muted); font-size: 0.88rem; }
   #join-code-input { max-width: 140px; font-size: 0.8rem; }
   .center-panel { width: 40%; position: fixed; top: 80px; left: 50%; transform: translateX(-50%) !important; height: calc(100vh - 140px); }
   input[type="text"] { padding: 8px; max-width: 180px; font-size: 0.85rem; }
-  #play-btn, #ready-btn, #start-match-btn { width: 170px; font-size: 0.88rem; padding: 10px; }
-  .color-option { width: 24px; height: 24px; }
+  #play-btn, #ready-btn, #start-match-btn { width: 200px; font-size: 1rem; padding: 14px 20px; }
+  .color-option { width: 32px; height: 32px; }
   .code { font-size: 1.4rem; letter-spacing: 3px; }
   .code-box { padding: 0; margin-bottom: 5px; }
   .code-instructions { display: none; }
   .icon-btn { padding: 6px 10px; font-size: 0.78rem; }
-  .dropdown-button, .dropdown-option { font-size: 0.78rem; padding: 8px 10px; }
+  .dropdown-button, .dropdown-option { font-size: 0.78rem; padding: 12px 14px; }
   .exit-button, .host-badge { font-size: 0.68rem; padding: 3px 7px; }
   .loading-title { font-size: 3rem; }
   .loading-subtitle { font-size: 1.1rem; letter-spacing: 6px; }
@@ -3624,15 +4422,16 @@ input::placeholder { color: var(--text-muted); font-size: 0.88rem; }
    KART SELECTOR  (center panel, below 3D preview)
    =================================================== */
 
-/* ── Kart + GLO side-by-side row ── */
+/* ── Kart + GLO stacked layout ── */
 .kart-glo-row {
   display: flex;
-  gap: 8px;
+  flex-direction: column;
+  gap: 10px;
   width: 100%;
   padding: 0 10px;
   box-sizing: border-box;
   align-items: stretch;
-  margin-top: 8px;
+  margin-top: 124px;
 }
 
 .kart-selector {
@@ -3643,25 +4442,17 @@ input::placeholder { color: var(--text-muted); font-size: 0.88rem; }
   align-items: center;
   justify-content: center;
   gap: 6px;
-  flex: 1 1 0;
+  flex: 0 0 auto;
   min-width: 0;
+  width: 100%;
   padding: 10px 12px;
   /* Liquid glass card — matches glo-picker */
-  background: linear-gradient(
-    150deg,
-    rgba(255,255,255,0.020) 0%,
-    rgba(var(--glo-rgb), 0.030) 55%,
-    rgba(0,0,0,0.010) 100%
-  );
-  backdrop-filter: blur(14px) saturate(145%);
-  -webkit-backdrop-filter: blur(14px) saturate(145%);
-  border: 1px solid rgba(255,255,255,0.10);
-  border-top-color: rgba(255,255,255,0.06);
+  background: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border: none;
   border-radius: 16px;
-  box-shadow:
-    0  1px 0  rgba(255,255,255,0.06) inset,
-    0  0  8px rgba(var(--glo-rgb), 0.05),
-    0  3px 12px rgba(0,0,0,0.10);
+  box-shadow: none;
 }
 
 .kart-selector-title {
@@ -3679,15 +4470,16 @@ input::placeholder { color: var(--text-muted); font-size: 0.88rem; }
 .kart-nav-row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   width: 100%;
-  justify-content: center;
+  max-width: 260px;
+  justify-content: space-between;
 }
 
 .kart-nav-btn {
-  width: 34px;
-  height: 34px;
-  border-radius: 10px;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
   /* Liquid glass pill nav button */
   background: rgba(255, 255, 255, 0.07);
   backdrop-filter: blur(12px) saturate(150%);
@@ -3695,7 +4487,7 @@ input::placeholder { color: var(--text-muted); font-size: 0.88rem; }
   border: 1px solid var(--lg-border);
   border-top-color: rgba(255,255,255,0.22);
   color: var(--text-sub);
-  font-size: 1rem;
+  font-size: 1.15rem;
   cursor: pointer;
   transition: all 0.20s cubic-bezier(0.34,1.56,0.64,1);
   display: flex;
@@ -3717,7 +4509,20 @@ input::placeholder { color: var(--text-muted); font-size: 0.88rem; }
 }
 .kart-nav-btn {
   position: relative;
-  overflow: hidden;
+}
+.kart-nav-btn > i,
+.kart-nav-btn > svg,
+.kart-nav-btn > .svg-inline--fa {
+  position: relative;
+  z-index: 1;
+}
+.kart-nav-btn .nav-arrow {
+  width: 1.15em;
+  height: 1.15em;
+  position: relative;
+  z-index: 1;
+  fill: currentColor;
+  flex-shrink: 0;
 }
 .kart-nav-btn::before {
   content: "";
@@ -3772,7 +4577,8 @@ input::placeholder { color: var(--text-muted); font-size: 0.88rem; }
   display: flex;
   flex-direction: column;
   align-items: center;
-  min-width: 140px;
+  min-width: 0;
+  flex: 1 1 auto;
   gap: 2px;
 }
 
@@ -3934,9 +4740,9 @@ select option {
 .glo-picker-title {
   margin: 0;
   font-family: var(--font-display);
-  font-size: 0.72rem;
+  font-size: 0.64rem;
   font-weight: 700;
-  letter-spacing: 0.14em;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--neon-magenta);
   text-shadow: 0 0 6px var(--neon-magenta);
@@ -3947,22 +4753,22 @@ select option {
 .glo-carousel {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
 }
 
 /* One drum row: [label] [‹] [viewport] [›] */
 .glo-drum-row {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
 }
 
 /* Vertical category label */
 .glo-drum-lbl {
   font-family: var(--font-ui);
   font-weight: 700;
-  font-size: 0.48rem;
-  letter-spacing: 0.12em;
+  font-size: 0.42rem;
+  letter-spacing: 0.10em;
   text-transform: uppercase;
   color: var(--text-muted);
   opacity: 0.60;
@@ -3970,7 +4776,7 @@ select option {
   text-orientation: mixed;
   transform: rotate(180deg);
   white-space: nowrap;
-  width: 10px;
+  width: 8px;
   flex-shrink: 0;
   text-align: center;
 }
@@ -3979,11 +4785,11 @@ select option {
 .glo-drum-header {
   font-family: var(--font-ui);
   font-weight: 700;
-  font-size: 0.58rem;
-  letter-spacing: 0.18em;
+  font-size: 0.5rem;
+  letter-spacing: 0.15em;
   text-transform: uppercase;
-  padding: 2px 0 1px;
-  margin-top: 3px;
+  padding: 1px 0;
+  margin-top: 2px;
 }
 .glo-drum-header--scenes {
   color: rgba(255,0,128,0.85);
@@ -3999,19 +4805,19 @@ select option {
   height: 1px;
   background: linear-gradient(to right,
     transparent, rgba(255,255,255,0.10) 30%, rgba(255,255,255,0.10) 70%, transparent);
-  margin: 3px 0;
+  margin: 2px 0;
 }
 
 /* Arrow buttons */
 .glo-drum-arrow {
   flex-shrink: 0;
-  width: 44px;
-  height: 44px;
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
   border: 1px solid var(--lg-border);
   background: rgba(255,255,255,0.05);
   color: var(--text-sub);
-  font-size: 1.6rem;
+  font-size: 1.25rem;
   font-weight: 700;
   line-height: 1;
   padding: 0;
@@ -4100,11 +4906,11 @@ select option {
   position: relative;
   z-index: 2;
   width: 100%;
-  padding: 2px 6px;
+  padding: 1px 5px;
   background: rgba(0,0,0,0.55);
   font-family: var(--font-ui);
   font-weight: 700;
-  font-size: 0.72rem;
+  font-size: 0.64rem;
   letter-spacing: 0.5px;
   color: #fff;
   text-align: center;
@@ -4147,15 +4953,15 @@ select option {
 .glo-spec-row {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 0 0;
-  margin-top: 2px;
+  gap: 5px;
+  padding: 4px 0 0;
+  margin-top: 1px;
 }
 .glo-spectrum {
   flex: 1;
   position: relative;
-  height: 22px;
-  border-radius: 11px;
+  height: 18px;
+  border-radius: 9px;
   background: linear-gradient(to right,
     #f00, #ff8000, #ff0, #80ff00,
     #0f0, #00ff80, #0ff, #0080ff,
@@ -4166,11 +4972,11 @@ select option {
 }
 .glo-spectrum-thumb {
   position: absolute;
-  top: -4px;
-  width: 10px;
-  height: calc(100% + 8px);
+  top: -3px;
+  width: 9px;
+  height: calc(100% + 6px);
   background: #fff;
-  border-radius: 5px;
+  border-radius: 4px;
   transform: translateX(-50%);
   box-shadow: 0 0 5px rgba(0,0,0,0.5), 0 0 0 1px rgba(0,0,0,0.25);
   pointer-events: none;
@@ -4209,10 +5015,13 @@ select option {
    WEAPON LOADOUT SELECTOR (in battle settings)
 ══════════════════════════════════════════════ */
 .weapon-loadout-row {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(90px, 1fr);
   gap: 4px;
   margin-top: 1px;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
 }
 
 .loadout-icon {
@@ -4275,7 +5084,7 @@ select option {
 ═══════════════════════════════════════════════════════════════ */
 .website-link-btn, .info-btn {
   position: fixed; bottom: 20px;
-  width: 42px; height: 42px;
+  width: 48px; height: 48px;
   border-radius: 50%;
   background:
     linear-gradient(160deg, rgba(255,255,255,0.08) 0%, rgba(0,0,0,0.08) 100%);
@@ -4312,28 +5121,20 @@ select option {
 .glo-picker {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 8px 14px;
+  gap: 4px;
+  padding: 4px 10px;
   margin-top: 0;
   margin-left: 0;
   margin-right: 0;
-  flex: 1 1 0;
+  flex: 0 0 auto;
   min-width: 0;
-  background: linear-gradient(
-    150deg,
-    rgba(255,255,255,0.020) 0%,
-    rgba(var(--glo-rgb), 0.032) 55%,
-    rgba(0,0,0,0.010) 100%
-  );
-  backdrop-filter: blur(14px) saturate(145%);
-  -webkit-backdrop-filter: blur(14px) saturate(145%);
-  border: 1px solid rgba(255,255,255,0.10);
-  border-top-color: rgba(255,255,255,0.06);
+  width: 100%;
+  background: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border: none;
   border-radius: 16px;
-  box-shadow:
-    0  1px 0  rgba(255,255,255,0.06) inset,
-    0  0  10px rgba(var(--glo-rgb), 0.055),
-    0  3px 12px rgba(0,0,0,0.10);
+  box-shadow: none;
   width: auto;
   box-sizing: border-box;
   position: relative;

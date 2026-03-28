@@ -968,7 +968,7 @@ function init() {
   
   // Setup renderer
   renderer = new THREE.WebGLRenderer({ antialias: true });
-  renderer.outputEncoding = THREE.sRGBEncoding;  // or THREE.LinearSRGBEncoding in newer Three.js
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.setPixelRatio(window.devicePixelRatio);
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.shadowMap.enabled = true;

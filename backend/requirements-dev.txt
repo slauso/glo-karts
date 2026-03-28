@@ -1,0 +1,8 @@
+-r requirements.txt
+pytest
+pytest-django
+pytest-asyncio
+pytest-cov
+httpx
+websockets
+factory-boy

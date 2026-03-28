@@ -1,13 +1,18 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { getTrackRegistry } from './track-data.js';
 
 // Function to load the track model and add to scene
 export function loadTrackModel(ammo, mapId = "map1", scene, physicsWorld, loadingManager, callback) {
   // Use the loading manager with your loader
   const loader = new GLTFLoader(loadingManager);
   
+  const registry = getTrackRegistry();
+  const entry = registry[mapId];
+  const trackPath = (entry && entry.trackPath) ? entry.trackPath : `/models/maps/${mapId}/track.glb`;
+
   loader.load(
-    `/models/maps/${mapId}/track.glb`,
+    trackPath,
     (gltf) => {
       const track = gltf.scene;
       

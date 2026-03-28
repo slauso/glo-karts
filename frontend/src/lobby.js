@@ -7,26 +7,119 @@ import {
   getPageForMode,
   requiresLobby,
   isPlayable,
-  buildGameConfig,
   getMode,
 } from './game-modes.js';
 import {
-  getLegacyModeFamily,
-  getSelectableContentList,
-  usesArenaSelection,
-  usesTrackSelection,
-} from './modules/single-player-routing.js';
+  ALL_ARENAS,
+  ALL_TRACKS,
+  CUSTOM_TRACK_ID,
+} from './modules/content-registry.js';
 
 const DEFAULTS = {
-  mode: 'race',
+  mode: 'battle',
   battleType: 'deathmatch',
-  maxPlayers: 12,
-  botCount: 6,
+  maxPlayers: 8,
+  botCount: 0,
   loadoutId: 'random-all',
   scoreLimit: 5,
-  arenaId: 'test_box',
-  trackId: 'test_box',
+  arenaId: 'glo_arena',
+  trackId: 'glo_arena',
 };
+
+const BATTLE_WEAPON_LIBRARY = [
+  { id: 'bowling_ball', label: 'Bowling Ball', icon: '🎳' },
+  { id: 'plunger', label: 'Plunger', icon: '🪠' },
+  { id: 'cake', label: 'Cake Missile', icon: '🎂' },
+  { id: 'bubblegum', label: 'Bubblegum Trap', icon: '🫧' },
+  { id: 'swatter', label: 'Swatter', icon: '🪰' },
+  { id: 'nitro', label: 'Nitro Flask', icon: '⚗️' },
+  { id: 'shield', label: 'Shield', icon: '🛡️' },
+  { id: 'banana', label: 'Banana', icon: '🍌' },
+  { id: 'anchor', label: 'Anchor', icon: '⚓' },
+  { id: 'missile', label: 'Missile', icon: '🚀' },
+  { id: 'lightning_bolt', label: 'Lightning', icon: '⚡' },
+  { id: 'tornado', label: 'Tornado', icon: '🌪️' },
+];
+
+const BATTLE_RULE_PRESETS = {
+  classic: {
+    battleType: 'deathmatch',
+    loadoutId: 'combat',
+    scoreLimit: 7,
+    maxPlayers: 8,
+    matchLength: '8',
+    healthMultiplier: '1',
+    respawnTime: '4',
+    randomSpawns: true,
+    powerWeapons: true,
+    collisionDamage: true,
+    friendlyFire: false,
+    radarEnabled: true,
+    autoAim: true,
+    oneHitKills: false,
+  },
+  'golden-gun': {
+    battleType: 'deathmatch',
+    loadoutId: 'custom',
+    scoreLimit: 1,
+    maxPlayers: 8,
+    matchLength: '5',
+    healthMultiplier: '0.75',
+    respawnTime: '6',
+    randomSpawns: false,
+    powerWeapons: false,
+    collisionDamage: false,
+    friendlyFire: true,
+    radarEnabled: false,
+    autoAim: false,
+    oneHitKills: true,
+    customWeapons: ['plunger', 'missile'],
+  },
+  mayhem: {
+    battleType: 'ctf',
+    loadoutId: 'chaos',
+    scoreLimit: 10,
+    maxPlayers: 8,
+    matchLength: '12',
+    healthMultiplier: '1.5',
+    respawnTime: '2',
+    randomSpawns: true,
+    powerWeapons: true,
+    collisionDamage: true,
+    friendlyFire: true,
+    radarEnabled: true,
+    autoAim: true,
+    oneHitKills: false,
+  },
+};
+
+function getLegacyModeFamily(modeId) {
+  if (modeId === 'battle_online') return 'battle';
+  if (modeId === 'gloflux_race' || modeId === 'gloflux_arena') return 'gloflux';
+  return 'race';
+}
+
+function usesArenaSelection(modeId) {
+  return !!getMode(modeId)?.selectors?.arena;
+}
+
+function usesTrackSelection(modeId) {
+  return !!getMode(modeId)?.selectors?.track;
+}
+
+function getSelectableContentList(modeId) {
+  if (usesArenaSelection(modeId)) {
+    return Object.values(ALL_ARENAS).map((entry) => ({ id: entry.id, name: entry.label }));
+  }
+
+  if (usesTrackSelection(modeId)) {
+    return Object.values(ALL_TRACKS)
+      .filter((entry) => entry.id !== CUSTOM_TRACK_ID)
+      .map((entry) => ({ id: entry.id, name: entry.label }));
+  }
+
+  return [];
+}
 
 function normalizeLobbyCode(raw) {
   return String(raw || '').trim().replace(/\s+/g, '-').toUpperCase();
@@ -112,11 +205,13 @@ class RacingLobby {
 
     this.selectedMode = DEFAULTS.mode;
     this.selectedModeId = null;
-    this.selectedMap = DEFAULTS.trackId;
+    this.selectedMap = DEFAULTS.arenaId;
     this.selectedBattleType = DEFAULTS.battleType;
     this.selectedMaxPlayers = DEFAULTS.maxPlayers;
     this.selectedBotCount = DEFAULTS.botCount;
     this.selectedLoadout = DEFAULTS.loadoutId;
+    this.selectedCustomWeapons = new Set(['bowling_ball', 'plunger', 'cake', 'bubblegum', 'shield']);
+    this.activeBattleView = 'core';
     this.selectedCup = 'starter';
     this.selectedGlofluxTheme = 'nuclear_desert';
     this.splitScreenType = 'race';
@@ -131,6 +226,7 @@ class RacingLobby {
     this.initRaceSettings();
     this.initGlofluxSettings();
     this.initWeaponLoadout();
+    this.initBattleCustomizationLab();
     this.populateArenaSelector();
     this.refreshBattleControls();
     this._initLensEngine();
@@ -210,6 +306,9 @@ class RacingLobby {
       this.sendPlayerUpdate();
     });
 
+    const backBtn = document.getElementById('back-to-modes-btn');
+    backBtn?.addEventListener('click', () => this.resetToModeSelection());
+
     this.playBtn?.addEventListener('click', () => this.onPlayClicked());
     this.readyBtn?.addEventListener('click', () => this.toggleReady());
     this.startMatchBtn?.addEventListener('click', () => this.startMatch());
@@ -278,8 +377,9 @@ class RacingLobby {
       try {
         const trackData = JSON.parse(json);
         saveCustomTrack(trackData);
+        sessionStorage.setItem('customTrackData', json);
         if (status) {
-          status.textContent = `Imported: ${trackData.name || 'Custom Track'}`;
+          status.textContent = `Imported: ${trackData.name || 'Custom Track'} (saved for builder only)`;
           status.style.color = '#44ff88';
         }
         if (input) input.value = '';
@@ -294,36 +394,63 @@ class RacingLobby {
     const code = generateLobbyCode();
     this.currentLobbyCode = code;
     this._showConnectingState(code);
-    try {
-      await this.connectLobby('joinOrCreate', {
-        lobbyCode: code,
-        privacy,
-        gameMode: this.selectedMode,
-        ...this.buildSettingsPayload(),
-        ...this.buildPlayerPayload(),
-      });
-    } catch (error) {
-      this._showLobbyError('Connection failed. Diagnosing\u2026');
-      const msg = await this.getLobbyErrorMessage(error, 'Create failed');
-      this._showLobbyError(msg);
+
+    const maxRetries = 2;
+    let lastError = null;
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        if (attempt > 0) {
+          console.log(`[lobby] Retry ${attempt}/${maxRetries} connecting to lobby...`);
+          if (this.lobbyStatusDetail) this.lobbyStatusDetail.textContent = `Retrying (${attempt}/${maxRetries})\u2026`;
+          await new Promise(r => setTimeout(r, 1200 * attempt));
+        }
+        await this.connectLobby('joinOrCreate', {
+          lobbyCode: code,
+          privacy,
+          gameMode: this.selectedMode,
+          ...this.buildSettingsPayload(),
+          ...this.buildPlayerPayload(),
+        });
+        return; // success
+      } catch (error) {
+        lastError = error;
+        console.warn(`[lobby] Attempt ${attempt + 1} failed:`, error?.message || error);
+        if (attempt === maxRetries) break;
+      }
     }
+    this._showLobbyError('Connection failed. Diagnosing\u2026');
+    const msg = await this.getLobbyErrorMessage(lastError, 'Create failed');
+    this._showLobbyError(msg);
   }
 
   async quickMatch() {
     this._showConnectingState('');
-    try {
-      await this.connectLobby('joinOrCreate', {
-        lobbyCode: '',
-        privacy: 'open',
-        gameMode: this.selectedMode,
-        ...this.buildSettingsPayload(),
-        ...this.buildPlayerPayload(),
-      });
-    } catch (error) {
-      this._showLobbyError('Connection failed. Diagnosing\u2026');
-      const msg = await this.getLobbyErrorMessage(error, 'Quick match failed');
-      this._showLobbyError(msg);
+    const maxRetries = 2;
+    let lastError = null;
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        if (attempt > 0) {
+          console.log(`[lobby] Quick match retry ${attempt}/${maxRetries}...`);
+          if (this.lobbyStatusDetail) this.lobbyStatusDetail.textContent = `Retrying (${attempt}/${maxRetries})\u2026`;
+          await new Promise(r => setTimeout(r, 1200 * attempt));
+        }
+        await this.connectLobby('joinOrCreate', {
+          lobbyCode: '',
+          privacy: 'open',
+          gameMode: this.selectedMode,
+          ...this.buildSettingsPayload(),
+          ...this.buildPlayerPayload(),
+        });
+        return; // success
+      } catch (error) {
+        lastError = error;
+        console.warn(`[lobby] Quick match attempt ${attempt + 1} failed:`, error?.message || error);
+        if (attempt === maxRetries) break;
+      }
     }
+    this._showLobbyError('Connection failed. Diagnosing\u2026');
+    const msg = await this.getLobbyErrorMessage(lastError, 'Quick match failed');
+    this._showLobbyError(msg);
   }
 
   async joinLobbyByCode() {
@@ -445,6 +572,10 @@ class RacingLobby {
       this.selectedMap = state.trackId || this.selectedMap;
       this.selectedBattleType = state.battleType || this.selectedBattleType;
       this.selectedMaxPlayers = Number(state.maxPlayers || this.selectedMaxPlayers || 12);
+      this.selectedLoadout = state.loadoutId || this.selectedLoadout;
+      if (Array.isArray(state.weaponPool) && state.weaponPool.length) {
+        this.selectedCustomWeapons = new Set(state.weaponPool);
+      }
 
       this.players = [];
       state.players.forEach((player, id) => {
@@ -644,21 +775,46 @@ class RacingLobby {
   }
 
   buildSettingsPayload() {
-    const modeEntry = getMode(this.selectedModeId);
-    const isSoloMode = modeEntry?.category === 'solo';
+    const customTrackData = this.selectedMap === CUSTOM_TRACK_ID
+      ? sessionStorage.getItem('customTrackData') || ''
+      : '';
+
+    const matchLength = document.getElementById('battle-match-length')?.value || '8';
+    const healthMultiplier = document.getElementById('battle-health-multiplier')?.value || '1';
+    const respawnTime = document.getElementById('battle-respawn-time')?.value || '4';
+    const randomSpawns = !!document.getElementById('battle-random-spawns')?.checked;
+    const powerWeapons = !!document.getElementById('battle-power-weapons')?.checked;
+    const friendlyFire = !!document.getElementById('battle-friendly-fire')?.checked;
+    const radarEnabled = !!document.getElementById('battle-radar-enabled')?.checked;
+    const autoAim = !!document.getElementById('battle-auto-aim')?.checked;
+    const oneHitKills = !!document.getElementById('battle-one-hit-kills')?.checked;
+
+    const weaponPool = this.selectedLoadout === 'custom'
+      ? Array.from(this.selectedCustomWeapons)
+      : [];
 
     return {
       modeId: this.selectedModeId,
-      singlePlayerMode: isSoloMode,
       trackId: this.selectedMap,
-      arenaId: document.getElementById('battle-arena-select')?.value || DEFAULTS.arenaId,
+      arenaId: this.selectedMap || DEFAULTS.arenaId,
       arenaTheme: this.selectedGlofluxTheme,
       battleType: this.selectedBattleType,
-      maxPlayers: isSoloMode ? 1 : this.selectedMaxPlayers,
+      maxPlayers: this.selectedMaxPlayers,
       scoreLimit: parseInt(document.getElementById('battle-score-limit')?.value || '5', 10) || 5,
       loadoutId: this.selectedLoadout,
       collisionDamage: !!document.getElementById('battle-collision-damage')?.checked,
       botCount: this.selectedBotCount,
+      matchLength,
+      healthMultiplier: Number.parseFloat(healthMultiplier) || 1,
+      respawnTime: Number.parseInt(respawnTime, 10) || 4,
+      randomSpawns,
+      powerWeapons,
+      friendlyFire,
+      radarEnabled,
+      autoAim,
+      oneHitKills,
+      weaponPool,
+      customTrackData,
     };
   }
 
@@ -668,6 +824,7 @@ class RacingLobby {
   }
 
   sendSettingsUpdate() {
+    this._updateBattleSummary();
     if (!this.room || !this.isHost) return;
     this.room.send('settingsUpdate', {
       gameMode: this.selectedMode,
@@ -707,35 +864,9 @@ class RacingLobby {
       if (requiresLobby(modeId)) {
         // Auto-create a lobby when hitting PLAY GAME on an online mode
         this.createLobby();
-        return;
       }
-      this.startSinglePlayerGame();
       return;
     }
-  }
-
-  getGamePage({ multiplayer = false } = {}) {
-    // Use the mode registry for routing
-    if (multiplayer) return getPageForMode(this.selectedModeId) || 'realtime.html';
-    return getPageForMode(this.selectedModeId) || 'game.html';
-  }
-
-  startSinglePlayerGame() {
-    const lobbyState = {
-      selectedMap: this.selectedMap,
-      selectedBattleType: this.selectedBattleType,
-      selectedMaxPlayers: this.selectedMaxPlayers,
-      selectedBotCount: this.selectedBotCount,
-      selectedLoadout: this.selectedLoadout,
-      selectedCup: this.selectedCup || 'starter',
-      playerId: this.playerId,
-      playerName: this.playerName,
-    };
-
-    const gameConfig = buildGameConfig(this.selectedModeId, lobbyState);
-
-    sessionStorage.setItem('gameConfig', JSON.stringify(gameConfig));
-    window.location.href = getPageForMode(this.selectedModeId);
   }
 
   copyCode() {
@@ -868,17 +999,8 @@ class RacingLobby {
 
     switch (this.selectedModeId) {
       case 'battle_online':
-        icon = 'fa-globe';      label = 'GO ONLINE';
-        indicator = 'Click to find a match';
-        break;
-      case 'quick_race':
-        icon = 'fa-flag-checkered'; label = 'START RACE';
-        indicator = 'Click to race';
-        break;
-      case 'local_2p_race':
-      case 'local_2p_battle':
-        icon = 'fa-columns';    label = 'START SPLIT SCREEN';
-        indicator = 'Click to start';
+        icon = 'fa-crosshairs'; label = 'CREATE BATTLE LOBBY';
+        indicator = 'Click to host an online battle';
         break;
       default:
         if (isGloflux) {
@@ -913,19 +1035,14 @@ class RacingLobby {
     const modeEntry = getMode(this.selectedModeId);
     const showBattle = !!(modeEntry?.selectors?.battleSettings);
     const isGloflux = modeEntry?.id === 'gloflux' || modeEntry?.id?.startsWith('gloflux_');
-    const isSplitScreen = modeEntry?.id === 'local_2p_race' || modeEntry?.id === 'local_2p_battle';
     const showTrack = usesTrackSelection(this.selectedModeId) || usesArenaSelection(this.selectedModeId);
-    const isRaceWithBots = usesTrackSelection(this.selectedModeId)
-      && this.selectedModeId !== 'time_trial' && this.selectedModeId !== 'free_roam'
-      && !isSplitScreen;
 
     return {
       showBattle,
       isGloflux,
-      isSplitScreen,
       showTrack,
-      isRaceWithBots,
-      showSetup: showTrack || showBattle || isGloflux || isSplitScreen,
+      isRaceWithBots: false,
+      showSetup: showTrack || showBattle || isGloflux,
     };
   }
 
@@ -933,9 +1050,8 @@ class RacingLobby {
     const battleSettings = document.getElementById('battle-settings');
     const raceSettings = document.getElementById('race-settings');
     const glofluxSettings = document.getElementById('gloflux-settings');
-    const splitscreenSettings = document.getElementById('splitscreen-settings');
     const modeEntry = getMode(this.selectedModeId);
-    const { showBattle, isGloflux, isSplitScreen, showTrack, isRaceWithBots, showSetup } = this._getLeftSetupState();
+    const { showBattle, isGloflux, showTrack, isRaceWithBots, showSetup } = this._getLeftSetupState();
     const hasModeSelection = !!modeEntry;
 
     // Show/hide the inline setup section
@@ -947,8 +1063,6 @@ class RacingLobby {
     battleSettings?.classList.toggle('hidden', !showBattle);
     raceSettings?.classList.toggle('hidden', !isRaceWithBots);
     glofluxSettings?.classList.toggle('hidden', !isGloflux);
-    splitscreenSettings?.classList.toggle('hidden', !isSplitScreen);
-
     // Hide track/map selector for modes that don't need it
     if (this.mapSelectorContainer) {
       this.mapSelectorContainer.classList.toggle('hidden', !showTrack);
@@ -972,13 +1086,9 @@ class RacingLobby {
     const serverIsBattle = state.gameMode === 'battle';
     // If we're in a lobby, derive the modeId from server state
     if (this.room) {
-      if (state.singlePlayerMode && state.modeId) {
-        this.selectedModeId = state.modeId;
-      } else {
-        this.selectedModeId = state.gameMode === 'gloflux'
-          ? (state.modeId || 'gloflux')
-          : (serverIsBattle ? 'battle_online' : 'race_online');
-      }
+      this.selectedModeId = state.gameMode === 'gloflux'
+        ? (state.modeId || 'gloflux')
+        : (serverIsBattle ? 'battle_online' : 'race_online');
       this.selectedMode = state.gameMode || (serverIsBattle ? 'battle' : 'race');
     }
 
@@ -1002,10 +1112,22 @@ class RacingLobby {
     const battleTypeEl = document.getElementById('battle-type-select');
     if (battleTypeEl && battleTypeEl.value !== this.selectedBattleType) battleTypeEl.value = this.selectedBattleType;
     this._syncGlassDropdown(battleTypeEl);
+    this._syncBattleTypePills();
 
     const maxPlayersEl = document.getElementById('battle-max-players');
     if (maxPlayersEl) maxPlayersEl.value = String(this.selectedMaxPlayers);
     this._syncGlassDropdown(maxPlayersEl);
+
+    const scoreLimitEl = document.getElementById('battle-score-limit');
+    if (scoreLimitEl && state.scoreLimit) scoreLimitEl.value = String(state.scoreLimit);
+
+    if (state.loadoutId) {
+      this.selectedLoadout = state.loadoutId;
+      this._syncLoadoutButtons();
+      this._syncCustomWeaponPanel();
+    }
+
+    this._updateBattleSummary();
 
     const glofluxMaxPlayersEl = document.getElementById('gloflux-player-cap');
     if (glofluxMaxPlayersEl) glofluxMaxPlayersEl.value = String(this.selectedMaxPlayers);
@@ -1085,12 +1207,17 @@ class RacingLobby {
     const battleTypeEl = document.getElementById('battle-type-select');
     const maxPlayersEl = document.getElementById('battle-max-players');
     const botCountEl = document.getElementById('battle-bot-count');
+    const scoreLimitEl = document.getElementById('battle-score-limit');
+    const matchLengthEl = document.getElementById('battle-match-length');
+    const healthMultiplierEl = document.getElementById('battle-health-multiplier');
+    const respawnTimeEl = document.getElementById('battle-respawn-time');
 
     this._renderModeCards();
 
     // Battle settings listeners
     battleTypeEl?.addEventListener('change', () => {
       this.selectedBattleType = battleTypeEl.value === 'ctf' ? 'ctf' : 'deathmatch';
+      this._syncBattleTypePills();
       this.sendSettingsUpdate();
     });
 
@@ -1105,26 +1232,20 @@ class RacingLobby {
       const parsed = parseInt(botCountEl.value || '0', 10);
       this.selectedBotCount = Number.isFinite(parsed) ? Math.max(0, Math.min(11, parsed)) : 0;
       botCountEl.value = String(this.selectedBotCount);
+      this.sendSettingsUpdate();
     });
+
+    scoreLimitEl?.addEventListener('change', () => this.sendSettingsUpdate());
+    matchLengthEl?.addEventListener('change', () => this.sendSettingsUpdate());
+    healthMultiplierEl?.addEventListener('change', () => this.sendSettingsUpdate());
+    respawnTimeEl?.addEventListener('change', () => this.sendSettingsUpdate());
 
     this._initGlassDropdown(battleTypeEl);
     this._initGlassDropdown(maxPlayersEl);
+    this._initGlassDropdown(matchLengthEl);
+    this._initGlassDropdown(healthMultiplierEl);
+    this._initGlassDropdown(respawnTimeEl);
 
-    // Split screen type listener
-    const splitTypeEl = document.getElementById('split-type-select');
-    splitTypeEl?.addEventListener('change', () => {
-      this.splitScreenType = splitTypeEl.value;
-      // Swap track vs arena carousel
-      if (window.__trackPreview) {
-        window.__trackPreview.setMode(splitTypeEl.value === 'battle' ? 'battle' : 'race');
-      }
-      this._rebuildMapDropdown();
-      const carouselTitle = document.querySelector('.track-carousel-title');
-      if (carouselTitle) {
-        carouselTitle.textContent = splitTypeEl.value === 'battle' ? 'SELECT ARENA' : 'SELECT TRACK';
-      }
-    });
-    this._initGlassDropdown(splitTypeEl);
   }
 
   _selectMode(modeId) {
@@ -1135,6 +1256,11 @@ class RacingLobby {
     const leftPanel = document.querySelector('.simplified-left-panel');
     if (leftPanel?.classList.contains('mode-initial')) {
       leftPanel.classList.remove('mode-initial');
+    }
+
+    const activeModeTitle = document.getElementById('active-mode-title');
+    if (activeModeTitle) {
+      activeModeTitle.textContent = mode.label;
     }
 
     this.selectedModeId = modeId;
@@ -1163,6 +1289,32 @@ class RacingLobby {
     this.sendSettingsUpdate();
   }
 
+  resetToModeSelection() {
+    const leftPanel = document.querySelector('.simplified-left-panel');
+    if (leftPanel) {
+      leftPanel.classList.add('mode-initial');
+    }
+    
+    this.selectedModeId = null;
+    this.selectedMode = null;
+    
+    if (this.playBtn) {
+      this.playBtn.disabled = true;
+      if (this.playIndicator) {
+        this.playIndicator.classList.remove('hidden');
+        if (this.playIndicatorLabel) this.playIndicatorLabel.textContent = 'Select a mode';
+        const dot = this.playIndicator.querySelector('.play-indicator-dot');
+        if (dot) {
+          dot.style.background = '#888';
+          dot.style.boxShadow = 'none';
+        }
+      }
+    }
+    
+    this.refreshBattleControls();
+    this._renderModeCards();
+  }
+
   _renderModeCards() {
     const cardsContainer = document.getElementById('mode-cards');
     if (!cardsContainer) return;
@@ -1171,15 +1323,8 @@ class RacingLobby {
     const leftPanel = document.querySelector('.simplified-left-panel');
     const isInitial = leftPanel?.classList.contains('mode-initial');
 
-    // In initial landing state, append track_builder as 5th tile
-    const allModes = [...modes];
-    if (isInitial) {
-      const builder = getMode('track_builder');
-      if (builder) allModes.push(builder);
-    }
-
     cardsContainer.innerHTML = '';
-    allModes.forEach((mode) => {
+    modes.forEach((mode) => {
       const card = document.createElement('div');
       card.className = 'mode-card';
       if (mode.id === this.selectedModeId) card.classList.add('active');
@@ -1247,6 +1392,7 @@ class RacingLobby {
 
   _initGlassDropdown(selectEl) {
     if (!selectEl || selectEl.dataset.glassDropdownInitialized === 'true') return;
+    if (selectEl.classList.contains('hidden')) return;
 
     const wrapper = document.createElement('div');
     wrapper.className = 'glass-dropdown';
@@ -1354,8 +1500,7 @@ class RacingLobby {
     const LOADOUTS = [
       { id: 'random-all', label: 'All Weapons', icon: '🎲' },
       { id: 'combat', label: 'Combat', icon: '💥' },
-      { id: 'chaos', label: 'Chaos', icon: '🌀' },
-      { id: 'sneaky', label: 'Sneaky', icon: '👻' },
+      { id: 'custom', label: 'Custom', icon: '🧪' },
       { id: 'none', label: 'No Weapons', icon: '🚫' },
     ];
 
@@ -1365,6 +1510,7 @@ class RacingLobby {
     row.innerHTML = '';
     LOADOUTS.forEach((loadout) => {
       const btn = document.createElement('button');
+      btn.type = 'button';
       btn.className = `weapon-loadout-btn${loadout.id === this.selectedLoadout ? ' active' : ''}`;
       btn.setAttribute('data-loadout', loadout.id);
       btn.innerHTML = `<span class="loadout-icon">${loadout.icon}</span><span class="loadout-label">${loadout.label}</span>`;
@@ -1372,10 +1518,303 @@ class RacingLobby {
         row.querySelectorAll('.weapon-loadout-btn').forEach((node) => node.classList.remove('active'));
         btn.classList.add('active');
         this.selectedLoadout = loadout.id;
+        this._syncCustomWeaponPanel();
         this.sendSettingsUpdate();
       });
       row.appendChild(btn);
     });
+
+    this._syncLoadoutButtons();
+    this._syncCustomWeaponPanel();
+  }
+
+  _syncLoadoutButtons() {
+    const row = document.getElementById('weapon-loadout-row');
+    if (!row) return;
+    row.querySelectorAll('.weapon-loadout-btn').forEach((node) => {
+      node.classList.toggle('active', node.getAttribute('data-loadout') === this.selectedLoadout);
+    });
+    this._updateBattleSummary();
+  }
+
+  _setBattleView(viewId = 'core') {
+    this.activeBattleView = viewId;
+
+    const tabs = document.querySelectorAll('.battle-view-tab');
+    tabs.forEach((tab) => {
+      const active = tab.getAttribute('data-battle-view') === viewId;
+      tab.classList.toggle('active', active);
+      tab.setAttribute('aria-selected', active ? 'true' : 'false');
+    });
+
+    const panels = document.querySelectorAll('.battle-view-panel');
+    panels.forEach((panel) => {
+      const active = panel.id === `battle-view-${viewId}`;
+      panel.classList.toggle('active', active);
+      panel.setAttribute('aria-hidden', active ? 'false' : 'true');
+    });
+  }
+
+  _updateBattleSummary() {
+    const isCtf = this.selectedBattleType === 'ctf';
+    const type = isCtf ? 'Capture the Flag' : 'Kart Tag';
+    const scoreLimit = document.getElementById('battle-score-limit')?.value || String(DEFAULTS.scoreLimit);
+    const maxPlayers = this.selectedMaxPlayers || DEFAULTS.maxPlayers;
+    const loadoutMap = {
+      'random-all': 'ALL',
+      combat: 'COMBAT',
+      chaos: 'CHAOS',
+      custom: 'CUSTOM',
+      sneaky: 'SNEAKY',
+      none: 'NONE',
+    };
+    const loadout = loadoutMap[this.selectedLoadout] || String(this.selectedLoadout || 'ALL').toUpperCase();
+    const compactTarget = isCtf ? `${scoreLimit} Captures` : `${scoreLimit} KOs`;
+
+    const typeEl = document.getElementById('battle-summary-type');
+    const targetEl = document.getElementById('battle-summary-target');
+    const popEl = document.getElementById('battle-summary-pop');
+    const loadoutEl = document.getElementById('battle-summary-loadout');
+    const heroTypeEl = document.getElementById('battle-hero-type');
+    const heroPopEl = document.getElementById('battle-hero-pop');
+    const heroTargetEl = document.getElementById('battle-hero-target');
+    const targetUnitEl = document.getElementById('battle-score-limit-unit');
+
+    if (typeEl) typeEl.textContent = type;
+    if (targetEl) targetEl.textContent = isCtf ? `${scoreLimit} Captures` : `${scoreLimit} KOs`;
+    if (popEl) popEl.textContent = `${maxPlayers} Players`;
+    if (loadoutEl) {
+      if (this.selectedLoadout === 'custom') {
+        loadoutEl.textContent = `${loadout} (${this.selectedCustomWeapons.size})`;
+      } else {
+        loadoutEl.textContent = loadout;
+      }
+    }
+
+    if (heroTypeEl) heroTypeEl.textContent = type;
+    if (heroPopEl) heroPopEl.textContent = `${maxPlayers} Players`;
+    if (heroTargetEl) heroTargetEl.textContent = compactTarget;
+    if (targetUnitEl) targetUnitEl.textContent = isCtf ? 'Captures' : 'Knockouts';
+  }
+
+  _syncBattleTypePills() {
+    const pills = document.querySelectorAll('.battle-type-pill');
+    pills.forEach((pill) => {
+      const active = pill.getAttribute('data-battle-type') === this.selectedBattleType;
+      pill.classList.toggle('active', active);
+      pill.setAttribute('aria-selected', active ? 'true' : 'false');
+    });
+    this._updateBattleSummary();
+  }
+
+  _syncCustomWeaponPanel() {
+    const panel = document.getElementById('custom-weapon-panel');
+    if (!panel) return;
+
+    const isCustom = this.selectedLoadout === 'custom';
+    panel.classList.toggle('hidden', !isCustom);
+
+    const countEl = document.getElementById('custom-weapon-count');
+    if (countEl) {
+      const count = this.selectedCustomWeapons.size;
+      countEl.textContent = `${count} selected`;
+      countEl.classList.toggle('warn', count === 0);
+    }
+
+    const chips = document.querySelectorAll('.custom-weapon-chip');
+    chips.forEach((chip) => {
+      const weaponId = chip.getAttribute('data-weapon-id');
+      chip.classList.toggle('active', this.selectedCustomWeapons.has(weaponId));
+    });
+
+    this._updateBattleSummary();
+  }
+
+  _applyBattlePreset(presetId) {
+    const preset = BATTLE_RULE_PRESETS[presetId];
+    if (!preset) return;
+
+    const battleTypeEl = document.getElementById('battle-type-select');
+    const scoreEl = document.getElementById('battle-score-limit');
+    const maxPlayersEl = document.getElementById('battle-max-players');
+    const matchLengthEl = document.getElementById('battle-match-length');
+    const healthEl = document.getElementById('battle-health-multiplier');
+    const respawnEl = document.getElementById('battle-respawn-time');
+    const randomSpawnsEl = document.getElementById('battle-random-spawns');
+    const powerWeaponsEl = document.getElementById('battle-power-weapons');
+    const collisionEl = document.getElementById('battle-collision-damage');
+    const friendlyFireEl = document.getElementById('battle-friendly-fire');
+    const radarEl = document.getElementById('battle-radar-enabled');
+    const autoAimEl = document.getElementById('battle-auto-aim');
+    const oneHitEl = document.getElementById('battle-one-hit-kills');
+    const maxPlayersRangeEl = document.getElementById('battle-max-players-range');
+    const maxPlayersOutputEl = document.getElementById('battle-max-players-output');
+    const scoreRangeEl = document.getElementById('battle-score-limit-range');
+    const scoreOutputEl = document.getElementById('battle-score-limit-output');
+
+    this.selectedBattleType = preset.battleType;
+    this.selectedLoadout = preset.loadoutId;
+    this.selectedMaxPlayers = Math.min(8, Number.parseInt(String(preset.maxPlayers), 10) || this.selectedMaxPlayers);
+
+    if (battleTypeEl) {
+      battleTypeEl.value = preset.battleType;
+      this._syncGlassDropdown(battleTypeEl);
+    }
+    if (scoreEl) scoreEl.value = String(preset.scoreLimit);
+    if (maxPlayersEl) {
+      maxPlayersEl.value = String(this.selectedMaxPlayers);
+      this._syncGlassDropdown(maxPlayersEl);
+    }
+    if (maxPlayersRangeEl) maxPlayersRangeEl.value = String(this.selectedMaxPlayers);
+    if (maxPlayersOutputEl) maxPlayersOutputEl.textContent = String(this.selectedMaxPlayers);
+    if (scoreRangeEl) scoreRangeEl.value = String(preset.scoreLimit);
+    if (scoreOutputEl) scoreOutputEl.textContent = String(preset.scoreLimit);
+    if (matchLengthEl) {
+      matchLengthEl.value = preset.matchLength;
+      this._syncGlassDropdown(matchLengthEl);
+    }
+    if (healthEl) {
+      healthEl.value = preset.healthMultiplier;
+      this._syncGlassDropdown(healthEl);
+    }
+    if (respawnEl) {
+      respawnEl.value = preset.respawnTime;
+      this._syncGlassDropdown(respawnEl);
+    }
+
+    if (randomSpawnsEl) randomSpawnsEl.checked = !!preset.randomSpawns;
+    if (powerWeaponsEl) powerWeaponsEl.checked = !!preset.powerWeapons;
+    if (collisionEl) collisionEl.checked = !!preset.collisionDamage;
+    if (friendlyFireEl) friendlyFireEl.checked = !!preset.friendlyFire;
+    if (radarEl) radarEl.checked = !!preset.radarEnabled;
+    if (autoAimEl) autoAimEl.checked = !!preset.autoAim;
+    if (oneHitEl) oneHitEl.checked = !!preset.oneHitKills;
+
+    if (Array.isArray(preset.customWeapons)) {
+      this.selectedCustomWeapons = new Set(preset.customWeapons);
+    }
+
+    document.querySelectorAll('.battle-preset-btn').forEach((btn) => {
+      const isActive = btn.getAttribute('data-rule-preset') === presetId;
+      btn.classList.toggle('active', isActive);
+      btn.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+    });
+
+    this._syncBattleTypePills();
+    this._syncLoadoutButtons();
+    this._syncCustomWeaponPanel();
+    this.sendSettingsUpdate();
+  }
+
+  initBattleCustomizationLab() {
+    const battleTypeEl = document.getElementById('battle-type-select');
+    const typePills = document.querySelectorAll('.battle-type-pill');
+    const presetButtons = document.querySelectorAll('.battle-preset-btn');
+    const weaponGrid = document.getElementById('custom-weapon-grid');
+    const maxPlayersRangeEl = document.getElementById('battle-max-players-range');
+    const maxPlayersOutputEl = document.getElementById('battle-max-players-output');
+    const scoreRangeEl = document.getElementById('battle-score-limit-range');
+    const scoreOutputEl = document.getElementById('battle-score-limit-output');
+    const maxPlayersEl = document.getElementById('battle-max-players');
+    const scoreLimitEl = document.getElementById('battle-score-limit');
+
+    typePills.forEach((pill) => {
+      pill.addEventListener('click', () => {
+        const nextType = pill.getAttribute('data-battle-type') || 'deathmatch';
+        this.selectedBattleType = nextType;
+        if (battleTypeEl) {
+          battleTypeEl.value = nextType;
+          battleTypeEl.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+        this._syncBattleTypePills();
+      });
+    });
+
+    presetButtons.forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const presetId = btn.getAttribute('data-rule-preset');
+        this._applyBattlePreset(presetId);
+      });
+    });
+
+    const syncPlayersRange = () => {
+      if (!maxPlayersRangeEl) return;
+      const next = Number.parseInt(maxPlayersRangeEl.value || '8', 10) || 8;
+      this.selectedMaxPlayers = Math.max(2, Math.min(8, next));
+      if (maxPlayersOutputEl) maxPlayersOutputEl.textContent = String(this.selectedMaxPlayers);
+      if (maxPlayersEl) {
+        maxPlayersEl.value = String(this.selectedMaxPlayers);
+        maxPlayersEl.dispatchEvent(new Event('change', { bubbles: true }));
+      } else {
+        this._updateBattleSummary();
+      }
+    };
+
+    const syncScoreRange = () => {
+      if (!scoreRangeEl) return;
+      const next = Number.parseInt(scoreRangeEl.value || '5', 10) || 5;
+      const score = Math.max(1, Math.min(20, next));
+      if (scoreOutputEl) scoreOutputEl.textContent = String(score);
+      if (scoreLimitEl) {
+        scoreLimitEl.value = String(score);
+        scoreLimitEl.dispatchEvent(new Event('change', { bubbles: true }));
+      } else {
+        this._updateBattleSummary();
+      }
+    };
+
+    maxPlayersRangeEl?.addEventListener('input', syncPlayersRange);
+    scoreRangeEl?.addEventListener('input', syncScoreRange);
+
+    if (weaponGrid) {
+      weaponGrid.innerHTML = '';
+      BATTLE_WEAPON_LIBRARY.forEach((weapon) => {
+        const chip = document.createElement('button');
+        chip.type = 'button';
+        chip.className = 'custom-weapon-chip';
+        chip.setAttribute('data-weapon-id', weapon.id);
+        chip.innerHTML = `<span class="custom-weapon-icon">${weapon.icon}</span><span class="custom-weapon-label">${weapon.label}</span>`;
+        chip.addEventListener('click', () => {
+          if (this.selectedCustomWeapons.has(weapon.id)) {
+            this.selectedCustomWeapons.delete(weapon.id);
+          } else {
+            this.selectedCustomWeapons.add(weapon.id);
+          }
+          this._syncCustomWeaponPanel();
+          this.sendSettingsUpdate();
+        });
+        weaponGrid.appendChild(chip);
+      });
+    }
+
+    [
+      'battle-random-spawns',
+      'battle-power-weapons',
+      'battle-friendly-fire',
+      'battle-radar-enabled',
+      'battle-auto-aim',
+      'battle-one-hit-kills',
+      'battle-collision-damage',
+      'battle-match-length',
+      'battle-health-multiplier',
+      'battle-respawn-time',
+      'battle-score-limit',
+    ].forEach((id) => {
+      document.getElementById(id)?.addEventListener('change', () => {
+        this._updateBattleSummary();
+        this.sendSettingsUpdate();
+      });
+    });
+
+    this.selectedMaxPlayers = Math.max(2, Math.min(8, this.selectedMaxPlayers || DEFAULTS.maxPlayers));
+    if (maxPlayersRangeEl) maxPlayersRangeEl.value = String(this.selectedMaxPlayers || DEFAULTS.maxPlayers);
+    if (maxPlayersOutputEl) maxPlayersOutputEl.textContent = String(this.selectedMaxPlayers || DEFAULTS.maxPlayers);
+    if (scoreRangeEl && scoreLimitEl) scoreRangeEl.value = String(scoreLimitEl.value || DEFAULTS.scoreLimit);
+    if (scoreOutputEl && scoreLimitEl) scoreOutputEl.textContent = String(scoreLimitEl.value || DEFAULTS.scoreLimit);
+
+    this._syncBattleTypePills();
+    this._syncCustomWeaponPanel();
+    this._updateBattleSummary();
   }
 
   /* ═══════════════════════════════════════════════════

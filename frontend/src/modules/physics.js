@@ -1,204 +1,81 @@
-import * as THREE from 'three';
+/**
+ * physics.js — Backward-compatibility shim.
+ *
+ * The old two-scene physics relay is retired. Physics now runs in the unified
+ * rendering scene via scene.render() auto-stepping Havok. This module provides
+ * the same API surface so transitional callers work during Phase 13 rollout.
+ */
 
-// Initialize physics world
-export function initPhysics(ammo) {
-  // Create physics configuration
-  const collisionConfig = new ammo.btDefaultCollisionConfiguration();
-  const dispatcher = new ammo.btCollisionDispatcher(collisionConfig);
-  const broadphase = new ammo.btDbvtBroadphase();
-  const solver = new ammo.btSequentialImpulseConstraintSolver();
-  
-  // Create physics world
-  const physicsWorld = new ammo.btDiscreteDynamicsWorld(
-    dispatcher, broadphase, solver, collisionConfig
-  );
-  
-  // Set gravity
-  physicsWorld.setGravity(new ammo.btVector3(0, -20, 0));
-  
-  // Create temporary transform for reuse
-  const tmpTrans = new ammo.btTransform();
-  
-  console.log("Physics world initialized");
-  
-  return { physicsWorld, tmpTrans };
+import { applyKartDriving, createDriftState, FIXED_PHYSICS_STEP } from './kart-physics.js';
+
+export { FIXED_PHYSICS_STEP };
+
+// Module-level refs — set by the game loop after kart loads
+let _kartBody = null;
+let _kartMesh = null;
+let _driftState = createDriftState();
+
+/**
+ * Register kart refs so the shim updatePhysics() works.
+ * Called from main.js / battle-main.js after createVehicle callback.
+ */
+export function setPhysicsKartRefs(body, mesh) {
+  _kartBody = body;
+  _kartMesh = mesh;
+  _driftState = createDriftState();
 }
 
-// Update physics simulation
-export function updatePhysics(deltaTime, ammo, physicsState, carState, debugObjects, raceState) {
-  const { physicsWorld, tmpTrans } = physicsState;
-  const { 
-    carBody, vehicle, carModel, wheelMeshes, 
-    keyState, currentSteeringAngle, updateSteering
-  } = carState;
-  
-  if (!vehicle || !carModel) return { currentSpeed: 0 };
-  
-  // Get current velocity to determine if we're moving forward or backward
-  const velocity = carBody.getLinearVelocity();
-  
-  // Get forward direction using Three.js
-  const carForward = new THREE.Vector3();
-  carModel.getWorldDirection(carForward);
-  
-  // Convert Ammo velocity to Three.js vector
-  const velocityThree = new THREE.Vector3(
-    velocity.x(), 
-    velocity.y(), 
-    velocity.z()
-  );
-  
-  // Calculate dot product using Three.js
-  const dotForward = carForward.dot(velocityThree);
-  const maxEngineForce = 1000;
-  const maxBrakingForce = 50;
-  
-  // Calculate car speed in km/h
-  const speedKPH = velocityThree.length() * 3.6;
-  
-  // Check if the race has started before allowing engine forces
-  let engineForce = 0;
-  let brakingForce = 0;
-  
-  // Only allow movement if race has started and not finished
-  if (raceState.raceStarted && !raceState.raceFinished) {
-    // Handle key inputs with proper braking logic
-    if (keyState.w) {
-      // Accelerate forward
-      engineForce = maxEngineForce;
-      brakingForce = 0;
-    } else if (keyState.s) {
-      if (dotForward > 0.1) {
-        // Moving forward - apply brakes when S is pressed
-        engineForce = 0;
-        brakingForce = maxBrakingForce;
-      } else {
-        // Stopped or moving backward - apply reverse
-        engineForce = -maxEngineForce / 2;
-        brakingForce = 0;
-      }
-    } else {
-      // No key pressed - engine off, light braking
-      engineForce = 0;
-      brakingForce = 20;
-    }
-  } else {
-    // Either countdown not over or race is finished - apply brakes
-    brakingForce = maxBrakingForce;
-  }
-  
-  // Apply forces to all wheels
-  for (let i = 0; i < vehicle.getNumWheels(); i++) {
-    // Engine force to rear wheels only
-    if (i >= 2) {
-      vehicle.applyEngineForce(engineForce, i);
-    }
-    
-    // Braking force to all wheels for better braking
-    vehicle.setBrake(brakingForce, i);
+/**
+ * No-op — physics is now initialised by babylon-renderer.js.
+ * Kept for backward compatibility with existing callers.
+ */
+export async function initPhysics() {
+  console.log('Physics world initialised (Havok — unified scene)');
+}
+
+/**
+ * Run one fixed-timestep tick using the shared kart-physics module.
+ * scene.render() handles Havok stepping, so no manual step call needed.
+ *
+ * @param {number}  deltaTime
+ * @param {object}  carState   { carModel, wheelMeshes, keyState }
+ * @param {object}  raceState  { raceStarted, raceFinished }
+ * @returns {{ currentSpeed: number, driftTier: number, miniBoostTier: number, miniBoostActive: boolean }}
+ */
+export function updatePhysics(deltaTime, carState, raceState) {
+  if (!_kartBody || !_kartMesh) {
+    return { currentSpeed: 0, driftTier: 0, miniBoostTier: 0, miniBoostActive: false };
   }
 
-  let newSteeringAngle = 0;
-  
-  // Call updateSteering to update the steering angle, passing the current speed
-  if (!raceState.raceFinished) {
-    newSteeringAngle = updateSteering(deltaTime, vehicle, keyState, currentSteeringAngle, speedKPH);
+  const { keyState } = carState;
+
+  // Block driving when race hasn't started or is finished
+  if (!raceState.raceStarted || raceState.raceFinished) {
+    // Just return zero speed — kart is frozen (STATIC body)
+    return { currentSpeed: 0, driftTier: 0, miniBoostTier: 0, miniBoostActive: false };
   }
-  
-  // Clean up Ammo.js objects to prevent memory leaks
-  ammo.destroy(velocity);
-  
-  // Step physics simulation
-  physicsWorld.stepSimulation(deltaTime, 10);
-  
-  // Update debug objects if any
-  if (debugObjects && debugObjects.length > 0) {
-    updateDebugObjects(vehicle, debugObjects, tmpTrans);
-  }
-  
-  // Return both speed and the new steering angle
-  return { 
-    currentSpeed: speedKPH,
-    currentSteeringAngle: newSteeringAngle 
+
+  // Convert keyState to normalised input
+  const input = {
+    throttle: (keyState.w ? 1 : 0) + (keyState.s ? -1 : 0),
+    steer:    (keyState.a ? 1 : 0) + (keyState.d ? -1 : 0),
+    brake:    !!keyState.space,
   };
-}
 
-// Update debug objects
-function updateDebugObjects(vehicle, debugObjects, tmpTrans) {
-  debugObjects.forEach((obj, index) => {
-    if (obj.isWheel) {
-      const wheelIndex = obj.wheelIndex % 4;
-      vehicle.updateWheelTransform(wheelIndex, true);
-      const transform = vehicle.getWheelInfo(wheelIndex).get_m_worldTransform();
-      const pos = transform.getOrigin();
-      const quat = transform.getRotation();
-      
-      obj.mesh.position.set(pos.x(), pos.y(), pos.z());
-      obj.mesh.quaternion.set(quat.x(), quat.y(), quat.z(), quat.w());
-    } else if (obj.body) {
-      const ms = obj.body.getMotionState();
-      if (ms) {
-        ms.getWorldTransform(tmpTrans);
-        const p = tmpTrans.getOrigin();
-        const q = tmpTrans.getRotation();
-        
-        obj.mesh.position.set(p.x(), p.y(), p.z());
-        obj.mesh.quaternion.set(q.x(), q.y(), q.z(), q.w());
-      }
+  const result = applyKartDriving(_kartBody, _kartMesh, input, deltaTime, _driftState);
+
+  // Spin wheel meshes based on speed
+  if (carState.wheelMeshes) {
+    const rotAmt = (result.speedKPH / 3.6) * deltaTime * 2.5;
+    for (const wm of carState.wheelMeshes) {
+      if (wm) wm.rotation.x -= rotAmt;
     }
-  });
-}
-
-// Physics time step constants
-export const FIXED_PHYSICS_STEP = 1/60; // 60Hz physics
-
-// Add a rigid body to the physics world
-export function addRigidBody(
-  ammo, physicsWorld, shape, mass, position, quaternion, 
-  friction = 0.5, restitution = 0.2
-) {
-  const transform = new ammo.btTransform();
-  transform.setIdentity();
-  
-  // Set position
-  transform.setOrigin(
-    new ammo.btVector3(position.x, position.y, position.z)
-  );
-  
-  // Set rotation
-  if (quaternion) {
-    transform.setRotation(
-      new ammo.btQuaternion(quaternion.x, quaternion.y, quaternion.z, quaternion.w)
-    );
   }
-  
-  const motionState = new ammo.btDefaultMotionState(transform);
-  const localInertia = new ammo.btVector3(0, 0, 0);
-  
-  // Calculate inertia for dynamic bodies
-  if (mass > 0) {
-    shape.calculateLocalInertia(mass, localInertia);
-  }
-  
-  // Create rigid body info
-  const rbInfo = new ammo.btRigidBodyConstructionInfo(
-    mass, motionState, shape, localInertia
-  );
-  
-  // Create rigid body
-  const body = new ammo.btRigidBody(rbInfo);
-  
-  // Set friction and restitution
-  body.setFriction(friction);
-  body.setRestitution(restitution);
-  
-  // Add to physics world
-  physicsWorld.addRigidBody(body);
-  
-  // Clean up temporary Ammo objects
-  ammo.destroy(transform);
-  ammo.destroy(localInertia);
-  ammo.destroy(rbInfo);
-  
-  return body;
+
+  return {
+    currentSpeed: result.speedKPH,
+    driftTier: result.driftTier || 0,
+    miniBoostTier: result.miniBoostTier || 0,
+    miniBoostActive: result.miniBoostActive || false,
+  };
 }
