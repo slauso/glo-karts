@@ -31,13 +31,67 @@ const ARENA_SURFACE_Y = {
   test_box: 0.6,
   glo_arena: 0.35,
 };
+const CUSTOM_TRACK_ID = "custom_import";
+const DEFAULT_BATTLE_TRACK = "glo_arena";
+const DEFAULT_LOADOUT_ID = "classic";
+
+function parseCustomTrackData(raw) {
+  if (!raw) return null;
+  if (typeof raw === "object") return raw;
+  try {
+    return JSON.parse(String(raw));
+  } catch {
+    return null;
+  }
+}
+
+function normalizeCustomSpawn(spawn) {
+  if (!spawn) return null;
+  const position = spawn.position && typeof spawn.position === "object"
+    ? spawn.position
+    : spawn;
+  const x = Number(position.x);
+  const y = Number(position.y ?? 0);
+  const z = Number(position.z);
+  if (![x, y, z].every(Number.isFinite)) return null;
+  const heading = Number(spawn.heading);
+  return {
+    x,
+    y,
+    z,
+    heading: Number.isFinite(heading) ? heading : undefined,
+  };
+}
+
+function normalizeCustomObstacle(obstacle) {
+  if (!obstacle?.position || typeof obstacle.position !== "object") return null;
+  const x = Number(obstacle.position.x);
+  const y = Number(obstacle.position.y ?? 0);
+  const z = Number(obstacle.position.z);
+  if (![x, y, z].every(Number.isFinite)) return null;
+  return { x, y, z };
+}
+
+function normalizeBattleGameType(value) {
+  const normalized = String(value || "deathmatch").trim().toLowerCase();
+  if (normalized === "ctf" || normalized === "capture_the_flag") return "ctf";
+  if (normalized === "balloon" || normalized === "last_kart_standing") return "balloon";
+  return "deathmatch";
+}
 
 export class BattleRoom extends Room {
   onCreate(options = {}) {
     const state = new BattleState();
-    state.gameType = options.gameType || "deathmatch";
+    state.gameType = normalizeBattleGameType(options.gameType || options.battleType);
+    state.trackId = String(options.trackId || DEFAULT_BATTLE_TRACK);
+    state.loadoutId = String(options.loadoutId || DEFAULT_LOADOUT_ID);
+    state.botCount = Math.max(0, Number(options.botCount || 0));
     state.scoreLimit = Number(options.scoreLimit || 5);
     this.setState(state);
+    const customPool = Array.isArray(options.weaponPool)
+      ? [...new Set(options.weaponPool.map((weaponId) => String(weaponId || "").trim()).filter((weaponId) => BATTLE_WEAPON_POOL.includes(weaponId)))]
+      : [];
+    this._weaponPool = customPool.length ? customPool : BATTLE_WEAPON_POOL;
 
     const syncConfig = configureRealtimeRoom(this, options, { authoritative: true });
     this.inputBySession = new Map();
@@ -47,9 +101,22 @@ export class BattleRoom extends Room {
     this._countdownTimer = null;
     this._matchEnded = false;
     this._joinedAtBySession = new Map();
+    this._hostSessionId = null;
     // Task 2.2: per-client rate limiter
     this._rateLimiter = new RateLimiter();
     this._allowDebugControls = process.env.NODE_ENV !== "production";
+    this._customArenaData = state.trackId === CUSTOM_TRACK_ID
+      ? parseCustomTrackData(options.customTrackData)
+      : null;
+    this._customSpawnPoints = Array.isArray(this._customArenaData?.startPositions)
+      ? this._customArenaData.startPositions.map(normalizeCustomSpawn).filter(Boolean)
+      : [];
+    this._customItemBoxPositions = Array.isArray(this._customArenaData?.obstacles)
+      ? this._customArenaData.obstacles
+          .filter((obstacle) => String(obstacle?.type || "") === "item_box")
+          .map(normalizeCustomObstacle)
+          .filter(Boolean)
+      : [];
 
     state.syncPatchRateMs = Number(syncConfig.patchRateMs || 0);
     state.syncSimulationHz = Number(syncConfig.simulationHz || 0);
@@ -60,8 +127,16 @@ export class BattleRoom extends Room {
     this._refreshReadyState();
 
     // Arena-specific spawn Y height (default 2.5 for glo_arena/test_box)
-    this._spawnY = ARENA_SURFACE_Y[options.trackId] ?? 1.0;
+    this._spawnY = this._customSpawnPoints[0]?.y ?? ARENA_SURFACE_Y[state.trackId] ?? 1.0;
     this._positionGuardHalf = 49.5;
+    if (this._customArenaData?.bounds?.min && this._customArenaData?.bounds?.max) {
+      const spanX = Math.abs(Number(this._customArenaData.bounds.max.x) - Number(this._customArenaData.bounds.min.x));
+      const spanZ = Math.abs(Number(this._customArenaData.bounds.max.z) - Number(this._customArenaData.bounds.min.z));
+      const customHalf = Math.max(spanX, spanZ) * 0.5 + 12;
+      if (Number.isFinite(customHalf)) {
+        this._positionGuardHalf = Math.max(this._positionGuardHalf, customHalf);
+      }
+    }
 
     // Phase 21 Block C: respawn invulnerability + kill tracking
     this._invulnUntil = new Map();
@@ -71,11 +146,37 @@ export class BattleRoom extends Room {
     this._kartCrashCooldownUntil = new Map();
 
     this.onMessage("triggerStart", () => {
+      if (this._matchEnded) this._resetForRematch("triggerStart");
       this._evaluateCountdownStart("triggerStart");
     });
 
     this.onMessage("start", () => {
+      if (this._matchEnded) this._resetForRematch("start");
       this._evaluateCountdownStart("start");
+    });
+
+    this.onMessage("settingsUpdate", (client, data = {}) => {
+      if (!client || client.sessionId !== this._hostSessionId) return;
+      if (this.state.started || this.countdownActive) return;
+
+      const nextTrackId = String(data.trackId || this.state.trackId || DEFAULT_BATTLE_TRACK);
+      this.state.trackId = nextTrackId;
+      this.state.gameType = normalizeBattleGameType(data.gameType || data.battleType || this.state.gameType);
+      this.state.scoreLimit = Math.min(Math.max(Number(data.scoreLimit) || this.state.scoreLimit || 5, 1), 50);
+      this.state.loadoutId = String(data.loadoutId || this.state.loadoutId || DEFAULT_LOADOUT_ID);
+      this.state.botCount = Math.min(Math.max(Number(data.botCount) || 0, 0), 10);
+      this._spawnY = this._customSpawnPoints[0]?.y ?? ARENA_SURFACE_Y[nextTrackId] ?? this._spawnY;
+
+      if (Array.isArray(data.weaponPool) && this.state.loadoutId === "custom") {
+        const sanitizedPool = [...new Set(
+          data.weaponPool
+            .map((weaponId) => String(weaponId || "").trim())
+            .filter((weaponId) => BATTLE_WEAPON_POOL.includes(weaponId))
+        )];
+        this._weaponPool = sanitizedPool.length ? sanitizedPool : BATTLE_WEAPON_POOL;
+      } else if (this.state.loadoutId !== "custom") {
+        this._weaponPool = BATTLE_WEAPON_POOL;
+      }
     });
 
     const markClientReady = (client) => {
@@ -117,35 +218,7 @@ export class BattleRoom extends Room {
     this.onMessage("pickupItem", (client, data) => {
         // Task 2.2 + 2.3: rate-limit and proximity-validate pickups
         if (!this._rateLimiter.allow(client.sessionId, "pickupItem")) return;
-        const entityId = data.entityId;
-        const e = this.state.entities.get(entityId);
-        const player = this.state.players.get(client.sessionId);
-        const pickupPosition = data && Number.isFinite(Number(data.x)) && Number.isFinite(Number(data.y)) && Number.isFinite(Number(data.z))
-          ? { x: Number(data.x), y: Number(data.y), z: Number(data.z) }
-          : null;
-        
-        if (e && e.type === "item_box" && e.active && player && isWithinPickupRangeWithClientPosition(player, e, pickupPosition)) {
-        // Allow pickup if any pickup slot has room (weapon2 empty OR reserve weapon3 empty)
-        const hasRoom = (!player.weapon2 || player.ammo2 <= 0) || (!player.weapon3 || player.ammo3 <= 0);
-        if (!hasRoom) return;
-            e.active = false;
-            e.respawnTimer = 10000; 
-            const slot = (player.weapon2 && player.ammo2 > 0) ? "reserve" : "secondary";
-            const rolled = grantWeapon(player, 0.5, { pool: BATTLE_WEAPON_POOL });
-          const weaponDef = WEAPONS[rolled];
-            
-          client.send("itemReceived", {
-            slot,
-            weapon: rolled,
-            ammo: slot === "reserve" ? player.ammo3 : player.ammo2,
-            category: weaponDef?.category || 'unknown',
-            cooldownMs: weaponDef?.cooldown || 0,
-            effect: weaponDef?.effect || '',
-            description: weaponDef?.desc || '',
-            // Include reserve state for client sync
-            reserve: { weapon: player.weapon3 || "", ammo: player.ammo3 || 0 },
-          });
-        }
+        this._handlePickupItem(client, data);
     });
 
     this.onMessage("swapSecondaryWeapon", (client) => {
@@ -292,6 +365,41 @@ export class BattleRoom extends Room {
     this.spawnItemBoxes();
   }
 
+  _handlePickupItem(client, data = {}) {
+    const entityId = data.entityId;
+    const itemBox = this.state.entities.get(entityId);
+    const player = this.state.players.get(client.sessionId);
+    const pickupPosition = Number.isFinite(Number(data.x)) && Number.isFinite(Number(data.y)) && Number.isFinite(Number(data.z))
+      ? { x: Number(data.x), y: Number(data.y), z: Number(data.z) }
+      : null;
+
+    if (!itemBox || itemBox.type !== "item_box" || !itemBox.active || !player) return null;
+    if (!isWithinPickupRangeWithClientPosition(player, itemBox, pickupPosition)) return null;
+
+    const hasRoom = (!player.weapon2 || player.ammo2 <= 0) || (!player.weapon3 || player.ammo3 <= 0);
+    if (!hasRoom) return null;
+
+    itemBox.active = false;
+    itemBox.respawnTimer = 10000;
+
+    const slot = (player.weapon2 && player.ammo2 > 0) ? "reserve" : "secondary";
+    const rolled = grantWeapon(player, 0.5, { pool: this._weaponPool });
+    const weaponDef = WEAPONS[rolled];
+    const payload = {
+      slot,
+      weapon: rolled,
+      ammo: slot === "reserve" ? player.ammo3 : player.ammo2,
+      category: weaponDef?.category || "unknown",
+      cooldownMs: weaponDef?.cooldown || 0,
+      effect: weaponDef?.effect || "",
+      description: weaponDef?.desc || "",
+      reserve: { weapon: player.weapon3 || "", ammo: player.ammo3 || 0 },
+    };
+
+    client.send("itemReceived", payload);
+    return payload;
+  }
+
   _checkDeathmatchWin(attacker) {
     if (!this.state.started) return;
     if (attacker.score >= this.state.scoreLimit) {
@@ -388,7 +496,7 @@ export class BattleRoom extends Room {
     }
 
     const spawn = this.getSpawnPoint(this.state.players.size, Math.floor(Math.random() * 12));
-    initializeAuthoritativeKart(victim, { x: spawn.x, y: this._spawnY, z: spawn.z });
+    initializeAuthoritativeKart(victim, spawn);
     victim.health = 100;
     victim.weapon = "glo_burst";
     victim.ammo = WEAPONS.glo_burst.ammo;
@@ -429,7 +537,7 @@ export class BattleRoom extends Room {
       attackerName: attacker?.name || "Arena",
       weapon: context.weapon || "unknown",
       spawnX: spawn.x,
-      spawnY: this._spawnY,
+      spawnY: spawn.y,
       spawnZ: spawn.z,
     });
 
@@ -510,12 +618,14 @@ export class BattleRoom extends Room {
   
   spawnItemBoxes() {
     // Grid of item boxes spread around the arena centre at 4 cardinal + 4 diagonal positions
-    const positions = [
-      { x:  20, z:   0 }, { x: -20, z:   0 },
-      { x:   0, z:  20 }, { x:   0, z: -20 },
-      { x:  15, z:  15 }, { x: -15, z:  15 },
-      { x:  15, z: -15 }, { x: -15, z: -15 },
-    ];
+    const positions = this._customItemBoxPositions.length
+      ? this._customItemBoxPositions
+      : [
+          { x:  20, z:   0 }, { x: -20, z:   0 },
+          { x:   0, z:  20 }, { x:   0, z: -20 },
+          { x:  15, z:  15 }, { x: -15, z:  15 },
+          { x:  15, z: -15 }, { x: -15, z: -15 },
+        ];
     positions.forEach((pos, i) => {
       const id = `box_${i}`;
       const box = new EntityState();
@@ -523,13 +633,17 @@ export class BattleRoom extends Room {
       box.type = "item_box";
       box.active = true;
       box.x = pos.x;
-      box.y = this._spawnY + 0.9;
+      box.y = Number.isFinite(pos.y) ? pos.y : this._spawnY + 0.9;
       box.z = pos.z;
       this.state.entities.set(id, box);
     });
   }
 
   onJoin(client, options = {}) {
+    if (!this._hostSessionId || options.isHost) {
+      this._hostSessionId = client.sessionId;
+    }
+
     const p = new PlayerState();
     p.id = client.sessionId;
     p.name = options.playerName || `Player_${client.sessionId.slice(0, 4)}`;
@@ -545,7 +659,7 @@ export class BattleRoom extends Room {
     p.readyAt = p.ready ? Date.now() : 0;
 
     const spawn = this.getSpawnPoint(this.maxClients, idx);
-    initializeAuthoritativeKart(p, { x: spawn.x, y: this._spawnY, z: spawn.z });
+    initializeAuthoritativeKart(p, spawn);
 
     // Grant glo_burst as primary weapon (always active)
     const gloBurst = WEAPONS.glo_burst;
@@ -591,6 +705,7 @@ export class BattleRoom extends Room {
   }
 
   onLeave(client) {
+    const wasHost = client.sessionId === this._hostSessionId;
     this._joinedAtBySession.delete(client.sessionId);
     this.state.players.delete(client.sessionId);
     this.inputBySession.delete(client.sessionId);
@@ -599,12 +714,88 @@ export class BattleRoom extends Room {
     if (!this.state.started) {
       this._evaluateCountdownStart("leave");
     }
+    if (wasHost) {
+      this._hostSessionId = this.clients[0]?.sessionId || null;
+    }
     log('info', 'room_leave', { room: 'battle_room', roomId: this.roomId, sessionId: client.sessionId, players: this.state.players.size });
     console.log(`[battle_room] leave sessionId=${client.sessionId} players=${this.state.players.size}`);
   }
 
   _getMinReadyPlayers() {
     return this.maxClients > 1 ? 2 : 1;
+  }
+
+  _resetForRematch(reason = "rematch") {
+    const now = Date.now();
+    this._cancelCountdown(`reset:${reason}`);
+    this._matchEnded = false;
+    this.state.started = false;
+    this.countdownActive = false;
+    this.state.countdownActive = false;
+    this.state.countdownStartAt = 0;
+    this._countdownStartAt = 0;
+    this.state.redScore = 0;
+    this.state.blueScore = 0;
+    this.state.arenaEffectType = "";
+    this.state.arenaEffectTimer = 0;
+    this.inputBySession.clear();
+    this._invulnUntil.clear();
+    this._killStreaks.clear();
+    this._lastKilledBy.clear();
+    this._kartCrashCooldownUntil.clear();
+    this._firstBloodDone = false;
+
+    const players = [...this.state.players.values()];
+    const maxPlayers = Math.max(players.length, this.maxClients || players.length || 1);
+    const gloBurst = WEAPONS.glo_burst;
+    players.forEach((player, index) => {
+      const spawn = this.getSpawnPoint(maxPlayers, index);
+      initializeAuthoritativeKart(player, spawn);
+      player.team = index % 2 === 0 ? "red" : "blue";
+      player.health = 100;
+      player.score = 0;
+      player.ready = true;
+      player.readyAt = now;
+      player.lastProcessedInput = 0;
+      player.lives = 3;
+      player.deaths = 0;
+      player.weapon = "glo_burst";
+      player.ammo = gloBurst?.ammo || 0;
+      player.fireCooldown = 0;
+      player.overheat = 0;
+      player.overheated = false;
+      player.weapon2 = "";
+      player.ammo2 = 0;
+      player.fireCooldown2 = 0;
+      player.weapon3 = "";
+      player.ammo3 = 0;
+      player.speedMultiplier = 1;
+      player.steerMultiplier = 1;
+      player.effectType = "";
+      player.effectTimer = 0;
+      player.shielded = false;
+      player.shieldHP = 0;
+      player.reflectProjectiles = false;
+      player.phased = false;
+      player.steer = 0;
+      player.lap = 0;
+      player.checkpointIdx = -1;
+      player.finished = false;
+      player.raceFinishTime = 0;
+    });
+
+    const transientEntityIds = [];
+    this.state.entities.forEach((entity, entityId) => {
+      if (entity.type === "item_box") {
+        entity.active = true;
+        entity.respawnTimer = 0;
+      } else {
+        transientEntityIds.push(entityId);
+      }
+    });
+    transientEntityIds.forEach((entityId) => this.state.entities.delete(entityId));
+
+    this._refreshReadyState();
   }
 
   _refreshReadyState() {
@@ -682,6 +873,16 @@ export class BattleRoom extends Room {
   }
 
   getSpawnPoint(maxPlayers, index) {
+    if (this._customSpawnPoints.length) {
+      const authoredSpawn = this._customSpawnPoints[index % this._customSpawnPoints.length];
+      return {
+        x: authoredSpawn.x,
+        y: authoredSpawn.y,
+        z: authoredSpawn.z,
+        heading: authoredSpawn.heading,
+      };
+    }
+
     const count = Math.max(2, Math.min(12, maxPlayers || 12));
     const angleStep = (Math.PI * 2) / count;
     const baseAngle = angleStep * (index % count);
@@ -704,7 +905,7 @@ export class BattleRoom extends Room {
       });
 
       if (!tooClose) {
-        return { x, z };
+        return { x, y: this._spawnY, z };
       }
 
       const retryAngle = Math.random() * Math.PI * 2;
@@ -713,7 +914,7 @@ export class BattleRoom extends Room {
       z = Math.sin(retryAngle) * retryRadius;
     }
 
-    return { x, z };
+    return { x, y: this._spawnY, z };
   }
 
   update(deltaTime) {

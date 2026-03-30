@@ -3,7 +3,6 @@
 
 // ── Kart roster with GLO-Karts character names ──────────────────
 const STK_KARTS = [
-  { id: 'tux',             name: 'Stephen' },
   { id: 'adiumy',          name: 'Angela'  },
   { id: 'nolok',           name: 'Fred'    },
   { id: 'wilber',          name: 'Mia'     },
@@ -11,17 +10,41 @@ const STK_KARTS = [
   { id: 'hexley',          name: 'Wes'     },
   { id: 'gavroche',        name: 'James'   },
   { id: 'emule',           name: 'Luca'    },
-  { id: 'kiki',            name: 'Grace'   },
-  { id: 'beastie',         name: 'John'    },
-  { id: 'amanda',          name: 'Olivia'  },
-  { id: 'suzanne',         name: 'Lisa'    },
+  { id: 'kiki',            name: 'Madeline'},
+  { id: 'amanda',          name: 'Grace'   },
+  { id: 'suzanne',         name: 'John'    },
 
   { id: 'konqi',           name: 'Judy'    },
-  { id: 'sara_the_racer',  name: 'Carrie'  },
+  { id: 'sara_the_racer',  name: 'Toni'    },
   { id: 'sara_the_wizard', name: 'Gianna'  },
   { id: 'puffy',           name: 'Anthony' },
   { id: 'pidgin',          name: 'Zane'    },
   { id: 'beagle_2',        name: 'Walter'  },
+
+  // ── New addon karts ──
+  { id: 'carrot',          name: 'Olivia'  },
+  { id: 'liz',             name: 'Amelia'  },
+  { id: 'oem',             name: 'Christopher' },
+  { id: 'mr_iceblock',     name: 'Frost'   },
+  { id: 'minix',           name: 'Max'     },
+  { id: 'pidgin_2020',     name: 'Perry'   },
+  { id: 'toots',           name: 'Alicia'  },
+  { id: 'rx173',           name: 'michael' },
+  { id: 'bea',             name: 'Christi' },
+
+  // ── Batch 2 addon karts ──
+  { id: 'transmission',    name: 'Switch'       },
+  { id: 'python',          name: 'Dave'         },
+  { id: 'amazing_panda',   name: 'Sharlene'     },
+  { id: 'racehicle',       name: 'Ron'          },
+  { id: 'inky',            name: 'Gail'         },
+  { id: 'mechatux',        name: 'MJ'           },
+  { id: 'sepia',           name: 'Jason'        },
+  { id: 'elephpant',       name: 'Carrie'       },
+  { id: 'ozom',            name: 'Bennett'      },
+  { id: 'chibi',           name: 'Jimbo'        },
+  { id: 'p2000',           name: 'Stephen'      },
+  { id: 'cyberkart',       name: 'Peter'        },
 ];
 
 // ── GLO effect definitions (saved to sessionStorage for in-game replication) ──
@@ -338,7 +361,11 @@ class KartPreview {
     this.currentIndex = STK_KARTS.findIndex(k => k.id === savedId);
     if (this.currentIndex < 0) this.currentIndex = 0;
 
-    this.init();
+    try {
+      this.init();
+    } catch (e) {
+      console.error('[KartPreview] init failed:', e);
+    }
     this.setupNavButtons();
     this.updateKartInfo();
     this.buildGloPicker();
@@ -620,7 +647,7 @@ class KartPreview {
     if (this._wheels && this._wheels.length > 0) {
       for (const tire of this._wheels) {
         if (tire.isTire && tire.material) {
-          tire.material.color.set(0x1a1a1a);
+          tire.material.color.set(0x111111);
           if (tire.material.emissive) tire.material.emissive.set(0x000000);
           tire.material.emissiveIntensity = 0;
           tire.material.needsUpdate = true;
@@ -680,7 +707,8 @@ class KartPreview {
         const size   = box.getSize(new THREE.Vector3());
         const diag = size.length(); // Revert back to diagonal for uniform volume fill
           const scale = 2.112 / diag; // Increase visible kart size by an additional 10% without moving the preview frame
-        this.kart.scale.setScalar(scale);
+        const perKartScale = { toots: 0.85 }; // Carrie is 15% smaller
+        this.kart.scale.setScalar(scale * (perKartScale[id] || 1));
         const box2   = new THREE.Box3().setFromObject(this.kart);
         const center = box2.getCenter(new THREE.Vector3());
         const minY   = box2.min.y;
@@ -691,15 +719,17 @@ class KartPreview {
         this.kart.position.set(-center.x, (-minY + 0.03) - lowerBy, -center.z);
         this._kartBaseY = (-minY + 0.03) - lowerBy;
         this._kartBaseX = -center.x;
-        this._kartScale = scale;
+        this._kartScale = scale * (perKartScale[id] || 1);
         this._enterDir = dir;
         this._enterT = dir !== 0 ? 0 : 1;
         this.kart.rotation.y = this.kartRotation;
-        // Per-kart mesh fixes: UV V-flip and winding reversal keyed by material name
-        const UV_FLIP = { amanda: ['body'] };       // Olivia — body UVs V-flipped
-        const WIND_FLIP = { gavroche: ['gavroche'] }; // James — face mesh winding reversed
-        const uvTargets  = UV_FLIP[id]  || [];
-        const windTargets = WIND_FLIP[id] || [];
+        // Per-kart mesh fixes keyed by material name substring
+        const UV_FLIP     = { amanda: ['body'] };       // Grace — full V-flip
+        const UV_FLIP_HI  = { gavroche: ['gavroche'] }; // James — conditional V-flip (V>0.5 only, B3D bottom-origin UVs)
+        const WIND_FLIP   = { gavroche: ['gavroche'] };  // James — face mesh winding reversed
+        const uvTargets    = UV_FLIP[id]    || [];
+        const uvHiTargets  = UV_FLIP_HI[id] || [];
+        const windTargets  = WIND_FLIP[id]  || [];
         this.kart.traverse(c => {
           if (c.isMesh) {
             c.castShadow = true;
@@ -716,6 +746,18 @@ class KartPreview {
                 if (uv) {
                   for (let i = 0; i < uv.count; i++) {
                     uv.setY(i, 1 - uv.getY(i));
+                  }
+                  uv.needsUpdate = true;
+                }
+              }
+              // Conditional V-flip: only flip V for vertices whose V > 0.5
+              // (B3D bottom-origin UVs that weren't converted to glTF top-origin)
+              if (uvHiTargets.length && matName && uvHiTargets.some(t => matName.includes(t))) {
+                const uv = c.geometry.getAttribute('uv');
+                if (uv) {
+                  for (let i = 0; i < uv.count; i++) {
+                    const v = uv.getY(i);
+                    if (v > 0.5) uv.setY(i, 1 - v);
                   }
                   uv.needsUpdate = true;
                 }
@@ -772,11 +814,32 @@ class KartPreview {
     const kartId = STK_KARTS[this.currentIndex].id;
     const skipWheels = kartId === 'beagle_2'; // Walter — wheel spin glitches
 
-    // Shared rubber material for tire surfaces
+    // Shared rubber material for tire surfaces — procedural tread texture
     if (!KartPreview._rubberMat) {
+      const texSize = 64;
+      const canvas = document.createElement('canvas');
+      canvas.width = canvas.height = texSize;
+      const ctx = canvas.getContext('2d');
+      // Base dark rubber
+      ctx.fillStyle = '#111111';
+      ctx.fillRect(0, 0, texSize, texSize);
+      // Tread grooves — slightly lighter horizontal stripes
+      ctx.fillStyle = '#1a1a1a';
+      for (let y = 0; y < texSize; y += 8) {
+        ctx.fillRect(0, y, texSize, 3);
+      }
+      // Subtle side wall edge highlights
+      ctx.fillStyle = '#222222';
+      ctx.fillRect(0, 0, texSize, 2);
+      ctx.fillRect(0, texSize - 2, texSize, 2);
+      const treadTex = new THREE.CanvasTexture(canvas);
+      treadTex.wrapS = treadTex.wrapT = THREE.RepeatWrapping;
+      treadTex.repeat.set(2, 4);
+
       KartPreview._rubberMat = new THREE.MeshStandardMaterial({
-        color: new THREE.Color(0x1a1a1a),
-        roughness: 0.92,
+        color: new THREE.Color(0x111111),
+        map: treadTex,
+        roughness: 0.95,
         metalness: 0.0,
         side: THREE.DoubleSide,
         depthWrite: true,
@@ -1174,7 +1237,9 @@ class KartPreview {
   }
 }
 
-document.addEventListener('DOMContentLoaded', () => { new KartPreview(); });
+document.addEventListener('DOMContentLoaded', () => {
+  try { new KartPreview(); } catch (e) { console.error('[KartPreview] startup failed:', e); }
+});
 
 
 

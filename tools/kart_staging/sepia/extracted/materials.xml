@@ -1,0 +1,10 @@
+<?xml version="1.0"?>
+<!-- Generated with script from SVN rev Unknown -->
+<materials>
+  <material name="light_diffuse.png" gloss-map="light_params.png"/>
+  <material name="lights.png" shader="additive"/>
+  <material name="metal_diffuse.png" gloss-map="metal_params.png" colorizable="Y" colorization-factor="0.10"/>
+  <material name="paint_diffuse.png" gloss-map="paint_params.png" colorizable="Y" colorization-factor="1.00"/>
+  <material name="roughplastic_diffuse.png" gloss-map="roughplastic_params.png" normal-map="roughplastic_normal.png"/>
+  <material name="sepia_diffuse.png" gloss-map="sepia_params.png"/>
+</materials>

@@ -1,0 +1,16 @@
+Models, textures and animation are made by Aidan Rhoden
+This mod is licensed under Creative Commons BY 3.0
+
+E-mail: aidan.j.rhoden@gmail.com
+ArtStation: https://aidan.j.rhoden.artstation.com
+
+This mod is not affiliated with The Boring Company or Tesla, Inc., and the content contained therein is not endorsed or otherwise sponsored by The Boring Company or Tesla Inc.
+
+Rev. 1
+	Majorly optimized textures, reducing addon size by about 80%, added normal maps, added headlights.
+
+Rev. 2
+	Added falling animation, added taillights
+
+Rev. 3
+	Added colorization masks, added steering animations, updated window texture

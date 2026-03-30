@@ -198,6 +198,18 @@
                     <input id="battle-score-limit-range" class="battle-tune-slider" type="range" min="1" max="20" step="1" value="5" />
                   </label>
                 </div>
+
+                <details class="battle-advanced-block" open>
+                  <summary>Weapon Loadout</summary>
+                  <div id="weapon-loadout-row" class="weapon-loadout-row" role="tablist" aria-label="Battle weapon loadouts"></div>
+                  <div id="custom-weapon-panel" class="custom-weapon-panel hidden">
+                    <div class="custom-weapon-head">
+                      <span class="custom-weapon-title">Custom Weapon Pool</span>
+                      <span id="custom-weapon-count" class="custom-weapon-count">0 selected</span>
+                    </div>
+                    <div id="custom-weapon-grid" class="custom-weapon-grid" role="group" aria-label="Custom battle weapon pool"></div>
+                  </div>
+                </details>
               </div>
 
               <input type="hidden" id="battle-arena-select" value="battleisland" />
@@ -306,7 +318,7 @@
               </button>
             </div>
             <p class="kart-selector-title">RACER NAME</p>
-            <input type="text" id="player-name-input" placeholder="Enter Your Name" maxlength="15">
+            <input type="text" id="player-name-input" placeholder="Enter Your Nickname" maxlength="15">
           </div>
 
           <!-- GLO Underglow Picker -->
@@ -334,7 +346,7 @@
             <div class="join-section">
               <div id="code-input">
                 <div class="code-input lens-pill-code-input">
-                  <input type="text" id="join-code-input" placeholder="Enter lobby code" maxlength="64">
+                  <input type="text" id="join-code-input" placeholder="Enter three-word party code" maxlength="64">
                   <button id="join-party-btn" class="icon-btn join-btn">Join</button>
                 </div>
                 <p id="join-status" class="status-message"></p>
@@ -351,7 +363,7 @@
               <div id="host-info" class="lobby-dashboard hidden">
                 <div class="lobby-dash-code-block">
                   <div class="code-box">
-                    <span id="party-code" class="code">XXXXXX</span>
+                    <span id="party-code" class="code">NEON-FOX-BOOST</span>
                     <button id="copy-code-btn" class="icon-btn">Copy</button>
                   </div>
                 </div>

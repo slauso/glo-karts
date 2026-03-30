@@ -1,4 +1,4 @@
-import { Schema, MapSchema, type } from "@colyseus/schema";
+import { Schema, MapSchema, ArraySchema, type } from "@colyseus/schema";
 import { LobbyPlayerState } from "./LobbyPlayerState.js";
 
 export class LobbyState extends Schema {
@@ -12,10 +12,12 @@ export class LobbyState extends Schema {
     this.arenaId = "test_box";
     this.arenaTheme = "nuclear_desert";
     this.battleType = "deathmatch";
+    this.loadoutId = "random-all";
     this.maxPlayers = 12;
     this.status = "waiting";
     this.countdown = 0;
     this.customTrackData = "";
+    this.weaponPool = new ArraySchema();
     this.players = new MapSchema();
   }
 }
@@ -28,8 +30,10 @@ type("string")(LobbyState.prototype, "trackId");
 type("string")(LobbyState.prototype, "arenaId");
 type("string")(LobbyState.prototype, "arenaTheme");
 type("string")(LobbyState.prototype, "battleType");
+type("string")(LobbyState.prototype, "loadoutId");
 type("number")(LobbyState.prototype, "maxPlayers");
 type("string")(LobbyState.prototype, "status");
 type("number")(LobbyState.prototype, "countdown");
 type("string")(LobbyState.prototype, "customTrackData");
+type(["string"])(LobbyState.prototype, "weaponPool");
 type({ map: LobbyPlayerState })(LobbyState.prototype, "players");

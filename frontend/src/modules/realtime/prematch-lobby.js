@@ -240,7 +240,6 @@ function _renderSettings(joinOptions) {
 
   const pills = [];
   if (joinOptions.gameMode === 'battle') {
-    pills.push(joinOptions.gameType === 'ctf' ? 'CTF' : 'DEATHMATCH');
     pills.push(`SCORE: ${joinOptions.scoreLimit || 5}`);
   } else {
     pills.push('3 LAPS');
@@ -278,9 +277,7 @@ export function show(roomState, localSessionId, joinOptions = {}) {
 
   const modeTag = _getEl('pm-map-mode-tag');
   if (modeTag) {
-    modeTag.textContent = isBattle
-      ? (joinOptions.gameType === 'ctf' ? 'CAPTURE THE FLAG' : 'DEATHMATCH')
-      : 'RACE';
+    modeTag.textContent = isBattle ? 'BATTLE' : 'RACE';
   }
 
   // Hide the 3D map canvas — no GPU work
@@ -411,11 +408,14 @@ export function cancelCountdown(label = 'WAITING') {
  */
 export function hide() {
   if (!_overlay) return;
+  // Stop Three.js render loop IMMEDIATELY to free GPU for Babylon gameplay
+  _disposed = true;
+  if (_threeRafId) { cancelAnimationFrame(_threeRafId); _threeRafId = null; }
   _overlay.classList.add('fade-out');
   setTimeout(() => {
     _overlay.classList.remove('visible', 'fade-out');
     _overlay.style.display = 'none';
-    _dispose();
+    _disposeAllPreviews();
   }, 700);
 }
 

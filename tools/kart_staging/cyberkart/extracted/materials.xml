@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<materials>
+  <material name="black-plastic-albedo.png" gloss-map="black-plastic-gloss.png"/>
+  <material name="body-albedo.png" gloss-map="body-gloss.png" colorizable="Y" colorization-factor="1.00" colorization-mask="body-colormask.png"/>
+  <material name="window-cracked-albedo.png" shader="alphablend"/>
+  <material name="door-rear-left-albedo.png" gloss-map="body-gloss.png" normal-map="Door-RearLeft-Normal.png" colorizable="Y" colorization-factor="1.00" colorization-mask="body-colormask.png"/>
+  <material name="door-front-left-albedo.png" gloss-map="body-gloss.png" normal-map="Door-FrontLeft-Normal.png" colorizable="Y" colorization-factor="1.00" colorization-mask="body-colormask.png"/>
+  <material name="gold-albedo.png" gloss-map="body-gloss.png"/>
+  <material name="hood-albedo.png" gloss-map="hood-gloss.png" colorizable="Y" colorization-factor="1.00" colorization-mask="hood-colormask.png"/>
+  <material name="hubcap-albedo.png" gloss-map="hubcap-gloss.png"/>
+  <material name="flamethrower.png" gloss-map="flamethrower-gloss.png"/>
+  <material name="gfxGlow_red_a.png" gloss-map="full-emission-gloss.png"/>
+  <material name="rubber-albedo.png" gloss-map="rubber-gloss.png"/>
+  <material name="screen.png" gloss-map="body-gloss.png"/>
+  <material name="taillight-albedo.png" gloss-map="full-emission-gloss.png"/>
+  <material name="window-base-albedo.png" shader="alphablend"/>
+</materials>

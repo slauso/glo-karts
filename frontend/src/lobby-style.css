@@ -2550,6 +2550,28 @@ input::placeholder { color: var(--text-muted); font-size: 0.88rem; }
   overflow: hidden;
 }
 
+.mode-card-stack {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  height: 100%;
+}
+
+.mode-card-stack > .mode-card {
+  flex: 1 1 auto;
+}
+
+.mode-card-builder-wrap {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  margin-top: 10px;
+  display: flex;
+  z-index: 5;
+}
+
 .mode-card.mode-card-guided {
   border-color: rgba(var(--glo-rgb), 0.22);
   box-shadow:
@@ -2696,6 +2718,9 @@ input::placeholder { color: var(--text-muted); font-size: 0.88rem; }
 .mode-card-info {
   flex: 1;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 .mode-card-label {
   font-family: var(--font-ui);
@@ -2726,6 +2751,44 @@ input::placeholder { color: var(--text-muted); font-size: 0.88rem; }
   padding: 3px 8px;
   border-radius: 999px;
   flex-shrink: 0;
+}
+
+.mode-card-builder-link {
+  align-items: center;
+  border: 0;
+  border-radius: 999px;
+  padding: 8px 14px;
+  display: inline-flex;
+  font-family: var(--font-ui);
+  font-size: 0.7rem;
+  font-weight: 800;
+  justify-content: center;
+  letter-spacing: 0.9px;
+  text-transform: uppercase;
+  color: #0b1020;
+  background: linear-gradient(135deg, rgba(255, 241, 168, 0.98), rgba(255, 184, 62, 0.94));
+  box-shadow: 0 10px 24px rgba(255, 184, 62, 0.3);
+  cursor: pointer;
+  transition: transform 140ms ease, box-shadow 140ms ease, filter 140ms ease;
+}
+
+.mode-card-builder-link:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.03);
+  box-shadow: 0 14px 28px rgba(255, 184, 62, 0.38);
+}
+
+.mode-card-builder-link:active {
+  transform: translateY(0);
+}
+
+.mode-card.active .mode-card-builder-link {
+  background: linear-gradient(135deg, rgba(255, 247, 205, 1), rgba(255, 198, 91, 0.98));
+}
+
+.mode-card-builder-separate {
+  width: 100%;
+  padding: 10px 16px;
 }
 .mode-card-badge.coming-soon {
   background: rgba(255,255,255,0.08);
@@ -2833,6 +2896,10 @@ input::placeholder { color: var(--text-muted); font-size: 0.88rem; }
   transition: gap 0.4s ease;
 }
 
+.mode-cards-row .mode-card-stack {
+  grid-column: 1 / -1;
+}
+
 .mode-cards-row .mode-card {
   grid-template-columns: 1fr;
   grid-template-rows: auto auto;
@@ -2916,6 +2983,23 @@ input::placeholder { color: var(--text-muted); font-size: 0.88rem; }
     inset 0 1px 1px rgba(255,255,255,0.1),
     inset 0 -5px 15px rgba(0,0,0,0.5),
     0 4px 15px rgba(0,0,0,0.3);
+}
+
+.mode-initial .mode-cards-row .mode-card-stack {
+  grid-column: 1 / -1;
+  --portal-rgb: 255, 0, 70;
+}
+
+.mode-initial .mode-cards-row .mode-card-stack .mode-card-builder-wrap {
+  z-index: 5;
+}
+
+.mode-initial .mode-cards-row .mode-card-stack .mode-card-builder-separate {
+  background: linear-gradient(135deg, rgba(255, 241, 168, 0.98), rgba(255, 184, 62, 0.94));
+  border: 1px solid rgba(255, 206, 102, 0.28);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.2),
+    0 8px 18px rgba(255, 184, 62, 0.28);
 }
 
 /* Ensure text and icon stay above the background effects */
@@ -5306,4 +5390,175 @@ select option {
     0 7px 0 rgba(0, 160, 200, 0.8), 
     0 10px 30px rgba(0, 255, 220, 0.35), 
     0 20px 50px rgba(0, 255, 220, 0.15); 
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   UNIFIED SHIMMER SWEEP — mode-card-style hover for all buttons
+   Light streak slides across on hover + GLO border/bg tint
+═══════════════════════════════════════════════════════════════ */
+
+/* ── Group A: Buttons with NO existing ::before (use ::before) ── */
+.glass-back-btn,
+.battle-type-pill,
+.weapon-loadout-btn,
+.glo-drum-arrow,
+.lens-pill,
+.battle-tune-item,
+.cup-card,
+.builder-btn {
+  position: relative;
+  overflow: hidden;
+}
+.glass-back-btn::before,
+.battle-type-pill::before,
+.weapon-loadout-btn::before,
+.glo-drum-arrow::before,
+.lens-pill::before,
+.battle-tune-item::before,
+.cup-card::before,
+.builder-btn::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(100deg, transparent 18%, rgba(255,255,255,0.11) 48%, transparent 82%);
+  transform: translateX(-130%);
+  transition: transform 0.7s ease;
+  pointer-events: none;
+  z-index: 1;
+}
+.glass-back-btn:hover::before,
+.battle-type-pill:hover::before,
+.weapon-loadout-btn:hover::before,
+.glo-drum-arrow:hover::before,
+.lens-pill:hover::before,
+.battle-tune-item:hover::before,
+.cup-card:hover::before,
+.builder-btn:hover::before {
+  transform: translateX(130%);
+}
+
+/* ── Group B: .battle-mode-card already uses ::after — add shimmer via ::before ── */
+.battle-mode-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(100deg, transparent 18%, rgba(255,255,255,0.11) 48%, transparent 82%);
+  transform: translateX(-130%);
+  transition: transform 0.7s ease;
+  pointer-events: none;
+  z-index: 1;
+}
+.battle-mode-card:hover::before {
+  transform: translateX(130%);
+}
+
+/* ── Group C: ::before occupied — add shimmer via ::after ── */
+.kart-nav-btn {
+  overflow: hidden;
+}
+.mode-cat-tab::after,
+.kart-nav-btn::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(100deg, transparent 18%, rgba(255,255,255,0.11) 48%, transparent 82%);
+  transform: translateX(-130%);
+  transition: transform 0.7s ease;
+  pointer-events: none;
+  z-index: 1;
+}
+.mode-cat-tab:hover::after,
+.kart-nav-btn:hover::after {
+  transform: translateX(130%);
+}
+
+/* ── GLO-tinted hover enhancements (applied over any existing hover) ── */
+.glass-back-btn:hover {
+  background: rgba(var(--glo-rgb), 0.08);
+  border-color: rgba(var(--glo-rgb), 0.30);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.10),
+    0 6px 18px rgba(0,0,0,0.22),
+    0 0 14px rgba(var(--glo-rgb), 0.08);
+}
+
+.battle-mode-card:hover {
+  background:
+    linear-gradient(180deg, rgba(var(--glo-rgb), 0.08), rgba(8,11,22,0.92));
+  box-shadow:
+    0 12px 28px rgba(0,0,0,0.28),
+    0 0 14px rgba(var(--glo-rgb), 0.08);
+}
+
+.battle-type-pill:hover {
+  background: linear-gradient(165deg, rgba(var(--glo-rgb), 0.10), rgba(10,14,28,0.95));
+}
+
+.weapon-loadout-btn:hover {
+  background: rgba(var(--glo-rgb), 0.10);
+  border-color: rgba(var(--glo-rgb), 0.40);
+  box-shadow:
+    0 1px 0 rgba(255,255,255,0.10) inset,
+    0 4px 14px rgba(var(--glo-rgb), 0.18);
+}
+
+.glo-drum-arrow:hover {
+  background: rgba(var(--glo-rgb), 0.12);
+  border-color: rgba(var(--glo-rgb), 0.35);
+  box-shadow:
+    0 0 8px rgba(var(--glo-rgb), 0.12),
+    0 4px 10px rgba(0,0,0,0.20);
+}
+
+.lens-pill:hover {
+  background: rgba(var(--glo-rgb), 0.08);
+  border-color: rgba(var(--glo-rgb), 0.28);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.10),
+    0 6px 14px rgba(0,0,0,0.20),
+    0 0 12px rgba(var(--glo-rgb), 0.06);
+}
+
+.kart-nav-btn:hover {
+  border-color: rgba(var(--glo-rgb), 0.30);
+  box-shadow:
+    0 0 10px rgba(var(--glo-rgb), 0.10),
+    0 4px 12px rgba(0,0,0,0.20);
+}
+
+.cup-card:hover {
+  background: rgba(var(--glo-rgb), 0.06);
+  border-color: rgba(var(--glo-rgb), 0.25);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.08),
+    0 8px 20px rgba(0,0,0,0.24),
+    0 0 12px rgba(var(--glo-rgb), 0.06);
+}
+
+.builder-btn:hover {
+  background: rgba(var(--glo-rgb), 0.08);
+  border-color: rgba(var(--glo-rgb), 0.30);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.10),
+    0 6px 16px rgba(0,0,0,0.22),
+    0 0 14px rgba(var(--glo-rgb), 0.08);
+}
+
+/* ── Unified active (press) feel for all buttons ── */
+.glass-back-btn:active,
+.battle-mode-card:active,
+.battle-type-pill:active,
+.weapon-loadout-btn:active,
+.glo-drum-arrow:active,
+.lens-pill:active,
+.mode-cat-tab:active,
+.battle-tune-item:active,
+.kart-nav-btn:active,
+.cup-card:active,
+.builder-btn:active {
+  transform: scale(0.975) translateY(1px);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.02),
+    0 4px 10px rgba(0,0,0,0.24);
+  transition: transform 0.08s ease, box-shadow 0.08s ease;
 }

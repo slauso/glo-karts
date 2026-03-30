@@ -20,6 +20,23 @@
       .bar:nth-child(1){animation-delay:0s}.bar:nth-child(2){animation-delay:.1s}.bar:nth-child(3){animation-delay:.2s}.bar:nth-child(4){animation-delay:.3s}.bar:nth-child(5){animation-delay:.4s}
       @keyframes barLoad{0%,100%{transform:scaleY(.1)}50%{transform:scaleY(1)}}
       .loading-text{color:rgba(255,255,255,.65);font-weight:600;font-size:1rem;letter-spacing:3px;text-transform:uppercase}
+      #loading-screen.is-builder-playtest{background:radial-gradient(circle at top,rgba(19,190,255,.18),transparent 42%),radial-gradient(circle at bottom right,rgba(255,123,0,.16),transparent 36%),linear-gradient(180deg,#04111a 0%,#05050a 54%,#13090d 100%)}
+      #loading-screen.is-builder-playtest .loading-title{text-shadow:0 0 60px rgba(19,190,255,.38);font-size:clamp(3rem,7vw,5.25rem)}
+      #loading-screen.is-builder-playtest .loading-subtitle{color:#7ee7ff;letter-spacing:7px;margin-bottom:28px}
+      .builder-playtest-panel{width:min(760px,92vw);padding:24px 24px 22px;border:1px solid rgba(126,231,255,.18);border-radius:28px;background:rgba(4,15,24,.78);backdrop-filter:blur(24px) saturate(145%);box-shadow:0 32px 90px rgba(0,0,0,.42),inset 0 1px 0 rgba(255,255,255,.08)}
+      .builder-playtest-kicker{font-size:.78rem;font-weight:800;letter-spacing:.26em;text-transform:uppercase;color:#7ee7ff;margin-bottom:10px}
+      .builder-playtest-name{font-family:"Bungee","Impact",sans-serif;font-size:clamp(1.4rem,3.3vw,2.2rem);letter-spacing:.08em;text-transform:uppercase;line-height:1.1;margin-bottom:10px}
+      .builder-playtest-stats{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:18px}
+      .builder-playtest-stat{padding:8px 12px;border-radius:999px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.08);font-size:.76rem;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:rgba(255,255,255,.78)}
+      .builder-playtest-progress{height:12px;border-radius:999px;background:rgba(255,255,255,.08);overflow:hidden;box-shadow:inset 0 1px 1px rgba(255,255,255,.06)}
+      .builder-playtest-progress-fill{height:100%;width:8%;border-radius:999px;background:linear-gradient(90deg,#7ee7ff 0%,#2fd6ff 45%,#ff7b00 100%);box-shadow:0 0 24px rgba(47,214,255,.45);transition:width .24s ease}
+      .builder-playtest-step{margin-top:16px;font-size:1rem;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#fff}
+      .builder-playtest-detail{margin-top:6px;min-height:1.2em;font-size:.92rem;line-height:1.45;color:rgba(255,255,255,.7)}
+      .builder-playtest-log{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:18px}
+      .builder-playtest-log-item{padding:12px 14px;border-radius:18px;background:rgba(255,255,255,.045);border:1px solid rgba(255,255,255,.06)}
+      .builder-playtest-log-item b{display:block;font-size:.72rem;letter-spacing:.16em;text-transform:uppercase;color:rgba(255,255,255,.52);margin-bottom:6px}
+      .builder-playtest-log-item span{display:block;font-size:.95rem;font-weight:700;color:#fff}
+      @media (max-width: 760px){.builder-playtest-log{grid-template-columns:1fr}.builder-playtest-panel{padding:18px 18px 16px}}
       #realtime-canvas{width:100vw;height:100vh;display:block;touch-action:none}
       .exit-game-btn{position:fixed;top:20px;right:20px;z-index:100;width:44px;height:44px;border-radius:50%;background:rgba(12,12,18,.55);backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,.15);color:rgba(255,255,255,.7);display:flex;align-items:center;justify-content:center;text-decoration:none;font-size:18px;transition:all .2s}
       .exit-game-btn:hover{background:#ff0080;color:#fff;border-color:#b30059}
@@ -89,6 +106,30 @@
         <div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div>
       </div>
       <div class="loading-text">Connecting...</div>
+      <div id="builder-playtest-panel" class="builder-playtest-panel" hidden>
+        <div class="builder-playtest-kicker">Arena Builder Live Handoff</div>
+        <div id="builder-playtest-name" class="builder-playtest-name">Untitled Arena</div>
+        <div id="builder-playtest-stats" class="builder-playtest-stats"></div>
+        <div class="builder-playtest-progress">
+          <div id="builder-playtest-progress-fill" class="builder-playtest-progress-fill"></div>
+        </div>
+        <div id="builder-playtest-step" class="builder-playtest-step">Reading builder payload</div>
+        <div id="builder-playtest-detail" class="builder-playtest-detail">Packaging your arena for direct playtest.</div>
+        <div class="builder-playtest-log">
+          <div class="builder-playtest-log-item">
+            <b>Route</b>
+            <span id="builder-playtest-route">Builder → Realtime</span>
+          </div>
+          <div class="builder-playtest-log-item">
+            <b>Shell</b>
+            <span id="builder-playtest-shell">Battle Room</span>
+          </div>
+          <div class="builder-playtest-log-item">
+            <b>Status</b>
+            <span id="builder-playtest-status">Booting</span>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- Prematch Lobby Screen -->
@@ -142,6 +183,7 @@
       import { ColyseusBabylonClient } from '/src/modules/realtime/colyseus-babylon-client.js';
       import { getColyseusEndpoint } from '/src/modules/realtime/feature-flag.js';
 
+      const BUILDER_PLAYTEST_META_KEY = 'gloBuilderPlaytestMeta';
       const params = new URLSearchParams(window.location.search);
       const isDevBattle = !!import.meta.env.DEV && params.get('devBattle') === '1';
       const scenarioDelayMs = Number(params.get('scenarioDelayMs') || 900);
@@ -158,7 +200,17 @@
         return next;
       };
 
-      const baseConfig = JSON.parse(sessionStorage.getItem('gameConfig') || '{}');
+      const safeParse = (raw, fallback = {}) => {
+        try {
+          return raw ? JSON.parse(raw) : fallback;
+        } catch {
+          return fallback;
+        }
+      };
+
+      const baseConfig = safeParse(sessionStorage.getItem('gameConfig'), {});
+      const builderPlaytestMeta = safeParse(sessionStorage.getItem(BUILDER_PLAYTEST_META_KEY), null);
+      const isBuilderPlaytest = params.get('builderPlaytest') === '1' || !!baseConfig.builderPlaytest;
       const myId = isDevBattle ? ensureDevPlayerId() : (sessionStorage.getItem('myPlayerId') || localStorage.getItem('myPlayerId'));
       const config = isDevBattle
         ? {
@@ -185,14 +237,72 @@
         gloColor:  sessionStorage.getItem('gloColor')  || '#ff0080',
         gloColor2: sessionStorage.getItem('gloColor2') || '#00e5ff',
       };
+      const smokeMode = sessionStorage.getItem('realtimeSmokeMode') || '';
 
       const isBattle = config.gameMode === 'battle';
       const roomName = isBattle ? 'battle_room' : 'race_room';
       const canvas   = document.getElementById('realtime-canvas');
+      const loadingScreen = document.getElementById('loading-screen');
+      const loadingTitle = document.querySelector('.loading-title');
+      const loadingText = document.querySelector('.loading-text');
+      const builderPanel = document.getElementById('builder-playtest-panel');
+      const builderName = document.getElementById('builder-playtest-name');
+      const builderStats = document.getElementById('builder-playtest-stats');
+      const builderProgressFill = document.getElementById('builder-playtest-progress-fill');
+      const builderStep = document.getElementById('builder-playtest-step');
+      const builderDetail = document.getElementById('builder-playtest-detail');
+      const builderStatus = document.getElementById('builder-playtest-status');
+      const builderShell = document.getElementById('builder-playtest-shell');
+      const exitButton = document.querySelector('.exit-game-btn');
+
+      const emitPlaytestStage = ({ phase = 'boot', label, detail = '', progress = null, state = 'active' }) => {
+        window.dispatchEvent(new CustomEvent('glo-playtest-progress', {
+          detail: { phase, label, detail, progress, state },
+        }));
+      };
+
+      const formatPlaytestStats = () => {
+        if (!builderStats || !builderPlaytestMeta) return;
+        const chips = [
+          `${builderPlaytestMeta.segmentCount || 0} tiles`,
+          `${builderPlaytestMeta.obstacleCount || 0} props`,
+          `${builderPlaytestMeta.spawnCount || 0} spawns`,
+        ];
+        builderStats.innerHTML = chips.map((value) => `<span class="builder-playtest-stat">${value}</span>`).join('');
+      };
+
+      const applyBuilderPlaytestSkin = () => {
+        if (!isBuilderPlaytest) return;
+        loadingScreen?.classList.add('is-builder-playtest');
+        if (builderPanel) builderPanel.hidden = false;
+        if (loadingTitle) loadingTitle.textContent = 'ARENA FORGE';
+        if (sub) sub.textContent = 'LIVE PLAYTEST';
+        if (builderName) builderName.textContent = builderPlaytestMeta?.name || 'Untitled Arena';
+        if (builderShell) builderShell.textContent = roomName.replace('_', ' ').toUpperCase();
+        if (exitButton) {
+          exitButton.href = 'builder.html';
+          exitButton.setAttribute('aria-label', 'Return to builder');
+        }
+        formatPlaytestStats();
+      };
+
+      window.addEventListener('glo-playtest-progress', (event) => {
+        if (!isBuilderPlaytest) return;
+        const detail = event.detail || {};
+        if (loadingText && detail.label) loadingText.textContent = detail.label;
+        if (builderStep && detail.label) builderStep.textContent = detail.label;
+        if (builderDetail) builderDetail.textContent = detail.detail || '';
+        if (builderStatus) builderStatus.textContent = detail.state === 'warning' ? 'Fallback' : (detail.phase || 'active').replace(/-/g, ' ');
+        if (builderProgressFill && Number.isFinite(Number(detail.progress))) {
+          const pct = Math.max(0.06, Math.min(1, Number(detail.progress)));
+          builderProgressFill.style.width = `${Math.round(pct * 100)}%`;
+        }
+      });
 
       // Update splash subtitle
       const sub = document.querySelector('.loading-subtitle');
       if (sub) sub.textContent = isBattle ? 'BATTLE' : 'RACE';
+      applyBuilderPlaytestSkin();
 
       const client = new ColyseusBabylonClient({
         endpoint:   getColyseusEndpoint(),
@@ -203,15 +313,16 @@
       });
 
       (async () => {
-        const lt = document.querySelector('.loading-text');
         const maxRetries = 2;
         let lastError = null;
 
         try {
+          emitPlaytestStage({ phase: 'boot', label: 'Reading builder handoff', detail: 'Loading saved arena data from the editor.', progress: 0.08 });
           console.log('[Realtime] Step 1: gameConfig =', JSON.stringify(config));
           console.log('[Realtime] Step 1b: endpoint =', client.endpoint, 'roomName =', roomName);
 
           console.log('[Realtime] Step 2: initBabylon...');
+          emitPlaytestStage({ phase: 'boot', label: 'Warming render core', detail: 'Initializing Babylon runtime and physics.', progress: 0.16 });
           await client.initBabylon(canvas);
           console.log('[Realtime] Step 2 OK: Babylon initialized');
 
@@ -226,20 +337,25 @@
             playerName:  config.players?.find(p => p.id === myId)?.name || 'Player',
             kartId:      config.selectedKart || sessionStorage.getItem('selectedKart') || 'tux',
             playerColor: config.players?.find(p => p.id === myId)?.playerColor || 'red',
+            customTrackData: config.customTrackData || sessionStorage.getItem('customTrackData') || '',
+            directPlaytest: isBuilderPlaytest || !!config.directPlaytest,
+            smokeMode,
             ...glo,
           };
           console.log('[Realtime] Step 3: connect opts =', JSON.stringify(connectOpts));
+          emitPlaytestStage({ phase: 'connect', label: 'Streaming arena into battle shell', detail: 'Passing custom arena data into the realtime client.', progress: 0.22 });
 
           // Retry connection up to maxRetries times
           for (let attempt = 0; attempt <= maxRetries; attempt++) {
             try {
               if (attempt > 0) {
                 console.log(`[Realtime] Retry ${attempt}/${maxRetries}...`);
-                if (lt) lt.textContent = `Retrying connection (${attempt}/${maxRetries})...`;
+                emitPlaytestStage({ phase: 'connect', label: 'Retrying connection', detail: `Attempt ${attempt} of ${maxRetries}`, progress: 0.22 });
                 await new Promise(r => setTimeout(r, 1500 * attempt));
               }
               await client.connect(connectOpts);
               console.log('[Realtime] Step 3 OK: Connected to room');
+              emitPlaytestStage({ phase: 'countdown', label: 'Room ready', detail: isBuilderPlaytest ? 'Triggering direct playtest start.' : 'Waiting for match start.', progress: 0.985 });
               lastError = null;
               break;
             } catch (err) {
@@ -250,7 +366,10 @@
           }
 
           // Auto-trigger match start after prematch lobby is shown
-          setTimeout(() => { client.triggerStart(); }, 3000);
+          setTimeout(() => {
+            emitPlaytestStage({ phase: 'countdown', label: 'Starting playtest', detail: 'Countdown armed. Dropping into the generated arena.', progress: 0.995 });
+            client.triggerStart();
+          }, isBuilderPlaytest ? 450 : 3000);
           // Expose for automated Playwright tests
           window.__gloClient = client;
           if (isDevBattle && window.__gloDebug) {
@@ -265,8 +384,9 @@
           const msg = err?.message || String(err);
           console.error('[Realtime] Connection failed:', msg);
           console.error('[Realtime] Full error:', err);
-          if (lt) lt.textContent = `Connection failed: ${msg.slice(0, 120)}`;
-          setTimeout(() => { window.location.href = 'index.html'; }, 4000);
+          emitPlaytestStage({ phase: 'error', label: 'Playtest launch failed', detail: msg.slice(0, 140), progress: 1, state: 'warning' });
+          if (loadingText) loadingText.textContent = `Connection failed: ${msg.slice(0, 120)}`;
+          setTimeout(() => { window.location.href = isBuilderPlaytest ? 'builder.html' : 'index.html'; }, 4000);
         }
       })();
 

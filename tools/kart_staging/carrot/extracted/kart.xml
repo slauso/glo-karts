@@ -1,0 +1,20 @@
+<?xml version="1.0"?>
+<kart name="Carrot" version="3" model-file="carrot.spm" icon-file="carrot_icon.png" minimap-icon-file="carrot_mapicon.png" shadow-file="carrot_shadow.png" type="light" center-shift="0.50" groups="Add-Ons" rgb="1.00 0.40 0.00" revision="2">
+    <sounds engine="small"/>
+    <animations left="0" straight="3" right="6" backpedal-left="7" backpedal="10" backpedal-right="13" start-jump="14" end-jump="57" start-winning="58" start-winning-loop="71" end-winning="137" end-winning-straight="155" start-losing="156" start-losing-loop="189" end-losing="221" end-losing-straight="253" selection-start="254" selection-end="335"/>
+    <wheels>
+        <rear-left position="-0.257573 0.126203 -0.323657" model="wheel-rear-left.spm"/>
+        <rear-right position="0.257573 0.126203 -0.323657" model="wheel-rear-right.spm"/>
+        <front-left position="-0.224474 0.129199 0.484532" model="wheel-front-left.spm"/>
+        <front-right position="0.224474 0.129199 0.484532" model="wheel-front-right.spm"/>
+    </wheels>
+    <nitro-emitter>
+        <nitro-emitter-a position="-0.125136 0.132651 -0.564437"/>
+        <nitro-emitter-b position="0.125136 0.132651 -0.564437"/>
+    </nitro-emitter>
+    <headlights>
+        <object position="-0.000120 0.235343 0.851647" rotation="1.531745 -0.000000 -0.000000" scale="1.000000 1.000000 1.000000" color="186 255 209" model="HeadlightsBeam.spm"/>
+    </headlights>
+    <hat position="-0.000000 0.639690 -0.170452" rotation="-29.682879 0.000006 -0.000005" scale="0.911987 0.911987 0.911987" bone="Head"/>
+    <exhaust file="kart_exhaust.xml"/>
+</kart>

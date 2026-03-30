@@ -1,0 +1,23 @@
+<?xml version="1.0"?>
+<kart name="Cyberkart" version="3" model-file="cyberkart.spm" icon-file="icon.png" minimap-icon-file="icon.png" shadow-file="cyberkart-shadow.png" type="heavy" center-shift="-0.10" groups="Add-Ons" rgb="1.00 1.00 1.00" revision="3">
+    <sounds engine="custom" file="motor-loop.ogg" max_dist="200">
+        <skid name="default"/>
+    </sounds>
+    <animations left="0" straight="9" right="19" backpedal-left="29" backpedal="39" backpedal-right="49" start-jump="59" end-jump="199" start-winning="209" start-winning-loop="229" end-winning="269" end-winning-straight="289" start-losing="299" start-losing-loop="319" end-losing="389" end-losing-straight="399"/>
+    <wheels>
+        <front-left position="-0.350245 0.144934 0.827065" model="wheel-front-left.spm"/>
+        <rear-left position="-0.350245 0.143692 -0.394413" model="wheel-rear-left.spm"/>
+        <rear-right position="0.350237 0.143693 -0.394413" model="wheel-rear-right.spm"/>
+        <front-right position="0.350236 0.144330 0.826600" model="wheel-front-right.spm"/>
+    </wheels>
+    <nitro-emitter>
+        <nitro-emitter-a position="-0.395055 0.408449 -0.866760"/>
+        <nitro-emitter-b position="0.395055 0.408449 -0.866760"/>
+    </nitro-emitter>
+    <headlights>
+        <object position="-0.252327 0.242871 1.049880" rotation="0.000000 -0.000000 0.000000" scale="1.000000 1.000000 1.000000" model="Headlight.l.spm"/>
+        <object position="0.252098 0.242871 1.049881" rotation="0.000000 -0.000000 0.000000" scale="1.000000 1.000000 1.000000" model="Headlight.r.spm"/>
+    </headlights>
+    <hat position="-0.000000 0.572867 0.119611" rotation="-6.912467 0.000000 0.000000" scale="1.000000 1.000000 1.000000"/>
+    <lean max="10"/>
+</kart>

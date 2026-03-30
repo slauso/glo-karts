@@ -89,14 +89,14 @@ export function getInterpolationBaseDelayMs(patchRateMs) {
 }
 
 export function getRecommendedPatchRateMs(maxClients) {
-  const count = Math.max(2, Math.min(12, safeNumber(maxClients, 12)));
+  const count = Math.max(1, Math.min(12, safeNumber(maxClients, 12)));
   if (count <= 4) return 1000 / 60;
   if (count <= 8) return 1000 / 45;
   return 1000 / 30;
 }
 
 export function configureRealtimeRoom(room, options = {}, config = {}) {
-  const maxClients = Math.max(2, Math.min(12, safeNumber(options.maxPlayers, 12)));
+  const maxClients = Math.max(1, Math.min(12, safeNumber(options.maxPlayers, 12)));
   const patchRateMs = Math.max(
     1000 / 60,
     safeNumber(

@@ -1,0 +1,10 @@
+<?xml version="1.0"?>
+<!-- Generated with script from SVN rev Unknown -->
+<materials>
+  <material name="bark_diff.jpg" normal-map="bark_normal.jpg"/>
+  <material name="granite.jpg" normal-map="granite_normal.jpg"/>
+  <material name="leather.jpg" normal-map="leather_normal.jpg" colorizable="Y" colorization-factor="0.90"/>
+  <material name="light.png" shader="additive"/>
+  <material name="rope.jpg" normal-map="rope_normal.jpg" colorizable="Y" colorization-factor="0.80"/>
+  <material name="rough_wood_diff.jpg" normal-map="rough_wood_normal.jpg"/>
+</materials>

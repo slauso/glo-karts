@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+<kart name="Ozom" version="3" model-file="ozom.spm" icon-file="ozom_icon.png" minimap-icon-file="ozom_mapicon.png" shadow-file="ozom_shadow.png" type="medium" center-shift="0.20" groups="Add-Ons" rgb="0.55 1.00 0.00" revision="2">
+    <sounds engine="large"/>
+    <animations left="0" straight="5" right="10" backpedal-left="11" backpedal="16" backpedal-right="21" start-jump="22" end-jump="48" start-winning="49" start-winning-loop="63" end-winning="114" end-winning-straight="119" start-losing="120" start-losing-loop="145" end-losing="185" end-losing-straight="195" selection-start="196" selection-end="376"/>
+    <wheels>
+        <rear-right position="0.011650 0.150990 -0.480867" model="wheel-rear-right.spm"/>
+        <front-left position="-0.277241 0.139296 0.374544" model="wheel-front-left.spm"/>
+        <front-right position="0.277241 0.139296 0.374544" model="wheel-front-right.spm"/>
+        <rear-left position="-0.034041 0.150990 -0.480867" model="wheel-rear-left.spm"/>
+    </wheels>
+    <nitro-emitter>
+        <nitro-emitter-a position="0.105510 0.125991 -0.540618"/>
+        <nitro-emitter-b position="-0.104816 0.125991 -0.540618"/>
+    </nitro-emitter>
+    <headlights>
+        <object position="0.000000 0.122900 0.827543" rotation="0.000045 -0.000000 -0.000000" scale="1.111000 1.111000 1.111000" model="headlights.spm"/>
+    </headlights>
+    <hat position="0.001342 0.780529 -0.248936" rotation="-11.285209 -1.091021 -4.272279" scale="1.080534 1.032810 1.080531" bone="Head"/>
+    <lean max="23"/>
+    <exhaust file="kart_exhaust.xml"/>
+</kart>

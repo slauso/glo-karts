@@ -28,6 +28,7 @@ import {
   StandardMaterial,
   Texture,
   DynamicTexture,
+  VertexBuffer,
 } from '@babylonjs/core';
 import { resolveKartAsset } from '../content-registry.js';
 import { FILTER, applyFilterToAggregate } from './collision-layers.js';
@@ -38,6 +39,7 @@ import { FILTER, applyFilterToAggregate } from './collision-layers.js';
 
 const DEFAULT_EXTENTS = new Vector3(1.8, 0.5, 3.2);
 const DEFAULT_MASS    = 800;
+const KART_SIZE_MULTIPLIER = 1.3;
 
 // Wheel offset definitions for per-wheel raycasting (local space)
 const WHEEL_OFFSETS = {
@@ -151,15 +153,16 @@ export class KartEntity {
     // ── Material isolation ──────────────────────────────────────────────
     this._cloneAndStoreMaterials();
 
+    // ── Per-kart UV corrections ─────────────────────────────────────────
+    this._applyPerKartUVFixes(this.kartId);
+
     // ── Scaling ─────────────────────────────────────────────────────────
-    const effectiveScale = this.scaleFactor
-      || (kartInfo.scale && kartInfo.scale !== 1 ? kartInfo.scale : null);
-    if (effectiveScale) {
-      this.rootMesh.scaling.setAll(effectiveScale);
-      this.rootMesh.computeWorldMatrix(true);
-      this.extents = DEFAULT_EXTENTS.scale(effectiveScale);
-      this.scaleFactor = effectiveScale;
-    }
+    const baseScale = this.scaleFactor || kartInfo.scale || 1;
+    const effectiveScale = baseScale * KART_SIZE_MULTIPLIER;
+    this.rootMesh.scaling.setAll(effectiveScale);
+    this.rootMesh.computeWorldMatrix(true);
+    this.extents = DEFAULT_EXTENTS.scale(effectiveScale);
+    this.scaleFactor = effectiveScale;
 
     // ── Wheel detection ─────────────────────────────────────────────────
     this.wheelMeshes = result.meshes.filter(
@@ -249,22 +252,26 @@ export class KartEntity {
 
     // Create shared tire material once per entity
     const mat = new StandardMaterial(`tire_${this.id}`, this.scene);
-    mat.diffuseColor  = new Color3(0.12, 0.12, 0.12);  // near-black rubber
-    mat.specularColor = new Color3(0.08, 0.08, 0.08);  // slight sheen
-    mat.roughness     = 0.9;
+    mat.diffuseColor  = new Color3(0.07, 0.07, 0.07);  // darker rubber
+    mat.specularColor = new Color3(0.05, 0.05, 0.05);  // subtle sheen
+    mat.roughness     = 0.95;
 
     // Procedural tread: small DynamicTexture with horizontal stripe bands
     const texSize = 64;
     const tex = new DynamicTexture(`tireTread_${this.id}`, texSize, this.scene, false);
     const ctx = tex.getContext();
     // Base rubber
-    ctx.fillStyle = '#1a1a1a';
+    ctx.fillStyle = '#111111';
     ctx.fillRect(0, 0, texSize, texSize);
     // Tread grooves (lighter stripes)
-    ctx.fillStyle = '#222222';
+    ctx.fillStyle = '#1a1a1a';
     for (let y = 0; y < texSize; y += 8) {
       ctx.fillRect(0, y, texSize, 3);
     }
+    // Side wall edge highlights
+    ctx.fillStyle = '#1e1e1e';
+    ctx.fillRect(0, 0, texSize, 2);
+    ctx.fillRect(0, texSize - 2, texSize, 2);
     tex.update();
     tex.uScale = 2;
     tex.vScale = 4;
@@ -275,6 +282,27 @@ export class KartEntity {
 
     for (const wm of this.wheelMeshes) {
       wm.material = mat;
+    }
+  }
+
+  /**
+   * Per-kart UV corrections for meshes with misapplied textures.
+   */
+  _applyPerKartUVFixes(kartId) {
+    // Conditional V-flip: only flip V > 0.5 (B3D bottom-origin UVs not converted)
+    const UV_FLIP_HI = { gavroche: ['gavroche'] };
+    const hiTargets = UV_FLIP_HI[kartId] || [];
+    if (hiTargets.length === 0) return;
+
+    for (const mesh of this.childMeshes) {
+      const matName = mesh.material?.name || '';
+      if (!hiTargets.some(t => matName.includes(t))) continue;
+      const uvs = mesh.getVerticesData(VertexBuffer.UVKind);
+      if (!uvs) continue;
+      for (let i = 1; i < uvs.length; i += 2) {
+        if (uvs[i] > 0.5) uvs[i] = 1 - uvs[i]; // flip V only when > 0.5
+      }
+      mesh.setVerticesData(VertexBuffer.UVKind, uvs);
     }
   }
 

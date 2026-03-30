@@ -59,6 +59,7 @@ const PROJECTILE_ROTATION = {
   plunger:       { axis: new Vector3(0, 0, 1), speed: 0, tumble: false }, // flies straight
   nitro:         { axis: new Vector3(0, 1, 0), speed: 5, tumble: true, tumbleAxis: new Vector3(1, 0, 0), tumbleSpeed: 2 },
   missile:       { axis: new Vector3(0, 0, 1), speed: 0.5, tumble: false }, // subtle roll
+  crimson_hydra: { axis: new Vector3(0, 0, 1), speed: 0.7, tumble: false },
   fireball:      { axis: new Vector3(0, 1, 0), speed: 8, tumble: false },
   toxic_spread:  { axis: new Vector3(0, 1, 0), speed: 6, tumble: true, tumbleAxis: new Vector3(1, 0, 0), tumbleSpeed: 3 },
   ice_lance:     { axis: new Vector3(0, 0, 1), speed: 0, tumble: false }, // flies like a dart
@@ -79,6 +80,7 @@ const PROJECTILE_ROTATION = {
 const DECAL_CONFIGS = {
   fireball:       { color: new Color3(0.15, 0.05, 0.0), emissive: new Color3(0.4, 0.1, 0.0), size: 3.5, lifetime: 8000 },
   missile:        { color: new Color3(0.1, 0.05, 0.02), emissive: new Color3(0.3, 0.08, 0.0), size: 4.0, lifetime: 10000 },
+  crimson_hydra:  { color: new Color3(0.16, 0.03, 0.04), emissive: new Color3(0.5, 0.08, 0.05), size: 3.2, lifetime: 8500 },
   nitro:          { color: new Color3(0.05, 0.1, 0.08), emissive: new Color3(0.0, 0.2, 0.1), size: 3.0, lifetime: 6000 },
   super_nova:     { color: new Color3(0.2, 0.1, 0.0), emissive: new Color3(0.6, 0.3, 0.0), size: 8.0, lifetime: 12000 },
   ice_lance:      { color: new Color3(0.7, 0.85, 0.95), emissive: new Color3(0.3, 0.5, 0.7), size: 2.5, lifetime: 5000 },
@@ -513,6 +515,7 @@ export function getEnhancedTrailConfig(weaponId) {
         sizeGradients: [[0, 0.25, 0.3], [0.5, 0.4, 0.45], [1.0, 0.05, 0.1]],
       };
     case 'missile':
+    case 'crimson_hydra':
       return {
         emitRate: 60,
         minLifeTime: 0.3, maxLifeTime: 0.7,
@@ -681,7 +684,7 @@ export function enhanceWeaponImpact(position, subType, damage, camera, isLocalPl
   stampImpactDecal(position, subType);
 
   // Enhanced shake for heavy weapons
-  const heavyWeapons = new Set(['super_nova', 'gravity_well', 'tornado', 'missile', 'rock_barrage', 'lightning_bolt']);
+  const heavyWeapons = new Set(['super_nova', 'gravity_well', 'tornado', 'missile', 'crimson_hydra', 'rock_barrage', 'lightning_bolt']);
   if (heavyWeapons.has(subType) && camera) {
     enhancedShake(camera, {
       intensity: 0.15 + dmgNorm * 0.35,

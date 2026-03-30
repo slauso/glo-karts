@@ -664,6 +664,7 @@ const TRAIL_CONFIGS = {
   cake:         { color: [1.0, 0.6, 0.8], size: 0.20, rate: 14, life: 0.6 },
   plunger:      { color: [0.6, 0.4, 0.2], size: 0.16, rate: 16, life: 0.5 },
   missile:      { color: [1.0, 0.58, 0.12], size: 0.34, rate: 34, life: 1.0, gravity: [0, -0.4, 0], power: [0.7, 1.8], direction1: [-0.15, -0.1, -1.3], direction2: [0.15, 0.18, -0.65] },
+  crimson_hydra:{ color: [1.0, 0.32, 0.18], size: 0.24, rate: 28, life: 0.85, gravity: [0, -0.3, 0], power: [0.55, 1.45], direction1: [-0.12, -0.08, -1.1], direction2: [0.12, 0.16, -0.55] },
   fireball:     { color: [1.0, 0.45, 0.1], size: 0.35, rate: 30, life: 0.7 },
   toxic_spread: { color: [0.45, 0.95, 0.2], size: 0.24, rate: 20, life: 0.6 },
   ice_lance:    { color: [0.65, 0.9, 1.0], size: 0.22, rate: 22, life: 0.5 },

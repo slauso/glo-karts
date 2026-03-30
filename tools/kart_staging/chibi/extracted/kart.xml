@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<kart name="Chibi" version="3" model-file="chibi.spm" icon-file="IconChibi.png" minimap-icon-file="IconChibi.png" shadow-file="genericshadow.png" type="light" groups="Add-Ons" rgb="1.00 1.00 1.00" revision="1">
+    <sounds engine="small">
+        <skid name="default"/>
+    </sounds>
+    <animations left="0" straight="5" right="10" backpedal-left="11" backpedal="15" backpedal-right="19" start-jump="20" end-jump="53" start-winning="54" end-winning="116" start-losing="117" end-losing="207" selection-start="209" selection-end="299"/>
+    <wheels>
+        <rear-right position="0.360233 0.115577 -0.453359" model="wheel-rear-right.spm"/>
+        <front-right position="0.329949 0.096577 0.394253" model="wheel-front-right.spm"/>
+        <front-left position="-0.329949 0.096577 0.394253" model="wheel-front-left.spm"/>
+        <rear-left position="-0.360233 0.115577 -0.453359" model="wheel-rear-left.spm"/>
+    </wheels>
+    <nitro-emitter>
+        <nitro-emitter-a position="-0.170000 0.362798 -0.800000"/>
+        <nitro-emitter-b position="0.170000 0.362798 -0.800000"/>
+    </nitro-emitter>
+    <headlights>
+        <object position="0.000000 0.085008 0.667978" rotation="0.000000 -0.000000 0.000000" scale="1.000000 1.000000 1.000000" color="0 38 255" model="lightflu.spm"/>
+    </headlights>
+    <hat position="0.001857 0.513336 0.007640" rotation="18.353149 0.492487 -1.197775" scale="0.999990 0.999990 0.999990" bone="tete"/>
+    <exhaust file="kart_exhaust.xml"/>
+</kart>

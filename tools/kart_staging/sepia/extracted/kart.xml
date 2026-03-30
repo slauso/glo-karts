@@ -1,0 +1,24 @@
+<?xml version="1.0"?>
+<kart name="Sepia" version="3" model-file="sepia.spm" icon-file="sepia_icon.png" minimap-icon-file="sepia_mapicon.png" shadow-file="sepia_shadow.png" type="medium" center-shift="0.25" groups="Add-Ons" rgb="0.11 0.68 1.00" revision="3">
+    <sounds engine="large"/>
+    <animations left="0" straight="3" right="6" backpedal-left="7" backpedal="10" backpedal-right="13" start-jump="14" end-jump="24" start-winning="25" start-winning-loop="40" end-winning="92" end-winning-straight="109" start-losing="110" start-losing-loop="129" end-losing="179" end-losing-straight="192" selection-start="193" selection-end="273"/>
+    <wheels>
+        <front-left position="-0.259875 0.173914 0.322345" model="wheel-front-left.spm"/>
+        <front-right position="0.259875 0.173914 0.322345" model="wheel-front-right.spm"/>
+        <rear-left position="-0.340358 0.173914 -0.352687" model="wheel-rear-left.spm"/>
+        <rear-right position="0.340359 0.173914 -0.352687" model="wheel-rear-right.spm"/>
+    </wheels>
+    <speed-weighted-objects>
+        <object position="0.000000 0.458255 -0.399535" rotation="-0.000003 0.000000 -0.000000" scale="1.000000 1.000000 1.000000" speed-factor="2.000000" model="pistons.spm"/>
+    </speed-weighted-objects>
+    <nitro-emitter>
+        <nitro-emitter-a position="-0.128509 0.111794 -0.506015"/>
+        <nitro-emitter-b position="0.128509 0.111794 -0.506015"/>
+    </nitro-emitter>
+    <headlights>
+        <object position="0.000000 0.350170 0.568538" rotation="0.000000 -0.000000 0.000000" scale="0.371250 0.371250 0.371250" model="headlight.spm"/>
+    </headlights>
+    <hat position="-0.011667 0.783043 -0.125913" rotation="-29.708888 -0.618989 1.878565" scale="1.308526 1.081745 1.155905" bone="Fin"/>
+    <lean max="12"/>
+    <exhaust file="kart_exhaust.xml"/>
+</kart>

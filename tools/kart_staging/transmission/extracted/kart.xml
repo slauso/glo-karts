@@ -1,0 +1,16 @@
+<?xml version="1.0"?>
+<kart name="Transmission" version="2" model-file="transmission.b3d" icon-file="transmission_icon_128.png" minimap-icon-file="transmission_icon_32.png" shadow-file="transmission_shadow.png" random-wheel-rot="true" center-shift="0.00" groups="Add-Ons" rgb="1.00 1.00 1.00" revision="1">
+    <sounds engine="large"/>
+    <animations left="0" straight="10" right="20" start-winning="30" start-winning-loop="70" end-winning="90" start-losing="95" start-losing-loop="115" end-losing="155"/>
+    <wheels>
+        <front-right position="0.322980 0.155281 0.406040" model="wheel-front-right.b3d"/>
+        <front-left position="-0.322980 0.155281 0.406040" model="wheel-front-left.b3d"/>
+        <rear-right position="0.329080 0.171542 -0.452369" model="wheel-rear-right.b3d"/>
+        <rear-left position="-0.329080 0.171542 -0.452369" model="wheel-rear-left.b3d"/>
+    </wheels>
+    <nitro-emitter>
+        <nitro-emitter-a position="0.194710 0.143080 -0.603281"/>
+        <nitro-emitter-b position="-0.194710 0.143080 -0.603281"/>
+    </nitro-emitter>
+    <hat offset="0.0 1.0 0.0"/>
+</kart>

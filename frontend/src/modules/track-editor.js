@@ -250,8 +250,8 @@ export class TrackEditor {
   validateTrack() {
     const errors = [];
 
-    if (this.segments.length < 3) {
-      errors.push('Track must have at least 3 segments.');
+    if (this.segments.length < 1) {
+      errors.push('Arena must have at least 1 segment.');
     }
 
     if (this.startPositions.length < 1) {

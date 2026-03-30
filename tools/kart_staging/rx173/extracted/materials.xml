@@ -1,0 +1,7 @@
+<?xml version="1.0"?>
+<!-- Generated with script from SVN rev Unknown -->
+<materials>
+  <material name="carbody.png" gloss-map="gloss.png" colorizable="Y"/>
+  <material name="taillights.png" gloss-map="emissive.png"/>
+  <material name="windows.png" gloss-map="windowsgloss.png"/>
+</materials>

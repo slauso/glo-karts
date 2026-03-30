@@ -1,0 +1,4 @@
+Inky is licensed under the GNU-GPL.
+
+Neither the Kart itself or Inkscape logo used here are affiliated oficcially with Inkscape.
+Inkscape logo by Andrew Michael Fitzsimon, https://en.wikipedia.org/wiki/File:Inkscape_Logo.svg, GNU-GPL.

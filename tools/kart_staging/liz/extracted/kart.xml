@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+<kart name="Liz" version="3" model-file="liz.spm" icon-file="icon.png" minimap-icon-file="icon32.png" shadow-file="KartL-Shadow.png" type="medium" groups="Add-Ons" rgb="1.00 1.00 1.00" revision="4">
+    <sounds engine="small"/>
+    <animations right="4" straight="9" left="14" backpedal-right="23" backpedal="28" backpedal-left="33" start-jump="44" end-jump="74" start-losing="89" start-losing-loop="215" end-losing="241" start-winning="267" start-winning-loop="324" end-winning="452" selection-start="489" selection-end="635"/>
+    <wheels>
+        <rear-left position="-0.382990 0.179480 -0.370632" model="wheel-rear-left.spm"/>
+        <rear-right position="0.363673 0.179480 -0.376646" model="wheel-rear-right.spm"/>
+        <front-left position="-0.392670 0.159597 0.418207" model="wheel-front-left.spm"/>
+        <front-right position="0.371964 0.159597 0.412127" model="wheel-front-right.spm"/>
+    </wheels>
+    <nitro-emitter>
+        <nitro-emitter-a position="0.204510 0.412056 -0.641885"/>
+        <nitro-emitter-b position="-0.220798 0.412056 -0.641885"/>
+    </nitro-emitter>
+    <headlights>
+        <object position="0.000000 0.272645 1.415266" rotation="-90.344060 -0.000000 -0.000000" scale="-0.001958 -0.001958 -0.001958" color="142 179 255" model="HL1.spm"/>
+        <object position="-0.001439 0.199519 1.600190" rotation="-90.000003 -0.000000 -0.924946" scale="1.878740 0.819428 1.087618" type="mesh" model="HL2.spm"/>
+    </headlights>
+    <lean max="2"/>
+    <exhaust file="kart_exhaust.xml"/>
+</kart>

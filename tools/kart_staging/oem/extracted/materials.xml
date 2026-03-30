@@ -1,0 +1,10 @@
+<?xml version="1.0"?>
+<!-- Generated with script from SVN rev Unknown -->
+<materials>
+  <material name="Body_Pepe_D.png" gloss-map="gloss.png" colorizable="Y" colorization-mask="mask.png"/>
+  <material name="Chasis_Pepe_D.png" gloss-map="gloss_chassis.png"/>
+  <material name="wheel_diffuse.png" gloss-map="gloss_wheel.png" normal-map="normal_wheel.png"/> 
+  <material name="windows.png" gloss-map="windowsgloss.png"/>
+  <material name="win.png" shader="alphatest" gloss-map="emoteGloss.png"/>
+  <material name="lose.png" shader="alphatest" gloss-map="emoteGloss.png"/>
+</materials>

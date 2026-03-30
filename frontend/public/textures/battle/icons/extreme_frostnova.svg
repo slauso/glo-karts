@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs><radialGradient id="fn"><stop offset="0%" stop-color="#eeffff"/><stop offset="100%" stop-color="#44aaff"/></radialGradient></defs>
+  <polygon points="32,4 36,24 44,12 38,28 56,22 40,32 56,42 38,36 44,52 36,40 32,60 28,40 20,52 26,36 8,42 24,32 8,22 26,28 20,12 28,24" fill="url(#fn)" opacity="0.9"/>
+  <polygon points="32,14 35,28 42,20 37,30 50,28 38,33 50,38 37,36 42,46 35,38 32,50 29,38 22,46 27,36 14,38 26,33 14,28 27,30 22,20 29,28" fill="#ffffff" opacity="0.5"/>
+</svg>

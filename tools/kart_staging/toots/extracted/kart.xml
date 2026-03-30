@@ -1,0 +1,23 @@
+<?xml version="1.0"?>
+<kart name="Toots" version="3" model-file="toots.spm" icon-file="toots_icon.png" minimap-icon-file="toots_icon.png" shadow-file="toots_shadow.png" type="heavy" groups="Add-Ons" rgb="0.00 0.50 1.00" revision="2">
+    <sounds engine="large"/>
+    <animations left="0" straight="4" right="8" backpedal-left="9" backpedal="13" backpedal-right="17" start-jump="18" end-jump="34" selection-start="35" selection-end="134" start-winning="135" start-winning-loop="141" end-winning="156" start-losing="157" start-losing-loop="207" end-losing="254"/>
+    <wheels>
+        <front-right position="0.000000 0.172997 0.345197" model="wheel-front-right.spm"/>
+        <rear-left position="-0.312644 0.200877 -0.325195" model="wheel-rear-left.spm"/>
+        <rear-right position="0.312644 0.200877 -0.325195" model="wheel-rear-right.spm"/>
+    </wheels>
+    <speed-weighted-objects>
+        <object position="0.000000 0.000000 0.000000" rotation="-90.000003 -0.000000 0.000000" scale="1.000000 1.000000 1.000000" bone="RootBone" speed-factor="25.000000" model="DriveChain.spm"/>
+    </speed-weighted-objects>
+    <nitro-emitter>
+        <nitro-emitter-a position="-0.253313 0.678367 -0.433238"/>
+        <nitro-emitter-b position="0.253314 0.678367 -0.433238"/>
+    </nitro-emitter>
+    <headlights>
+        <object position="0.000000 0.433850 0.621810" rotation="0.000000 -0.000000 0.000000" scale="1.000000 1.000000 1.000000" color="255 236 160" model="HeadLight.spm"/>
+    </headlights>
+    <hat position="-0.000016 0.983361 0.114350" rotation="-3.007205 0.152010 1.960455" scale="0.938786 0.938786 0.938786" bone="Head"/>
+    <lean max="17"/>
+    <exhaust file="kart_exhaust.xml"/>
+</kart>

@@ -135,38 +135,79 @@ ALL_TRACKS[CUSTOM_TRACK_ID] = {
   startPositions: [{ x: 0, y: 2, z: 0 }],
 };
 
+ALL_ARENAS[CUSTOM_TRACK_ID] = {
+  id: CUSTOM_TRACK_ID,
+  label: 'Custom Arena',
+  type: 'custom-arena',
+  scale: 1,
+  startPositions: [{ x: 0, y: 2, z: 0, heading: 0 }],
+};
+
 export const ALL_KARTS = {
   default: { id: 'default', label: 'Classic Kart', modelPath: '/models/car.glb', scale: 2.8 },
   adiumy: { id: 'adiumy', label: 'Angela', modelPath: '/models/stk/karts/adiumy/kart.glb', scale: 2.2 },
-  amanda: { id: 'amanda', label: 'Olivia', modelPath: '/models/stk/karts/amanda/kart.glb', scale: 2.2 },
-  beastie: { id: 'beastie', label: 'Fred', modelPath: '/models/stk/karts/beastie/kart.glb', scale: 2.2 },
+  amanda: { id: 'amanda', label: 'Grace', modelPath: '/models/stk/karts/amanda/kart.glb', scale: 2.2 },
   emule: { id: 'emule', label: 'Luca', modelPath: '/models/stk/karts/emule/kart.glb', scale: 2.2 },
   gavroche: { id: 'gavroche', label: 'Mia', modelPath: '/models/stk/karts/gavroche/kart.glb', scale: 2.2 },
   gnu: { id: 'gnu', label: 'Wes', modelPath: '/models/stk/karts/gnu/kart.glb', scale: 2.2 },
   hexley: { id: 'hexley', label: 'James', modelPath: '/models/stk/karts/hexley/kart.glb', scale: 2.2 },
-  kiki: { id: 'kiki', label: 'Grace', modelPath: '/models/stk/karts/kiki/kart.glb', scale: 2.2 },
-  konqi: { id: 'konqi', label: 'John', modelPath: '/models/stk/karts/konqi/kart.glb', scale: 2.2 },
-  nolok: { id: 'nolok', label: 'Lisa', modelPath: '/models/stk/karts/nolok/kart.glb', scale: 2.2 },
+  kiki: { id: 'kiki', label: 'Madeline', modelPath: '/models/stk/karts/kiki/kart.glb', scale: 2.2 },
+  konqi: { id: 'konqi', label: 'Beastie', modelPath: '/models/stk/karts/konqi/kart.glb', scale: 2.2 },
+  nolok: { id: 'nolok', label: 'John', modelPath: '/models/stk/karts/nolok/kart.glb', scale: 2.2 },
   pidgin: { id: 'pidgin', label: 'Christi', modelPath: '/models/stk/karts/pidgin/kart.glb', scale: 2.2 },
   puffy: { id: 'puffy', label: 'Pat', modelPath: '/models/stk/karts/puffy/kart.glb', scale: 2.2 },
   sara_the_racer: { id: 'sara_the_racer', label: 'Judy', modelPath: '/models/stk/karts/sara_the_racer/kart.glb', scale: 2.2 },
   sara_the_wizard: { id: 'sara_the_wizard', label: 'Stephen', modelPath: '/models/stk/karts/sara_the_wizard/kart.glb', scale: 2.2 },
   suzanne: { id: 'suzanne', label: 'Gianna', modelPath: '/models/stk/karts/suzanne/kart.glb', scale: 2.2 },
-  tux: { id: 'tux', label: 'Anthony', modelPath: '/models/stk/karts/tux/kart.glb', scale: 2.2 },
   wilber: { id: 'wilber', label: 'Zane', modelPath: '/models/stk/karts/wilber/kart.glb', scale: 2.2 },
-  xue: { id: 'xue', label: 'Carrie', modelPath: '/models/stk/karts/xue/kart.glb', scale: 2.2 },
+  xue: { id: 'xue', label: 'Toni', modelPath: '/models/stk/karts/xue/kart.glb', scale: 2.2 },
   beagle_2: { id: 'beagle_2', label: 'Beagle', modelPath: '/models/stk/karts/beagle_2/kart.glb', scale: 2.2 },
+  // ── New addon karts ──
+  carrot: { id: 'carrot', label: 'Olivia', modelPath: '/models/stk/karts/carrot/kart.glb', scale: 2.2 },
+  liz: { id: 'liz', label: 'Amelia', modelPath: '/models/stk/karts/liz/kart.glb', scale: 2.2 },
+  oem: { id: 'oem', label: 'Christopher', modelPath: '/models/stk/karts/oem/kart.glb', scale: 2.2 },
+  mr_iceblock: { id: 'mr_iceblock', label: 'Frost', modelPath: '/models/stk/karts/mr_iceblock/kart.glb', scale: 2.2 },
+  minix: { id: 'minix', label: 'Max', modelPath: '/models/stk/karts/minix/kart.glb', scale: 2.2 },
+  pidgin_2020: { id: 'pidgin_2020', label: 'Perry', modelPath: '/models/stk/karts/pidgin_2020/kart.glb', scale: 2.2 },
+  toots: { id: 'toots', label: 'Alicia', modelPath: '/models/stk/karts/toots/kart.glb', scale: 1.87 },
+  rx173: { id: 'rx173', label: 'michael', modelPath: '/models/stk/karts/rx173/kart.glb', scale: 2.2 },
+  bea: { id: 'bea', label: 'Christi', modelPath: '/models/stk/karts/bea/kart.glb', scale: 2.2 },
+  // ── Batch 2 addon karts ──
+  transmission: { id: 'transmission', label: 'Switch', modelPath: '/models/stk/karts/transmission/kart.glb', scale: 2.2 },
+  python: { id: 'python', label: 'Dave', modelPath: '/models/stk/karts/python/kart.glb', scale: 2.2 },
+  amazing_panda: { id: 'amazing_panda', label: 'Sharlene', modelPath: '/models/stk/karts/amazing_panda/kart.glb', scale: 2.2 },
+  racehicle: { id: 'racehicle', label: 'Ron', modelPath: '/models/stk/karts/racehicle/kart.glb', scale: 2.2 },
+  inky: { id: 'inky', label: 'Gail', modelPath: '/models/stk/karts/inky/kart.glb', scale: 2.2 },
+  mechatux: { id: 'mechatux', label: 'MJ', modelPath: '/models/stk/karts/mechatux/kart.glb', scale: 2.2 },
+  sepia: { id: 'sepia', label: 'Jason', modelPath: '/models/stk/karts/sepia/kart.glb', scale: 2.2 },
+  elephpant: { id: 'elephpant', label: 'Carrie', modelPath: '/models/stk/karts/elephpant/kart.glb', scale: 2.2 },
+  ozom: { id: 'ozom', label: 'Bennett', modelPath: '/models/stk/karts/ozom/kart.glb', scale: 2.2 },
+  chibi: { id: 'chibi', label: 'Jimbo', modelPath: '/models/stk/karts/chibi/kart.glb', scale: 2.2 },
+  p2000: { id: 'p2000', label: 'Stephen', modelPath: '/models/stk/karts/p2000/kart.glb', scale: 2.2 },
+  cyberkart: { id: 'cyberkart', label: 'Peter', modelPath: '/models/stk/karts/cyberkart/kart.glb', scale: 2.2 },
 };
 
 // ── Weight classes (21.36) ──────────────────────────────────────────────────
 // light = nimble (higher steer, lower mass), medium = balanced, heavy = tanky (lower steer, higher mass/health)
 export const KART_WEIGHT_CLASSES = {
   default: 'medium',
-  adiumy: 'light', amanda: 'medium', beastie: 'heavy', emule: 'medium',
+  adiumy: 'light', amanda: 'medium', emule: 'medium',
   gavroche: 'light', gnu: 'heavy', hexley: 'medium', kiki: 'light',
   konqi: 'heavy', nolok: 'heavy', pidgin: 'light', puffy: 'medium',
   sara_the_racer: 'light', sara_the_wizard: 'medium', suzanne: 'medium',
-  tux: 'medium', wilber: 'heavy', xue: 'light', beagle_2: 'medium',
+  wilber: 'heavy', xue: 'light', beagle_2: 'medium',
+  carrot: 'light', liz: 'medium', oem: 'medium', mr_iceblock: 'heavy',
+  minix: 'light', pidgin_2020: 'light',
+  toots: 'heavy',
+  rx173: 'medium', bea: 'medium',
+  // Batch 2
+  transmission: 'medium', python: 'light',
+  amazing_panda: 'heavy', racehicle: 'medium',
+  inky: 'light',
+  mechatux: 'heavy', sepia: 'light',
+  elephpant: 'heavy', ozom: 'light',
+  chibi: 'light', p2000: 'light',
+  cyberkart: 'heavy',
 };
 
 export const WEIGHT_CLASS_STATS = {

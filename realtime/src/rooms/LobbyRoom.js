@@ -8,6 +8,45 @@ const DEFAULT_ARENA = "test_box";
 const DEFAULT_BATTLE_TYPE = "deathmatch";
 const DEFAULT_MAX_PLAYERS = 12;
 const MAX_CONCURRENT_LOBBY_PLAYERS = 100;
+const PARTY_CODE_FIRST_WORDS = [
+  "NEON", "TURBO", "NOVA", "LUNAR", "SOLAR", "RAPID", "HYPER", "WILD",
+  "GOLD", "SILVER", "CRIMSON", "ELECTRIC", "GLASS", "MIDNIGHT", "RADAR", "COMET",
+  "ROCKET", "PIXEL", "FROST", "EMBER", "THUNDER", "BLAZING", "COSMIC", "PHANTOM",
+];
+const PARTY_CODE_SECOND_WORDS = [
+  "FOX", "WOLF", "TIGER", "RACER", "VIPER", "RIDER", "PILOT", "DRIVER",
+  "FALCON", "PANTHER", "OTTER", "COBRA", "JAGUAR", "COMET", "BLADE", "EAGLE",
+  "RHINO", "BADGER", "HAWK", "RAVEN", "ORBIT", "NITRO", "KART", "THRUSTER",
+];
+const PARTY_CODE_THIRD_WORDS = [
+  "BOOST", "DRIFT", "DASH", "BLITZ", "CHASE", "SPRINT", "RALLY", "CIRCUIT",
+  "ARENA", "ROCKET", "FUSION", "STORM", "CLUTCH", "VICTORY", "CHARGE", "GLIDE",
+  "FLASH", "RUMBLE", "SKID", "TURN", "VAULT", "BURST", "GRID", "START",
+];
+
+function pickRandom(list) {
+  return list[Math.floor(Math.random() * list.length)];
+}
+
+function normalizeLobbyCode(value) {
+  const tokens = String(value || "").trim().toUpperCase().match(/[A-Z0-9]+/g) || [];
+  if (!tokens.length) return "";
+
+  const looksLegacyCode = tokens.every((token) => token.length <= 3) && tokens.some((token) => /\d/.test(token));
+  if (looksLegacyCode) {
+    return tokens.slice(0, 3).join("-");
+  }
+
+  return tokens
+    .map((token) => token.replace(/\d+/g, ""))
+    .filter(Boolean)
+    .slice(0, 3)
+    .join("-");
+}
+
+function generateLobbyCode() {
+  return `${pickRandom(PARTY_CODE_FIRST_WORDS)}-${pickRandom(PARTY_CODE_SECOND_WORDS)}-${pickRandom(PARTY_CODE_THIRD_WORDS)}`;
+}
 
 function normalizeGameMode(value) {
   if (value === "battle") return "battle";
@@ -26,7 +65,12 @@ export class LobbyRoom extends Room {
 
   onCreate(options = {}) {
     const state = new LobbyState();
-    state.lobbyCode = String(options.lobbyCode || "").trim().toUpperCase();
+    const initialLoadoutId = String(options.loadoutId || "random-all");
+    const initialWeaponPool = Array.isArray(options.weaponPool) && initialLoadoutId === "custom"
+      ? [...new Set(options.weaponPool.map((weaponId) => String(weaponId || "").trim()).filter(Boolean))].slice(0, 24)
+      : [];
+
+    state.lobbyCode = normalizeLobbyCode(options.lobbyCode);
     state.privacy = options.privacy === "open" ? "open" : "private";
     state.gameMode = normalizeGameMode(options.gameMode);
     state.modeId = String(options.modeId || defaultModeId(state.gameMode));
@@ -35,6 +79,8 @@ export class LobbyRoom extends Room {
     state.arenaTheme = String(options.arenaTheme || "nuclear_desert");
     state.battleType = options.battleType === "ctf" ? "ctf" : DEFAULT_BATTLE_TYPE;
     state.maxPlayers = Math.min(Math.max(Number(options.maxPlayers) || DEFAULT_MAX_PLAYERS, 1), 12);
+    state.loadoutId = initialLoadoutId;
+    initialWeaponPool.forEach((weaponId) => state.weaponPool.push(weaponId));
     state.status = "waiting";
     state.countdown = 0;
 
@@ -69,8 +115,15 @@ export class LobbyRoom extends Room {
       this.state.arenaId = String(data.arenaId || this.state.arenaId || DEFAULT_ARENA);
       this.state.arenaTheme = String(data.arenaTheme || this.state.arenaTheme || "nuclear_desert");
       this.state.battleType = data.battleType === "ctf" ? "ctf" : "deathmatch";
+      this.state.loadoutId = String(data.loadoutId || this.state.loadoutId || "random-all");
       this.state.maxPlayers = Math.min(Math.max(Number(data.maxPlayers) || this.state.maxPlayers || DEFAULT_MAX_PLAYERS, 1), 12);
       this.maxClients = this.state.maxPlayers;
+
+      this.state.weaponPool.splice(0, this.state.weaponPool.length);
+      if (Array.isArray(data.weaponPool) && this.state.loadoutId === "custom") {
+        const sanitizedPool = [...new Set(data.weaponPool.map((weaponId) => String(weaponId || "").trim()).filter(Boolean))].slice(0, 24);
+        sanitizedPool.forEach((weaponId) => this.state.weaponPool.push(weaponId));
+      }
 
       // Custom track data (max 64KB)
       if (typeof data.customTrackData === 'string') {
@@ -135,7 +188,7 @@ export class LobbyRoom extends Room {
     LobbyRoom.activeLobbyPlayers += 1;
 
     if (isFirst && this.state.lobbyCode === "") {
-      this.state.lobbyCode = this.roomId.slice(0, 6).toUpperCase();
+      this.state.lobbyCode = generateLobbyCode();
       this.setMetadata({
         lobbyCode: this.state.lobbyCode,
         privacy: this.state.privacy,
@@ -218,6 +271,8 @@ export class LobbyRoom extends Room {
         arenaId: this.state.arenaId,
         arenaTheme: this.state.arenaTheme,
         battleType: this.state.battleType,
+        loadoutId: this.state.loadoutId,
+        weaponPool: Array.from(this.state.weaponPool),
         maxPlayers: this.state.maxPlayers,
         lobbyCode: this.state.lobbyCode,
         customTrackData: this.state.customTrackData || "",
@@ -229,6 +284,9 @@ export class LobbyRoom extends Room {
       const roomName = this.state.gameMode === "gloflux"
         ? "gloflux"
         : (this.state.gameMode === "battle" ? "battle_room" : "race_room");
+      console.log(
+        `[lobby_room] matchStart roomId=${this.roomId} mode=${this.state.gameMode} trackId=${gameConfig.trackId} arenaId=${gameConfig.arenaId} customTrackBytes=${gameConfig.customTrackData?.length || 0}`
+      );
       this.broadcast("matchStart", { roomName, gameConfig });
       this.disconnect();
     }, 1000, 3);

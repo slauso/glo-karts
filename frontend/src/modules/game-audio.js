@@ -68,6 +68,7 @@ const SFX = {
 // Map weapon subType → fire SFX
 const WEAPON_FIRE_SFX = {
   missile:      "shoot",
+  crimson_hydra: "shoot",
   bowling_ball: "bowling_shoot",
   cake:         "shoot",
   plunger:      "plunger",
@@ -99,6 +100,7 @@ const WEAPON_FIRE_SFX = {
 };
 const WEAPON_HIT_SFX = {
   missile:      "explosion",
+  crimson_hydra: "explosion",
   bowling_ball: "strike",
   cake:         "splash",
   plunger:      "ugh",

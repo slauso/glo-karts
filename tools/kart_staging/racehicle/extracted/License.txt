@@ -1,0 +1,14 @@
+---Racehicle---
+
+=========================
+
+- Kart Name: Racehicle
+- License: GNU GPL
+- Creator: Hand_of_Justice (Vladislav)
+
+=========================
+=========================
+
+Made to be the cross-country racing vehicle.
+
+---------------

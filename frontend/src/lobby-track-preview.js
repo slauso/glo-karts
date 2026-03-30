@@ -168,7 +168,6 @@ class TrackPreview {
     this.mode         = newMode;
     this.currentIndex = 0;
     this._updateInfo();
-    this._emitChange();
   }
 
   // ── Events ─────────────────────────────────────────────────────────────────

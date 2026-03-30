@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>GLO KARTS — Arena Builder</title>
+    <link rel="stylesheet" href="/src/builder-style.css" />
+  </head>
+  <body>
+    <div class="ab">
+
+      <!-- ── Top Bar ──────────────────────────────────────────── -->
+      <header class="ab-bar">
+        <button id="ab-back" class="ab-btn" title="Back to menu">← Menu</button>
+        <div class="ab-sep"></div>
+        <input id="ab-name" class="ab-name" type="text" maxlength="48" placeholder="Arena Name" />
+        <div class="ab-sep"></div>
+        <div class="ab-toolset" role="toolbar" aria-label="Build tools">
+          <button id="ab-tool-select" class="ab-btn ab-tool-btn" type="button" title="Select &amp; Move (1)">↖ Select</button>
+          <button id="ab-tool-road"   class="ab-btn ab-tool-btn" type="button" title="Draw Road (2)">🛣 Road</button>
+          <button id="ab-tool-object" class="ab-btn ab-tool-btn" type="button" title="Place Object (3)">📦 Object</button>
+          <button id="ab-tool-erase"  class="ab-btn ab-tool-btn" type="button" title="Erase (4)">⌫ Erase</button>
+        </div>
+        <div class="ab-sep"></div>
+        <button id="ab-undo"   class="ab-btn ab-btn--icon" title="Undo (Ctrl+Z)">↩</button>
+        <button id="ab-redo"   class="ab-btn ab-btn--icon" title="Redo (Ctrl+Y)">↪</button>
+        <button id="ab-rotate" class="ab-btn ab-btn--icon" title="Rotate 90° (R)">⟳</button>
+        <button id="ab-delete" class="ab-btn ab-btn--icon ab-btn--danger" title="Delete selection (Del)">🗑</button>
+        <div class="ab-sep"></div>
+        <button id="ab-clear" class="ab-btn" title="Start a fresh arena">New Arena</button>
+        <div class="ab-spacer"></div>
+        <button id="ab-save"  class="ab-btn ab-btn--accent">Save</button>
+        <button id="ab-load"  class="ab-btn">Load</button>
+        <button id="ab-share" class="ab-btn">Share</button>
+        <div class="ab-sep"></div>
+        <button id="ab-play" class="ab-btn ab-btn--cta">▶ Playtest</button>
+        <button id="ab-host" class="ab-btn ab-btn--cta2">Host Online</button>
+      </header>
+
+      <!-- ── Left Navigation Strip (TinkerCAD-style) ─────────── -->
+      <nav class="ab-nav-strip" aria-label="Viewport navigation">
+        <!-- 3D View Cube: click a face to jump to that camera view -->
+        <div class="ab-view-cube" title="Click a face to set view">
+          <div class="ab-vc-scene">
+            <div class="ab-vc-face ab-vc-top"    data-view="top">TOP</div>
+            <div class="ab-vc-face ab-vc-front"  data-view="front">FRONT</div>
+            <div class="ab-vc-face ab-vc-right"  data-view="right">RIGHT</div>
+            <div class="ab-vc-face ab-vc-left"   data-view="left">LEFT</div>
+            <div class="ab-vc-face ab-vc-back"   data-view="back">BACK</div>
+            <div class="ab-vc-face ab-vc-bottom" data-view="iso">ISO</div>
+          </div>
+        </div>
+
+        <!-- Fit All -->
+        <button class="ab-nav-strip-btn" id="ab-nav-home" title="Fit Arena (0)" aria-label="Fit Arena">⌂</button>
+
+        <!-- Orbit D-pad -->
+        <div class="ab-nav-strip-dpad">
+          <button class="ab-nav-strip-btn ab-nav-strip-btn--sm" id="ab-nav-up"    title="Orbit Up"    aria-label="Orbit Up">▲</button>
+          <button class="ab-nav-strip-btn ab-nav-strip-btn--sm" id="ab-nav-left"  title="Orbit Left"  aria-label="Orbit Left">◀</button>
+          <button class="ab-nav-strip-btn ab-nav-strip-btn--sm" id="ab-nav-right" title="Orbit Right" aria-label="Orbit Right">▶</button>
+          <button class="ab-nav-strip-btn ab-nav-strip-btn--sm" id="ab-nav-down"  title="Orbit Down"  aria-label="Orbit Down">▼</button>
+        </div>
+
+        <div class="ab-nav-strip-sep"></div>
+
+        <!-- Zoom -->
+        <button class="ab-nav-strip-btn" id="ab-nav-zoom-in"  title="Zoom In (+)"  aria-label="Zoom In">+</button>
+        <button class="ab-nav-strip-btn" id="ab-nav-zoom-out" title="Zoom Out (−)" aria-label="Zoom Out">−</button>
+      </nav>
+
+      <!-- ── 3D Viewport ─────────────────────────────────────── -->
+      <main class="ab-stage">
+        <canvas id="ab-viewport"></canvas>
+        <div id="ab-hint" class="ab-hint">Choose Draw Road, then click-drag directly in 3D to sketch lanes.</div>
+        <div id="ab-stats" class="ab-stats"></div>
+      </main>
+
+      <!-- ── Right Panel: Inspector + Validation + Library ─────── -->
+      <aside class="ab-side">
+
+        <!-- Shape Inspector (TinkerCAD "Shape" panel) -->
+        <section class="ab-panel ab-panel--shape">
+          <div class="ab-panel-head">
+            <span>Shape</span>
+            <span id="ab-selection-badge" class="ab-badge">None</span>
+          </div>
+          <div id="ab-selection-empty" class="ab-empty">Select a piece to inspect, move, or swap its type.</div>
+          <div id="ab-selection-fields" class="ab-fields" hidden>
+            <label class="ab-field">
+              <span>Type</span>
+              <select id="ab-inspector-type"></select>
+            </label>
+            <div class="ab-fields-grid">
+              <label class="ab-field">
+                <span>X</span>
+                <input id="ab-inspector-x" type="number" step="10" />
+              </label>
+              <label class="ab-field">
+                <span>Y</span>
+                <input id="ab-inspector-y" type="number" step="1" />
+              </label>
+              <label class="ab-field">
+                <span>Z</span>
+                <input id="ab-inspector-z" type="number" step="10" />
+              </label>
+              <label class="ab-field">
+                <span>Rotation</span>
+                <input id="ab-inspector-rotation" type="number" step="90" min="0" max="270" />
+              </label>
+            </div>
+          </div>
+        </section>
+
+        <!-- Validation -->
+        <section class="ab-panel ab-panel--validation">
+          <div class="ab-panel-head">
+            <span>Validation</span>
+            <span class="ab-panel-meta">Battle checks</span>
+          </div>
+          <ul id="ab-validation-list" class="ab-validation-list"></ul>
+        </section>
+
+        <!-- Shapes Library (TinkerCAD "Basic Shapes" panel) -->
+        <section class="ab-panel ab-panel--library">
+          <div class="ab-panel-head">
+            <span>Shapes</span>
+            <span class="ab-panel-meta">GLO Karts</span>
+          </div>
+          <div id="ab-palette"></div>
+        </section>
+
+      </aside>
+    </div>
+
+    <div class="ab-ghost" id="ab-ghost" hidden></div>
+    <div class="ab-toast-wrap" id="ab-toast-wrap"></div>
+
+    <dialog id="ab-load-dialog" class="ab-dialog">
+      <div class="ab-dialog-head">
+        <h2>Saved Arenas</h2>
+        <button class="ab-dialog-x" data-close>✕</button>
+      </div>
+      <div id="ab-saved-list" class="ab-saved-list"></div>
+    </dialog>
+
+    <dialog id="ab-share-dialog" class="ab-dialog">
+      <div class="ab-dialog-head">
+        <h2>Share &amp; Import</h2>
+        <button class="ab-dialog-x" data-close>✕</button>
+      </div>
+      <label class="ab-field">
+        <span>Share Code</span>
+        <textarea id="ab-share-code" rows="4" readonly placeholder="Click Export to generate a code."></textarea>
+      </label>
+      <div class="ab-dialog-row">
+        <button id="ab-export-btn" class="ab-btn ab-btn--accent">Export</button>
+        <button id="ab-copy-btn" class="ab-btn">Copy</button>
+      </div>
+      <label class="ab-field">
+        <span>Import Arena</span>
+        <textarea id="ab-import-code" rows="4" placeholder="Paste a TK1 code or raw JSON here."></textarea>
+      </label>
+      <div class="ab-dialog-row">
+        <button id="ab-import-btn" class="ab-btn ab-btn--accent">Import</button>
+      </div>
+    </dialog>
+
+    <script type="module" src="/src/builder-main.js"></script>
+  </body>
+</html>

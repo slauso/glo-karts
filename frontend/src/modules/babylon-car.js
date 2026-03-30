@@ -21,6 +21,8 @@ import { resolveKartAsset } from './content-registry.js';
 import { KART_MASS, KART_EXTENTS } from './kart-physics.js';
 import { FILTER, applyFilterToAggregate } from './realtime/collision-layers.js';
 
+const KART_SIZE_MULTIPLIER = 1.3;
+
 // Visual-only wheel constants (for fallback cylinder geometry)
 const WHEEL_RADIUS = 0.4;
 const WHEEL_WIDTH  = 0.25;
@@ -117,7 +119,7 @@ function loadCarModel(scene, carComponents, shadowGen, onModelLoaded) {
   }
 
   const modelPath  = kartModelPath || `/models/car_${carColor}.glb`;
-  const modelScale = kartModelScale ?? 4;
+  const modelScale = (kartModelScale ?? 4) * KART_SIZE_MULTIPLIER;
 
   // Split URL into root + filename for Babylon's SceneLoader
   const lastSlash = modelPath.lastIndexOf('/');
@@ -236,7 +238,7 @@ function loadFallbackCarModel(scene, carComponents, shadowGen, onModelLoaded) {
 
   SceneLoader.ImportMeshAsync('', '/models/', 'car_red.glb', scene).then((result) => {
     const carModel = new TransformNode('carRoot', scene);
-    carModel.scaling = new Vector3(4, 4, 4);
+    carModel.scaling = new Vector3(4 * KART_SIZE_MULTIPLIER, 4 * KART_SIZE_MULTIPLIER, 4 * KART_SIZE_MULTIPLIER);
     carModel.position = new Vector3(0, 5.2, 0);
 
     for (const mesh of result.meshes) {
@@ -252,7 +254,7 @@ function loadFallbackCarModel(scene, carComponents, shadowGen, onModelLoaded) {
       const found = scene.getMeshByName(names[i]);
       if (found) {
         found.parent = null;
-        found.scaling = new Vector3(4, 4, 4);
+        found.scaling = new Vector3(4 * KART_SIZE_MULTIPLIER, 4 * KART_SIZE_MULTIPLIER, 4 * KART_SIZE_MULTIPLIER);
         carComponents.wheelMeshes[i] = found;
       } else {
         const wm = MeshBuilder.CreateCylinder(names[i], {

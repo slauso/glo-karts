@@ -6,7 +6,6 @@ import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial';
 import { Texture } from '@babylonjs/core/Materials/Textures/texture';
 import { ParticleSystem } from '@babylonjs/core/Particles/particleSystem';
 import { createWeaponModel, createPickupRingModel } from './weapon-models.js';
-import { EXTREME_WEAPONS } from '../procedural-models.js';
 import { attachProjectileRotation, applyEnhancedTrail, initHavokPhysics, getHavokPlugin } from './weapon-fx-enhance.js';
 import { poolScale, scaleParticles, scaleTrail, maxPhysicsBodies, maxProjectiles } from '../perf-tier.js';
 
@@ -84,92 +83,19 @@ export const WEAPON_TYPES = {
     desc: 'Deploys behind you — slows the chasing player',
   },
   guided_missile: {
-    id: 'guided_missile', name: 'GUIDED MISSILE', icon: '/textures/items/bowling-icon.png',
+    id: 'guided_missile', name: 'GUIDED MISSILE', icon: '/textures/items/guided-missile-icon.svg',
     color: 0xff0066, damage: 35, speed: 24, radius: 0.45, lifetime: 5, bounces: 0,
     drag: 0.999, gravity: 0, blastRadius: 5, blastForce: 14,
     homing: true, seekForce: 12, seekCone: 0.5,
     desc: 'Locks on and chases the nearest enemy',
   },
   grenade: {
-    id: 'grenade', name: 'GRENADE', icon: '/textures/items/nitro.png',
+    id: 'grenade', name: 'GRENADE', icon: '/textures/items/grenade-icon.svg',
     color: 0x556b2f, damage: 45, speed: 16, radius: 0.35, lifetime: 2.5, bounces: 2,
     drag: 0.99, gravity: -12, blastRadius: 6, blastForce: 16,
     homing: false, seekForce: 0, seekCone: 0,
     desc: 'Arced throw — large AoE explosion on detonation',
   },
-  // ── EXTREME tier weapons ───────────────────────────────────────────────
-  shockwave_cannon: {
-    id: 'shockwave_cannon', name: 'SHOCKWAVE CANNON', icon: '/textures/items/bowling-icon.png',
-    color: 0x4488ff, damage: 55, speed: 0, radius: 1.0, lifetime: 1.5, bounces: 0,
-    drag: 1, gravity: 0, blastRadius: 15, blastForce: 20,
-    homing: false, seekForce: 0, seekCone: 0,
-    desc: 'Expanding energy ring flattens all karts in range', extreme: true,
-  },
-  thunderstrike: {
-    id: 'thunderstrike', name: 'THUNDERSTRIKE', icon: '/textures/items/bowling-icon.png',
-    color: 0xccddff, damage: 45, speed: 999, radius: 0.5, lifetime: 2.0, bounces: 0,
-    drag: 1, gravity: 0, blastRadius: 3, blastForce: 10,
-    homing: true, seekForce: 999, seekCone: 1.0,
-    desc: 'Lightning bolt pins target with sparks', extreme: true,
-  },
-  black_hole: {
-    id: 'black_hole', name: 'BLACK HOLE ORB', icon: '/textures/items/bowling-icon.png',
-    color: 0x5500aa, damage: 35, speed: 8, radius: 0.9, lifetime: 5.0, bounces: 0,
-    drag: 0.99, gravity: 0, blastRadius: 12, blastForce: 25,
-    homing: false, seekForce: 0, seekCone: 0,
-    desc: 'Slow vortex pulls, crushes, and expels karts', extreme: true,
-  },
-  meteor_swarm: {
-    id: 'meteor_swarm', name: 'METEOR SWARM', icon: '/textures/items/nitro.png',
-    color: 0xff6600, damage: 40, speed: 30, radius: 0.6, lifetime: 4.0, bounces: 0,
-    drag: 0.99, gravity: -15, blastRadius: 4, blastForce: 14,
-    homing: false, seekForce: 0, seekCone: 0,
-    desc: 'Rains burning rocks onto a target zone', extreme: true,
-  },
-  frost_nova: {
-    id: 'frost_nova', name: 'FROST NOVA', icon: '/textures/items/bowling-icon.png',
-    color: 0x66ccff, damage: 20, speed: 0, radius: 1.0, lifetime: 2.5, bounces: 0,
-    drag: 1, gravity: 0, blastRadius: 15, blastForce: 5,
-    homing: false, seekForce: 0, seekCone: 0,
-    desc: 'Instant AOE freeze with ice crystals', extreme: true,
-  },
-  emp_pulse: {
-    id: 'emp_pulse', name: 'EMP PULSE', icon: '/textures/items/bowling-icon.png',
-    color: 0x00ccff, damage: 10, speed: 0, radius: 1.0, lifetime: 1.5, bounces: 0,
-    drag: 1, gravity: 0, blastRadius: 18, blastForce: 3,
-    homing: false, seekForce: 0, seekCone: 0,
-    desc: 'Disables steering and boost for all nearby karts', extreme: true,
-  },
-  gravity_flip: {
-    id: 'gravity_flip', name: 'GRAVITY FLIP', icon: '/textures/items/bowling-icon.png',
-    color: 0xaa44ff, damage: 15, speed: 0, radius: 1.0, lifetime: 3.0, bounces: 0,
-    drag: 1, gravity: 0, blastRadius: 12, blastForce: 18,
-    homing: false, seekForce: 0, seekCone: 0,
-    desc: 'Reverses gravity for caught karts', extreme: true,
-  },
-  inferno_trail: {
-    id: 'inferno_trail', name: 'INFERNO TRAIL', icon: '/textures/items/nitro.png',
-    color: 0xff4400, damage: 30, speed: 0, radius: 0.5, lifetime: 5.0, bounces: 0,
-    drag: 1, gravity: 0, blastRadius: 3, blastForce: 8,
-    homing: false, seekForce: 0, seekCone: 0,
-    desc: 'Drops persistent fire wall behind kart', extreme: true,
-  },
-  plasma_railgun: {
-    id: 'plasma_railgun', name: 'PLASMA RAILGUN', icon: '/textures/items/bowling-icon.png',
-    color: 0x00ffcc, damage: 60, speed: 999, radius: 0.3, lifetime: 0.5, bounces: 0,
-    drag: 1, gravity: 0, blastRadius: 1, blastForce: 30,
-    homing: false, seekForce: 0, seekCone: 0,
-    desc: 'Instant-hit beam piercing multiple targets', extreme: true,
-  },
-  vortex_tornado: {
-    id: 'vortex_tornado', name: 'VORTEX TORNADO', icon: '/textures/items/bowling-icon.png',
-    color: 0x8899aa, damage: 25, speed: 12, radius: 3.0, lifetime: 6.0, bounces: 0,
-    drag: 0.995, gravity: 0, blastRadius: 6, blastForce: 18,
-    homing: false, seekForce: 0, seekCone: 0,
-    pullRadius: 18, pullForce: 9.0, spinForce: 3.5,
-    desc: 'Wandering tornado scoops up karts', extreme: true,
-  },
-
   // ── Wizard-Masters Elemental Weapons ────────────────────────────────
   fireball: {
     id: 'fireball', name: 'FIREBALL', icon: '/textures/battle/icons/skill_fire.png',
@@ -245,6 +171,80 @@ export const WEAPON_TYPES = {
     homing: false, seekForce: 0, seekCone: 0,
     desc: 'Nuclear fission detonation — obliterates everything in range', element: 'fire',
   },
+  // ── Extreme Weapons ────────────────────────────────────────────────────
+  shockwave_cannon: {
+    id: 'shockwave_cannon', name: 'SHOCKWAVE CANNON', icon: '/textures/battle/icons/extreme_shockwave.svg',
+    color: 0x4488ff, damage: 55, speed: 0, radius: 1.2, lifetime: 1.5, bounces: 0,
+    drag: 1, gravity: 0, blastRadius: 15, blastForce: 20,
+    homing: false, seekForce: 0, seekCone: 0,
+    desc: 'Expanding energy ring that flattens all karts in range', element: 'electric',
+  },
+  thunderstrike: {
+    id: 'thunderstrike', name: 'THUNDERSTRIKE', icon: '/textures/battle/icons/extreme_thunderstrike.svg',
+    color: 0xddeeff, damage: 45, speed: 180, radius: 0.5, lifetime: 1.0, bounces: 0,
+    drag: 1, gravity: 0, blastRadius: 3, blastForce: 12,
+    homing: false, seekForce: 0, seekCone: 0,
+    desc: 'Lightning bolt pins target with sparks', element: 'electric',
+  },
+  black_hole: {
+    id: 'black_hole', name: 'BLACK HOLE ORB', icon: '/textures/battle/icons/extreme_blackhole.svg',
+    color: 0x5500aa, damage: 35, speed: 8, radius: 1.5, lifetime: 5.0, bounces: 0,
+    drag: 0.99, gravity: 0, blastRadius: 12, blastForce: 8,
+    homing: false, seekForce: 0, seekCone: 0,
+    pullRadius: 12, pullForce: 15,
+    desc: 'Slow vortex that pulls, crushes, and expels karts', element: 'dark',
+  },
+  meteor_swarm: {
+    id: 'meteor_swarm', name: 'METEOR SWARM', icon: '/textures/battle/icons/extreme_meteor.svg',
+    color: 0xff6622, damage: 40, speed: 30, radius: 0.6, lifetime: 4.0, bounces: 0,
+    drag: 0.99, gravity: -6, blastRadius: 4, blastForce: 14,
+    homing: false, seekForce: 0, seekCone: 0,
+    desc: 'Rains burning rocks onto a target zone', element: 'fire',
+    spreadCount: 4, spreadAngle: 0.25,
+  },
+  frost_nova: {
+    id: 'frost_nova', name: 'FROST NOVA', icon: '/textures/battle/icons/extreme_frostnova.svg',
+    color: 0x66ccff, damage: 20, speed: 0, radius: 1.8, lifetime: 2.5, bounces: 0,
+    drag: 1, gravity: 0, blastRadius: 15, blastForce: 8,
+    homing: false, seekForce: 0, seekCone: 0,
+    desc: 'Instant AOE freeze with ice crystal growth', element: 'ice',
+  },
+  emp_pulse: {
+    id: 'emp_pulse', name: 'EMP PULSE', icon: '/textures/battle/icons/extreme_emp.svg',
+    color: 0x22ccff, damage: 10, speed: 0, radius: 1.0, lifetime: 1.5, bounces: 0,
+    drag: 1, gravity: 0, blastRadius: 18, blastForce: 6,
+    homing: false, seekForce: 0, seekCone: 0,
+    desc: 'Disables steering and boost for all nearby karts', element: 'electric',
+  },
+  gravity_flip: {
+    id: 'gravity_flip', name: 'GRAVITY FLIP', icon: '/textures/battle/icons/extreme_gravity.svg',
+    color: 0xbb55ff, damage: 15, speed: 0, radius: 1.2, lifetime: 3.0, bounces: 0,
+    drag: 1, gravity: 0, blastRadius: 12, blastForce: 10,
+    homing: false, seekForce: 0, seekCone: 0,
+    desc: 'Reverses gravity for caught karts', element: 'dark',
+  },
+  inferno_trail: {
+    id: 'inferno_trail', name: 'INFERNO TRAIL', icon: '/textures/battle/icons/extreme_inferno.svg',
+    color: 0xff4400, damage: 30, speed: 0, radius: 1.5, lifetime: 5.0, bounces: 0,
+    drag: 1, gravity: 0, blastRadius: 3, blastForce: 4,
+    homing: false, seekForce: 0, seekCone: 0,
+    desc: 'Drops persistent fire wall behind the kart', element: 'fire',
+  },
+  plasma_railgun: {
+    id: 'plasma_railgun', name: 'PLASMA RAILGUN', icon: '/textures/battle/icons/extreme_plasma.svg',
+    color: 0x00ffcc, damage: 60, speed: 200, radius: 0.4, lifetime: 0.5, bounces: 0,
+    drag: 1, gravity: 0, blastRadius: 1, blastForce: 8,
+    homing: false, seekForce: 0, seekCone: 0,
+    desc: 'Instant-hit beam that pierces multiple targets', element: 'electric',
+  },
+  vortex_tornado: {
+    id: 'vortex_tornado', name: 'VORTEX TORNADO', icon: '/textures/battle/icons/extreme_vortex.svg',
+    color: 0x99bbcc, damage: 25, speed: 12, radius: 2.0, lifetime: 6.0, bounces: 0,
+    drag: 0.998, gravity: 0, blastRadius: 6, blastForce: 18,
+    homing: false, seekForce: 0, seekCone: 0,
+    pullRadius: 10, pullForce: 12, spinForce: 3.5,
+    desc: 'Wandering tornado that scoops up karts', element: 'wind',
+  },
 };
 
 // Expose for dev/test menus
@@ -287,18 +287,9 @@ export const WEAPON_LOADOUTS = {
     pool: ['cake', 'nitro', 'anchor', 'guided_missile', 'grenade'],
     spawnInterval: 5000,
   },
-  'extreme': {
-    id: 'extreme', name: 'Extreme',
-    desc: 'Rare devastating weapons with awe-inspiring effects',
-    pool: ['shockwave_cannon', 'thunderstrike', 'black_hole', 'meteor_swarm',
-           'frost_nova', 'emp_pulse', 'gravity_flip', 'inferno_trail',
-           'plasma_railgun', 'vortex_tornado', 'final_fission'],
-    spawnInterval: 10000,
-    maxPickups: 3,
-  },
-  'all-extreme': {
-    id: 'all-extreme', name: 'All + Extreme',
-    desc: 'Standard weapons plus rare extreme drops',
+  'all-weapons': {
+    id: 'all-weapons', name: 'All Weapons',
+    desc: 'Standard + elemental weapons',
     pool: [...Object.keys(WEAPON_TYPES)],
     spawnInterval: 6000,
     maxPickups: 6,
@@ -314,7 +305,7 @@ export const WEAPON_LOADOUTS = {
   'fire-and-ice': {
     id: 'fire-and-ice', name: 'Fire & Ice',
     desc: 'Elemental duel — fire vs ice weapons',
-    pool: ['fireball', 'super_nova', 'ice_lance', 'frost_nova'],
+    pool: ['fireball', 'super_nova', 'ice_lance'],
     spawnInterval: 5000,
     maxPickups: 5,
   },
@@ -325,7 +316,20 @@ export const WEAPON_LOADOUTS = {
     spawnInterval: 5000,
     maxPickups: 7,
   },
+  'extreme': {
+    id: 'extreme', name: 'Extreme',
+    desc: 'Overpowered extreme weapons — total devastation',
+    pool: ['shockwave_cannon', 'thunderstrike', 'black_hole', 'meteor_swarm',
+           'frost_nova', 'emp_pulse', 'gravity_flip', 'inferno_trail',
+           'plasma_railgun', 'vortex_tornado'],
+    spawnInterval: 4000,
+    maxPickups: 8,
+  },
 };
+
+if (typeof window !== 'undefined') {
+  window.WEAPON_LOADOUTS = WEAPON_LOADOUTS;
+}
 
 // ── Config ──────────────────────────────────────────────────────────────────
 const DEFAULT_SPAWN_INTERVAL = 7000;

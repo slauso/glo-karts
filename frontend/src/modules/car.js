@@ -1,15 +1,18 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 
+const KART_SIZE_MULTIPLIER = 1.3;
+const VISUAL_MODEL_SCALE = 4 * KART_SIZE_MULTIPLIER;
+
 // Vehicle parameters
-const VEHICLE_WIDTH = 2.0;
-const VEHICLE_HEIGHT = 0.6;
-const VEHICLE_LENGTH = 4.0;
-const WHEEL_RADIUS = 0.4;
-const WHEEL_WIDTH = 0.25;
-const SUSPENSION_REST_LENGTH = 0.3;
-const WHEEL_X_OFFSET = 0.8;
-const WHEEL_Z_OFFSET = 1.5;
+const VEHICLE_WIDTH = 2.0 * KART_SIZE_MULTIPLIER;
+const VEHICLE_HEIGHT = 0.6 * KART_SIZE_MULTIPLIER;
+const VEHICLE_LENGTH = 4.0 * KART_SIZE_MULTIPLIER;
+const WHEEL_RADIUS = 0.4 * KART_SIZE_MULTIPLIER;
+const WHEEL_WIDTH = 0.25 * KART_SIZE_MULTIPLIER;
+const SUSPENSION_REST_LENGTH = 0.3 * KART_SIZE_MULTIPLIER;
+const WHEEL_X_OFFSET = 0.8 * KART_SIZE_MULTIPLIER;
+const WHEEL_Z_OFFSET = 1.5 * KART_SIZE_MULTIPLIER;
 
 // Physics tuning parameters
 const SUSPENSION_STIFFNESS = 50;
@@ -170,7 +173,7 @@ function loadCarModel(ammo, scene, carComponents, wheelPositions, onModelLoaded)
       const carModel = gltf.scene;
       
       // Adjust model scale and position if needed
-      carModel.scale.set(4, 4, 4); // Adjust scale as needed
+      carModel.scale.set(VISUAL_MODEL_SCALE, VISUAL_MODEL_SCALE, VISUAL_MODEL_SCALE);
       carModel.position.set(0, 0, 0); // Position will be updated by physics
       
       // Make sure car casts shadows
@@ -202,7 +205,7 @@ function loadCarModel(ammo, scene, carComponents, wheelPositions, onModelLoaded)
           scene.add(wheelModelMeshes[i]);
           
           // Apply the same scale as the car model
-          wheelModelMeshes[i].scale.set(4, 4, 4);
+          wheelModelMeshes[i].scale.set(VISUAL_MODEL_SCALE, VISUAL_MODEL_SCALE, VISUAL_MODEL_SCALE);
           
           // Save reference
           carComponents.wheelMeshes[i] = wheelModelMeshes[i];
@@ -223,7 +226,7 @@ function loadCarModel(ammo, scene, carComponents, wheelPositions, onModelLoaded)
           scene.add(wheelMesh);
           
           // Scale the default wheel to match too
-          wheelMesh.scale.set(4, 4, 4);
+          wheelMesh.scale.set(VISUAL_MODEL_SCALE, VISUAL_MODEL_SCALE, VISUAL_MODEL_SCALE);
           
           // Use this default wheel
           carComponents.wheelMeshes[i] = wheelMesh;
@@ -261,7 +264,7 @@ function loadFallbackCarModel(ammo, scene, carComponents, wheelPositions, onMode
       const carModel = gltf.scene;
       
       // Adjust model scale and position
-      carModel.scale.set(4, 4, 4);
+      carModel.scale.set(VISUAL_MODEL_SCALE, VISUAL_MODEL_SCALE, VISUAL_MODEL_SCALE);
       carModel.position.set(0, 0, 0);
       
       // Make sure car casts shadows
@@ -285,7 +288,7 @@ function loadFallbackCarModel(ammo, scene, carComponents, wheelPositions, onMode
           wheelModelMeshes[i].updateMatrixWorld(true);
           carModel.remove(wheelModelMeshes[i]);
           scene.add(wheelModelMeshes[i]);
-          wheelModelMeshes[i].scale.set(4, 4, 4);
+          wheelModelMeshes[i].scale.set(VISUAL_MODEL_SCALE, VISUAL_MODEL_SCALE, VISUAL_MODEL_SCALE);
           carComponents.wheelMeshes[i] = wheelModelMeshes[i];
         } else {
           // Create default wheel
@@ -299,7 +302,7 @@ function loadFallbackCarModel(ammo, scene, carComponents, wheelPositions, onMode
           wheelMesh.castShadow = true;
           scene.add(wheelMesh);
           
-          wheelMesh.scale.set(4, 4, 4);
+          wheelMesh.scale.set(VISUAL_MODEL_SCALE, VISUAL_MODEL_SCALE, VISUAL_MODEL_SCALE);
           carComponents.wheelMeshes[i] = wheelMesh;
         }
       }

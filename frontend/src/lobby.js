@@ -26,6 +26,8 @@ const DEFAULTS = {
   trackId: 'glo_arena',
 };
 
+const BUILDER_LAUNCH_INTENT_KEY = 'gloBuilderLaunchIntent';
+
 const BATTLE_WEAPON_LIBRARY = [
   { id: 'bowling_ball', label: 'Bowling Ball', icon: '🎳' },
   { id: 'plunger', label: 'Plunger', icon: '🪠' },
@@ -37,6 +39,7 @@ const BATTLE_WEAPON_LIBRARY = [
   { id: 'banana', label: 'Banana', icon: '🍌' },
   { id: 'anchor', label: 'Anchor', icon: '⚓' },
   { id: 'missile', label: 'Missile', icon: '🚀' },
+  { id: 'crimson_hydra', label: 'Crimson Hydra', icon: '🐉' },
   { id: 'lightning_bolt', label: 'Lightning', icon: '⚡' },
   { id: 'tornado', label: 'Tornado', icon: '🌪️' },
 ];
@@ -121,21 +124,46 @@ function getSelectableContentList(modeId) {
   return [];
 }
 
-function normalizeLobbyCode(raw) {
-  return String(raw || '').trim().replace(/\s+/g, '-').toUpperCase();
+const PARTY_CODE_FIRST_WORDS = [
+  'NEON', 'TURBO', 'NOVA', 'LUNAR', 'SOLAR', 'RAPID', 'HYPER', 'WILD',
+  'GOLD', 'SILVER', 'CRIMSON', 'ELECTRIC', 'GLASS', 'MIDNIGHT', 'RADAR', 'COMET',
+  'ROCKET', 'PIXEL', 'FROST', 'EMBER', 'THUNDER', 'BLAZING', 'COSMIC', 'PHANTOM',
+];
+
+const PARTY_CODE_SECOND_WORDS = [
+  'FOX', 'WOLF', 'TIGER', 'RACER', 'VIPER', 'RIDER', 'PILOT', 'DRIVER',
+  'FALCON', 'PANTHER', 'OTTER', 'COBRA', 'JAGUAR', 'COMET', 'BLADE', 'EAGLE',
+  'RHINO', 'BADGER', 'HAWK', 'RAVEN', 'ORBIT', 'NITRO', 'KART', 'THRUSTER',
+];
+
+const PARTY_CODE_THIRD_WORDS = [
+  'BOOST', 'DRIFT', 'DASH', 'BLITZ', 'CHASE', 'SPRINT', 'RALLY', 'CIRCUIT',
+  'ARENA', 'ROCKET', 'FUSION', 'STORM', 'CLUTCH', 'VICTORY', 'CHARGE', 'GLIDE',
+  'FLASH', 'RUMBLE', 'SKID', 'TURN', 'VAULT', 'BURST', 'GRID', 'START',
+];
+
+function pickRandom(list) {
+  return list[Math.floor(Math.random() * list.length)];
 }
 
-function randomCodePart(len = 3) {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  let out = '';
-  for (let i = 0; i < len; i += 1) {
-    out += chars[Math.floor(Math.random() * chars.length)];
+function normalizeLobbyCode(raw) {
+  const tokens = String(raw || '').trim().toUpperCase().match(/[A-Z0-9]+/g) || [];
+  if (!tokens.length) return '';
+
+  const looksLegacyCode = tokens.every((token) => token.length <= 3) && tokens.some((token) => /\d/.test(token));
+  if (looksLegacyCode) {
+    return tokens.slice(0, 3).join('-');
   }
-  return out;
+
+  return tokens
+    .map((token) => token.replace(/\d+/g, ''))
+    .filter(Boolean)
+    .slice(0, 3)
+    .join('-');
 }
 
 function generateLobbyCode() {
-  return `${randomCodePart(3)}-${randomCodePart(3)}-${randomCodePart(3)}`;
+  return `${pickRandom(PARTY_CODE_FIRST_WORDS)}-${pickRandom(PARTY_CODE_SECOND_WORDS)}-${pickRandom(PARTY_CODE_THIRD_WORDS)}`;
 }
 
 function getStoredGlo() {
@@ -230,6 +258,7 @@ class RacingLobby {
     this.populateArenaSelector();
     this.refreshBattleControls();
     this._initLensEngine();
+    this._consumeBuilderLaunchIntent();
   }
 
   initUIElements() {
@@ -270,7 +299,7 @@ class RacingLobby {
     this.playerNameInput.value = '';
     this.playerNameInput.placeholder = this.playerName;
     // Cycle placeholder between default name and prompt
-    this._placeholderTexts = [this.playerName, 'Enter Your Name'];
+    this._placeholderTexts = [this.playerName, 'Enter Your Nickname'];
     this._placeholderIdx = 0;
     this._placeholderTimer = setInterval(() => {
       if (this.playerNameInput === document.activeElement) return;
@@ -387,6 +416,90 @@ class RacingLobby {
         if (status) status.textContent = 'Failed to parse track data.';
       }
     });
+  }
+
+  _openBuilder() {
+    window.location.href = 'builder.html';
+  }
+
+  _syncSelectedMapUI(mapId) {
+    const items = getSelectableContentList(this.selectedModeId);
+    const selectedEntry = items.find((entry) => entry.id === mapId);
+    if (!selectedEntry) return false;
+
+    this.selectedMap = mapId;
+
+    const mapName = document.querySelector('.selected-map-name');
+    if (mapName) mapName.textContent = selectedEntry.name;
+
+    document.querySelectorAll('.dropdown-option').forEach((option) => {
+      option.classList.toggle('selected', option.getAttribute('data-map-id') === mapId);
+    });
+
+    if (window.__trackPreview) {
+      window.__trackPreview.setMode(usesArenaSelection(this.selectedModeId) ? 'battle' : 'race');
+      window.__trackPreview.setById(mapId);
+    }
+
+    return true;
+  }
+
+  _consumeBuilderLaunchIntent() {
+    const rawIntent = sessionStorage.getItem(BUILDER_LAUNCH_INTENT_KEY);
+    if (!rawIntent) return;
+
+    sessionStorage.removeItem(BUILDER_LAUNCH_INTENT_KEY);
+
+    let intent;
+    try {
+      intent = JSON.parse(rawIntent);
+    } catch {
+      return;
+    }
+
+    if (!intent || typeof intent !== 'object') return;
+
+    if (intent.customTrackData) {
+      const serialized = typeof intent.customTrackData === 'string'
+        ? intent.customTrackData
+        : JSON.stringify(intent.customTrackData);
+      sessionStorage.setItem('customTrackData', serialized);
+    }
+
+    this._selectMode(intent.modeId || 'battle_online');
+
+    this.selectedBattleType = intent.battleType || this.selectedBattleType;
+    this.selectedMaxPlayers = Math.max(1, Math.min(12, Number(intent.maxPlayers || this.selectedMaxPlayers || DEFAULTS.maxPlayers)));
+    this.selectedLoadout = intent.loadoutId || this.selectedLoadout;
+
+    const battleTypeEl = document.getElementById('battle-type-select');
+    if (battleTypeEl) battleTypeEl.value = this.selectedBattleType;
+    this._syncGlassDropdown(battleTypeEl);
+    this._syncBattleTypePills();
+
+    const maxPlayersEl = document.getElementById('battle-max-players');
+    if (maxPlayersEl) maxPlayersEl.value = String(this.selectedMaxPlayers);
+    this._syncGlassDropdown(maxPlayersEl);
+
+    const scoreLimit = Number(intent.scoreLimit || DEFAULTS.scoreLimit) || DEFAULTS.scoreLimit;
+    const scoreLimitEl = document.getElementById('battle-score-limit');
+    if (scoreLimitEl) scoreLimitEl.value = String(scoreLimit);
+
+    this._syncLoadoutButtons();
+    this._syncCustomWeaponPanel();
+    this._syncSelectedMapUI(intent.selectedMap || CUSTOM_TRACK_ID);
+    this._updateBattleSummary();
+    this.refreshBattleControls();
+    this.sendSettingsUpdate();
+
+    if (intent.autoCreateLobby) {
+      window.setTimeout(async () => {
+        await this.createLobby();
+        if (intent.autoStart) {
+          window.setTimeout(() => this.startMatch(), 900);
+        }
+      }, 0);
+    }
   }
 
   async createLobby() {
@@ -565,16 +678,23 @@ class RacingLobby {
     localStorage.setItem('myPlayerId', room.sessionId);
 
     room.onStateChange((state) => {
+      const syncedWeaponPool = state.weaponPool && typeof state.weaponPool[Symbol.iterator] === 'function'
+        ? Array.from(state.weaponPool).map((weaponId) => String(weaponId || '').trim()).filter(Boolean)
+        : [];
+      const serverSelectedMap = state.gameMode === 'battle'
+        ? (state.arenaId || state.trackId || this.selectedMap)
+        : (state.trackId || this.selectedMap);
+
       this.currentLobbyCode = state.lobbyCode || this.currentLobbyCode;
       this.currentLobbyPrivacy = state.privacy || this.currentLobbyPrivacy;
       this.selectedMode = state.gameMode || this.selectedMode;
       this.selectedModeId = state.modeId || this.selectedModeId;
-      this.selectedMap = state.trackId || this.selectedMap;
+      this.selectedMap = serverSelectedMap;
       this.selectedBattleType = state.battleType || this.selectedBattleType;
       this.selectedMaxPlayers = Number(state.maxPlayers || this.selectedMaxPlayers || 12);
       this.selectedLoadout = state.loadoutId || this.selectedLoadout;
-      if (Array.isArray(state.weaponPool) && state.weaponPool.length) {
-        this.selectedCustomWeapons = new Set(state.weaponPool);
+      if (this.selectedLoadout === 'custom') {
+        this.selectedCustomWeapons = new Set(syncedWeaponPool);
       }
 
       this.players = [];
@@ -619,6 +739,15 @@ class RacingLobby {
     });
 
     room.onMessage('matchStart', ({ gameConfig }) => {
+      console.info('[custom-arena-debug] lobby matchStart received', {
+        roomCode: this.currentLobbyCode || null,
+        modeId: gameConfig?.modeId || null,
+        gameMode: gameConfig?.gameMode || null,
+        trackId: gameConfig?.trackId || null,
+        arenaId: gameConfig?.arenaId || null,
+        customTrackBytes: gameConfig?.customTrackData?.length || 0,
+        selectedMap: this.selectedMap || null,
+      });
       sessionStorage.setItem('gameConfig', JSON.stringify(gameConfig));
       // If host set a custom track, store it so game pages can load it
       if (gameConfig.customTrackData) {
@@ -849,7 +978,7 @@ class RacingLobby {
 
     // Track Builder navigates directly — no game config needed
     if (modeId === 'track_builder') {
-      window.location.href = getPageForMode(modeId) || 'builder.html';
+      this._openBuilder();
       return;
     }
     
@@ -1329,6 +1458,7 @@ class RacingLobby {
       card.className = 'mode-card';
       if (mode.id === this.selectedModeId) card.classList.add('active');
       card.setAttribute('data-mode-id', mode.id);
+      const isBattleOnlineCard = mode.id === 'battle_online';
 
       let badgeHTML = '';
       if (mode.status === MODE_STATUS.BETA) {
@@ -1348,7 +1478,24 @@ class RacingLobby {
       } else {
         card.addEventListener('click', () => this._selectMode(mode.id));
       }
-      cardsContainer.appendChild(card);
+
+      if (isBattleOnlineCard) {
+        const cardStack = document.createElement('div');
+        cardStack.className = 'mode-card-stack mode-card-stack-battle';
+        const builderWrap = document.createElement('div');
+        builderWrap.className = 'mode-card-builder-wrap';
+        const builderButton = document.createElement('button');
+        builderButton.className = 'mode-card-builder-link mode-card-builder-separate';
+        builderButton.type = 'button';
+        builderButton.textContent = 'Arena Builder';
+        builderButton.addEventListener('click', () => this._openBuilder());
+        cardStack.appendChild(card);
+        builderWrap.appendChild(builderButton);
+        cardStack.appendChild(builderWrap);
+        cardsContainer.appendChild(cardStack);
+      } else {
+        cardsContainer.appendChild(card);
+      }
     });
   }
 

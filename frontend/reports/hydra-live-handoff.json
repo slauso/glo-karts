@@ -1,0 +1,29 @@
+{
+  "ok": false,
+  "step": "wait-for-battle-spawn",
+  "error": "page.waitForFunction: Timeout 45000ms exceeded.",
+  "debug": {
+    "host": {
+      "href": "http://127.0.0.1:5173/index.html",
+      "roomName": "",
+      "sessionId": "",
+      "started": false,
+      "countdownActive": false,
+      "playerCount": 0,
+      "players": [],
+      "splashStatus": "",
+      "statusText": ""
+    },
+    "guest": {
+      "href": "http://127.0.0.1:5173/index.html",
+      "roomName": "",
+      "sessionId": "",
+      "started": false,
+      "countdownActive": false,
+      "playerCount": 0,
+      "players": [],
+      "splashStatus": "",
+      "statusText": ""
+    }
+  }
+}

@@ -1,0 +1,17 @@
+<?xml version="1.0"?>
+<kart name="P2000" version="3" model-file="p2000.spm" icon-file="icon.png" minimap-icon-file="icon.png" shadow-file="genericshadow.png" type="heavy" groups="Add-Ons" rgb="1.00 1.00 1.00" revision="3">
+    <sounds engine="custom" file="cal_engine150.ogg" rolloff="0.3" max_dist="300" volume="4">
+        <skid name="default"/>
+    </sounds>
+    <wheels>
+        <rear-left position="-0.296761 0.130986 -0.712382" model="wheel-rear-left.spm"/>
+        <rear-right position="0.296549 0.131386 -0.712742" model="wheel-rear-right.spm"/>
+        <front-right position="0.301059 0.128510 0.516394" model="wheel-front-right.spm"/>
+        <front-left position="-0.303697 0.128986 0.516715" model="wheel-front-left.spm"/>
+    </wheels>
+    <headlights>
+        <object position="0.000000 0.065000 0.850000" rotation="5.035852 -2.065130 -8.483641" scale="1.000000 1.000000 1.000000" model="gfxGlow_blue_a.png__.spm"/>
+        <object position="0.000000 0.065000 0.850000" rotation="5.035852 -2.065130 -8.483641" scale="1.000000 1.000000 1.000000" model="stk_conelight_a.png__.spm"/>
+    </headlights>
+    <exhaust file="kart_exhaust.xml"/>
+</kart>

@@ -1,0 +1,16 @@
+<?xml version="1.0"?>
+<kart name="Amazing Panda" version="2" model-file="amazing panda.b3d" icon-file="icon.png" minimap-icon-file="icon.png" shadow-file="panda_shadow.png" type="medium" groups="Add-Ons" rgb="1.00 1.00 1.00" revision="3">
+    <sounds engine="large"/>
+    <animations left="0" straight="9" right="19" start-winning="29" start-winning-loop="109" end-winning="129" start-losing="139" start-losing-loop="159" end-losing="189"/>
+    <wheels>
+        <front-left position="-0.245190 0.167488 0.579515" model="wheel-front-left.b3d"/>
+        <front-right position="0.245190 0.167488 0.579515" model="wheel-front-right.b3d"/>
+        <rear-left position="-0.439559 0.225882 -0.397689" model="wheel-rear-left.b3d"/>
+        <rear-right position="0.439769 0.217153 -0.397689" model="wheel-rear-right.b3d"/>
+    </wheels>
+    <nitro-emitter>
+        <nitro-emitter-a position="-0.286261 0.382020 -0.575864"/>
+        <nitro-emitter-b position="0.286260 0.382020 -0.575864"/>
+    </nitro-emitter>
+    <hat offset="0.0 0.1 0.0"/>
+</kart>

@@ -1,0 +1,105 @@
+﻿≡ƒÅü  Loading lobby to seed sessionStorageΓÇª
+≡ƒÅü  Navigating to battle.htmlΓÇª
+Γ£à  Battle scene loaded ΓÇö starting deep auditΓÇª
+
+  Checking icon asset reachabilityΓÇª
+
+ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ
+  COMPREHENSIVE ITEM PICKUP AUDIT
+ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ
+  Total:  30   |   Γ£à SHIP: 17   |   ΓÜá∩╕Å  WARN: 13   |   Γ¥î FAIL: 0
+ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+
+  ΓöÇΓöÇ Standard Weapons (10) ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  #   ID                     Name                   Tier         Dmg   Spd   Life  Blast  Model    Verdict
+  ------------------------------------------------------------------------------------------------
+  1   bowling                BOWLING BALL           STANDARD     40    28    6     0      CUSTOM   Γ£à SHIP
+  2   bubblegum              BUBBLE GUM             STANDARD     20    0     12    0      CUSTOM   Γ£à SHIP
+  3   cake                   CAKE                   STANDARD     30    22    4     4      CUSTOM   Γ£à SHIP
+  4   plunger                PLUNGER                STANDARD     15    35    3.5   0      CUSTOM   Γ£à SHIP
+  5   anchor                 ANCHOR                 STANDARD     50    0     0     3      CUSTOM   Γ£à SHIP
+  6   swatter                SWATTER                STANDARD     35    18    3     0      CUSTOM   Γ£à SHIP
+  7   nitro                  NITRO                  STANDARD     25    20    5     5      CUSTOM   Γ£à SHIP
+  8   parachute              PARACHUTE              STANDARD     0     0     0     0      CUSTOM   Γ£à SHIP
+  9   guided_missile         GUIDED MISSILE         STANDARD     35    24    5     5      CUSTOM   ΓÜá∩╕Å  WARN
+       ΓÜá∩╕Å  placeholder icon (bowling-icon.png)
+  10  grenade                GRENADE                STANDARD     45    16    2.5   6      CUSTOM   ΓÜá∩╕Å  WARN
+       ΓÜá∩╕Å  placeholder icon (nitro.png)
+
+  ΓöÇΓöÇ Extreme Weapons (10) ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  #   ID                     Name                   Tier         Dmg   Spd   Life  Blast  Model    Verdict
+  ------------------------------------------------------------------------------------------------
+  1   shockwave_cannon       SHOCKWAVE CANNON       EXTREME      55    0     1.5   15     SPHERE   ΓÜá∩╕Å  WARN
+       ΓÜá∩╕Å  placeholder icon (bowling-icon.png)
+       ΓÜá∩╕Å  no dedicated model ΓÇö uses fallback sphere
+  2   thunderstrike          THUNDERSTRIKE          EXTREME      45    999   2     3      SPHERE   ΓÜá∩╕Å  WARN
+       ΓÜá∩╕Å  placeholder icon (bowling-icon.png)
+       ΓÜá∩╕Å  no dedicated model ΓÇö uses fallback sphere
+  3   black_hole             BLACK HOLE ORB         EXTREME      35    8     5     12     SPHERE   ΓÜá∩╕Å  WARN
+       ΓÜá∩╕Å  placeholder icon (bowling-icon.png)
+       ΓÜá∩╕Å  no dedicated model ΓÇö uses fallback sphere
+  4   meteor_swarm           METEOR SWARM           EXTREME      40    30    4     4      SPHERE   ΓÜá∩╕Å  WARN
+       ΓÜá∩╕Å  placeholder icon (nitro.png)
+       ΓÜá∩╕Å  no dedicated model ΓÇö uses fallback sphere
+  5   frost_nova             FROST NOVA             EXTREME      20    0     2.5   15     SPHERE   ΓÜá∩╕Å  WARN
+       ΓÜá∩╕Å  placeholder icon (bowling-icon.png)
+       ΓÜá∩╕Å  no dedicated model ΓÇö uses fallback sphere
+  6   emp_pulse              EMP PULSE              EXTREME      10    0     1.5   18     SPHERE   ΓÜá∩╕Å  WARN
+       ΓÜá∩╕Å  placeholder icon (bowling-icon.png)
+       ΓÜá∩╕Å  no dedicated model ΓÇö uses fallback sphere
+  7   gravity_flip           GRAVITY FLIP           EXTREME      15    0     3     12     SPHERE   ΓÜá∩╕Å  WARN
+       ΓÜá∩╕Å  placeholder icon (bowling-icon.png)
+       ΓÜá∩╕Å  no dedicated model ΓÇö uses fallback sphere
+  8   inferno_trail          INFERNO TRAIL          EXTREME      30    0     5     3      SPHERE   ΓÜá∩╕Å  WARN
+       ΓÜá∩╕Å  placeholder icon (nitro.png)
+       ΓÜá∩╕Å  no dedicated model ΓÇö uses fallback sphere
+  9   plasma_railgun         PLASMA RAILGUN         EXTREME      60    999   0.5   1      SPHERE   ΓÜá∩╕Å  WARN
+       ΓÜá∩╕Å  placeholder icon (bowling-icon.png)
+       ΓÜá∩╕Å  no dedicated model ΓÇö uses fallback sphere
+  10  vortex_tornado         VORTEX TORNADO         EXTREME      25    12    6     6      SPHERE   ΓÜá∩╕Å  WARN
+       ΓÜá∩╕Å  placeholder icon (bowling-icon.png)
+       ΓÜá∩╕Å  no dedicated model ΓÇö uses fallback sphere
+
+  ΓöÇΓöÇ Elemental Weapons (10) ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  #   ID                     Name                   Tier         Dmg   Spd   Life  Blast  Model    Verdict
+  ------------------------------------------------------------------------------------------------
+  1   fireball               FIREBALL               ELEM:fire    35    32    4.5   4      CUSTOM   Γ£à SHIP
+  2   toxic_spread           TOXIC SPREAD           ELEM:toxic   18    26    3.5   3      CUSTOM   Γ£à SHIP
+  3   ice_lance              ICE LANCE              ELEM:ice     28    55    3     2      CUSTOM   Γ£à SHIP
+  4   tornado                TORNADO                ELEM:wind    22    14    6     6      CUSTOM   Γ£à SHIP
+  5   super_nova             SUPER NOVA             ELEM:fire    45    0     3.5   15     CUSTOM   Γ£à SHIP
+  6   rock_barrage           ROCK BARRAGE           ELEM:earth   30    22    4     4      CUSTOM   Γ£à SHIP
+  7   lightning_bolt         LIGHTNING BOLT         ELEM:light   42    200   0.8   3      CUSTOM   Γ£à SHIP
+  8   wind_slash             WIND SLASH             ELEM:wind    20    42    2     2      CUSTOM   Γ£à SHIP
+  9   toxic_cloud            TOXIC CLOUD            ELEM:toxic   8     0     7.5   10     CUSTOM   ΓÜá∩╕Å  WARN
+       ΓÜá∩╕Å  blastRadius=10 but blastForce=0 ΓÇö explosion has no push
+  10  final_fission          FINAL FISSION          ELEM:fire    80    0     5     25     CUSTOM   Γ£à SHIP
+
+  Γ£à All loadout pools reference valid weapon IDs
+
+  ΓÜá∩╕Å  Weapons in no loadout pool: bowling, bubblegum, cake, plunger, anchor, swatter, nitro, parachute, guided_missile, grenade, shockwave_cannon, thunderstrike, black_hole, meteor_swarm, frost_nova, emp_pulse, gravity_flip, inferno_trail, plasma_railgun, vortex_tornado, fireball, toxic_spread, ice_lance, tornado, super_nova, rock_barrage, lightning_bolt, wind_slash, toxic_cloud, final_fission
+
+ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ
+  Γ£à NO ITEMS FAIL ΓÇö ALL PASS FUNCTIONAL CHECKS
+ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ
+
+  ΓÜá∩╕Å  13 ITEMS PASS WITH WARNINGS (cosmetic issues, still shippable):
+     guided_missile         placeholder icon (bowling-icon.png)
+     grenade                placeholder icon (nitro.png)
+     shockwave_cannon       placeholder icon (bowling-icon.png) | no dedicated model ΓÇö uses fallback sphere
+     thunderstrike          placeholder icon (bowling-icon.png) | no dedicated model ΓÇö uses fallback sphere
+     black_hole             placeholder icon (bowling-icon.png) | no dedicated model ΓÇö uses fallback sphere
+     meteor_swarm           placeholder icon (nitro.png) | no dedicated model ΓÇö uses fallback sphere
+     frost_nova             placeholder icon (bowling-icon.png) | no dedicated model ΓÇö uses fallback sphere
+     emp_pulse              placeholder icon (bowling-icon.png) | no dedicated model ΓÇö uses fallback sphere
+     gravity_flip           placeholder icon (bowling-icon.png) | no dedicated model ΓÇö uses fallback sphere
+     inferno_trail          placeholder icon (nitro.png) | no dedicated model ΓÇö uses fallback sphere
+     plasma_railgun         placeholder icon (bowling-icon.png) | no dedicated model ΓÇö uses fallback sphere
+     vortex_tornado         placeholder icon (bowling-icon.png) | no dedicated model ΓÇö uses fallback sphere
+     toxic_cloud            blastRadius=10 but blastForce=0 ΓÇö explosion has no push
+
+ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  BREAKDOWN:  19 projectile  |  10 placed/AoE  |  1 passive
+  FINAL:      Γ£à ALL ITEMS FUNCTIONAL
+ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+

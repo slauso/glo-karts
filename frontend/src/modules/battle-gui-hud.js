@@ -43,20 +43,20 @@ function _tickSp(s, dt) {
 //  LAYOUT CONSTANTS
 // ═══════════════════════════════════════════════════════════════════════════
 
-const BAR_W      = 620;        // island width (px)
-const BAR_H      = 56;         // island height — compact
-const BAR_R      = 28;         // corner-radius (full pill = H/2)
+const BAR_W      = 775;        // island width (px) — +25%
+const BAR_H      = 70;         // island height — compact — +25%
+const BAR_R      = 35;         // corner-radius (full pill = H/2)
 const BAR_GAP    = 22;         // px from screen bottom
-const EV_H       = 46;         // extra height when event is visible
-const BAR_BG     = "rgba(6,8,18,0.95)";
+const EV_H       = 58;         // extra height when event is visible — +25%
+const BAR_BG     = "rgba(6,8,18,0.76)";
 
-// Zone layout — [leftOffset, width] inside barContent
-const Z_SCORE     = [10, 52];
-const Z_HEALTH    = [70, 242];
-const Z_PRIMARY   = [320, 92];
-const Z_PICKUP    = [420, 104];
-const Z_SPEED     = [532, 62];
-const DIV_X       = [64, 314, 414, 526]; // divider x-positions
+// Zone layout — [leftOffset, width] inside barContent — scaled +25%
+const Z_SCORE     = [12, 65];
+const Z_HEALTH    = [88, 302];
+const Z_PRIMARY   = [400, 115];
+const Z_PICKUP    = [525, 130];
+const Z_SPEED     = [665, 78];
+const DIV_X       = [80, 392, 518, 658]; // divider x-positions — scaled +25%
 
 // ═══════════════════════════════════════════════════════════════════════════
 //  MODULE STATE
@@ -245,6 +245,7 @@ function _tickTelemetry(now, pulse) {
   if (_lockTitleText && _lockValueText && _lockMeterFill) {
     const prog = _clamp01(_telemetryState.lockProgress || 0);
     const wn = String(_telemetryState.lockWeapon || "").replace(/_/g," ").toUpperCase();
+    const hydraMode = _telemetryState.lockWeapon === 'crimson_hydra';
     const hasLockContext = wn || prog > 0.01 || _telemetryState.locked;
     if (!hasLockContext) {
       _lockTitleText.text = "";
@@ -253,12 +254,22 @@ function _tickTelemetry(now, pulse) {
     const raw = _telemetryState.targetName || (wn ? `${wn} LINK` : "SCAN");
     const name = raw.length > 12 ? `${raw.slice(0,11)}.` : raw;
     const lk = _telemetryState.locked;
-    const ac = lk ? "#ff6d96" : prog > 0.01 ? "#7ee0ff" : "rgba(228,236,255,0.45)";
-    _lockTitleText.text  = lk ? "LOCKED" : prog > 0.01 ? "ACQ" : "";
+    const hydraSalvo = prog >= 0.95 ? 3 : prog >= 0.55 ? 2 : prog > 0.01 ? 1 : 0;
+    const ac = hydraMode
+      ? (lk ? "#ff425d" : prog > 0.01 ? "#7dff7a" : "rgba(228,236,255,0.45)")
+      : (lk ? "#ff6d96" : prog > 0.01 ? "#7ee0ff" : "rgba(228,236,255,0.45)");
+    _lockTitleText.text  = hydraMode
+      ? (hydraSalvo > 0 ? `SALVO ${hydraSalvo}` : "")
+      : (lk ? "LOCKED" : prog > 0.01 ? "ACQ" : "");
     _lockValueText.text  = name.toUpperCase();
     _lockTitleText.color = ac;
     _lockValueText.color = ac;
-    _lockMeterFill.background = _rgbaFromHex(lk ? "#ff6d96" : "#67d6ff", 0.9);
+    _lockMeterFill.background = _rgbaFromHex(
+      hydraMode
+        ? (prog >= 0.95 ? "#ff425d" : prog >= 0.55 ? "#ff8c42" : "#69ff7d")
+        : (lk ? "#ff6d96" : "#67d6ff"),
+      0.9,
+    );
     _lockMeterFill.alpha = prog > 0.01 ? 1 : 0.08;
     _setControlWidthPercent(_lockMeterFill, Math.max(6, prog * 100));
     }

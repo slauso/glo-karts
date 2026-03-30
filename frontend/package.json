@@ -13,7 +13,11 @@
     "preview": "vite preview",
     "test:lobby:regression": "node scripts/lobby-ux-regression.mjs",
     "test:e2e:install": "playwright install chromium",
-    "test:e2e:lobby": "node scripts/lobby-ux-regression.mjs"
+    "test:e2e:lobby": "node scripts/lobby-ux-regression.mjs",
+    "test:e2e:builder-playtest": "node scripts/builder-playtest-regression.mjs",
+    "test:e2e:hydra-lobby": "node scripts/hydra-lobby-smoke.mjs",
+    "test:e2e:hydra-handoff": "node scripts/hydra-live-handoff.mjs",
+    "test:e2e:postgame-host": "node scripts/postgame-host-settings-regression.mjs"
   },
   "devDependencies": {
     "@playwright/test": "^1.58.2",

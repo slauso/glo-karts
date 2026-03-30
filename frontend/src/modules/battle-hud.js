@@ -172,7 +172,7 @@ export function updateScoreDisplay(kills, label = 'Kills') {
 let _killFeed = null;
 
 const WEAPON_ICONS = {
-  bowling_ball: '🎳', cake: '🎂', plunger: '🪠', missile: '🚀',
+  bowling_ball: '🎳', cake: '🎂', plunger: '🪠', missile: '🚀', crimson_hydra: '🐉',
   banana: '🍌', bubblegum: '🫧', swatter: '🪰',
   shield: '🛡️', ludicrous_mode: '🔋', pirateleportation: '🏴‍☠️', mirror_realm: '🪞', phase_shift: '👻',
   weather_dominion: '⛈️',
@@ -538,6 +538,7 @@ const DAMAGE_BORDER_COLORS = {
   fire: '#ff3322',
   explosive: '#ff3322',
   missile: '#ff6600',
+  crimson_hydra: '#ff4260',
   fireball: '#ff6a24',
   glow_thrower: '#ff5a1f',
   glo_burst: '#ffd54a',

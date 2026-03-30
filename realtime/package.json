@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "node --watch src/index.js",
     "start": "node src/index.js",
+    "test:hydra-lock": "node scripts/hydra-lock-regression.mjs",
+    "test:hydra-pickups": "node scripts/hydra-pickup-regression.mjs",
     "load:sync": "node scripts/load-sync-harness.mjs",
     "load:sync:export": "node scripts/load-sync-harness.mjs --json=reports/load-sync-latest.json --csv=reports/load-sync-latest.csv",
     "load:sync:diff": "node scripts/load-sync-diff.mjs"

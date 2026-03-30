@@ -1,0 +1,6 @@
+Mr Iceblock is under GNU GPLv2 license
+Animation Rudy Phelippeau
+
+Textures
+
+* ice  taken from Extreme Tux Racer game (http://extremetuxracer.com/) GPL license

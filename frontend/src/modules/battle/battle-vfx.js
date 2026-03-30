@@ -94,6 +94,7 @@ const WEAPON_COLORS = {
   plunger:      { primary: [1.0, 0.2, 0.0], secondary: [0.8, 0.1, 0.0] },
   nitro:        { primary: [0.0, 1.0, 0.8], secondary: [0.0, 0.7, 0.5] },
   missile:      { primary: [1.0, 0.0, 0.4], secondary: [1.0, 0.5, 0.0] },
+  crimson_hydra:{ primary: [1.0, 0.08, 0.24], secondary: [1.0, 0.42, 0.12] },
   cannon:       { primary: [1.0, 0.85, 0.3], secondary: [0.9, 0.5, 0.1] },
   frostAxe:     { primary: [0.4, 0.8, 1.0], secondary: [0.2, 0.5, 1.0] },
   moltenDagger: { primary: [1.0, 0.4, 0.0], secondary: [1.0, 0.2, 0.0] },
@@ -774,6 +775,7 @@ export function emitWeaponImpactVFX(position, subType, damage) {
   // Weapon-specific extras
   switch (subType) {
     case 'missile':
+    case 'crimson_hydra':
       emitFireBurst(position);
       emitShockwaveRing(position, 10, [1, 0.42, 0.08]);
       break;

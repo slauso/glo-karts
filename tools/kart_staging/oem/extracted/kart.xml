@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+<kart name="OEM" version="3" model-file="oem.spm" icon-file="icon.png" minimap-icon-file="iconMinimap.png" shadow-file="octane" type="medium" groups="Add-Ons" rgb="0.00 0.24 0.97" revision="2">
+    <sounds engine="custom" file="octane.ogg" rolloff="0.2" max_dist="300" volume="1.0"/>
+    <animations start-winning="0" start-winning-loop="28" end-winning="28" start-losing="31" start-losing-loop="58" end-losing="58" left="0" straight="0" right="0" selection-start="0" selection-end="0"/>
+    <wheels>
+        <front-left position="-0.272401 0.138684 0.442345" model="wheel-front-left.spm"/>
+        <rear-left position="-0.272401 0.160682 -0.412842" model="wheel-rear-left.spm"/>
+        <front-right position="0.272401 0.138684 0.442345" model="wheel-front-right.spm"/>
+        <rear-right position="0.272401 0.160682 -0.412842" model="wheel-rear-right.spm"/>
+    </wheels>
+    <nitro-emitter>
+        <nitro-emitter-a position="0.090027 0.280241 -0.552621"/>
+        <nitro-emitter-b position="-0.090027 0.280241 -0.552621"/>
+    </nitro-emitter>
+    <headlights>
+        <object position="0.000000 0.357304 -0.809902" rotation="0.000000 -0.000000 0.000000" scale="0.000010 0.000010 0.000010" color="255 0 0" model="___.spm"/>
+        <object position="0.000652 0.184321 1.205738" rotation="0.000000 -0.000000 0.000000" scale="0.437831 0.437831 1.392876" model="headlight.spm"/>
+    </headlights>
+    <lean max="0"/>
+    <exhaust file="kart_exhaust.xml"/>
+</kart>

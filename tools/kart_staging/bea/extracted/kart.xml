@@ -1,0 +1,16 @@
+<?xml version="1.0"?>
+<kart name="Christi" version="3" model-file="bea.spm" icon-file="icon.png" minimap-icon-file="mapicon.png" shadow-file="genericshadow.png" type="heavy" groups="Add-Ons" rgb="1.00 1.00 1.00" revision="3">
+    <sounds engine="custom" file="SugarEngine.ogg" rolloff="0.2" max_dist="200" volume="0.8"/>
+    <animations left="3" straight="9" right="15" start-jump="17" end-jump="19" start-winning="25" start-winning-loop="37" end-winning="49" start-losing="53" start-losing-loop="59" end-losing="71" backpedal-left="76" backpedal="78" backpedal-right="80"/>
+    <wheels>
+        <rear-left position="-0.402994 0.116285 -0.309909" model="wheel-rear-left.spm"/>
+        <front-left position="-0.372729 0.074614 0.436832" model="wheel-front-left.spm"/>
+        <rear-right position="0.400132 0.116284 -0.309909" model="wheel-rear-right.spm"/>
+        <front-right position="0.376928 0.074613 0.436832" model="wheel-front-right.spm"/>
+    </wheels>
+    <nitro-emitter>
+        <nitro-emitter-a position="-0.206024 0.278073 -0.485104"/>
+        <nitro-emitter-b position="0.214533 0.278073 -0.485104"/>
+    </nitro-emitter>
+    <exhaust file="kart_exhaust.xml"/>
+</kart>

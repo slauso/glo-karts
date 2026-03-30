@@ -1,0 +1,16 @@
+<?xml version="1.0"?>
+<kart name="Inky" version="2" model-file="inky.b3d" icon-file="inkyicon1.png" minimap-icon-file="inkyicon1.png" shadow-file="ishadow.png" type="medium" groups="Add-Ons" rgb="0.00 0.00 0.00" revision="1">
+    <sounds engine="large"/>
+    <animations left="0" straight="19" right="39" start-jump="49" end-jump="69" start-winning="79" start-winning-loop="99" end-winning="119" start-losing="127" start-losing-loop="139" end-losing="159"/>
+    <wheels>
+        <rear-right position="0.561350 0.221992 -0.286592" model="wheel-rear-right.b3d"/>
+        <rear-left position="-0.561350 0.221992 -0.286592" model="wheel-rear-left.b3d"/>
+        <front-left position="-0.158468 0.141098 0.717832" model="wheel-front-left.b3d"/>
+        <front-right position="0.158470 0.141098 0.717832" model="wheel-front-right.b3d"/>
+    </wheels>
+    <nitro-emitter>
+        <nitro-emitter-a position="-0.000000 0.354918 -0.751548"/>
+        <nitro-emitter-b position="-0.000000 0.354918 -0.687642"/>
+    </nitro-emitter>
+    <hat offset="0.0 00 -.1"/>
+</kart>

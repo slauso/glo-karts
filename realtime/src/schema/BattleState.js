@@ -7,6 +7,9 @@ export class BattleState extends Schema {
     super();
     this.mode = "battle";
     this.gameType = "deathmatch";
+    this.trackId = "glo_arena";
+    this.loadoutId = "classic";
+    this.botCount = 0;
     this.started = false;
     this.serverTime = 0;
     this.scoreLimit = 5;
@@ -33,6 +36,9 @@ export class BattleState extends Schema {
 
 type("string")(BattleState.prototype, "mode");
 type("string")(BattleState.prototype, "gameType");
+type("string")(BattleState.prototype, "trackId");
+type("string")(BattleState.prototype, "loadoutId");
+type("number")(BattleState.prototype, "botCount");
 type("boolean")(BattleState.prototype, "started");
 type("number")(BattleState.prototype, "serverTime");
 type("number")(BattleState.prototype, "scoreLimit");

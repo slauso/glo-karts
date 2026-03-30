@@ -21,6 +21,7 @@ import {
   PostProcess,
   Effect,
 } from "@babylonjs/core";
+import { TransformNode } from "@babylonjs/core/Meshes/transformNode";
 import { ParticleSystem } from "@babylonjs/core/Particles/particleSystem";
 import { CubeTexture } from "@babylonjs/core/Materials/Textures/cubeTexture";
 import { DynamicTexture } from "@babylonjs/core/Materials/Textures/dynamicTexture";
@@ -30,7 +31,7 @@ import {
 import "@babylonjs/loaders/glTF";
 import "@babylonjs/core/Physics/joinedPhysicsEngineComponent";
 import HavokPhysics from "@babylonjs/havok";
-import { resolveTrackAsset, resolveArenaAsset, resolveKartAsset } from "../content-registry.js";
+import { resolveTrackAsset, resolveArenaAsset, resolveKartAsset, ALL_ARENAS, WEAPON_SETS } from "../content-registry.js";
 import { FILTER, LAYER, applyFilterToAggregate } from './collision-layers.js';
 import { createMinimap, updateMinimapPlayers, createBattleMinimap, updateBattleMinimapPlayers } from '../minimap.js';
 import { initParticles, updateParticles, disposeParticles, emitWeaponExplosion, emitShieldBreak, createProjectileTrail, disposeProjectileTrail, resetParticleBudget, emitItemBoxShatter } from '../babylon-particles.js';
@@ -75,6 +76,7 @@ import {
   loadBattleAssets, disposeBattleAssets, playWeaponFireSound, playWeaponHitSound,
   playBattleSound, areBattleAssetsLoaded,
 } from '../battle/battle-assets.js';
+import { createBananaModel } from '../battle/weapon-models.js';
 import {
   initBattleVFX, disposeBattleVFX, emitMuzzleFlash, emitBattleExplosion,
   emitFrostImpact, emitLightningStrike, emitBlackHoleVortex, emitKillCelebration,
@@ -88,6 +90,22 @@ import { initWeaponFXEnhance, disposeWeaponFXEnhance, tickDecals, syncWeaponFXQu
 import { detectPerformanceTier, startAdaptiveMonitor, stopAdaptiveMonitor, getTier, TIER, updateRuntimePerformanceBudget, runtimeFXBudget, runtimePostFXBudget, runtimePressure } from '../perf-tier.js';
 
 const HAVOK_WASM_PUBLIC_PATH = `${import.meta.env.BASE_URL}havok/HavokPhysics.wasm`;
+const CUSTOM_ARENA_SEGMENT_ASSET_PATHS = {
+  straight: '/models/track/track-road-wide-straight.glb',
+  flat_wide: '/models/track/track-road-wide.glb',
+  curve_left: '/models/track/track-road-wide-corner-large.glb',
+  curve_right: '/models/track/track-road-wide-corner-large.glb',
+  ramp_up: '/models/track/track-road-wide-straight-hill-beginning.glb',
+  ramp_down: '/models/track/track-road-wide-straight-hill-end.glb',
+};
+const CUSTOM_ARENA_SEGMENT_DIMS = {
+  straight: { width: 10, length: 10 },
+  flat_wide: { width: 20, length: 20 },
+  curve_left: { width: 10, length: 10 },
+  curve_right: { width: 10, length: 10 },
+  ramp_up: { width: 10, length: 10 },
+  ramp_down: { width: 10, length: 10 },
+};
 const MAX_QUEUED_PROJECTILE_EVENTS = 120;
 const MAX_QUEUED_IMPACT_EVENTS = 120;
 const MAX_QUEUED_CRASH_EVENTS = 48;
@@ -104,8 +122,17 @@ const COLYSEUS_PROTOCOL_NAMES = {
   17: 'ROOM_DATA_BYTES',
 };
 
+function emitPlaytestProgress(detail = {}) {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new CustomEvent('glo-playtest-progress', { detail }));
+  if (window.__gloDebug) {
+    window.__gloDebug.playtestProgress = detail;
+  }
+}
+
 const WEAPON_DISPLAY = {
   missile: { icon: "🚀", hue: "#ff7448", accent: "#ffd1b8", category: "Projectile" },
+  crimson_hydra: { icon: "🐉", hue: "#ff425d", accent: "#ffd0d8", category: "Projectile", displayName: "Crimson Hydra" },
   bowling_ball: { icon: "🎳", hue: "#9aa3b7", accent: "#eef3ff", category: "Projectile" },
   shield: { icon: "🛡️", hue: "#55bbff", accent: "#c7efff", category: "Defence" },
   cake: { icon: "🎂", hue: "#ffb347", accent: "#fff0c8", category: "Projectile" },
@@ -137,6 +164,7 @@ const WEAPON_DISPLAY = {
 const PROJECTILE_MODEL_ALIASES = {
   bowling_ball: 'bowling',
   missile: 'guided_missile',
+  crimson_hydra: 'guided_missile',
 };
 
 const DEBUG_WM_WEAPON_CYCLE = [
@@ -398,11 +426,11 @@ export class ColyseusBabylonClient {
     this._arenaKartScale  = null;    // per-arena kart scale override from content-registry
 
     // ── Camera view modes (C key cycles) ──────────────────────────────
-    // 0 = default, 1 = close/low chase
     this._cameraMode = 0;
     this._cameraModes = [
       { name: 'Chase',  radius: 12, height: 6,   fovBase: 75, accel: 0.035, maxSpeed: 12 },
-      { name: 'Close',  radius: 6,  height: 2.5, fovBase: 80, accel: 0.06,  maxSpeed: 18 },
+      { name: 'Low Behind', radius: 8.5, height: 2.2, fovBase: 78, accel: 0.05, maxSpeed: 15 },
+      { name: 'Close',  radius: 4.75,  height: 2.55, fovBase: 80, accel: 0.07,  maxSpeed: 20 },
     ];
   }
 
@@ -436,16 +464,18 @@ export class ColyseusBabylonClient {
     // GLO animation — no longer needs GlowLayer (shaders handle glow internally)
     this._gloTime = 0;
 
+    const initialCameraMode = this._cameraModes[this._cameraMode];
+
     // Setup FollowCamera
     this.camera = new FollowCamera("camera", new Vector3(0, 5, -15), this.scene);
-    this.camera.radius = 12;
-    this.camera.heightOffset = 6;        // slightly higher for better terrain clearance
+    this.camera.radius = initialCameraMode.radius;
+    this.camera.heightOffset = initialCameraMode.height;
     this.camera.rotationOffset = 180;
-    this.camera.cameraAcceleration = 0.035;
-    this.camera.maxCameraSpeed = 12;
+    this.camera.cameraAcceleration = initialCameraMode.accel;
+    this.camera.maxCameraSpeed = initialCameraMode.maxSpeed;
     this.camera.minZ = 0.1;             // prevent near-clip artifacts inside tunnels/walls
     this.camera.fov = this._baseFOV;    // Phase 21: dynamic FOV starts at base
-    this._targetCamRadius = 12;
+    this._targetCamRadius = initialCameraMode.radius;
     // this.camera.attachControl(canvas, true); // Removed to fix console warnings
 
     const hemiLight = new HemisphericLight("hemiLight", new Vector3(0, 1, 0), this.scene);
@@ -825,6 +855,7 @@ export class ColyseusBabylonClient {
       blockfort:  { clear: [0.45, 0.65, 0.95, 1], fog: 'exp2', fogDensity: 0.003, fogColor: [0.45, 0.65, 0.95], hemiInt: 0.7, dirInt: 1.0 },
       stadium:    { clear: [0.35, 0.55, 0.85, 1], fog: 'exp2', fogDensity: 0.002, fogColor: [0.35, 0.55, 0.85], hemiInt: 0.8, dirInt: 1.0 },
       debug_arena:{ clear: [0.55, 0.62, 0.72, 1], fog: 'none', fogDensity: 0, fogColor: [0.55, 0.62, 0.72], hemiInt: 1.0, dirInt: 1.2 },
+      custom_import: { clear: [0.05, 0.08, 0.12, 1], fog: 'none', fogDensity: 0, fogColor: [0.05, 0.08, 0.12], hemiInt: 0.92, dirInt: 1.1, exposure: 1.0, contrast: 1.03 },
       test_box:   { clear: [0.45, 0.65, 0.95, 1], fog: 'exp2', fogDensity: 0.003, fogColor: [0.45, 0.65, 0.95], hemiInt: 0.7, dirInt: 1.0 },
     };
     const env = ENVS[arenaId] || ENVS.test_box;
@@ -1049,6 +1080,17 @@ export class ColyseusBabylonClient {
   async loadSceneAssets(options) {
     let trackInfo;
     let customTrackParsed = null;
+    const requestedArenaId = options.arenaId || options.trackId || 'test_box';
+    const customTrackBytes = typeof options.customTrackData === 'string'
+      ? options.customTrackData.length
+      : (options.customTrackData ? JSON.stringify(options.customTrackData).length : 0);
+
+    emitPlaytestProgress({
+      phase: 'scene-load',
+      label: 'Decoding arena blueprint',
+      detail: customTrackBytes ? `${customTrackBytes.toLocaleString()} bytes from builder` : 'No builder arena payload detected',
+      progress: 0.28,
+    });
 
     // Check for custom track data from Track Builder
     if (options.customTrackData) {
@@ -1058,15 +1100,297 @@ export class ColyseusBabylonClient {
       } catch (_) { /* ignore parse errors */ }
     }
 
+    console.info('[custom-arena-debug] loadSceneAssets input', {
+      gameMode: options.gameMode || null,
+      trackId: options.trackId || null,
+      arenaId: requestedArenaId,
+      customTrackBytes,
+      customTrackParsed: !!customTrackParsed,
+    });
+    if (typeof window !== 'undefined' && window.__gloDebug) {
+      window.__gloDebug.requestedArenaId = requestedArenaId;
+      window.__gloDebug.customTrackBytes = customTrackBytes;
+      window.__gloDebug.customArenaBuilt = false;
+    }
+
     if (options.gameMode === "battle") {
       trackInfo = resolveArenaAsset(options.trackId);
     } else {
       trackInfo = resolveTrackAsset(options.trackId);
     }
 
+    const buildCustomArena = async (trackData) => {
+      const hasPhysics = typeof this.scene.getPhysicsEngine === 'function' && this.scene.getPhysicsEngine();
+      const bounds = trackData?.bounds || { min: { x: -40, y: 0, z: -40 }, max: { x: 40, y: 0, z: 40 } };
+      const totalSegments = Math.max(1, (trackData?.segments || []).length || 1);
+      const authoredStaticObstacles = (trackData?.obstacles || []).filter((obstacle) => String(obstacle?.type || 'barrier') !== 'item_box');
+      const totalObstacles = Math.max(1, authoredStaticObstacles.length || 1);
+      const floorWidth = Math.max(40, (bounds.max.x - bounds.min.x) + 28);
+      const floorDepth = Math.max(40, (bounds.max.z - bounds.min.z) + 28);
+      const floorCenterX = (bounds.min.x + bounds.max.x) * 0.5;
+      const floorCenterZ = (bounds.min.z + bounds.max.z) * 0.5;
+      const floorHeight = 0.6;
+      const floorY = Math.min(bounds.min.y || 0, 0) - (floorHeight * 0.5);
+
+      const floorMat = new StandardMaterial('custom-arena-floor-mat', this.scene);
+      floorMat.diffuseColor = new Color3(0.07, 0.1, 0.15);
+      floorMat.specularColor = new Color3(0.03, 0.05, 0.07);
+
+      const floor = MeshBuilder.CreateBox('custom-arena-floor', {
+        width: floorWidth,
+        depth: floorDepth,
+        height: floorHeight,
+      }, this.scene);
+      emitPlaytestProgress({
+        phase: 'scene-load',
+        label: 'Forging arena floor',
+        detail: `${(trackData?.segments || []).length || 0} tiles · ${(trackData?.obstacles || []).length || 0} props`,
+        progress: 0.42,
+      });
+      floor.position.set(floorCenterX, floorY, floorCenterZ);
+      floor.material = floorMat;
+      floor.receiveShadows = true;
+      if (hasPhysics) {
+        const floorAggregate = new PhysicsAggregate(floor, PhysicsShapeType.BOX, { mass: 0, friction: 0.8, restitution: 0.02 }, this.scene);
+        applyFilterToAggregate(floorAggregate, FILTER.TRACK);
+      }
+
+      const importSegmentVisual = async (segment, index) => {
+        const segmentType = segment?.type ? String(segment.type) : 'straight';
+        const assetPath = CUSTOM_ARENA_SEGMENT_ASSET_PATHS[segmentType];
+        const dims = CUSTOM_ARENA_SEGMENT_DIMS[segmentType] || CUSTOM_ARENA_SEGMENT_DIMS.straight;
+        if (!assetPath) return null;
+
+        const pathParts = assetPath.split('/');
+        const filename = pathParts.pop();
+        const dir = `${pathParts.join('/')}/`;
+        const result = await SceneLoader.ImportMeshAsync('', dir, filename, this.scene)
+          .catch((error) => {
+            console.warn(`[realtime] Custom arena segment load skipped for ${segmentType}:`, error?.message || error);
+            return null;
+          });
+        if (!result?.meshes?.length) return null;
+
+        const wrapper = new TransformNode(`custom-segment-wrapper-${segment.id || index}`, this.scene);
+        const topLevelNodes = result.meshes.filter((mesh) => !mesh.parent);
+        topLevelNodes.forEach((mesh) => {
+          mesh.parent = wrapper;
+        });
+
+        const renderMeshes = result.meshes.filter((mesh) => typeof mesh.getTotalVertices === 'function' && mesh.getTotalVertices() > 0);
+        if (!renderMeshes.length) return wrapper;
+
+        let minX = Infinity;
+        let minY = Infinity;
+        let minZ = Infinity;
+        let maxX = -Infinity;
+        let maxY = -Infinity;
+        let maxZ = -Infinity;
+
+        renderMeshes.forEach((mesh) => {
+          mesh.computeWorldMatrix(true);
+          const info = mesh.getBoundingInfo?.().boundingBox;
+          if (!info) return;
+          minX = Math.min(minX, info.minimumWorld.x);
+          minY = Math.min(minY, info.minimumWorld.y);
+          minZ = Math.min(minZ, info.minimumWorld.z);
+          maxX = Math.max(maxX, info.maximumWorld.x);
+          maxY = Math.max(maxY, info.maximumWorld.y);
+          maxZ = Math.max(maxZ, info.maximumWorld.z);
+        });
+
+        const sizeX = Math.max(0.01, maxX - minX);
+        const sizeZ = Math.max(0.01, maxZ - minZ);
+        const scale = Math.min(dims.width / sizeX, dims.length / sizeZ);
+        wrapper.scaling.scaleInPlace(scale);
+        wrapper.computeWorldMatrix(true);
+
+        minX = Infinity;
+        minY = Infinity;
+        minZ = Infinity;
+        maxX = -Infinity;
+        maxY = -Infinity;
+        maxZ = -Infinity;
+        renderMeshes.forEach((mesh) => {
+          mesh.computeWorldMatrix(true);
+          const info = mesh.getBoundingInfo?.().boundingBox;
+          if (!info) return;
+          minX = Math.min(minX, info.minimumWorld.x);
+          minY = Math.min(minY, info.minimumWorld.y);
+          minZ = Math.min(minZ, info.minimumWorld.z);
+          maxX = Math.max(maxX, info.maximumWorld.x);
+          maxY = Math.max(maxY, info.maximumWorld.y);
+          maxZ = Math.max(maxZ, info.maximumWorld.z);
+        });
+
+        const centerX = (minX + maxX) * 0.5;
+        const centerZ = (minZ + maxZ) * 0.5;
+        wrapper.position.x -= centerX;
+        wrapper.position.y -= minY;
+        wrapper.position.z -= centerZ;
+        if (segmentType === 'curve_left') {
+          wrapper.scaling.x *= -1;
+        }
+
+        renderMeshes.forEach((mesh) => {
+          mesh.receiveShadows = true;
+        });
+        return wrapper;
+      };
+
+      const createFallbackSegmentVisual = (segmentType, index) => {
+        const dims = CUSTOM_ARENA_SEGMENT_DIMS[segmentType] || CUSTOM_ARENA_SEGMENT_DIMS.straight;
+        const color = segmentType === 'flat_wide'
+          ? new Color3(0.12, 0.74, 0.66)
+          : segmentType === 'curve_left' || segmentType === 'curve_right'
+            ? new Color3(0.93, 0.58, 0.24)
+            : segmentType === 'ramp_up' || segmentType === 'ramp_down'
+              ? new Color3(0.68, 0.46, 0.96)
+              : new Color3(0.2, 0.58, 0.92);
+        const mesh = MeshBuilder.CreateBox(`custom-segment-fallback-${index}`, {
+          width: dims.width,
+          depth: dims.length,
+          height: 1.2,
+        }, this.scene);
+        const material = new StandardMaterial(`custom-segment-fallback-mat-${index}`, this.scene);
+        material.diffuseColor = color;
+        material.specularColor = new Color3(0.1, 0.12, 0.18);
+        mesh.material = material;
+        mesh.position.y = 0.6;
+        mesh.receiveShadows = true;
+        return mesh;
+      };
+
+      for (const [segmentIndex, segment] of (trackData?.segments || []).entries()) {
+        const segmentType = segment?.type ? String(segment.type) : 'straight';
+        const segmentRoot = new TransformNode(`custom-segment-node-${segment.id || segmentIndex}`, this.scene);
+        const visual = await importSegmentVisual(segment, segmentIndex) || createFallbackSegmentVisual(segmentType, segmentIndex);
+        visual.parent = segmentRoot;
+        segmentRoot.position = new Vector3(
+          Number(segment.position?.x || 0),
+          Number(segment.position?.y || 0),
+          Number(segment.position?.z || 0),
+        );
+        segmentRoot.rotation.y = -(Number(segment.rotation || 0) * Math.PI) / 180;
+
+        if (hasPhysics) {
+          const dims = CUSTOM_ARENA_SEGMENT_DIMS[segmentType] || CUSTOM_ARENA_SEGMENT_DIMS.straight;
+          const aggregate = new PhysicsAggregate(segmentRoot, PhysicsShapeType.BOX, {
+            mass: 0,
+            friction: 0.9,
+            restitution: 0.02,
+            extents: new Vector3(dims.width, Math.max(1.4, Math.abs(Number(segment.position?.y || 0)) + 2), dims.length),
+          }, this.scene);
+          applyFilterToAggregate(aggregate, FILTER.TRACK);
+        }
+
+        if (segmentIndex === 0 || segmentIndex === totalSegments - 1 || (segmentIndex + 1) % Math.max(1, Math.ceil(totalSegments / 5)) === 0) {
+          emitPlaytestProgress({
+            phase: 'scene-load',
+            label: 'Placing track geometry',
+            detail: `Tile ${segmentIndex + 1} of ${totalSegments}`,
+            progress: 0.42 + (((segmentIndex + 1) / totalSegments) * 0.28),
+          });
+        }
+      }
+
+      for (const [index, obstacle] of authoredStaticObstacles.entries()) {
+        const obstacleType = String(obstacle?.type || 'barrier');
+        const obstacleFilter = obstacleType === 'item_box'
+          ? FILTER.ITEM_BOX
+          : obstacleType === 'banana'
+            ? FILTER.TRAP
+            : FILTER.TRACK;
+        let obstacleMesh;
+        if (obstacleType === 'item_box') {
+          obstacleMesh = createItemBoxModel(this.scene);
+          obstacleMesh.scaling.scaleInPlace(3.1);
+        } else if (obstacleType === 'banana') {
+          obstacleMesh = createBananaModel(this.scene);
+          obstacleMesh.scaling.scaleInPlace(7.2);
+        } else if (obstacleType === 'boost_pad') {
+          obstacleMesh = MeshBuilder.CreateBox(`custom-obstacle-${index}`, { width: 7.2, height: 0.6, depth: 11.2 }, this.scene);
+          const boostMat = new StandardMaterial(`custom-obstacle-mat-${index}`, this.scene);
+          boostMat.diffuseColor = new Color3(0, 0.66, 1);
+          boostMat.emissiveColor = new Color3(0.06, 0.31, 0.4);
+          obstacleMesh.material = boostMat;
+        } else {
+          obstacleMesh = MeshBuilder.CreateBox(`custom-obstacle-${index}`, { width: 9.5, height: 5.5, depth: 2.5 }, this.scene);
+          const barrierMat = new StandardMaterial(`custom-obstacle-mat-${index}`, this.scene);
+          barrierMat.diffuseColor = new Color3(0.4, 0.46, 0.54);
+          obstacleMesh.material = barrierMat;
+        }
+
+        obstacleMesh.position = new Vector3(
+          Number(obstacle.position?.x || 0),
+          obstacleType === 'boost_pad' ? 0.3 : obstacleType === 'item_box' ? 2.6 : obstacleType === 'banana' ? 1.7 : 2.75,
+          Number(obstacle.position?.z || 0),
+        );
+
+        if (hasPhysics) {
+          const obstacleAggregate = new PhysicsAggregate(obstacleMesh, PhysicsShapeType.BOX, { mass: 0, friction: 0.7, restitution: 0.05 }, this.scene);
+          applyFilterToAggregate(obstacleAggregate, obstacleFilter);
+        }
+
+        if (index === 0 || index === totalObstacles - 1 || (index + 1) % Math.max(1, Math.ceil(totalObstacles / 3)) === 0) {
+          emitPlaytestProgress({
+            phase: 'scene-load',
+            label: 'Installing arena props',
+            detail: `Prop ${index + 1} of ${totalObstacles}`,
+            progress: 0.72 + (((index + 1) / totalObstacles) * 0.12),
+          });
+        }
+      }
+
+      const wallThickness = 8;
+      const wallHeight = 6;
+      const wallMat = new StandardMaterial('custom-arena-wall-mat', this.scene);
+      wallMat.diffuseColor = new Color3(0.16, 0.18, 0.24);
+
+      const createWall = (name, width, height, depth, x, y, z) => {
+        const wall = MeshBuilder.CreateBox(name, { width, height, depth }, this.scene);
+        wall.position.set(x, y, z);
+        wall.material = wallMat;
+        if (hasPhysics) {
+          const wallAggregate = new PhysicsAggregate(wall, PhysicsShapeType.BOX, { mass: 0, friction: 0.7, restitution: 0.04 }, this.scene);
+          applyFilterToAggregate(wallAggregate, FILTER.TRACK);
+        }
+      };
+
+      createWall('custom-wall-n', floorWidth + wallThickness * 2, wallHeight, wallThickness, floorCenterX, wallHeight * 0.5, floorCenterZ - (floorDepth * 0.5) - (wallThickness * 0.5));
+      createWall('custom-wall-s', floorWidth + wallThickness * 2, wallHeight, wallThickness, floorCenterX, wallHeight * 0.5, floorCenterZ + (floorDepth * 0.5) + (wallThickness * 0.5));
+      createWall('custom-wall-e', wallThickness, wallHeight, floorDepth + wallThickness * 2, floorCenterX + (floorWidth * 0.5) + (wallThickness * 0.5), wallHeight * 0.5, floorCenterZ);
+      createWall('custom-wall-w', wallThickness, wallHeight, floorDepth + wallThickness * 2, floorCenterX - (floorWidth * 0.5) - (wallThickness * 0.5), wallHeight * 0.5, floorCenterZ);
+
+      emitPlaytestProgress({
+        phase: 'scene-load',
+        label: 'Sealing combat boundaries',
+        detail: 'Arena collision shell ready',
+        progress: 0.9,
+      });
+
+      this._arenaBoundsHalf = Math.max(floorWidth, floorDepth) * 0.5;
+    };
+
     // ── DEBUG: skip GLB loading, use procedural debug arena ──
-    const USE_DEBUG_ARENA = true;
+    const USE_DEBUG_ARENA = !customTrackParsed;
     if (USE_DEBUG_ARENA) {
+      if (typeof window !== 'undefined' && window.__gloDebug) {
+        window.__gloDebug.customArenaBuilt = false;
+      }
+      console.info('[custom-arena-debug] loadSceneAssets using fallback arena path', {
+        gameMode: options.gameMode || null,
+        trackId: options.trackId || null,
+        arenaId: requestedArenaId,
+        customTrackBytes,
+      });
+      emitPlaytestProgress({
+        phase: 'scene-load',
+        label: 'Using fallback arena shell',
+        detail: 'Builder data was unavailable, so the debug arena path was selected',
+        progress: 0.34,
+        state: 'warning',
+      });
       console.log('[realtime] DEBUG ARENA mode — skipping GLB load');
       this._createFallbackGround();
       const debugSpawns = [
@@ -1094,22 +1418,30 @@ export class ColyseusBabylonClient {
       if (customTrackParsed) {
         // Build custom track from TrackData JSON
         console.log('[realtime] Building custom track from TrackData...');
-        this._createFallbackGround();
-        const { generateSegmentGeometry, SEGMENT_TYPES } = await import('../../modules/track-editor.js');
-        for (const seg of (customTrackParsed.segments || [])) {
-          const typeDef = SEGMENT_TYPES.find(t => t.id === seg.type);
-          if (!typeDef) continue;
-          const geom = generateSegmentGeometry(seg.type, seg.position, seg.rotation || 0);
-          const mesh = MeshBuilder.CreateBox('cseg', { width: geom.width, height: geom.height, depth: geom.depth }, this.scene);
-          mesh.position = new Vector3(geom.center.x, geom.center.y, geom.center.z);
-          if (seg.rotation) mesh.rotation.y = seg.rotation;
-          const mat = new StandardMaterial('cseg_mat', this.scene);
-          mat.diffuseColor = new Color3(0.3, 0.5, 0.9);
-          mesh.material = mat;
-          const agg = new PhysicsAggregate(mesh, PhysicsShapeType.BOX, { mass: 0, friction: 0.8 }, this.scene);
-          applyFilterToAggregate(agg, FILTER.TRACK);
+        await buildCustomArena(customTrackParsed);
+        if (typeof window !== 'undefined' && window.__gloDebug) {
+          window.__gloDebug.customArenaBuilt = true;
         }
+        console.info('[custom-arena-debug] loadSceneAssets built custom arena', {
+          gameMode: options.gameMode || null,
+          trackId: options.trackId || null,
+          arenaId: requestedArenaId,
+          customTrackBytes,
+        });
+        emitPlaytestProgress({
+          phase: 'scene-load',
+          label: 'Builder arena assembled',
+          detail: 'Custom combat geometry is live in the runtime shell',
+          progress: 0.96,
+        });
       } else {
+        console.info('[custom-arena-debug] loadSceneAssets resolved registry asset', {
+          gameMode: options.gameMode || null,
+          trackId: options.trackId || null,
+          arenaId: requestedArenaId,
+          resolvedAssetId: trackInfo?.id || options.trackId || null,
+          customTrackBytes,
+        });
         console.log(`[realtime] Loading track models for ${trackInfo.id}...`);
         const assetPath = trackInfo.arenaPath || trackInfo.trackPath;
         if (assetPath) {
@@ -1193,6 +1525,36 @@ export class ColyseusBabylonClient {
     // Per-arena kart scale override (e.g. blockfort needs much smaller karts)
     this._arenaKartScale = trackInfo.kartScale || null;
     } // end !USE_DEBUG_ARENA spawn/kill-plane section
+
+    if (options.smokeMode) {
+      this.localMesh = MeshBuilder.CreateBox("localCar", { size: 1.8 }, this.scene);
+      this.localMesh.position = new Vector3(
+        this._spawnPos.x,
+        this._sampleSurfaceY(this._spawnPos.x, this._spawnPos.z, this._spawnPos.y, 0.3),
+        this._spawnPos.z,
+      );
+      const smokeScale = this._arenaKartScale || 1;
+      this._localKartExtents = new Vector3(1.8 * smokeScale, 0.5 * smokeScale, 3.2 * smokeScale);
+      if (this.havokPlugin) {
+        this.localKartAggregate = new PhysicsAggregate(this.localMesh, PhysicsShapeType.BOX, { mass: 800, friction: 0.8, restitution: 0.01, extents: this._localKartExtents }, this.scene);
+        this.localKartAggregate.body.setMassProperties({ inertia: new Vector3(800, 500, 800) });
+        applyFilterToAggregate(this.localKartAggregate, FILTER.KART);
+        this.localKartAggregate.body.setCollisionCallbackEnabled(true);
+      }
+      this.localMesh.isVisible = false;
+      if (this.localKartAggregate) this.localKartAggregate.body.setMotionType(PhysicsMotionType.STATIC);
+      this._kartReady = false;
+      this.camera.lockedTarget = this.localMesh;
+      this._gloKit = createGloUnderglow(this.scene, this.localMesh, {
+        effect: options.gloEffect, color: options.gloColor, color2: options.gloColor2, id: 'local',
+      });
+      if (typeof window !== 'undefined' && window.__gloDebug) {
+        window.__gloDebug.kartLoaded = true;
+        window.__gloDebug.spawnPos = { x: this._spawnPos.x, y: this._spawnPos.y, z: this._spawnPos.z };
+        window.__gloDebug.smokeMode = options.smokeMode;
+      }
+      return;
+    }
 
     const kartInfo = resolveKartAsset(options.kartId);
     try {
@@ -1286,20 +1648,39 @@ export class ColyseusBabylonClient {
   }
 
   async connect(options = {}) {
+    const weaponPool = Array.isArray(options.weaponPool)
+      ? [...new Set(options.weaponPool.map((weaponId) => String(weaponId || '').trim()).filter(Boolean))]
+      : [];
     const joinOptions = {
         playerName: options.playerName || this.playerName,
         maxPlayers: options.maxPlayers || this.maxPlayers,
         gameMode: options.gameMode || "race",
         gameType: options.gameType || this.gameType,
+      battleType: options.battleType || options.gameType || this.gameType,
         trackId: options.trackId || "test_box",
+      arenaId: options.arenaId || options.trackId || "test_box",
         scoreLimit: options.scoreLimit || 5,
+      botCount: options.botCount ?? 0,
+      loadoutId: options.loadoutId || "classic",
+      weaponPool,
+        smokeMode: options.smokeMode || "",
         partyCode: options.partyCode || "",
+      isHost: !!options.isHost,
         kartId: options.kartId || "tux",
         playerColor: options.playerColor || "red",
         gloEffect: options.gloEffect || "solid",
         gloColor: options.gloColor || "#ff0080",
         gloColor2: options.gloColor2 || "#00e5ff",
+      customTrackData: options.customTrackData || "",
+      directPlaytest: !!options.directPlaytest,
     };
+
+    emitPlaytestProgress({
+      phase: 'connect',
+      label: 'Preparing realtime shell',
+      detail: `${joinOptions.gameMode.toUpperCase()} · ${joinOptions.arenaId || joinOptions.trackId}`,
+      progress: 0.18,
+    });
 
     // Load visual assets before connecting
     console.log('[realtime] connect: loading scene assets...');
@@ -1307,18 +1688,27 @@ export class ColyseusBabylonClient {
     console.log('[realtime] connect: scene assets loaded OK');
 
     // Per-arena environment (sky, fog, lighting)
-    this._setupArenaEnvironment(joinOptions.trackId || (true ? 'debug_arena' : 'glo_arena'));
+    this._setupArenaEnvironment(joinOptions.arenaId || joinOptions.trackId || 'debug_arena');
 
-    // Init particle system for drift sparks / boost flames (Task 3.3.4)
+    // ── Defer heavy init work across frames to avoid jank ──
+    // Each setTimeout(fn, 0) yields to the browser between operations,
+    // preventing long frames during the sync init that blocks rendering.
+    const _deferFrame = () => new Promise(r => setTimeout(r, 0));
+
+    // Particles — 4 systems + textures
     initParticles(this.scene);
     createLockReticle();
+    await _deferFrame();
 
-    // Init battle VFX + preload wizard-masters assets for battle mode
+    // Battle-specific VFX + HUD (80+ GUI controls)
     if (joinOptions.gameMode === 'battle') {
       initBattleVFX(this.scene);
+      await _deferFrame();
       initWeaponFXEnhance(this.scene, this.camera);
+      await _deferFrame();
       loadBattleAssets(this.scene).catch(e => console.warn('[battle-assets] preload error:', e));
       createBattleGUIHud(this.scene);
+      await _deferFrame();
       this._installBattleDebugHooks();
     }
 
@@ -1339,6 +1729,12 @@ export class ColyseusBabylonClient {
     console.log('[realtime] connect: join roomName=' + this.roomName + ' endpoint=' + this.endpoint);
     this.room = await this.client.joinOrCreate(this.roomName, joinOptions);
     console.log('[realtime] connect: joined room sessionId=' + this.room.sessionId);
+    emitPlaytestProgress({
+      phase: 'connect',
+      label: 'Room synchronized',
+      detail: `Session ${this.room.sessionId}`,
+      progress: 0.98,
+    });
     this._installLowLevelFrameTrace();
     this._joinOptions = joinOptions;
     this._startNetworkSync();
@@ -1351,7 +1747,7 @@ export class ColyseusBabylonClient {
     }
 
     // ── Show prematch lobby (hides loading screen) ──
-    {
+    if (!joinOptions.directPlaytest) {
       const ls = document.getElementById('loading-screen');
       if (ls) { ls.style.opacity = '0'; setTimeout(() => ls.style.display = 'none', 500); }
       // Build a minimal player map from joinOptions for the initial card
@@ -1440,6 +1836,8 @@ export class ColyseusBabylonClient {
 
     this.room.onStateChange((state) => {
       this._applyRoomStateSnapshot(state, joinOptions);
+      // Refresh post-game lobby player chips when room state changes
+      if (this._postGamePlayerRefresh) this._postGamePlayerRefresh();
     });
 
     const initialState = this.room.state;
@@ -1626,6 +2024,11 @@ export class ColyseusBabylonClient {
       if (typeof window !== 'undefined' && window.__gloDebug) window.__gloDebug.matchEnded = msg;
       stopEngineSound();
       stopBGM();
+      // Reset match state so the next match cycle can fire properly
+      this._matchLiveHandled = false;
+      this.started = false;
+      this._kartReady = false;
+      this._audioStarted = false;
       this._showMatchEndScreen(msg);
     });
 
@@ -2857,6 +3260,23 @@ export class ColyseusBabylonClient {
     this._cancelServerCountdown();
     console.log("[realtime] Match is LIVE!", msg?.derivedFromState ? "(derived from state)" : "");
 
+    // Remove post-game lobby overlay if still shown
+    document.getElementById('_glo-match-end')?.remove();
+    this._postGamePlayerRefresh = null;
+
+    const loadingScreen = document.getElementById('loading-screen');
+    if (loadingScreen && loadingScreen.style.display !== 'none') {
+      loadingScreen.style.opacity = '0';
+      setTimeout(() => { loadingScreen.style.display = 'none'; }, 500);
+    }
+
+    emitPlaytestProgress({
+      phase: 'live',
+      label: 'Playtest live',
+      detail: 'Dropping into the generated arena now',
+      progress: 1,
+    });
+
     if (PrematchLobby.isVisible()) PrematchLobby.hide();
     this._showGoOverlay();
 
@@ -2940,7 +3360,7 @@ export class ColyseusBabylonClient {
         e.preventDefault();
         this._updateAndShowScoreboard();
       }
-      // C: cycle camera view (Chase → Close → Chase …)
+      // C: cycle camera view (Chase → Low Behind → Close …)
       if (e.code === 'KeyC') {
         this._cameraMode = (this._cameraMode + 1) % this._cameraModes.length;
         const mode = this._cameraModes[this._cameraMode];
@@ -2952,7 +3372,6 @@ export class ColyseusBabylonClient {
           this.camera.cameraAcceleration = mode.accel;
           this.camera.maxCameraSpeed = mode.maxSpeed;
         }
-        this._showCameraModeBanner(mode.name);
       }
     };
     this._onKeyUp = (e) => {
@@ -3249,27 +3668,6 @@ export class ColyseusBabylonClient {
     });
   }
 
-  /** Brief on-screen banner when camera mode changes. */
-  _showCameraModeBanner(name) {
-    let el = document.getElementById('tk-cam-banner');
-    if (!el) {
-      el = document.createElement('div');
-      el.id = 'tk-cam-banner';
-      Object.assign(el.style, {
-        position: 'fixed', top: '12%', left: '50%', transform: 'translateX(-50%)',
-        padding: '6px 18px', borderRadius: '6px',
-        background: 'rgba(0,0,0,0.65)', color: '#fff',
-        fontSize: '18px', fontFamily: 'sans-serif', pointerEvents: 'none',
-        zIndex: '9999', transition: 'opacity 0.3s',
-      });
-      document.body.appendChild(el);
-    }
-    el.textContent = `Camera: ${name}`;
-    el.style.opacity = '1';
-    clearTimeout(this._camBannerTimer);
-    this._camBannerTimer = setTimeout(() => { el.style.opacity = '0'; }, 1200);
-  }
-
   _debugGrantNextWmWeapon() {
     if (!this.room || this.roomName !== 'battle_room') return;
 
@@ -3516,87 +3914,136 @@ export class ColyseusBabylonClient {
     setTimeout(() => {
       // Remove if already shown
       document.getElementById('_glo-match-end')?.remove();
+      this._postGameSettingsChanged = false;
 
+      const isRace = msg?.mode === 'race';
+      const isSelfWinner = msg?.winnerId === this.room?.sessionId;
+      const standings = msg?.standings || [];
+
+      // Determine if local player is the room host
+      const myId = this.room?.sessionId;
+      const stablePlayerId = sessionStorage.getItem('myPlayerId') || localStorage.getItem('myPlayerId') || myId;
+      let amHost = false;
+      // The game room sessionId can differ from the lobby player id, so prefer
+      // the persisted player id and join-time host flag when rebuilding host state.
+      if (this._joinOptions?.isHost) {
+        amHost = true;
+      }
+
+      // Game room player schema doesn't have isHost — check gameConfig from lobby
+      try {
+        const gc = JSON.parse(sessionStorage.getItem('gameConfig') || '{}');
+        if (gc.players) {
+          amHost = amHost || gc.players.some((p) => (p.id === stablePlayerId || p.id === myId) && p.isHost);
+        }
+      } catch (_) {}
+      // Also check room state in case it does expose isHost
+      if (!amHost && this.room?.state?.players) {
+        this.room.state.players.forEach((p, id) => {
+          if (id === myId && p.isHost) amHost = true;
+        });
+      }
+
+      // Current settings from room state or joinOptions for defaults
+      const roomState = this.room?.state || {};
+      const opts = this._joinOptions || {};
+      const curArena = roomState.trackId || opts.trackId || 'glo_arena';
+      const curBattleType = roomState.gameType || roomState.battleType || opts.battleType || opts.gameType || 'deathmatch';
+      const curLoadout = roomState.loadoutId || opts.loadoutId || 'classic';
+      const curScoreLimit = roomState.scoreLimit ?? opts.scoreLimit ?? 5;
+      const curBotCount = roomState.botCount ?? opts.botCount ?? 0;
+
+      // ── Build full-screen overlay ─────────────────────────────────────
       const screen = document.createElement('div');
       screen.id = '_glo-match-end';
       Object.assign(screen.style, {
         position: 'fixed', inset: '0', zIndex: '10010',
-        background: 'rgba(0,0,0,0.82)',
+        background: 'rgba(0,0,0,0.88)',
         display: 'flex', flexDirection: 'column',
-        alignItems: 'center', justifyContent: 'center',
+        alignItems: 'center',
         fontFamily: "'Bungee', Impact, sans-serif",
         color: '#fff',
-        padding: '32px',
-        gap: '16px',
+        padding: '24px 16px',
+        gap: '12px',
         opacity: '0',
         transition: 'opacity 0.6s ease-in',
+        overflowY: 'auto',
       });
 
-      // Title
+      // ── Shared styles ─────────────────────────────────────────────────
+      const labelStyle = {
+        fontSize: 'clamp(0.65rem, 1.4vw, 0.78rem)',
+        color: 'rgba(255,255,255,0.5)',
+        fontWeight: '700',
+        letterSpacing: '0.1em',
+        textTransform: 'uppercase',
+        marginBottom: '4px',
+      };
+      const selectStyle = {
+        width: '100%',
+        padding: '8px 10px',
+        fontSize: 'clamp(0.8rem, 1.8vw, 0.95rem)',
+        fontFamily: "'Poppins', sans-serif",
+        background: 'rgba(255,255,255,0.08)',
+        color: '#fff',
+        border: '1px solid rgba(255,255,255,0.15)',
+        borderRadius: '8px',
+        outline: 'none',
+        cursor: amHost ? 'pointer' : 'not-allowed',
+        opacity: amHost ? '1' : '0.5',
+      };
+      const inputStyle = {
+        ...selectStyle,
+        width: '80px',
+        textAlign: 'center',
+      };
+
+      // ── Title ─────────────────────────────────────────────────────────
       const title = document.createElement('div');
-      const isRace = msg?.mode === 'race';
-      const isSelfWinner = msg?.winnerId === this.room?.sessionId;
       title.textContent = isRace ? '🏁 RACE OVER' : (isSelfWinner ? '🏆 VICTORY!' : '⚔️  MATCH OVER');
       Object.assign(title.style, {
-        fontSize: 'clamp(2rem, 7vw, 4rem)',
+        fontSize: 'clamp(1.8rem, 6vw, 3.2rem)',
         textShadow: '0 0 30px rgba(255,200,0,0.7)',
-        marginBottom: '8px',
         color: isSelfWinner ? '#ffd700' : '#fff',
+        flexShrink: '0',
       });
       screen.appendChild(title);
 
-      // Winner banner
-      if (msg?.winner || (msg?.standings?.[0]?.name)) {
-        const winnerName = msg?.winner || msg?.standings?.[0]?.name;
+      // ── Winner banner ─────────────────────────────────────────────────
+      if (msg?.winner || standings[0]?.name) {
         const winBanner = document.createElement('div');
-        winBanner.textContent = `🏆 ${winnerName}`;
+        winBanner.textContent = `🏆 ${msg?.winner || standings[0]?.name}`;
         Object.assign(winBanner.style, {
-          fontSize: 'clamp(1.4rem, 5vw, 2.8rem)',
+          fontSize: 'clamp(1.2rem, 4vw, 2.2rem)',
           color: '#ffd700',
           textShadow: '0 0 20px rgba(255,200,0,0.8)',
           background: 'rgba(255,200,0,0.1)',
-          padding: '8px 24px',
+          padding: '6px 20px',
           borderRadius: '8px',
           border: '2px solid rgba(255,200,0,0.4)',
+          flexShrink: '0',
         });
         screen.appendChild(winBanner);
       }
 
-      // Win reason
-      if (msg?.winReason) {
-        const reason = document.createElement('div');
-        reason.textContent = msg.winReason;
-        Object.assign(reason.style, {
-          fontSize: 'clamp(0.8rem, 2vw, 1rem)',
-          color: 'rgba(255,255,255,0.6)',
-          fontStyle: 'italic',
-        });
-        screen.appendChild(reason);
-      }
-
-      // Enhanced standings table with K/D ratio
-      const standings = msg?.standings || [];
+      // ── Standings table ───────────────────────────────────────────────
       if (standings.length > 0) {
         const table = document.createElement('div');
         Object.assign(table.style, {
-          display: 'flex', flexDirection: 'column', gap: '4px',
-          marginTop: '8px', width: '100%', maxWidth: '520px',
+          display: 'flex', flexDirection: 'column', gap: '3px',
+          width: '100%', maxWidth: '500px', flexShrink: '0',
         });
 
-        // Header row
         const header = document.createElement('div');
         Object.assign(header.style, {
           display: 'grid',
-          gridTemplateColumns: '40px 1fr 60px 60px 50px',
-          gap: '8px',
-          padding: '6px 16px',
-          fontSize: 'clamp(0.65rem, 1.5vw, 0.8rem)',
-          color: 'rgba(255,255,255,0.4)',
-          fontWeight: '700',
-          letterSpacing: '0.08em',
-          textTransform: 'uppercase',
+          gridTemplateColumns: '36px 1fr 54px 54px 46px',
+          gap: '6px', padding: '4px 14px',
+          fontSize: 'clamp(0.6rem, 1.3vw, 0.75rem)',
+          color: 'rgba(255,255,255,0.35)',
+          fontWeight: '700', letterSpacing: '0.08em', textTransform: 'uppercase',
         });
-        header.innerHTML = '<span></span><span>Player</span><span style="text-align:center">Kills</span><span style="text-align:center">Deaths</span><span style="text-align:center">K/D</span>';
+        header.innerHTML = '<span></span><span>Player</span><span style="text-align:center">K</span><span style="text-align:center">D</span><span style="text-align:center">K/D</span>';
         table.appendChild(header);
 
         standings.forEach((entry, i) => {
@@ -3605,72 +4052,291 @@ export class ColyseusBabylonClient {
           const kills = entry.score ?? 0;
           const deaths = entry.deaths ?? 0;
           const kd = deaths === 0 ? kills.toFixed(1) : (kills / deaths).toFixed(1);
-          const isSelf = entry.sessionId === this.room?.sessionId;
+          const isSelf = entry.sessionId === myId;
           Object.assign(row.style, {
             display: 'grid',
-            gridTemplateColumns: '40px 1fr 60px 60px 50px',
-            gap: '8px',
-            background: isSelf ? 'rgba(0,200,100,0.15)' : (i === 0 ? 'rgba(255,200,0,0.12)' : 'rgba(255,255,255,0.05)'),
-            padding: '8px 16px',
-            borderRadius: '6px',
-            fontSize: 'clamp(0.9rem, 2.5vw, 1.1rem)',
+            gridTemplateColumns: '36px 1fr 54px 54px 46px',
+            gap: '6px',
+            background: isSelf ? 'rgba(0,200,100,0.15)' : (i === 0 ? 'rgba(255,200,0,0.1)' : 'rgba(255,255,255,0.04)'),
+            padding: '6px 14px', borderRadius: '6px',
+            fontSize: 'clamp(0.8rem, 2.2vw, 1rem)',
             color: i === 0 ? '#ffd700' : (isSelf ? '#00ff88' : '#ccc'),
             alignItems: 'center',
-            border: isSelf ? '1px solid rgba(0,255,100,0.3)' : 'none',
+            border: isSelf ? '1px solid rgba(0,255,100,0.25)' : 'none',
           });
-          row.innerHTML = `<span>${medal}</span><span>${entry.name || '?'}</span><span style="text-align:center">${kills}</span><span style="text-align:center">${deaths}</span><span style="text-align:center;color:rgba(255,255,255,0.5)">${kd}</span>`;
+          row.innerHTML = `<span>${medal}</span><span>${entry.name || '?'}</span><span style="text-align:center">${kills}</span><span style="text-align:center">${deaths}</span><span style="text-align:center;color:rgba(255,255,255,0.45)">${kd}</span>`;
           table.appendChild(row);
         });
         screen.appendChild(table);
       }
 
-      // Button row
-      const btnRow = document.createElement('div');
-      Object.assign(btnRow.style, { display: 'flex', gap: '16px', marginTop: '24px', flexWrap: 'wrap', justifyContent: 'center' });
-
-      // Play Again button
-      const btnAgain = document.createElement('button');
-      btnAgain.textContent = 'PLAY AGAIN';
-      Object.assign(btnAgain.style, {
-        padding: '12px 32px',
-        fontSize: 'clamp(0.9rem, 2.5vw, 1.3rem)',
-        fontFamily: "'Bungee', Impact, sans-serif",
-        background: 'linear-gradient(135deg, #00cc66, #009944)',
-        color: '#fff',
-        border: 'none',
-        borderRadius: '12px',
-        cursor: 'pointer',
-        letterSpacing: '0.05em',
-        boxShadow: '0 0 20px rgba(0,200,100,0.4)',
+      // ── Divider ───────────────────────────────────────────────────────
+      const divider = document.createElement('div');
+      Object.assign(divider.style, {
+        width: '100%', maxWidth: '500px', height: '1px',
+        background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.15), transparent)',
+        flexShrink: '0', margin: '4px 0',
       });
-      btnAgain.addEventListener('click', () => {
+      screen.appendChild(divider);
+
+      // ── Next Match Settings (host-editable) ───────────────────────────
+      const settingsSection = document.createElement('div');
+      Object.assign(settingsSection.style, {
+        width: '100%', maxWidth: '500px',
+        display: 'flex', flexDirection: 'column', gap: '10px',
+        flexShrink: '0',
+      });
+
+      const settingsTitle = document.createElement('div');
+      settingsTitle.textContent = amHost ? '⚙️  NEXT MATCH SETTINGS' : '⚙️  MATCH SETTINGS';
+      Object.assign(settingsTitle.style, {
+        fontSize: 'clamp(0.85rem, 2vw, 1.1rem)',
+        color: '#ff0080',
+        letterSpacing: '0.06em',
+        textAlign: 'center',
+      });
+      settingsSection.appendChild(settingsTitle);
+
+      if (!amHost) {
+        const hostNote = document.createElement('div');
+        hostNote.textContent = 'Waiting for host to configure…';
+        Object.assign(hostNote.style, {
+          fontSize: 'clamp(0.7rem, 1.6vw, 0.85rem)',
+          color: 'rgba(255,255,255,0.4)',
+          textAlign: 'center',
+          fontStyle: 'italic',
+          fontFamily: "'Poppins', sans-serif",
+        });
+        settingsSection.appendChild(hostNote);
+      }
+
+      const settingsGrid = document.createElement('div');
+      Object.assign(settingsGrid.style, {
+        display: 'grid',
+        gridTemplateColumns: '1fr 1fr',
+        gap: '10px',
+      });
+
+      // Helper to create a settings field
+      const makeField = (labelText, controlEl) => {
+        const field = document.createElement('div');
+        const lbl = document.createElement('div');
+        lbl.textContent = labelText;
+        Object.assign(lbl.style, labelStyle);
+        field.appendChild(lbl);
+        field.appendChild(controlEl);
+        return field;
+      };
+
+      // Arena selector
+      const arenaSelect = document.createElement('select');
+      Object.assign(arenaSelect.style, selectStyle);
+      arenaSelect.disabled = !amHost;
+      for (const [id, arena] of Object.entries(ALL_ARENAS)) {
+        const opt = document.createElement('option');
+        opt.value = id;
+        opt.textContent = arena.label || id;
+        opt.style.background = '#1a1a2e';
+        if (id === curArena) opt.selected = true;
+        arenaSelect.appendChild(opt);
+      }
+      settingsGrid.appendChild(makeField('Arena', arenaSelect));
+
+      // Battle type selector
+      const btSelect = document.createElement('select');
+      Object.assign(btSelect.style, selectStyle);
+      btSelect.disabled = !amHost;
+      for (const [bt, label] of [['deathmatch', 'Deathmatch'], ['ctf', 'Capture The Flag'], ['balloon', 'Three Strikes']]) {
+        const opt = document.createElement('option');
+        opt.value = bt;
+        opt.textContent = label;
+        opt.style.background = '#1a1a2e';
+        if (bt === curBattleType) opt.selected = true;
+        btSelect.appendChild(opt);
+      }
+      settingsGrid.appendChild(makeField('Battle Type', btSelect));
+
+      // Weapon loadout selector
+      const loadoutSelect = document.createElement('select');
+      Object.assign(loadoutSelect.style, selectStyle);
+      loadoutSelect.disabled = !amHost;
+      for (const [id, ws] of Object.entries(WEAPON_SETS)) {
+        const opt = document.createElement('option');
+        opt.value = id;
+        opt.textContent = ws.label || id;
+        opt.style.background = '#1a1a2e';
+        if (id === curLoadout) opt.selected = true;
+        loadoutSelect.appendChild(opt);
+      }
+      settingsGrid.appendChild(makeField('Loadout', loadoutSelect));
+
+      // Score limit
+      const scoreInput = document.createElement('input');
+      scoreInput.type = 'number';
+      scoreInput.min = '1';
+      scoreInput.max = '50';
+      scoreInput.value = String(curScoreLimit);
+      Object.assign(scoreInput.style, inputStyle);
+      scoreInput.disabled = !amHost;
+      settingsGrid.appendChild(makeField('Score Limit', scoreInput));
+
+      // Bot count
+      const botInput = document.createElement('input');
+      botInput.type = 'number';
+      botInput.min = '0';
+      botInput.max = '10';
+      botInput.value = String(curBotCount);
+      Object.assign(botInput.style, inputStyle);
+      botInput.disabled = !amHost;
+      settingsGrid.appendChild(makeField('Bots', botInput));
+
+      settingsSection.appendChild(settingsGrid);
+
+      // Settings-changed indicator (hidden until host changes something)
+      const settingsChangedBadge = document.createElement('div');
+      settingsChangedBadge.textContent = '● Changes saved — REMATCH will use these settings';
+      Object.assign(settingsChangedBadge.style, {
+        fontSize: 'clamp(0.65rem, 1.4vw, 0.8rem)',
+        color: '#00e5ff',
+        textAlign: 'center',
+        fontFamily: "'Poppins', sans-serif",
+        display: 'none',
+        transition: 'opacity 0.3s',
+      });
+      settingsSection.appendChild(settingsChangedBadge);
+
+      const sendPostGameSettings = () => {
+        if (!this.room || !amHost) return;
+        const nextBattleType = btSelect.value;
+        const nextSettings = {
+          trackId: arenaSelect.value,
+          battleType: nextBattleType,
+          gameType: nextBattleType,
+          loadoutId: loadoutSelect.value,
+          scoreLimit: parseInt(scoreInput.value, 10) || 5,
+          botCount: parseInt(botInput.value, 10) || 0,
+        };
+        this._joinOptions = {
+          ...(this._joinOptions || {}),
+          ...nextSettings,
+        };
+        this.gameType = nextBattleType;
+        this.room.send('settingsUpdate', nextSettings);
+      };
+
+      // Wire up live settings updates (host only)
+      if (amHost) {
+        const onSettingsChange = () => {
+          this._postGameSettingsChanged = true;
+          settingsChangedBadge.style.display = 'block';
+          sendPostGameSettings();
+        };
+        arenaSelect.addEventListener('change', onSettingsChange);
+        btSelect.addEventListener('change', onSettingsChange);
+        loadoutSelect.addEventListener('change', onSettingsChange);
+        scoreInput.addEventListener('change', onSettingsChange);
+        botInput.addEventListener('change', onSettingsChange);
+      }
+
+      screen.appendChild(settingsSection);
+
+      // ── Connected Players ─────────────────────────────────────────────
+      const playersSection = document.createElement('div');
+      Object.assign(playersSection.style, {
+        width: '100%', maxWidth: '500px',
+        display: 'flex', flexWrap: 'wrap', gap: '8px',
+        justifyContent: 'center', flexShrink: '0',
+      });
+      const playersLabel = document.createElement('div');
+      playersLabel.style.cssText = 'width:100%;text-align:center;font-size:clamp(0.6rem,1.3vw,0.75rem);color:rgba(255,255,255,0.35);letter-spacing:0.1em;text-transform:uppercase;font-weight:700;';
+      playersLabel.textContent = 'IN LOBBY';
+      playersSection.appendChild(playersLabel);
+
+      const updatePlayerChips = () => {
+        // Remove old chips (keep label)
+        playersSection.querySelectorAll('.pg-player-chip').forEach(c => c.remove());
+        if (!this.room?.state?.players) return;
+        this.room.state.players.forEach((p, id) => {
+          const chip = document.createElement('div');
+          chip.className = 'pg-player-chip';
+          const isMe = id === myId;
+          Object.assign(chip.style, {
+            padding: '4px 12px',
+            borderRadius: '20px',
+            fontSize: 'clamp(0.7rem, 1.6vw, 0.85rem)',
+            fontFamily: "'Poppins', sans-serif",
+            color: isMe ? '#00ff88' : '#fff',
+            background: isMe ? 'rgba(0,255,100,0.12)' : 'rgba(255,255,255,0.06)',
+            border: `1px solid ${isMe ? 'rgba(0,255,100,0.3)' : 'rgba(255,255,255,0.1)'}`,
+          });
+          chip.textContent = (p.name || 'Player') + (p.isHost ? ' ★' : '');
+          playersSection.appendChild(chip);
+        });
+      };
+      updatePlayerChips();
+      screen.appendChild(playersSection);
+
+      // Refresh player chips when room state changes
+      this._postGamePlayerRefresh = () => {
+        if (document.getElementById('_glo-match-end')) updatePlayerChips();
+      };
+
+      const startNextMatch = () => {
+        if (amHost && this._postGameSettingsChanged) {
+          sendPostGameSettings();
+        }
+        this._postGameSettingsChanged = false;
         screen.remove();
-        // Re-trigger start in the same room
+        this._postGamePlayerRefresh = null;
         if (this.room) this.room.send('triggerStart', {});
-      });
-      btnRow.appendChild(btnAgain);
+      };
 
-      // Change Arena button
-      const btnLobby = document.createElement('button');
-      btnLobby.textContent = 'CHANGE ARENA';
-      Object.assign(btnLobby.style, {
-        padding: '12px 32px',
-        fontSize: 'clamp(0.9rem, 2.5vw, 1.3rem)',
-        fontFamily: "'Bungee', Impact, sans-serif",
-        background: 'linear-gradient(135deg, #ff0080, #7700ff)',
-        color: '#fff',
-        border: 'none',
-        borderRadius: '12px',
-        cursor: 'pointer',
-        letterSpacing: '0.05em',
-        boxShadow: '0 0 20px rgba(255,0,128,0.4)',
+      // ── Action Buttons ────────────────────────────────────────────────
+      const btnRow = document.createElement('div');
+      Object.assign(btnRow.style, {
+        display: 'flex', gap: '12px', flexWrap: 'wrap',
+        justifyContent: 'center', flexShrink: '0', marginTop: '8px',
       });
-      btnLobby.addEventListener('click', () => { window.location.href = '/index.html'; });
-      btnRow.appendChild(btnLobby);
+
+      const makeBtn = (text, bg, shadow) => {
+        const btn = document.createElement('button');
+        btn.textContent = text;
+        Object.assign(btn.style, {
+          padding: '10px 28px',
+          fontSize: 'clamp(0.85rem, 2.2vw, 1.15rem)',
+          fontFamily: "'Bungee', Impact, sans-serif",
+          background: bg,
+          color: '#fff',
+          border: 'none',
+          borderRadius: '12px',
+          cursor: 'pointer',
+          letterSpacing: '0.05em',
+          boxShadow: `0 0 18px ${shadow}`,
+          transition: 'transform 0.12s, box-shadow 0.12s',
+        });
+        btn.addEventListener('mouseenter', () => { btn.style.transform = 'scale(1.05)'; });
+        btn.addEventListener('mouseleave', () => { btn.style.transform = 'scale(1)'; });
+        return btn;
+      };
+
+      // REMATCH — same settings, instant restart
+      const btnRematch = makeBtn('REMATCH', 'linear-gradient(135deg, #00cc66, #009944)', 'rgba(0,200,100,0.4)');
+      btnRematch.addEventListener('click', () => {
+        startNextMatch();
+      });
+      btnRow.appendChild(btnRematch);
+
+      // LEAVE — go back to main menu
+      const btnLeave = makeBtn('LEAVE', 'linear-gradient(135deg, #ff0080, #7700ff)', 'rgba(255,0,128,0.4)');
+      btnLeave.addEventListener('click', () => {
+        this._postGamePlayerRefresh = null;
+        window.location.href = '/index.html';
+      });
+      btnRow.appendChild(btnLeave);
+
       screen.appendChild(btnRow);
 
       document.body.appendChild(screen);
-      // Fade in
       requestAnimationFrame(() => { screen.style.opacity = '1'; });
 
       // Victory/defeat audio stinger
@@ -3907,8 +4573,12 @@ export class ColyseusBabylonClient {
     };
 
     const activeLockWeapon = this._getActiveLockWeapon();
-    if (slot === 'secondary' && activeLockWeapon && this._missileLockState?.locked && this._missileLockState?.targetId) {
-      payload.targetId = this._missileLockTargetId;
+    if (slot === 'secondary' && activeLockWeapon) {
+      payload.lockStrength = Math.max(0, Math.min(1, Number(this._missileLockState?.lockProgress) || 0));
+      payload.lockLocked = !!this._missileLockState?.locked;
+      if (this._missileLockState?.targetId) {
+        payload.targetId = this._missileLockTargetId;
+      }
     }
 
     return payload;
@@ -3986,7 +4656,7 @@ export class ColyseusBabylonClient {
   }
 
   _getActiveLockWeapon() {
-    if (this.currentWeapon2 === 'missile' || this.currentWeapon2 === 'lightning_bolt') {
+    if (this.currentWeapon2 === 'missile' || this.currentWeapon2 === 'crimson_hydra' || this.currentWeapon2 === 'lightning_bolt') {
       return this.currentWeapon2;
     }
     return '';
@@ -4006,7 +4676,20 @@ export class ColyseusBabylonClient {
           edgePenalty: 1.75,
           minAcquireScale: 0.28,
         }
-      : {
+      : weaponId === 'crimson_hydra'
+        ? {
+            maxRange: 90,
+            minRange: 4,
+            halfAngle: Math.PI / 5.3,
+            acquireTime: 0.42,
+            loseTime: 0.26,
+            stickyBonus: 0.2,
+            maxScreenOffsetNorm: 0.58,
+            centerBias: 0.98,
+            edgePenalty: 1.38,
+            minAcquireScale: 0.28,
+          }
+        : {
           maxRange: 85,
           minRange: 4,
           halfAngle: Math.PI / 5.2,
@@ -4833,7 +5516,7 @@ export class ColyseusBabylonClient {
         }
         if (!mesh._impactHandled && mesh.position && mesh._subType === 'super_nova') {
           emitWeaponImpactVFX(mesh.position.clone ? mesh.position.clone() : mesh.position, 'super_nova');
-        } else if (!mesh._impactHandled && mesh.position && (mesh._subType === 'missile' || mesh._subType === 'fireball')) {
+        } else if (!mesh._impactHandled && mesh.position && (mesh._subType === 'missile' || mesh._subType === 'crimson_hydra' || mesh._subType === 'fireball')) {
           emitWeaponImpactVFX(mesh.position.clone ? mesh.position.clone() : mesh.position, mesh._subType);
         }
         if (mesh._trailId) disposeProjectileTrail(mesh._trailId);
@@ -4887,7 +5570,7 @@ export class ColyseusBabylonClient {
 
   _createProjectileMesh(id, subType) {
     const modelWeaponId = PROJECTILE_MODEL_ALIASES[subType] || subType;
-    if (this.roomName === 'battle_room' || subType === 'missile') {
+    if (this.roomName === 'battle_room' || subType === 'missile' || subType === 'crimson_hydra') {
       const visualRoot = createWeaponModel(modelWeaponId, this.scene);
       if (visualRoot) {
         const anchor = MeshBuilder.CreateSphere(`entity-${id}`, { diameter: 0.42, segments: 6 }, this.scene);
@@ -4911,6 +5594,9 @@ export class ColyseusBabylonClient {
             child.isPickable = false;
             child.alwaysSelectAsActiveMesh = true;
           });
+        }
+        if (subType === 'crimson_hydra') {
+          visualRoot.scaling.scaleInPlace(0.72);
         }
         return anchor;
       }
@@ -5035,7 +5721,8 @@ export class ColyseusBabylonClient {
         mesh.rotation.z += dt * 2.0;
         break;
       }
-      case 'missile': {
+      case 'missile':
+      case 'crimson_hydra': {
         // Bank missiles based on actual course changes instead of an arbitrary wobble.
         const planarSpeed = Math.sqrt(pt.vel.x * pt.vel.x + pt.vel.z * pt.vel.z);
         if (planarSpeed > 0.1 || Math.abs(pt.vel.y) > 0.1) {
@@ -5055,10 +5742,11 @@ export class ColyseusBabylonClient {
         }
         mesh.rotation.z = pt._missileBank || 0;
         if (age < 0.3) {
-          const burst = 1.0 + (0.3 - age) * 0.5;
+          const baseScale = sub === 'crimson_hydra' ? 0.72 : 1.0;
+          const burst = baseScale + (0.3 - age) * (sub === 'crimson_hydra' ? 0.32 : 0.5);
           mesh.scaling.setAll(burst);
         } else {
-          mesh.scaling.setAll(1.0);
+          mesh.scaling.setAll(sub === 'crimson_hydra' ? 0.72 : 1.0);
         }
         const thrusterGlow = mesh.metadata?.thrusterGlow || mesh.metadata?.visualMetadata?.thrusterGlow;
         const thrusterMat = mesh.metadata?.thrusterMat || mesh.metadata?.visualMetadata?.thrusterMat;
@@ -5575,7 +6263,7 @@ export class ColyseusBabylonClient {
       document.body.appendChild(this._killFeedEl);
     }
     const WEAPON_ICONS = {
-      missile: "🚀", bowling_ball: "🎳", cake: "🎂", plunger: "🪠",
+      missile: "🚀", crimson_hydra: "🐉", bowling_ball: "🎳", cake: "🎂", plunger: "🪠",
       bubblegum: "🫧", banana: "🍌", swatter: "🪰", nitro: "💥",
       parachute: "🪂", anchor: "⚓", ludicrous_mode: "🔋", shield: "🛡️",
       fireball: "🔥", toxic_spread: "☣️", ice_lance: "🧊", tornado: "🌪️",

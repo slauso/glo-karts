@@ -1,0 +1,11 @@
+<?xml version="1.0"?>
+<kart name="Python" version="2" model-file="python.b3d" icon-file="python_icon.png" minimap-icon-file="python_icon.png" shadow-file="Python-shadow.png" groups="Add-Ons" rgb="0.7 0 0" revision="1">
+    <sounds engine="small"/>
+    <animations left="0" straight="20" right="40" start-winning="80" end-winning="336" start-losing="394" start-losing-loop="512" end-losing="517"/>
+    <wheels>
+        <front-left position="-0.245315 0.091270 0.462070" model="wheel-front-left.b3d"/>
+        <front-right position="0.253327 0.090654 0.460825" model="wheel-front-right.b3d"/>
+        <rear-left position="-0.372574 0.108073 -0.462549" model="wheel-rear-left.b3d"/>
+        <rear-right position="0.377162 0.108073 -0.462476" model="wheel-rear-right.b3d"/>
+    </wheels>
+</kart>

@@ -1,0 +1,10 @@
+<?xml version="1.0"?>
+<!-- Generated with script from SVN rev Unknown -->
+<materials>
+  <material name="dry.png" shader="alphatest" gloss-map="paint_params.png" colorizable="Y"/>
+  <material name="eye_diffuse.png" gloss-map="eye_params.png"/>
+  <material name="leather_diffuse.png" gloss-map="leather_params.png" colorizable="Y" colorization-factor="0.12"/>
+  <material name="metal_diffuse.png" gloss-map="metal_params.png" colorizable="Y" colorization-factor="0.10"/>
+  <material name="paint_diffuse.png" gloss-map="paint_params.png" colorizable="Y" colorization-factor="1.00"/>
+  <material name="skin_diffuse.png" gloss-map="skin_params.png"/>
+</materials>

@@ -1,0 +1,10 @@
+Files    : *
+Copyright: (c) 2024 Taufik Maulana I. 
+License  : Creative Commons Attribution-ShareAlike 4.0 International (CC BY-SA 4.0)
+Full License Text: https://creativecommons.org/licenses/by-sa/4.0/
+
+---
+
+Liz is one of the characters I created for my original comic. She plays the central role in my story.
+
+Models, textures, and animation are created by Taufik Maulana I., aka Ruenis.

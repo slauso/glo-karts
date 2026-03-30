@@ -40,9 +40,22 @@ function getGameConfig() {
   }
 }
 
+function getCurrentPlayerId() {
+  return sessionStorage.getItem('myPlayerId') || localStorage.getItem('myPlayerId');
+}
+
+function logCustomArenaHandoff(stage, payload = {}) {
+  const snapshot = {
+    stage,
+    ...payload,
+  };
+  console.info('[custom-arena-debug] realtime handoff', snapshot);
+  window.__lastCustomArenaDebug = snapshot;
+}
+
 function resolvePlayerName(config) {
   const fallback = `Player_${Math.floor(Math.random() * 10000)}`;
-  const myPeerId = localStorage.getItem('myPlayerId');
+  const myPeerId = getCurrentPlayerId();
   if (!config?.players?.length) return fallback;
 
   if (myPeerId) {
@@ -132,7 +145,8 @@ async function bootRealtime() {
   const roomName = config?.gameMode === 'battle' ? 'battle_room' : 'race_room';
   const endpoint = getColyseusEndpoint();
   const playerName = smokeName || resolvePlayerName(config);
-  const myPlayerId = localStorage.getItem('myPlayerId');
+  const myPlayerId = getCurrentPlayerId();
+  const smokeMode = sessionStorage.getItem('realtimeSmokeMode') || '';
   const playerInfo = config?.players?.find((player) => player.id === myPlayerId) || {};
   const joinCustomization = {
     kartId: sessionStorage.getItem('selectedKart') || playerInfo.playerKart || 'tux',
@@ -141,6 +155,17 @@ async function bootRealtime() {
     gloColor: sessionStorage.getItem('gloColor') || '#ff0080',
     gloColor2: sessionStorage.getItem('gloColor2') || '#00e5ff',
   };
+  const stagedCustomTrackData = config?.customTrackData || sessionStorage.getItem('customTrackData') || '';
+
+  logCustomArenaHandoff('bootRealtime config', {
+    roomName,
+    gameMode: config?.gameMode || null,
+    modeId: config?.modeId || null,
+    trackId: config?.trackId || null,
+    arenaId: config?.arenaId || null,
+    customTrackBytes: stagedCustomTrackData.length,
+    selectedPlayerId: myPlayerId || null,
+  });
 
   const client = new ColyseusBabylonClient({
     endpoint,
@@ -162,11 +187,25 @@ async function bootRealtime() {
     maxPlayers: config?.maxPlayers || 12,
     gameMode: config?.gameMode || 'race',
     gameType: config?.battleType || 'deathmatch',
+    isHost: !!playerInfo.isHost,
     trackId: config?.trackId || 'test_box',
+    arenaId: config?.arenaId || config?.trackId || 'test_box',
     scoreLimit: config?.scoreLimit || 5,
+    loadoutId: config?.loadoutId || 'random-all',
+    weaponPool: Array.isArray(config?.weaponPool) ? config.weaponPool : [],
     partyCode: config?.lobbyCode || '',
-    customTrackData: config?.customTrackData || sessionStorage.getItem('customTrackData') || '',
+    customTrackData: stagedCustomTrackData,
+    smokeMode,
     ...joinCustomization,
+  });
+
+  logCustomArenaHandoff('client.connect submitted', {
+    roomName,
+    gameMode: config?.gameMode || null,
+    trackId: config?.trackId || null,
+    arenaId: config?.arenaId || config?.trackId || 'test_box',
+    customTrackBytes: stagedCustomTrackData.length,
+    isHost: !!playerInfo.isHost,
   });
 
   setStatus(`Connected (${roomName}). Waiting for match start...`);
@@ -258,9 +297,13 @@ async function bootRealtime() {
   });
 
   let lastSplashHtml = '';
+  let lastSplashUpdateAt = 0;
+  const SPLASH_UPDATE_INTERVAL = 100; // 10fps for splash DOM updates — no need for 60fps
 
   const tick = () => {
     const now = performance.now();
+
+    // ── Input sending (60fps) ──
     if (now - lastSentAt >= 1000 / 60) {
       const isGameStarted = !!(client.room && client.room.state && client.room.state.started);
 
@@ -283,35 +326,37 @@ async function bootRealtime() {
 
     const isGameStarted = client.room && client.room.state && client.room.state.started;
 
+    // ── Countdown text (only when active) ──
     if (countdownActive) {
       const remainingMs = Math.max(0, countdownStartAt - Date.now());
       if (remainingMs > 3000) setCountdownText('3');
       else if (remainingMs > 2000) setCountdownText('2');
       else if (remainingMs > 1000) setCountdownText('1');
-      else if (remainingMs > 0) setCountdownText('START!');
       else setCountdownText('START!');
     }
-    
+
     if (isGameStarted) {
         endCountdown();
-    } else if (client.room && client.room.state && client.room.state.players) { 
+    } else if (now - lastSplashUpdateAt >= SPLASH_UPDATE_INTERVAL
+               && client.room && client.room.state && client.room.state.players) {
+        lastSplashUpdateAt = now;
         const plDiv = document.getElementById('splash-players');
         const statusDiv = splashStatus;
-        
+
         if (plDiv) {
             let html = '';
             let pCount = 0;
             client.room.state.players.forEach(p => {
                   const kartInfo = resolveKartAsset(p.kartId);
-                  
-                  let modelPath = kartInfo.modelPath || `/models/car_${p.playerColor || 'red'}.glb`;
-                  if (kartInfo.id === 'default' || p.kartId === 'default' || !p.kartId) {
-                      modelPath = `/models/car_${p.playerColor || 'red'}.glb`;
-                  }
-                  
-                  html += `<div class="splash-player" style="display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(0,0,0,0.5); border-radius: 12px; color: ${p.gloColor || p.playerColor || '#fff'}; border: 2px solid ${p.gloColor || p.playerColor || '#fff'}; padding: 10px; margin: 10px; font-weight: bold; box-shadow: 0 0 15px ${p.gloColor || '#ff0080'}; min-width: 180px; max-width: 220px;">`;
-                  html += `<model-viewer src="${modelPath}" auto-rotate shadow-intensity="1" shadow-softness="0.5" camera-controls disable-zoom style="width: 100%; height: 200px; background-color: transparent; outline: none;"></model-viewer>`;
-                  html += `<div style="margin-top: 5px; font-size: 1.2rem; text-align: center; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; width: 100%;">${p.name || 'Player'}</div>`;
+                  const safeGlo = p.gloColor || '#ff0080';
+                  const safeName = (p.name || 'Player').replace(/</g, '&lt;');
+
+                  html += `<div class="splash-player" style="display:flex;flex-direction:column;align-items:center;justify-content:center;background:rgba(0,0,0,0.5);border-radius:12px;color:${safeGlo};border:2px solid ${safeGlo};padding:14px 10px;margin:10px;font-weight:bold;box-shadow:0 0 15px ${safeGlo};min-width:180px;max-width:220px;">`;
+                  html += `<div style="width:100%;height:120px;display:flex;align-items:center;justify-content:center;background:radial-gradient(ellipse at center,${safeGlo}22 0%,transparent 70%);border-radius:8px;">`;
+                  html += `<div style="font-size:3rem;text-shadow:0 0 20px ${safeGlo};">🏎️</div>`;
+                  html += `</div>`;
+                  html += `<div style="margin-top:8px;font-size:0.85rem;opacity:0.7;text-transform:uppercase;letter-spacing:1px;">${kartInfo.name || p.kartId || 'kart'}</div>`;
+                  html += `<div style="margin-top:4px;font-size:1.2rem;text-align:center;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;width:100%;">${safeName}</div>`;
                   html += '</div>';
                   pCount++;
               });

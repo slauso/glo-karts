@@ -1,0 +1,3 @@
+Transmission:
+	by Ponzi Fabio
+	released under GNU GPL & MIT licenses

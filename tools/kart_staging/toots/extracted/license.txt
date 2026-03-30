@@ -1,0 +1,9 @@
+Toots the mastodon by Frode 魔大农 Lindeijer (Modanung)
+
+Icons and Toots model based on:
+https://en.wikipedia.org/wiki/File:Mastodon_mascot_vector_version.svg | Licensed AGPL
+
+
+Textures: CC0
+Rope, Light, Shadow by Modanung
+Fine wood, Rough wood, Bark by Rob Tuytel (source: polyhaven.com)

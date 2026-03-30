@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<materials>
+  <material name="Shirt.png" colorizable="Y"/>
+  <material name="Primary.png" colorizable="Y"/>
+  <material name="Secondary.png" colorizable="Y"/>
+</materials>

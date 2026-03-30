@@ -1,0 +1,6 @@
+<?xml version="1.0"?>
+<!-- Generated with script from SVN rev Unknown -->
+<materials>
+  <material name="guyTexture-TX.png" gloss-map="guyTexture-TX_Gloss.png"/>
+  <material name="KartUVs.png" gloss-map="KartUVs_Gloss.png"/>
+</materials>

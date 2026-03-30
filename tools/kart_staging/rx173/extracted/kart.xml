@@ -1,0 +1,20 @@
+<?xml version="1.0"?>
+<kart name="173RX Mk2" version="3" model-file="173rx mk2.spm" icon-file="icon.png" minimap-icon-file="icon.png" shadow-file="wasted" type="medium" groups="Add-Ons" rgb="1.00 0.59 0.00" revision="3">
+    <sounds engine="custom" file="173rx.ogg" rolloff="0.2" max_dist="300" volume="0.5"/>
+    <wheels>
+        <front-right position="0.266421 0.123057 0.460973" model="wheel-front-right.spm"/>
+        <front-left position="-0.266421 0.123057 0.460973" model="wheel-front-left.spm"/>
+        <rear-left position="-0.266421 0.123057 -0.451116" model="wheel-rear-left.spm"/>
+        <rear-right position="0.266421 0.123057 -0.451116" model="wheel-rear-right.spm"/>
+    </wheels>
+    <nitro-emitter>
+        <nitro-emitter-a position="0.036780 0.182433 -0.817043"/>
+        <nitro-emitter-b position="-0.036780 0.182433 -0.817043"/>
+    </nitro-emitter>
+    <headlights>
+        <object position="0.000000 0.246459 1.238233" rotation="0.000000 -0.000000 0.000000" scale="1.000000 1.000000 5.703981" model="headlight.spm"/>
+        <object position="-0.000000 0.301508 -0.901712" rotation="-89.999996 -179.999978 -0.000000" scale="0.367008 0.367008 0.367008" color="255 0 0" model="tailight.spm"/>
+    </headlights>
+    <lean max="0"/>
+    <exhaust file="kart_exhaust.xml"/>
+</kart>

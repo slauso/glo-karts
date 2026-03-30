@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<materials>
+  <material name="Chibi_color.png" gloss-map="Chibi_glossy.png" colorizable="Y"/>
+  <material name="ChibiKart_color.jpg" colorizable="Y" shader="solid" tex-layer-2="ChibiKart_métal.jpg" tex-layer-3="ChibiKart_rugosité.jpg"/>
+  <material name="stk_conelight_a.png" shader="alphablend"/>
+  <material name="roue_color.png" colorizable="Y" shader="solid" tex-layer-2="roue_color.png"/>
+  <material name="volant_color.jpg" tex-layer-2="volant_rugosité.jpg" colorizable="Y"/>
+</materials>

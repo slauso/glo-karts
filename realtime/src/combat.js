@@ -96,6 +96,30 @@ export const WEAPONS = {
     effectDuration: 1000,
     desc: "Homing missile — locks onto nearest rival and tracks them down",
   },
+  crimson_hydra: {
+    category: "projectile",
+    speed: 36,
+    damage: 14,
+    lifespan: 7200,
+    cooldown: 700,
+    ammo: 1,
+    gravity: 0,
+    bounces: 0,
+    homing: true,
+    homingTurnRate: 6.2,
+    homingDelay: 90,
+    lockOnRange: 96,
+    lockOnMinDot: 0.34,
+    leadScale: 0.9,
+    maxLeadTime: 0.95,
+    reacquireTarget: true,
+    collisionRadius: 2.1,
+    volleyCount: 3,
+    volleySpreadAngle: 0.14,
+    effect: "spinout",
+    effectDuration: 850,
+    desc: "Crimson Hydra — a triple-salvo lock weapon that rewards a perfect bead",
+  },
   cannon: {
     category: "projectile",
     speed: 52,
@@ -489,6 +513,7 @@ export const BATTLE_WEAPON_POOL = [
   "ludicrous_mode", "shield",
   "pirateleportation", "mirror_realm", "phase_shift", "memory_leak", "gravity_well", "weather_dominion",
   "missile", "missile",
+  "crimson_hydra",
   "fireball", "fireball",
   "toxic_spread", "toxic_spread",
   "ice_lance", "ice_lance",
@@ -510,7 +535,7 @@ export const RACE_WEAPON_POOL = [
 // Position-aware weighted item draw
 // ---------------------------------------------------------------------------
 const BACK_WEIGHTS = {
-  bowling_ball: 3, cake: 3, missile: 4, nitro: 3, plunger: 2,
+  bowling_ball: 3, cake: 3, missile: 4, crimson_hydra: 3, nitro: 3, plunger: 2,
   bubblegum: 1, banana: 1, swatter: 2, parachute: 1, anchor: 2,
   ludicrous_mode: 4, shield: 2,
   pirateleportation: 2, mirror_realm: 1, phase_shift: 1, memory_leak: 1, gravity_well: 1, weather_dominion: 1,
@@ -519,7 +544,7 @@ const BACK_WEIGHTS = {
   glow_thrower: 3, glo_burst: 0,
 };
 const MID_WEIGHTS = {
-  bowling_ball: 3, cake: 2, missile: 2, nitro: 2, plunger: 2,
+  bowling_ball: 3, cake: 2, missile: 2, crimson_hydra: 2, nitro: 2, plunger: 2,
   bubblegum: 3, banana: 3, swatter: 2, parachute: 2, anchor: 2,
   ludicrous_mode: 1, shield: 2,
   pirateleportation: 2, mirror_realm: 0.35, phase_shift: 0.45, memory_leak: 0.35, gravity_well: 0.35, weather_dominion: 0.35,
@@ -528,7 +553,7 @@ const MID_WEIGHTS = {
   glow_thrower: 3, glo_burst: 0,
 };
 const FRONT_WEIGHTS = {
-  bowling_ball: 1, cake: 1, missile: 1, nitro: 1, plunger: 1,
+  bowling_ball: 1, cake: 1, missile: 1, crimson_hydra: 0.6, nitro: 1, plunger: 1,
   bubblegum: 4, banana: 5, swatter: 1, parachute: 3, anchor: 3,
   ludicrous_mode: 1, shield: 4,
   pirateleportation: 1, mirror_realm: 2, phase_shift: 2, memory_leak: 1, gravity_well: 1, weather_dominion: 1,
@@ -547,6 +572,7 @@ const BATTLE_PICKUP_WEIGHTS = {
   gravity_well: 0.35,
   weather_dominion: 0.35,
   missile: 3.0,
+  crimson_hydra: 2.2,
   fireball: 3.8,
   toxic_spread: 1.2,
   ice_lance: 4.2,
@@ -962,6 +988,66 @@ export function handleFireWeapon(player, entitiesMap, playersMap, context = {}) 
 
   // ── Projectile (forward-fired) ───────────────────────────────────────
   const fwd = resolveFireVector(player, fireInput);
+  if (wepId === "crimson_hydra") {
+    const volleyCount = Math.max(1, Number(def.volleyCount) || 3);
+    const halfAngle = Number(def.volleySpreadAngle) || 0.14;
+    const projectileOrigin = resolveProjectileOrigin(player, fireInput, fwd, 3.5, 1.0);
+    const lockStrength = Math.max(0, Math.min(1, Number(fireInput?.lockStrength) || 0));
+    const allowGuidance = !!fireInput?.lockLocked || lockStrength > 0.01;
+    const requestedTargetId = String(fireInput?.targetId || "");
+    const requestedTarget = allowGuidance && requestedTargetId ? playersMap.get(requestedTargetId) : null;
+    const target = !allowGuidance
+      ? null
+      : isValidGuidanceTarget(requestedTarget, player.id)
+        ? requestedTarget
+        : findBestGuidanceTarget(
+          { x: projectileOrigin.x, y: projectileOrigin.y, z: projectileOrigin.z },
+          { x: fwd.x, y: fwd.y, z: fwd.z },
+          player.id,
+          playersMap,
+          def,
+        );
+    const guaranteedHits = lockStrength >= 0.95 ? 3 : lockStrength >= 0.55 ? 2 : target ? 1 : 0;
+    const projectiles = [];
+
+    for (let i = 0; i < volleyCount; i++) {
+      const angle = volleyCount === 1 ? 0 : -halfAngle + (halfAngle * 2 * i) / (volleyCount - 1);
+      const cosA = Math.cos(angle);
+      const sinA = Math.sin(angle);
+      const dx = fwd.x * cosA + fwd.z * sinA;
+      const dz = -fwd.x * sinA + fwd.z * cosA;
+      const length = Math.sqrt(dx * dx + fwd.y * fwd.y + dz * dz) || 1;
+      const dir = { x: dx / length, y: fwd.y / length, z: dz / length };
+
+      const id = `proj_${player.id.slice(0, 4)}_${++_projectileCounter}`;
+      const ent = new EntityState();
+      ent.id = id;
+      ent.type = "projectile";
+      ent.subType = wepId;
+      ent.ownerId = player.id;
+      ent.active = true;
+      ent.damage = def.damage;
+      ent.lifespan = def.lifespan;
+      ent.x = projectileOrigin.x;
+      ent.y = projectileOrigin.y;
+      ent.z = projectileOrigin.z;
+      ent.vx = dir.x * def.speed;
+      ent.vy = def.gravity ? Math.max(dir.y * def.speed, 8) : dir.y * def.speed;
+      ent.vz = dir.z * def.speed;
+      ent.rx = player.rx;
+      ent.ry = player.ry;
+      ent.rz = player.rz;
+      ent.rw = player.rw;
+      if (target && i < guaranteedHits) ent.targetId = target.id;
+      entitiesMap.set(id, ent);
+      projectiles.push(ent);
+    }
+
+    consumeAmmo(player, def, slot);
+    result.projectile = projectiles[0];
+    result.extraProjectiles = projectiles.slice(1);
+    return result;
+  }
   const id = `proj_${player.id.slice(0, 4)}_${++_projectileCounter}`;
 
   const ent = new EntityState();

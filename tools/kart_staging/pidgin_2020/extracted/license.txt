@@ -1,0 +1,67 @@
+Format: https://debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: Pidgin Kart for SuperTuxKart
+Upstream-Contact: Marianne "Auria" Gagnon <auria.mg@gmail.com>
+Source: https://supertuxkart.net
+License: CC-BY-SA 3.0
+
+Pidgin Edit by CrystalTheEevee
+Copyright:
+ Copyright 2009 Tobias "Tob" cheleb" Beyrer
+ Copyright 2010 STKRudy85
+ Copyright 2013 chronomaster
+ Copyright 2015 Vincent "vlj" Lejeune
+ Copyright 2020 CrystalTheEevee
+
+Files:
+ headlights.spm
+ taillights.spm
+Copyright:
+ Copyright 2017 Jean-Manuel "samuncle" Clémençon <sam.un@protonmail.com>
+ Copyright 2017 Néd J. "jymis" Édoire <nwad@crypticgate.net>
+ Copyright 2020 CrystalTheEevee
+License: CC-BY-SA 3.0
+Comment: Improved headlights, added tailights as individual.
+
+Files:
+ wheel-*.spm
+ *.xml
+ *.png
+Copyright:
+ Copyright 2011 Dakal
+License: CC-BY-SA 3.0
+
+Files: pidgin.spm
+Copyright:
+ Copyright 2009 Tobias "Tob" cheleb" Beyrer
+ Copyright 2010 STKRudy85
+ Copyright 2013 chronomaster
+ Copyright 2015 Vincent "vlj" Lejeune
+License: CC-BY-SA 3.0
+
+Files:
+ pidgin-kart.png
+ pidgin.png
+ pidginshadow.png
+ pidginwheel.png
+ pidginwindow.png
+Copyright: Copyright 2009 Tobias "Tob" "Cheleb" Beyrer
+License: CC-BY-SA 3.0
+
+Files: pidginicon.png
+Copyright: Copyright 2010 Anthony "yeKcim" Carré <yeknan.free.fr>
+License: GPL 2.0
+
+Files:
+ pidgin-exhaust.png
+ pidgin-kart-uncolorizable.png
+Copyright: 
+ Copyright 2009 Tobias "Tob" "Cheleb" Beyrer
+ Copyright 2020 CrystalTheEevee
+License: CC-BY-SA 3.0
+Comment: Recolor for exhaust, and rename for uncolorizable faces.
+
+Files:
+ pidgin-plate.png
+Copyright:
+ Copyright 2020 CrystalTheEevee
+License: GPL 2.0

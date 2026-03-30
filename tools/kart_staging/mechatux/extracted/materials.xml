@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<materials>
+  <material name="kart-color.png" gloss-map="kart-gloss.png" colorizable="Y" colorization-factor="1.00" colorization-mask="kart-mask.png"/>
+  <material name="mechatux-color.png" gloss-map="mechatux-gloss.png"/>
+</materials>

@@ -1,0 +1,339 @@
+{
+  "ok": true,
+  "navs": [
+    "http://127.0.0.1:5173/builder.html",
+    "http://127.0.0.1:5173/realtime.html?builderPlaytest=1"
+  ],
+  "summary": {
+    "href": "http://127.0.0.1:5173/realtime.html?builderPlaytest=1",
+    "gameConfig": {
+      "type": "startGame",
+      "modeId": "builder_playtest",
+      "gameMode": "battle",
+      "subMode": "builder_playtest",
+      "battleType": "deathmatch",
+      "loadoutId": "combat",
+      "trackId": "custom_import",
+      "arenaId": "custom_import",
+      "resolvedContentId": "custom_import",
+      "contentType": "arena",
+      "customTrackData": "{\"version\":1,\"name\":\"Starter Arena\",\"author\":\"Builder\",\"segments\":[{\"id\":1,\"type\":\"curve_right\",\"position\":{\"x\":-20,\"y\":0,\"z\":0},\"rotation\":90,\"scale\":1,\"builderRole\":\"road\"},{\"id\":2,\"type\":\"straight\",\"position\":{\"x\":-10,\"y\":0,\"z\":0},\"rotation\":90,\"scale\":1,\"builderRole\":\"road\"},{\"id\":3,\"type\":\"straight\",\"position\":{\"x\":0,\"y\":0,\"z\":0},\"rotation\":90,\"scale\":1,\"builderRole\":\"road\"},{\"id\":4,\"type\":\"straight\",\"position\":{\"x\":10,\"y\":0,\"z\":0},\"rotation\":90,\"scale\":1,\"builderRole\":\"road\"},{\"id\":5,\"type\":\"curve_right\",\"position\":{\"x\":20,\"y\":0,\"z\":0},\"rotation\":180,\"scale\":1,\"builderRole\":\"road\"},{\"id\":6,\"type\":\"straight\",\"position\":{\"x\":20,\"y\":0,\"z\":10},\"rotation\":0,\"scale\":1,\"builderRole\":\"road\"},{\"id\":7,\"type\":\"curve_right\",\"position\":{\"x\":20,\"y\":0,\"z\":20},\"rotation\":270,\"scale\":1,\"builderRole\":\"road\"},{\"id\":8,\"type\":\"straight\",\"position\":{\"x\":10,\"y\":0,\"z\":20},\"rotation\":90,\"scale\":1,\"builderRole\":\"road\"},{\"id\":9,\"type\":\"straight\",\"position\":{\"x\":0,\"y\":0,\"z\":20},\"rotation\":90,\"scale\":1,\"builderRole\":\"road\"},{\"id\":10,\"type\":\"straight\",\"position\":{\"x\":-10,\"y\":0,\"z\":20},\"rotation\":90,\"scale\":1,\"builderRole\":\"road\"},{\"id\":11,\"type\":\"curve_right\",\"position\":{\"x\":-20,\"y\":0,\"z\":20},\"rotation\":0,\"scale\":1,\"builderRole\":\"road\"},{\"id\":12,\"type\":\"straight\",\"position\":{\"x\":-20,\"y\":0,\"z\":10},\"rotation\":0,\"scale\":1,\"builderRole\":\"road\"},{\"id\":13,\"type\":\"flat_wide\",\"position\":{\"x\":0,\"y\":0,\"z\":10},\"rotation\":0,\"scale\":1,\"builderRole\":\"manual\"}],\"checkpoints\":[{\"position\":{\"x\":-20,\"y\":0,\"z\":0},\"width\":10},{\"position\":{\"x\":-10,\"y\":0,\"z\":0},\"width\":10},{\"position\":{\"x\":0,\"y\":0,\"z\":0},\"width\":10},{\"position\":{\"x\":10,\"y\":0,\"z\":0},\"width\":10},{\"position\":{\"x\":20,\"y\":0,\"z\":0},\"width\":10},{\"position\":{\"x\":20,\"y\":0,\"z\":10},\"width\":10},{\"position\":{\"x\":20,\"y\":0,\"z\":20},\"width\":10},{\"position\":{\"x\":10,\"y\":0,\"z\":20},\"width\":10},{\"position\":{\"x\":0,\"y\":0,\"z\":20},\"width\":10},{\"position\":{\"x\":-10,\"y\":0,\"z\":20},\"width\":10},{\"position\":{\"x\":-20,\"y\":0,\"z\":20},\"width\":10},{\"position\":{\"x\":-20,\"y\":0,\"z\":10},\"width\":10},{\"position\":{\"x\":0,\"y\":0,\"z\":10},\"width\":20}],\"startPositions\":[{\"position\":{\"x\":-10,\"y\":1,\"z\":-10},\"heading\":0},{\"position\":{\"x\":10,\"y\":1,\"z\":-10},\"heading\":3.141592653589793}],\"obstacles\":[{\"type\":\"item_box\",\"position\":{\"x\":0,\"y\":0.6,\"z\":10}},{\"type\":\"boost_pad\",\"position\":{\"x\":20,\"y\":0.6,\"z\":0}},{\"type\":\"banana\",\"position\":{\"x\":-20,\"y\":0.6,\"z\":20}}],\"bounds\":{\"min\":{\"x\":-25,\"y\":0,\"z\":-5},\"max\":{\"x\":25,\"y\":0,\"z\":25}}}",
+      "scoreLimit": 5,
+      "maxPlayers": 1,
+      "multiplayer": true,
+      "multiplayerProvider": "colyseus",
+      "singlePlayerMode": true,
+      "directPlaytest": true,
+      "builderPlaytest": true,
+      "selectedKart": "tux",
+      "players": [
+        {
+          "id": "builder-860r7daf",
+          "name": "Tux Pilot",
+          "isHost": true,
+          "playerColor": "red",
+          "playerKart": "tux"
+        }
+      ]
+    },
+    "playtestMeta": {
+      "name": "Starter Arena",
+      "segmentCount": 13,
+      "obstacleCount": 3,
+      "spawnCount": 2,
+      "startedAt": 1774885862523
+    },
+    "loadingVisible": false,
+    "prematchVisible": false,
+    "builderPanelVisible": true,
+    "builderStep": "Playtest live",
+    "builderDetail": "Dropping into the generated arena now",
+    "builderStatus": "live",
+    "progressWidth": "100%",
+    "events": [
+      {
+        "phase": "boot",
+        "label": "Reading builder handoff",
+        "detail": "Loading saved arena data from the editor.",
+        "progress": 0.08,
+        "state": "active",
+        "ts": 1774885862945
+      },
+      {
+        "phase": "boot",
+        "label": "Warming render core",
+        "detail": "Initializing Babylon runtime and physics.",
+        "progress": 0.16,
+        "state": "active",
+        "ts": 1774885862946
+      },
+      {
+        "phase": "connect",
+        "label": "Streaming arena into battle shell",
+        "detail": "Passing custom arena data into the realtime client.",
+        "progress": 0.22,
+        "state": "active",
+        "ts": 1774885862996
+      },
+      {
+        "phase": "connect",
+        "label": "Preparing realtime shell",
+        "detail": "BATTLE · custom_import",
+        "progress": 0.18,
+        "ts": 1774885862997
+      },
+      {
+        "phase": "scene-load",
+        "label": "Decoding arena blueprint",
+        "detail": "2,435 bytes from builder",
+        "progress": 0.28,
+        "ts": 1774885863004
+      },
+      {
+        "phase": "scene-load",
+        "label": "Forging arena floor",
+        "detail": "13 tiles · 3 props",
+        "progress": 0.42,
+        "ts": 1774885863008
+      },
+      {
+        "phase": "scene-load",
+        "label": "Placing track geometry",
+        "detail": "Tile 1 of 13",
+        "progress": 0.44153846153846155,
+        "ts": 1774885863055
+      },
+      {
+        "phase": "scene-load",
+        "label": "Placing track geometry",
+        "detail": "Tile 3 of 13",
+        "progress": 0.4846153846153846,
+        "ts": 1774885863069
+      },
+      {
+        "phase": "scene-load",
+        "label": "Placing track geometry",
+        "detail": "Tile 6 of 13",
+        "progress": 0.5492307692307692,
+        "ts": 1774885863100
+      },
+      {
+        "phase": "scene-load",
+        "label": "Placing track geometry",
+        "detail": "Tile 9 of 13",
+        "progress": 0.6138461538461538,
+        "ts": 1774885863113
+      },
+      {
+        "phase": "scene-load",
+        "label": "Placing track geometry",
+        "detail": "Tile 12 of 13",
+        "progress": 0.6784615384615384,
+        "ts": 1774885863128
+      },
+      {
+        "phase": "scene-load",
+        "label": "Placing track geometry",
+        "detail": "Tile 13 of 13",
+        "progress": 0.7,
+        "ts": 1774885863137
+      },
+      {
+        "phase": "scene-load",
+        "label": "Installing arena props",
+        "detail": "Prop 1 of 2",
+        "progress": 0.78,
+        "ts": 1774885863137
+      },
+      {
+        "phase": "scene-load",
+        "label": "Installing arena props",
+        "detail": "Prop 2 of 2",
+        "progress": 0.84,
+        "ts": 1774885863139
+      },
+      {
+        "phase": "scene-load",
+        "label": "Sealing combat boundaries",
+        "detail": "Arena collision shell ready",
+        "progress": 0.9,
+        "ts": 1774885863140
+      },
+      {
+        "phase": "scene-load",
+        "label": "Builder arena assembled",
+        "detail": "Custom combat geometry is live in the runtime shell",
+        "progress": 0.96,
+        "ts": 1774885863140
+      },
+      {
+        "phase": "connect",
+        "label": "Room synchronized",
+        "detail": "Session Rryj2j8gG",
+        "progress": 0.98,
+        "ts": 1774885863402
+      },
+      {
+        "phase": "countdown",
+        "label": "Room ready",
+        "detail": "Triggering direct playtest start.",
+        "progress": 0.985,
+        "state": "active",
+        "ts": 1774885863405
+      },
+      {
+        "phase": "countdown",
+        "label": "Starting playtest",
+        "detail": "Countdown armed. Dropping into the generated arena.",
+        "progress": 0.995,
+        "state": "active",
+        "ts": 1774885863856
+      },
+      {
+        "phase": "live",
+        "label": "Playtest live",
+        "detail": "Dropping into the generated arena now",
+        "progress": 1,
+        "ts": 1774885873407
+      }
+    ],
+    "debug": {
+      "trackPhysicsCount": 0,
+      "kartLoaded": true,
+      "kartVisible": true,
+      "matchLive": true,
+      "roomJoined": true,
+      "sessionId": "Rryj2j8gG",
+      "playerCount": 1,
+      "spawnPos": {
+        "x": -10,
+        "y": 2.209999847412109,
+        "z": -10
+      },
+      "effectiveKartScale": 3.6399999999999997,
+      "lastWeaponReceived": null,
+      "lastWeaponFired": null,
+      "lastHitVictimId": null,
+      "lastEffect": null,
+      "lastShieldAbsorbed": null,
+      "lastKartCrash": null,
+      "lastArenaEffect": null,
+      "lastAnomalyCue": null,
+      "matchEnded": null,
+      "network": {
+        "rttMs": 7,
+        "jitterMs": 8,
+        "interpolationDelayMs": 75,
+        "patchRateMs": 17,
+        "authoritative": true
+      },
+      "syncMetrics": {
+        "roomId": "xrlPgspkQ",
+        "roomName": "battle_room",
+        "authoritative": true,
+        "patchRateMs": 16.67,
+        "interpolationBaseDelayMs": 75,
+        "staleInputMs": 500,
+        "expectedTickMs": 16.67,
+        "playerCount": 1,
+        "tickCount": 398,
+        "patchCycles": 398,
+        "patchCount": 398,
+        "lastTickDriftMs": 0.67,
+        "avgTickDriftMs": 3.28,
+        "lastInputAgeMs": 0,
+        "avgInputAgeMs": 0,
+        "maxInputAgeMs": 0,
+        "staleInputDrops": 0,
+        "outOfOrderInputDrops": 0,
+        "anomalyProjectilesFired": 0,
+        "anomalyProjectileHits": 0,
+        "anomalyEffectsApplied": 0,
+        "arenaEffectsApplied": 0,
+        "apocalypseBursts": 0,
+        "anomalyCoreCollections": 0,
+        "anomalyChainBursts": 0,
+        "anomalyLongestChain": 0,
+        "activeAnomalyCores": 0,
+        "activeAnomalyChainPeak": 0,
+        "arenaSeed": 0,
+        "lastPatchAt": 1774885873377,
+        "lastSyncAt": 1774885873377,
+        "serverNow": 1774885873407
+      },
+      "weaponState": {
+        "weapon": "glo_burst",
+        "displayWeapon": "glo_burst",
+        "ammo": 180,
+        "weapon2": "",
+        "ammo2": 0,
+        "weapon3": "",
+        "ammo3": 0,
+        "fireCooldown": 0,
+        "effectType": "",
+        "shielded": false,
+        "maxCooldownMs": 0
+      },
+      "lowLevelFrames": [],
+      "readySignalSent": true,
+      "errors": [],
+      "burstQueues": {
+        "projectileFires": 0,
+        "projectileHits": 0,
+        "kartCrashes": 0
+      },
+      "playtestProgress": {
+        "phase": "live",
+        "label": "Playtest live",
+        "detail": "Dropping into the generated arena now",
+        "progress": 1
+      },
+      "requestedArenaId": "custom_import",
+      "customTrackBytes": 2435,
+      "customArenaBuilt": true,
+      "performanceBudget": {
+        "drawCalls": 2073,
+        "particles": 72,
+        "particleSystems": 25,
+        "projectiles": 0,
+        "tier": 2,
+        "fxBudget": 0.899,
+        "postFXBudget": 0.857,
+        "pressure": 0.14
+      },
+      "roomId": null,
+      "remoteProjectileBudget": {
+        "budget": 47,
+        "active": 0,
+        "suppressed": 0
+      },
+      "readyCount": 1,
+      "readyRequiredCount": 1
+    },
+    "joinOptions": {
+      "playerName": "Tux Pilot",
+      "maxPlayers": 1,
+      "gameMode": "battle",
+      "gameType": "deathmatch",
+      "battleType": "deathmatch",
+      "trackId": "custom_import",
+      "arenaId": "custom_import",
+      "scoreLimit": 5,
+      "botCount": 0,
+      "loadoutId": "classic",
+      "weaponPool": [],
+      "smokeMode": "",
+      "partyCode": "",
+      "isHost": false,
+      "kartId": "tux",
+      "playerColor": "red",
+      "gloEffect": "falling-petals",
+      "gloColor": "#ff0080",
+      "gloColor2": "#00e5ff",
+      "customTrackData": "{\"version\":1,\"name\":\"Starter Arena\",\"author\":\"Builder\",\"segments\":[{\"id\":1,\"type\":\"curve_right\",\"position\":{\"x\":-20,\"y\":0,\"z\":0},\"rotation\":90,\"scale\":1,\"builderRole\":\"road\"},{\"id\":2,\"type\":\"straight\",\"position\":{\"x\":-10,\"y\":0,\"z\":0},\"rotation\":90,\"scale\":1,\"builderRole\":\"road\"},{\"id\":3,\"type\":\"straight\",\"position\":{\"x\":0,\"y\":0,\"z\":0},\"rotation\":90,\"scale\":1,\"builderRole\":\"road\"},{\"id\":4,\"type\":\"straight\",\"position\":{\"x\":10,\"y\":0,\"z\":0},\"rotation\":90,\"scale\":1,\"builderRole\":\"road\"},{\"id\":5,\"type\":\"curve_right\",\"position\":{\"x\":20,\"y\":0,\"z\":0},\"rotation\":180,\"scale\":1,\"builderRole\":\"road\"},{\"id\":6,\"type\":\"straight\",\"position\":{\"x\":20,\"y\":0,\"z\":10},\"rotation\":0,\"scale\":1,\"builderRole\":\"road\"},{\"id\":7,\"type\":\"curve_right\",\"position\":{\"x\":20,\"y\":0,\"z\":20},\"rotation\":270,\"scale\":1,\"builderRole\":\"road\"},{\"id\":8,\"type\":\"straight\",\"position\":{\"x\":10,\"y\":0,\"z\":20},\"rotation\":90,\"scale\":1,\"builderRole\":\"road\"},{\"id\":9,\"type\":\"straight\",\"position\":{\"x\":0,\"y\":0,\"z\":20},\"rotation\":90,\"scale\":1,\"builderRole\":\"road\"},{\"id\":10,\"type\":\"straight\",\"position\":{\"x\":-10,\"y\":0,\"z\":20},\"rotation\":90,\"scale\":1,\"builderRole\":\"road\"},{\"id\":11,\"type\":\"curve_right\",\"position\":{\"x\":-20,\"y\":0,\"z\":20},\"rotation\":0,\"scale\":1,\"builderRole\":\"road\"},{\"id\":12,\"type\":\"straight\",\"position\":{\"x\":-20,\"y\":0,\"z\":10},\"rotation\":0,\"scale\":1,\"builderRole\":\"road\"},{\"id\":13,\"type\":\"flat_wide\",\"position\":{\"x\":0,\"y\":0,\"z\":10},\"rotation\":0,\"scale\":1,\"builderRole\":\"manual\"}],\"checkpoints\":[{\"position\":{\"x\":-20,\"y\":0,\"z\":0},\"width\":10},{\"position\":{\"x\":-10,\"y\":0,\"z\":0},\"width\":10},{\"position\":{\"x\":0,\"y\":0,\"z\":0},\"width\":10},{\"position\":{\"x\":10,\"y\":0,\"z\":0},\"width\":10},{\"position\":{\"x\":20,\"y\":0,\"z\":0},\"width\":10},{\"position\":{\"x\":20,\"y\":0,\"z\":10},\"width\":10},{\"position\":{\"x\":20,\"y\":0,\"z\":20},\"width\":10},{\"position\":{\"x\":10,\"y\":0,\"z\":20},\"width\":10},{\"position\":{\"x\":0,\"y\":0,\"z\":20},\"width\":10},{\"position\":{\"x\":-10,\"y\":0,\"z\":20},\"width\":10},{\"position\":{\"x\":-20,\"y\":0,\"z\":20},\"width\":10},{\"position\":{\"x\":-20,\"y\":0,\"z\":10},\"width\":10},{\"position\":{\"x\":0,\"y\":0,\"z\":10},\"width\":20}],\"startPositions\":[{\"position\":{\"x\":-10,\"y\":1,\"z\":-10},\"heading\":0},{\"position\":{\"x\":10,\"y\":1,\"z\":-10},\"heading\":3.141592653589793}],\"obstacles\":[{\"type\":\"item_box\",\"position\":{\"x\":0,\"y\":0.6,\"z\":10}},{\"type\":\"boost_pad\",\"position\":{\"x\":20,\"y\":0.6,\"z\":0}},{\"type\":\"banana\",\"position\":{\"x\":-20,\"y\":0.6,\"z\":20}}],\"bounds\":{\"min\":{\"x\":-25,\"y\":0,\"z\":-5},\"max\":{\"x\":25,\"y\":0,\"z\":25}}}",
+      "directPlaytest": true
+    },
+    "roomName": "battle_room",
+    "matchLive": true
+  }
+}

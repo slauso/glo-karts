@@ -131,6 +131,7 @@ const WEAPON_FIRE_SOUND = {
   plunger: { key: 'fire_whoosh', volume: 0.48, playbackRate: 1.01 },
   nitro: { key: 'dash', volume: 0.52, playbackRate: 1.04 },
   missile: { key: 'fire_whoosh', volume: 0.58, playbackRate: 0.98, cooldownMs: 90 },
+  crimson_hydra: { key: 'fire_whoosh', volume: 0.52, playbackRate: 1.08, cooldownMs: 70 },
   cannon: { key: 'rock_hit', volume: 0.6, playbackRate: 0.9, cooldownMs: 95 },
   frostAxe: { key: 'ice_whoosh', volume: 0.5, playbackRate: 1.04 },
   moltenDagger: { key: 'fire_whoosh', volume: 0.5, playbackRate: 1.06 },
@@ -140,8 +141,53 @@ const WEAPON_FIRE_SOUND = {
   shockwave_cannon: { key: 'thunder', volume: 0.62, playbackRate: 0.94, cooldownMs: 180 },
   thunderstrike: { key: 'light_strike', volume: 0.62, playbackRate: 0.98, cooldownMs: 160 },
   black_hole: { key: 'nova_impact', volume: 0.64, playbackRate: 0.86, cooldownMs: 240 },
+  meteor_swarm: {
+    key: 'fire_whoosh',
+    volume: 0.58,
+    playbackRate: 0.88,
+    cooldownMs: 140,
+    layers: [
+      { key: 'rock_hit', volume: 0.18, playbackRate: 0.82, cooldownMs: 140 },
+    ],
+  },
   frost_nova: { key: 'ice_burst', volume: 0.58, playbackRate: 0.95, cooldownMs: 180 },
+  emp_pulse: {
+    key: 'light_strike',
+    volume: 0.52,
+    playbackRate: 1.12,
+    cooldownMs: 170,
+    layers: [
+      { key: 'sparkle_hit', volume: 0.16, playbackRate: 1.24, cooldownMs: 170 },
+    ],
+  },
+  gravity_flip: {
+    key: 'nova_impact',
+    volume: 0.48,
+    playbackRate: 1.12,
+    cooldownMs: 180,
+    layers: [
+      { key: 'air_whoosh_light', volume: 0.14, playbackRate: 0.84, cooldownMs: 180 },
+    ],
+  },
+  inferno_trail: {
+    key: 'fire_whoosh',
+    volume: 0.6,
+    playbackRate: 0.92,
+    cooldownMs: 120,
+    layers: [
+      { key: 'dash', volume: 0.16, playbackRate: 0.88, cooldownMs: 120 },
+    ],
+  },
   plasma_railgun: { key: 'light_staff', volume: 0.6, playbackRate: 1.02, cooldownMs: 120 },
+  vortex_tornado: {
+    key: 'wind_tornado_cast',
+    volume: 0.56,
+    playbackRate: 0.88,
+    cooldownMs: 180,
+    layers: [
+      { key: 'wind_tornado', volume: 0.22, playbackRate: 0.78, cooldownMs: 180 },
+    ],
+  },
   fireball: { key: 'fire_whoosh', volume: 0.62, playbackRate: 0.97, cooldownMs: 70 },
   toxic_spread: { key: 'toxic_whoosh', volume: 0.5, playbackRate: 1.02 },
   ice_lance: { key: 'ice_whoosh', volume: 0.48, playbackRate: 1.1 },
@@ -185,6 +231,7 @@ const WEAPON_HIT_SOUND = {
   plunger: { key: 'splash', volume: 0.46, playbackRate: 0.96 },
   nitro: { key: 'fire_impact', volume: 0.6, playbackRate: 0.94 },
   missile: { key: 'fire_hit', volume: 0.66, playbackRate: 0.96, cooldownMs: 90 },
+  crimson_hydra: { key: 'fire_hit', volume: 0.6, playbackRate: 1.05, cooldownMs: 70 },
   cannon: { key: 'fire_impact', volume: 0.68, playbackRate: 0.9, cooldownMs: 90 },
   frostAxe: { key: 'ice_hit', volume: 0.56, playbackRate: 1.02 },
   moltenDagger: { key: 'fire_hit', volume: 0.58, playbackRate: 1.02 },
@@ -194,8 +241,53 @@ const WEAPON_HIT_SOUND = {
   shockwave_cannon: { key: 'thunder', volume: 0.74, playbackRate: 0.96, cooldownMs: 180 },
   thunderstrike: { key: 'thunder', volume: 0.74, playbackRate: 1, cooldownMs: 180 },
   black_hole: { key: 'nova_impact', volume: 0.76, playbackRate: 0.84, cooldownMs: 240 },
+  meteor_swarm: {
+    key: 'fire_impact',
+    volume: 0.72,
+    playbackRate: 0.9,
+    cooldownMs: 140,
+    layers: [
+      { key: 'rock_hit', volume: 0.26, playbackRate: 0.8, cooldownMs: 140 },
+    ],
+  },
   frost_nova: { key: 'ice_burst', volume: 0.62, playbackRate: 0.96, cooldownMs: 120 },
+  emp_pulse: {
+    key: 'sparkle_hit',
+    volume: 0.56,
+    playbackRate: 1.18,
+    cooldownMs: 150,
+    layers: [
+      { key: 'light_strike', volume: 0.18, playbackRate: 1.08, cooldownMs: 150 },
+    ],
+  },
+  gravity_flip: {
+    key: 'wind_hit',
+    volume: 0.48,
+    playbackRate: 0.86,
+    cooldownMs: 160,
+    layers: [
+      { key: 'nova_impact', volume: 0.18, playbackRate: 1.16, cooldownMs: 160 },
+    ],
+  },
+  inferno_trail: {
+    key: 'fire_hit',
+    volume: 0.64,
+    playbackRate: 0.96,
+    cooldownMs: 110,
+    layers: [
+      { key: 'fire_impact', volume: 0.22, playbackRate: 0.88, cooldownMs: 110 },
+    ],
+  },
   plasma_railgun: { key: 'sparkle_hit', volume: 0.52, playbackRate: 1.03, cooldownMs: 95 },
+  vortex_tornado: {
+    key: 'wind_hit',
+    volume: 0.58,
+    playbackRate: 0.9,
+    cooldownMs: 170,
+    layers: [
+      { key: 'wind_tornado', volume: 0.2, playbackRate: 0.8, cooldownMs: 170 },
+    ],
+  },
   fireball: { key: 'fire_impact', volume: 0.68, playbackRate: 0.94, cooldownMs: 85 },
   toxic_spread: { key: 'toxic_explode', volume: 0.62, playbackRate: 0.97, cooldownMs: 100 },
   ice_lance: { key: 'ice_hit', volume: 0.54, playbackRate: 1.05 },

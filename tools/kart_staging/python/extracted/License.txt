@@ -1,0 +1,4 @@
+Python is under GPL v.3 license
+Maker Laslo Hunhold
+Animation Rudy Phelippeau
+Icon based on schollidesign's work GNU-GPL license

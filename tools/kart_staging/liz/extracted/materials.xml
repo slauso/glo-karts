@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<materials>
+  <material name="E1.png" shader="alphatest"/>
+  <material name="E2.png" shader="alphatest"/>
+  <material name="M2.png" shader="alphatest"/>
+  <material name="M3.png" shader="alphatest"/>
+  <material name="CahayaL1.png" shader="additive"/>
+  <material name="L217.png" gloss-map="L217-gloss.png" colorizable="Y"/>
+  <material name="LB-1.png" gloss-map="LB-1-gloss.png"/>
+  <material name="LF.png" gloss-map="LF-gloss.png"/>
+  <material name="KartL-217.png" gloss-map="KartL-217-gloss.png" colorizable="Y" colorization-factor="0.5" hue-settings="0.0 0.5"/>
+  <material name="KartL-W217.png" gloss-map="KartL-W217-gloss.png"
+normal-map="KartL-W217-Normal.png"/>
+</materials>

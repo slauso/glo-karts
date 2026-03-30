@@ -48,11 +48,6 @@
       "sizeBytes": 1807836
     },
     {
-      "id": "beastie",
-      "name": "Godette",
-      "sizeBytes": 2641508
-    },
-    {
       "id": "amanda",
       "name": "Amanda",
       "sizeBytes": 1167500
@@ -267,7 +262,6 @@
         "gavroche",
         "emule",
         "kiki",
-        "beastie",
         "amanda",
         "suzanne"
       ],
@@ -304,7 +298,6 @@
         "gavroche",
         "emule",
         "kiki",
-        "beastie",
         "amanda",
         "suzanne",
         "gnu",

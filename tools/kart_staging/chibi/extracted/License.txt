@@ -1,0 +1,31 @@
+Chibi by LLS
+
+License:
+    Apache (1)
+    CC BY v3+ (2)
+
+(1):
+    Model 3D chibi modèle disponible avec le logiciel cascadeur (https://cascadeur.com/)
+
+(2):
+    Création des UV's et texture pour Chibi
+    Création du kart
+    Animation avec le logiciel Cascadeur
+
+texture:
+    Chibi_color.png
+    Chibi_glossy.png
+    ChibiKart_color.jpg
+    ChibiKart_métal.jpg
+    ChibiKart_rugosité.jpg
+    IconChibi.png
+    roue_color.png
+    stk_conelight_a.png (stk-media-repo)
+    volant_color.jpg
+    volant_rugosité.jpg
+
+animation:
+    production of animation in Cascadeur https://cascadeur.com/
+
+projet status:
+    Version1: création des modèle, textures, animation, "hat positioner" et light.

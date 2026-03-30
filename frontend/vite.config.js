@@ -7,6 +7,7 @@ export default defineConfig({
         main: 'index.html',
         game: 'game.html',
         battle: 'battle.html',
+        builder: 'builder.html',
         realtime: 'realtime.html'
       }
     }

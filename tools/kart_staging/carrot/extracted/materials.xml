@@ -1,0 +1,7 @@
+<?xml version="1.0"?>
+<!-- Generated with script from SVN rev Unknown -->
+<materials>
+  <material name="carrot_diffuse.jpg" normal-map="carrot_normal.png"/>
+  <material name="carrot_label.png" gloss-map="carrot_label_params.png" colorizable="Y" colorization-factor="1.00" colorization-mask="carrot_label_mask.png"/>
+  <material name="light.png" shader="additive"/>
+</materials>
