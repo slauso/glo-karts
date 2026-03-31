@@ -3,169 +3,74 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>GLO KARTS — Arena Builder</title>
-    <link rel="stylesheet" href="/src/builder-style.css" />
+    <title>GLO KARTS — Arena Builder v2</title>
+    <link rel="stylesheet" href="/src/builder-v2/builder-v2.css" />
   </head>
   <body>
-    <div class="ab">
+    <div id="builder-root" class="bv2">
 
-      <!-- ── Top Bar ──────────────────────────────────────────── -->
-      <header class="ab-bar">
-        <button id="ab-back" class="ab-btn" title="Back to menu">← Menu</button>
-        <div class="ab-sep"></div>
-        <input id="ab-name" class="ab-name" type="text" maxlength="48" placeholder="Arena Name" />
-        <div class="ab-sep"></div>
-        <div class="ab-toolset" role="toolbar" aria-label="Build tools">
-          <button id="ab-tool-select" class="ab-btn ab-tool-btn" type="button" title="Select &amp; Move (1)">↖ Select</button>
-          <button id="ab-tool-road"   class="ab-btn ab-tool-btn" type="button" title="Draw Road (2)">🛣 Road</button>
-          <button id="ab-tool-object" class="ab-btn ab-tool-btn" type="button" title="Place Object (3)">📦 Object</button>
-          <button id="ab-tool-erase"  class="ab-btn ab-tool-btn" type="button" title="Erase (4)">⌫ Erase</button>
+      <!-- ── Top Toolbar ──────────────────────────────────────── -->
+      <header id="bv2-toolbar" class="bv2-toolbar">
+        <button id="bv2-back" class="bv2-btn" title="Back to menu">← Menu</button>
+        <div class="bv2-sep"></div>
+        <input id="bv2-name" class="bv2-name" type="text" maxlength="48" placeholder="Arena Name" />
+        <div class="bv2-sep"></div>
+        <div class="bv2-toolset" role="toolbar" aria-label="Editor tools">
+          <button id="bv2-tool-select" class="bv2-btn bv2-tool active" type="button" title="Select (1)">↖ Select</button>
+          <button id="bv2-tool-road"   class="bv2-btn bv2-tool" type="button" title="Road (2)">🛣 Road</button>
+          <button id="bv2-tool-place"  class="bv2-btn bv2-tool" type="button" title="Place Object (3)">📦 Place</button>
+          <button id="bv2-tool-erase"  class="bv2-btn bv2-tool" type="button" title="Erase (4)">⌫ Erase</button>
         </div>
-        <div class="ab-sep"></div>
-        <button id="ab-undo"   class="ab-btn ab-btn--icon" title="Undo (Ctrl+Z)">↩</button>
-        <button id="ab-redo"   class="ab-btn ab-btn--icon" title="Redo (Ctrl+Y)">↪</button>
-        <button id="ab-rotate" class="ab-btn ab-btn--icon" title="Rotate 90° (R)">⟳</button>
-        <button id="ab-delete" class="ab-btn ab-btn--icon ab-btn--danger" title="Delete selection (Del)">🗑</button>
-        <div class="ab-sep"></div>
-        <button id="ab-clear" class="ab-btn" title="Start a fresh arena">New Arena</button>
-        <div class="ab-spacer"></div>
-        <button id="ab-save"  class="ab-btn ab-btn--accent">Save</button>
-        <button id="ab-load"  class="ab-btn">Load</button>
-        <button id="ab-share" class="ab-btn">Share</button>
-        <div class="ab-sep"></div>
-        <button id="ab-play" class="ab-btn ab-btn--cta">▶ Playtest</button>
-        <button id="ab-host" class="ab-btn ab-btn--cta2">Host Online</button>
+        <div class="bv2-sep"></div>
+        <button id="bv2-undo"   class="bv2-btn bv2-btn--icon" title="Undo (Ctrl+Z)">↩</button>
+        <button id="bv2-redo"   class="bv2-btn bv2-btn--icon" title="Redo (Ctrl+Y)">↪</button>
+        <button id="bv2-delete" class="bv2-btn bv2-btn--icon bv2-btn--danger" title="Delete (Del)">🗑</button>
+        <div class="bv2-sep"></div>
+        <button id="bv2-grid-snap" class="bv2-btn bv2-btn--toggle" title="Toggle Grid Snap (G)">⊞ Snap</button>
+        <button id="bv2-cam-toggle" class="bv2-btn bv2-btn--toggle" title="Ortho / Perspective (Numpad 5)">🎥 Cam</button>
+        <div class="bv2-spacer"></div>
+        <button id="bv2-save"  class="bv2-btn bv2-btn--accent" title="Save (Ctrl+S)">Save</button>
+        <button id="bv2-load"  class="bv2-btn">Load</button>
+        <button id="bv2-share" class="bv2-btn">Share</button>
+        <div class="bv2-sep"></div>
+        <button id="bv2-play" class="bv2-btn bv2-btn--cta">▶ Playtest</button>
       </header>
 
-      <!-- ── Left Navigation Strip (TinkerCAD-style) ─────────── -->
-      <nav class="ab-nav-strip" aria-label="Viewport navigation">
-        <!-- 3D View Cube: click a face to jump to that camera view -->
-        <div class="ab-view-cube" title="Click a face to set view">
-          <div class="ab-vc-scene">
-            <div class="ab-vc-face ab-vc-top"    data-view="top">TOP</div>
-            <div class="ab-vc-face ab-vc-front"  data-view="front">FRONT</div>
-            <div class="ab-vc-face ab-vc-right"  data-view="right">RIGHT</div>
-            <div class="ab-vc-face ab-vc-left"   data-view="left">LEFT</div>
-            <div class="ab-vc-face ab-vc-back"   data-view="back">BACK</div>
-            <div class="ab-vc-face ab-vc-bottom" data-view="iso">ISO</div>
-          </div>
+      <!-- ── Left Sidebar: Toolbox Panels ─────────────────────── -->
+      <nav id="bv2-sidebar" class="bv2-sidebar">
+        <div class="bv2-tabs" role="tablist">
+          <button class="bv2-tab active" data-panel="objects"  title="Objects (1)">📦</button>
+          <button class="bv2-tab"        data-panel="road"     title="Road (2)">🛣</button>
+          <button class="bv2-tab"        data-panel="extras"   title="Extras (3)">⚙</button>
+          <button class="bv2-tab"        data-panel="terrain"  title="Terrain (4)">🏔</button>
         </div>
-
-        <!-- Fit All -->
-        <button class="ab-nav-strip-btn" id="ab-nav-home" title="Fit Arena (0)" aria-label="Fit Arena">⌂</button>
-
-        <!-- Orbit D-pad -->
-        <div class="ab-nav-strip-dpad">
-          <button class="ab-nav-strip-btn ab-nav-strip-btn--sm" id="ab-nav-up"    title="Orbit Up"    aria-label="Orbit Up">▲</button>
-          <button class="ab-nav-strip-btn ab-nav-strip-btn--sm" id="ab-nav-left"  title="Orbit Left"  aria-label="Orbit Left">◀</button>
-          <button class="ab-nav-strip-btn ab-nav-strip-btn--sm" id="ab-nav-right" title="Orbit Right" aria-label="Orbit Right">▶</button>
-          <button class="ab-nav-strip-btn ab-nav-strip-btn--sm" id="ab-nav-down"  title="Orbit Down"  aria-label="Orbit Down">▼</button>
-        </div>
-
-        <div class="ab-nav-strip-sep"></div>
-
-        <!-- Zoom -->
-        <button class="ab-nav-strip-btn" id="ab-nav-zoom-in"  title="Zoom In (+)"  aria-label="Zoom In">+</button>
-        <button class="ab-nav-strip-btn" id="ab-nav-zoom-out" title="Zoom Out (−)" aria-label="Zoom Out">−</button>
+        <div id="bv2-panel-objects"  class="bv2-panel active" role="tabpanel"></div>
+        <div id="bv2-panel-road"     class="bv2-panel" role="tabpanel" hidden></div>
+        <div id="bv2-panel-extras"   class="bv2-panel" role="tabpanel" hidden></div>
+        <div id="bv2-panel-terrain"  class="bv2-panel" role="tabpanel" hidden></div>
       </nav>
 
       <!-- ── 3D Viewport ─────────────────────────────────────── -->
-      <main class="ab-stage">
-        <canvas id="ab-viewport"></canvas>
-        <div id="ab-hint" class="ab-hint">Choose Draw Road, then click-drag directly in 3D to sketch lanes.</div>
-        <div id="ab-stats" class="ab-stats"></div>
+      <main id="bv2-stage" class="bv2-stage">
+        <canvas id="bv2-viewport"></canvas>
+        <div id="bv2-hint" class="bv2-hint">Select a tool to begin building your arena.</div>
       </main>
 
-      <!-- ── Right Panel: Inspector + Validation + Library ─────── -->
-      <aside class="ab-side">
-
-        <!-- Shape Inspector (TinkerCAD "Shape" panel) -->
-        <section class="ab-panel ab-panel--shape">
-          <div class="ab-panel-head">
-            <span>Shape</span>
-            <span id="ab-selection-badge" class="ab-badge">None</span>
-          </div>
-          <div id="ab-selection-empty" class="ab-empty">Select a piece to inspect, move, or swap its type.</div>
-          <div id="ab-selection-fields" class="ab-fields" hidden>
-            <label class="ab-field">
-              <span>Type</span>
-              <select id="ab-inspector-type"></select>
-            </label>
-            <div class="ab-fields-grid">
-              <label class="ab-field">
-                <span>X</span>
-                <input id="ab-inspector-x" type="number" step="10" />
-              </label>
-              <label class="ab-field">
-                <span>Y</span>
-                <input id="ab-inspector-y" type="number" step="1" />
-              </label>
-              <label class="ab-field">
-                <span>Z</span>
-                <input id="ab-inspector-z" type="number" step="10" />
-              </label>
-              <label class="ab-field">
-                <span>Rotation</span>
-                <input id="ab-inspector-rotation" type="number" step="90" min="0" max="270" />
-              </label>
-            </div>
-          </div>
-        </section>
-
-        <!-- Validation -->
-        <section class="ab-panel ab-panel--validation">
-          <div class="ab-panel-head">
-            <span>Validation</span>
-            <span class="ab-panel-meta">Battle checks</span>
-          </div>
-          <ul id="ab-validation-list" class="ab-validation-list"></ul>
-        </section>
-
-        <!-- Shapes Library (TinkerCAD "Basic Shapes" panel) -->
-        <section class="ab-panel ab-panel--library">
-          <div class="ab-panel-head">
-            <span>Shapes</span>
-            <span class="ab-panel-meta">GLO Karts</span>
-          </div>
-          <div id="ab-palette"></div>
-        </section>
-
+      <!-- ── Right Panel: Inspector ───────────────────────────── -->
+      <aside id="bv2-inspector" class="bv2-inspector">
+        <div class="bv2-panel-head">
+          <span>Inspector</span>
+          <span id="bv2-sel-badge" class="bv2-badge">None</span>
+        </div>
+        <div id="bv2-inspector-content" class="bv2-inspector-content">
+          <p class="bv2-empty">Select an object to inspect its properties.</p>
+        </div>
       </aside>
+
     </div>
 
-    <div class="ab-ghost" id="ab-ghost" hidden></div>
-    <div class="ab-toast-wrap" id="ab-toast-wrap"></div>
+    <div id="bv2-toast-wrap" class="bv2-toast-wrap"></div>
 
-    <dialog id="ab-load-dialog" class="ab-dialog">
-      <div class="ab-dialog-head">
-        <h2>Saved Arenas</h2>
-        <button class="ab-dialog-x" data-close>✕</button>
-      </div>
-      <div id="ab-saved-list" class="ab-saved-list"></div>
-    </dialog>
-
-    <dialog id="ab-share-dialog" class="ab-dialog">
-      <div class="ab-dialog-head">
-        <h2>Share &amp; Import</h2>
-        <button class="ab-dialog-x" data-close>✕</button>
-      </div>
-      <label class="ab-field">
-        <span>Share Code</span>
-        <textarea id="ab-share-code" rows="4" readonly placeholder="Click Export to generate a code."></textarea>
-      </label>
-      <div class="ab-dialog-row">
-        <button id="ab-export-btn" class="ab-btn ab-btn--accent">Export</button>
-        <button id="ab-copy-btn" class="ab-btn">Copy</button>
-      </div>
-      <label class="ab-field">
-        <span>Import Arena</span>
-        <textarea id="ab-import-code" rows="4" placeholder="Paste a TK1 code or raw JSON here."></textarea>
-      </label>
-      <div class="ab-dialog-row">
-        <button id="ab-import-btn" class="ab-btn ab-btn--accent">Import</button>
-      </div>
-    </dialog>
-
-    <script type="module" src="/src/builder-main.js"></script>
+    <script type="module" src="/src/builder-v2/builder-app.js"></script>
   </body>
 </html>
