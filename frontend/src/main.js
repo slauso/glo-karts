@@ -14,8 +14,8 @@ import {
   updateMarkers, 
   sendCarData,
 } from './modules/multiplayer.js';
-import { initPhysics, updatePhysics, FIXED_PHYSICS_STEP } from './modules/physics.js';
-import { createMinimap, extractTrackData, updateMinimapPlayers } from './modules/minimap.js';
+import { initPhysics, updatePhysics, FIXED_PHYSICS_STEP } from './modules/physics-ammo.js';
+import { createMinimap, extractTrackData, updateMinimapPlayers } from './modules/minimap-three.js';
 
 // Check for game config from lobby
 let gameConfig = null;
@@ -73,10 +73,12 @@ const keyState = {
 };
 
 // Camera parameters
-const CAMERA_DISTANCE = 10;  
-const CAMERA_HEIGHT = 5;     
 const CAMERA_LERP = 0.1;     
-const CAMERA_LOOK_AHEAD = 2; 
+const CAMERA_MODES = [
+  { name: 'Chase', distance: 10, height: 5, lookAhead: 2 },
+  { name: 'Low Behind', distance: 8, height: 2.6, lookAhead: 3 },
+];
+let activeCameraModeIndex = 0;
 
 // Steering parameters
 let currentSteeringAngle = 0; 
@@ -128,6 +130,14 @@ let activeRacers = [];
 
 // Add this variable to your global variables section
 let minimapState;
+
+function getActiveCameraMode() {
+  return CAMERA_MODES[activeCameraModeIndex];
+}
+
+function cycleCameraMode() {
+  activeCameraModeIndex = (activeCameraModeIndex + 1) % CAMERA_MODES.length;
+}
 
 let finalLeaderboardShown = false;
 
@@ -669,19 +679,20 @@ function updateSpectatorCamera() {
   // Get car's forward direction
   const carDirection = new THREE.Vector3(0, 0, 1);
   carDirection.applyQuaternion(targetCar.quaternion);
+  const cameraMode = getActiveCameraMode();
   
   // Calculate camera position - behind and above the car
-  const cameraOffset = carDirection.clone().multiplyScalar(-CAMERA_DISTANCE);
+  const cameraOffset = carDirection.clone().multiplyScalar(-cameraMode.distance);
   const targetPosition = carPos.clone()
     .add(cameraOffset)
-    .add(new THREE.Vector3(0, CAMERA_HEIGHT, 0));
+    .add(new THREE.Vector3(0, cameraMode.height, 0));
   
   // Smoothly interpolate camera position
   camera.position.lerp(targetPosition, CAMERA_LERP);
   
   // Look at a point slightly ahead of the car
   const lookAtPos = carPos.clone().add(
-    carDirection.clone().multiplyScalar(CAMERA_LOOK_AHEAD)
+    carDirection.clone().multiplyScalar(cameraMode.lookAhead)
   );
   camera.lookAt(lookAtPos);
 }
@@ -968,7 +979,7 @@ function init() {
   
   // Setup renderer
   renderer = new THREE.WebGLRenderer({ antialias: true });
-  renderer.outputEncoding = THREE.sRGBEncoding;  // or THREE.LinearSRGBEncoding in newer Three.js
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.setPixelRatio(window.devicePixelRatio);
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.shadowMap.enabled = true;
@@ -1104,6 +1115,7 @@ function setupKeyControls() {
     if (event.key.toLowerCase() === 's') keyState.s = true;
     if (event.key.toLowerCase() === 'a') keyState.a = true;
     if (event.key.toLowerCase() === 'd') keyState.d = true;
+    if (event.key.toLowerCase() === 'c' && !event.repeat) cycleCameraMode();
 
     // Replace the keydown R handler with this improved version:
     if (event.key.toLowerCase() === 'r') {
@@ -1141,6 +1153,7 @@ function setupKeyControls() {
 // Add this new camera update function
 function updateCamera() {
   if (!carModel) return;
+  const cameraMode = getActiveCameraMode();
   
   // Get car's position
   const carPos = carModel.position.clone();
@@ -1150,17 +1163,17 @@ function updateCamera() {
   carModel.getWorldDirection(carDirection);
   
   // Calculate camera position - behind and above the car
-  const cameraOffset = carDirection.clone().multiplyScalar(-CAMERA_DISTANCE);
+  const cameraOffset = carDirection.clone().multiplyScalar(-cameraMode.distance);
   const targetPosition = carPos.clone()
     .add(cameraOffset)
-    .add(new THREE.Vector3(0, CAMERA_HEIGHT, 0));
+    .add(new THREE.Vector3(0, cameraMode.height, 0));
   
   // Smoothly interpolate camera position
   camera.position.lerp(targetPosition, CAMERA_LERP);
   
   // Look at a point slightly ahead of the car
   const lookAtPos = carPos.clone().add(
-    carDirection.clone().multiplyScalar(CAMERA_LOOK_AHEAD)
+    carDirection.clone().multiplyScalar(cameraMode.lookAhead)
   );
   camera.lookAt(lookAtPos);
 }

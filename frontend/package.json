@@ -11,14 +11,24 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test:lobby:regression": "node scripts/lobby-ux-regression.mjs"
+    "test:lobby:regression": "node scripts/lobby-ux-regression.mjs",
+    "test:e2e:install": "playwright install chromium",
+    "test:e2e:lobby": "node scripts/lobby-ux-regression.mjs",
+    "test:e2e:hydra-lobby": "node scripts/hydra-lobby-smoke.mjs",
+    "test:e2e:hydra-handoff": "node scripts/hydra-live-handoff.mjs",
+    "test:e2e:postgame-host": "node scripts/postgame-host-settings-regression.mjs",
+    "test:e2e:builder-parity": "node scripts/builder-live-parity-audit.mjs"
   },
   "devDependencies": {
+    "@playwright/test": "^1.58.2",
     "playwright": "^1.58.2",
-    "vite": "^6.2.6"
+    "start-server-and-test": "^3.0.0",
+    "vite": "^6.2.6",
+    "wait-on": "^9.0.4"
   },
   "dependencies": {
     "@babylonjs/core": "^8.53.0",
+    "@babylonjs/gui": "^8.56.2",
     "@babylonjs/havok": "^1.3.11",
     "@babylonjs/loaders": "^8.53.0",
     "@vercel/analytics": "^1.5.0",

@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>GLO KARTS - TinkerTracks</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%2308111d'/%3E%3Cpath d='M16 38h11l7-14h14' fill='none' stroke='%2369b3ff' stroke-width='6' stroke-linecap='round' stroke-linejoin='round'/%3E%3Ccircle cx='22' cy='44' r='5' fill='%23ffb95e'/%3E%3Ccircle cx='46' cy='44' r='5' fill='%234ad49c'/%3E%3C/svg%3E" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet" href="/src/builder-v2/builder-v2.css" />
+  </head>
+  <body>
+    <div id="builder-root" class="bv2">
+      <header id="bv2-toolbar" class="bv2-toolbar">
+        <button id="bv2-back" class="bv2-btn" title="Back to menu"><svg viewBox="0 0 24 24"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg></button>
+        <div class="bv2-sep"></div>
+        <input id="bv2-name" class="bv2-name" type="text" maxlength="48" placeholder="Arena Name" />
+        <div class="bv2-sep"></div>
+        <div class="bv2-toolset" role="toolbar" aria-label="Editor tools">
+          <button id="bv2-tool-select" class="bv2-btn bv2-tool active" type="button" title="Select (1)"><svg viewBox="0 0 24 24"><path d="M7 2l10 8-4 1 3 7-2 1-3-7-4 3z"/></svg></button>
+          <button id="bv2-tool-road" class="bv2-btn bv2-tool" type="button" title="Road (2)"><svg viewBox="0 0 24 24"><path d="M11 2h2v4h-2zm0 6h2v4h-2zm0 6h2v4h-2zm0 6h2v2h-2zM4 2h4v20H4zM16 2h4v20h-4z" fill-rule="evenodd"/></svg></button>
+          <button id="bv2-tool-place" class="bv2-btn bv2-tool" type="button" title="Place Object (3)"><svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5zm0 13L2 10v5l10 5 10-5v-5z"/></svg></button>
+          <button id="bv2-tool-erase" class="bv2-btn bv2-tool" type="button" title="Erase (4)"><svg viewBox="0 0 24 24"><path d="M16.24 3.56l4.95 4.94c.78.78.78 2.05 0 2.83L12 20.53 4.39 12.9c-.78-.78-.78-2.05 0-2.83l8.49-8.49c.78-.78 2.05-.78 2.83 0l.53.53zM4.42 16H12l5.58-5.59L12.62 5.44 4.42 13.63z"/></svg></button>
+        </div>
+        <div class="bv2-sep"></div>
+        <button id="bv2-undo" class="bv2-btn bv2-btn--icon" title="Undo (Ctrl+Z)"><svg viewBox="0 0 24 24"><path d="M12.5 8c-2.65 0-5.05 1.04-6.83 2.73L2.5 7.56V16h8.44l-3.18-3.18C9.16 11.55 10.74 11 12.5 11c3.04 0 5.58 1.94 6.46 4.68l2.44-.86C20.16 11.17 16.64 8 12.5 8z"/></svg></button>
+        <button id="bv2-redo" class="bv2-btn bv2-btn--icon" title="Redo (Ctrl+Y)"><svg viewBox="0 0 24 24"><path d="M11.5 8c2.65 0 5.05 1.04 6.83 2.73L21.5 7.56V16h-8.44l3.18-3.18C14.84 11.55 13.26 11 11.5 11c-3.04 0-5.58 1.94-6.46 4.68l-2.44-.86C3.84 11.17 7.36 8 11.5 8z"/></svg></button>
+        <button id="bv2-duplicate" class="bv2-btn bv2-btn--icon" title="Duplicate (Ctrl+D)"><svg viewBox="0 0 24 24"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg></button>
+        <button id="bv2-delete" class="bv2-btn bv2-btn--icon bv2-btn--danger" title="Delete (Del)"><svg viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg></button>
+        <div class="bv2-sep"></div>
+        <button id="bv2-grid-snap" class="bv2-btn bv2-btn--toggle" title="Toggle Grid Snap (G)"><svg viewBox="0 0 24 24"><path d="M20 2H4c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zM8 20H4v-4h4v4zm0-6H4v-4h4v4zm0-6H4V4h4v4zm6 12h-4v-4h4v4zm0-6h-4v-4h4v4zm0-6h-4V4h4v4zm6 12h-4v-4h4v4zm0-6h-4v-4h4v4zm0-6h-4V4h4v4z"/></svg></button>
+
+        <div class="bv2-spacer"></div>
+        <button id="bv2-projects" class="bv2-btn" title="Open project launcher"><svg viewBox="0 0 24 24"><path d="M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg></button>
+        <button id="bv2-help-btn" class="bv2-btn" title="Help (?)"><svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17h-2v-2h2v2zm2.07-7.75l-.9.92A3.4 3.4 0 0013 15h-2v-.5a4.03 4.03 0 011.17-2.83l1.24-1.26c.37-.36.59-.86.59-1.41 0-1.1-.9-2-2-2s-2 .9-2 2H8c0-2.21 1.79-4 4-4s4 1.79 4 4c0 .88-.36 1.68-.93 2.25z"/></svg></button>
+        <button id="bv2-save" class="bv2-btn bv2-btn--accent" title="Save (Ctrl+S)"><svg viewBox="0 0 24 24"><path d="M17 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V7l-4-4zm-5 16c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zm3-10H5V5h10v4z"/></svg></button>
+        <button id="bv2-load" class="bv2-btn" title="Load project"><svg viewBox="0 0 24 24"><path d="M9 16h6v-6h4l-7-7-7 7h4v6zm-4 2h14v2H5v-2z"/></svg></button>
+        <button id="bv2-share" class="bv2-btn" title="Share"><svg viewBox="0 0 24 24"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81 1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9c-1.66 0-3 1.34-3 3s1.34 3 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.16c-.05.21-.08.43-.08.65 0 1.61 1.31 2.92 2.92 2.92s2.92-1.31 2.92-2.92-1.31-2.92-2.92-2.92z"/></svg></button>
+        <div class="bv2-sep"></div>
+        <button id="bv2-play" class="bv2-btn bv2-btn--cta" title="Test drive your track"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></button>
+      </header>
+
+      <nav id="bv2-sidebar" class="bv2-sidebar">
+        <div id="bv2-sidebar-mode" class="bv2-sidebar-mode"></div>
+        <div class="bv2-tabs" role="tablist">
+          <button class="bv2-tab active" data-panel="objects" title="Shapes">Shapes</button>
+          <button class="bv2-tab" data-panel="road" title="Track">Track</button>
+          <button class="bv2-tab" data-panel="extras" title="Helpers">Helpers</button>
+          <button class="bv2-tab" data-panel="terrain" title="Terrain">Terrain</button>
+        </div>
+        <div id="bv2-panel-objects" class="bv2-panel active" role="tabpanel"></div>
+        <div id="bv2-panel-road" class="bv2-panel" role="tabpanel" hidden></div>
+        <div id="bv2-panel-extras" class="bv2-panel" role="tabpanel" hidden></div>
+        <div id="bv2-panel-terrain" class="bv2-panel" role="tabpanel" hidden></div>
+      </nav>
+
+      <main id="bv2-stage" class="bv2-stage">
+        <canvas id="bv2-viewport"></canvas>
+
+        <!-- TinkerCad-style camera controls -->
+        <div id="bv2-cam-controls" class="bv2-cam-controls">
+          <canvas id="bv2-viewcube" class="bv2-viewcube" width="140" height="140"></canvas>
+          <div class="bv2-cam-stack">
+            <button id="bv2-view-home" class="bv2-cam-btn" type="button" title="Home view"><svg viewBox="0 0 24 24"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg></button>
+            <button id="bv2-focus" class="bv2-cam-btn" type="button" title="Fit to view (F)"><svg viewBox="0 0 24 24"><path d="M5 15H3v4c0 1.1.9 2 2 2h4v-2H5v-4zM5 5h4V3H5c-1.1 0-2 .9-2 2v4h2V5zm14-2h-4v2h4v4h2V5c0-1.1-.9-2-2-2zm0 16h-4v2h4c1.1 0 2-.9 2-2v-4h-2v4z"/></svg></button>
+            <button id="bv2-zoom-in" class="bv2-cam-btn" type="button" title="Zoom in"><svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg></button>
+            <button id="bv2-zoom-out" class="bv2-cam-btn" type="button" title="Zoom out"><svg viewBox="0 0 24 24"><path d="M19 13H5v-2h14v2z"/></svg></button>
+            <div class="bv2-cam-sep"></div>
+            <button id="bv2-cam-toggle" class="bv2-cam-btn bv2-cam-btn--text" type="button" title="Switch projection (C)"><span id="bv2-cam-toggle-label">Ortho</span></button>
+          </div>
+        </div>
+
+        <div id="bv2-help" class="bv2-help" hidden>
+          <div class="bv2-help-head">
+            <div>
+              <p class="bv2-help-kicker">Controls</p>
+              <h2 class="bv2-help-title">Navigate, Place & Edit</h2>
+            </div>
+            <button id="bv2-help-close" class="bv2-btn" type="button"><svg viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg></button>
+          </div>
+          <div class="bv2-help-grid">
+            <section class="bv2-help-card">
+              <h3>Mouse</h3>
+              <p><kbd>Left click</kbd> select or place.</p>
+              <p><kbd>Right drag</kbd> orbit.</p>
+              <p><kbd>Middle drag</kbd> pan.</p>
+              <p><kbd>Wheel</kbd> zoom.</p>
+            </section>
+            <section class="bv2-help-card">
+              <h3>Camera</h3>
+              <p><kbd>W</kbd> top-down view.</p>
+              <p><kbd>F</kbd> frame selection.</p>
+              <p>View pad: <kbd>Top</kbd> <kbd>Front</kbd> <kbd>Left</kbd> <kbd>Right</kbd> <kbd>Home</kbd>.</p>
+            </section>
+            <section class="bv2-help-card">
+              <h3>Edit</h3>
+              <p><kbd>Ctrl+D</kbd> duplicate.</p>
+              <p><kbd>Shift+G/R/S</kbd> move / rotate / scale.</p>
+              <p><kbd>Arrows</kbd> nudge one cell.</p>
+              <p><kbd>Delete</kbd> remove selected.</p>
+            </section>
+            <section class="bv2-help-card">
+              <h3>Pieces</h3>
+              <p>Pieces snap to the grid at 90° steps.</p>
+              <p><kbd>R</kbd> rotate before placing.</p>
+              <p>Double-click a piece to edit it.</p>
+            </section>
+          </div>
+        </div>
+
+        <div id="bv2-landing" class="bv2-landing" hidden>
+          <div class="bv2-landing-card">
+            <div class="bv2-landing-head">
+              <div>
+                <p class="bv2-landing-kicker">TinkerTracks</p>
+                <h1 class="bv2-landing-title">Build. Race. Repeat.</h1>
+                <p id="bv2-landing-subtitle" class="bv2-landing-subtitle"></p>
+              </div>
+              <button id="bv2-landing-close" class="bv2-btn" type="button"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg> Enter</button>
+            </div>
+            <div class="bv2-landing-grid">
+              <section class="bv2-landing-panel">
+                <div class="bv2-panel-section-head">Start</div>
+                <div class="bv2-launch-actions">
+                  <button id="bv2-landing-resume" class="bv2-launch-card" type="button">
+                    <span class="bv2-launch-label">Resume Session</span>
+                    <span id="bv2-landing-resume-copy" class="bv2-launch-copy">Continue from auto-save.</span>
+                  </button>
+                  <button id="bv2-landing-new-track" class="bv2-launch-card" type="button">
+                    <span class="bv2-launch-label">New Race Track</span>
+                    <span class="bv2-launch-copy">Paint roads, add pieces, race.</span>
+                  </button>
+                  <button id="bv2-landing-new-arena" class="bv2-launch-card" type="button">
+                    <span class="bv2-launch-label">New Battle Arena</span>
+                    <span class="bv2-launch-copy">Place structures, set spawns, fight.</span>
+                  </button>
+                </div>
+              </section>
+              <section class="bv2-landing-panel">
+                <div class="bv2-panel-section-head">Recent</div>
+                <div id="bv2-recent-projects" class="bv2-recent-projects"></div>
+              </section>
+            </div>
+          </div>
+        </div>
+
+        <div id="bv2-selection-hud" class="bv2-selection-hud" hidden>
+          <div id="bv2-selection-title" class="bv2-selection-title"></div>
+          <div id="bv2-selection-meta" class="bv2-selection-meta"></div>
+
+          <div id="bv2-selection-tip" class="bv2-selection-tip"></div>
+        </div>
+
+        <!-- Floating action ring (TinkerCad-style, follows selected piece) -->
+        <div id="bv2-action-ring" class="bv2-action-ring" hidden>
+          <button id="bv2-ring-ccw" class="bv2-ring-btn" type="button" title="Rotate 90° left">
+            <svg viewBox="0 0 24 24"><path d="M7.11 8.53L5.7 7.11C4.8 8.27 4.24 9.61 4.07 11h2.02c.14-.87.49-1.72 1.02-2.47zM6.09 13H4.07c.17 1.39.72 2.73 1.62 3.89l1.41-1.42c-.52-.75-.87-1.59-1.01-2.47zm1.01 5.32c1.16.9 2.51 1.44 3.9 1.61V17.9c-.87-.15-1.71-.49-2.46-1.03L7.1 18.32zM13 4.07V1L8.45 5.55 13 10V6.09c2.84.48 5 2.94 5 5.91s-2.16 5.43-5 5.91v2.02c3.95-.49 7-3.85 7-7.93s-3.05-7.44-7-7.93z"/></svg>
+          </button>
+          <button id="bv2-ring-cw" class="bv2-ring-btn" type="button" title="Rotate 90° right">
+            <svg viewBox="0 0 24 24"><path d="M15.55 5.55L11 1v3.07C7.06 4.56 4 7.92 4 12s3.05 7.44 7 7.93v-2.02c-2.84-.48-5-2.94-5-5.91s2.16-5.43 5-5.91V10l4.55-4.45zM19.93 11c-.17-1.39-.72-2.73-1.62-3.89l-1.42 1.42c.54.75.88 1.6 1.02 2.47h2.02zM13 17.9v2.02c1.39-.17 2.74-.71 3.9-1.61l-1.44-1.44c-.75.54-1.59.89-2.46 1.03zm3.89-2.42l1.42 1.41c.9-1.16 1.45-2.5 1.62-3.89h-2.02c-.14.87-.48 1.72-1.02 2.48z"/></svg>
+          </button>
+          <button id="bv2-ring-delete" class="bv2-ring-btn bv2-ring-btn--danger" type="button" title="Delete">
+            <svg viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+          </button>
+          <button id="bv2-ring-duplicate" class="bv2-ring-btn" type="button" title="Duplicate">
+            <svg viewBox="0 0 24 24"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>
+          </button>
+        </div>
+
+        <!-- Right-click context menu -->
+        <div id="bv2-context-menu" class="bv2-context-menu" hidden>
+          <button class="bv2-ctx-item" data-action="rotate-cw"><svg viewBox="0 0 24 24"><path d="M15.55 5.55L11 1v3.07C7.06 4.56 4 7.92 4 12s3.05 7.44 7 7.93v-2.02c-2.84-.48-5-2.94-5-5.91s2.16-5.43 5-5.91V10l4.55-4.45zM19.93 11c-.17-1.39-.72-2.73-1.62-3.89l-1.42 1.42c.54.75.88 1.6 1.02 2.47h2.02zM13 17.9v2.02c1.39-.17 2.74-.71 3.9-1.61l-1.44-1.44c-.75.54-1.59.89-2.46 1.03zm3.89-2.42l1.42 1.41c.9-1.16 1.45-2.5 1.62-3.89h-2.02c-.14.87-.48 1.72-1.02 2.48z"/></svg> Rotate 90°</button>
+          <button class="bv2-ctx-item" data-action="rotate-ccw"><svg viewBox="0 0 24 24"><path d="M7.11 8.53L5.7 7.11C4.8 8.27 4.24 9.61 4.07 11h2.02c.14-.87.49-1.72 1.02-2.47zM6.09 13H4.07c.17 1.39.72 2.73 1.62 3.89l1.41-1.42c-.52-.75-.87-1.59-1.01-2.47zm1.01 5.32c1.16.9 2.51 1.44 3.9 1.61V17.9c-.87-.15-1.71-.49-2.46-1.03L7.1 18.32zM13 4.07V1L8.45 5.55 13 10V6.09c2.84.48 5 2.94 5 5.91s-2.16 5.43-5 5.91v2.02c3.95-.49 7-3.85 7-7.93s-3.05-7.44-7-7.93z"/></svg> Rotate -90°</button>
+          <div class="bv2-ctx-divider"></div>
+          <button class="bv2-ctx-item" data-action="duplicate"><svg viewBox="0 0 24 24"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg> Duplicate</button>
+          <button class="bv2-ctx-item bv2-ctx-item--danger" data-action="delete"><svg viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg> Delete</button>
+        </div>
+
+        <div id="bv2-hint" class="bv2-hint">Select a tool to begin.</div>
+      </main>
+
+      <aside id="bv2-inspector" class="bv2-inspector">
+        <div class="bv2-panel-head">
+          <span>Inspector</span>
+          <span id="bv2-sel-badge" class="bv2-badge">None</span>
+        </div>
+        <div id="bv2-inspector-content" class="bv2-inspector-content">
+          <p class="bv2-empty">Select a piece to see details.</p>
+        </div>
+      </aside>
+    </div>
+
+    <div id="bv2-toast-wrap" class="bv2-toast-wrap"></div>
+
+    <script type="module" src="/src/builder-v2/builder-app.js"></script>
+  </body>
+</html>

@@ -1,5 +1,6 @@
 # Dependencies
 frontend/node_modules/
+realtime/node_modules/
 
 # Environment variables
 .env
@@ -12,9 +13,12 @@ frontend/node_modules/
 # Build directories
 frontend/dist/
 frontend/build/
+.vite/
 
 # Coverage directory
 frontend/coverage/
+frontend/test-results/
+frontend/reports/
 
 # Editor directories and files
 .DS_Store
@@ -24,8 +28,14 @@ frontend/coverage/
 # Python artifacts
 __pycache__/
 *.py[cod]
+.venv/
 backend/venv/
 backend/env/
 backend/staticfiles/
 *.sqlite3
 db.sqlite3
+
+# Generated frontend artifacts
+frontend/public/havok/
+frontend/builder-visual-smoke.png
+frontend/snap-verify.png

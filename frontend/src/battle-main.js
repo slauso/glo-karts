@@ -8,16 +8,16 @@ import * as THREE from 'three';
 import "./style.css";
 import Ammo from './lib/ammo.js';
 import { createVehicle, updateSteering, resetCarPosition, updateCarPosition } from './modules/car.js';
-import { initPhysics, updatePhysics, FIXED_PHYSICS_STEP } from './modules/physics.js';
+import { initPhysics, updatePhysics, FIXED_PHYSICS_STEP } from './modules/physics-ammo.js';
 import { 
   initMultiplayer, 
   updateMarkers, 
   sendCarData,
   interpolateOpponents,
 } from './modules/multiplayer.js';
-import { loadArena } from './modules/battle/arena.js';
-import { createHealthSystem } from './modules/battle/health.js';
-import { initWeapons, attemptFire, getWeaponDef, hostBroadcastPickups } from './modules/battle/weapons.js';
+import { loadArena } from './modules/battle/arena-three.js';
+import { createHealthSystem } from './modules/battle/health-three.js';
+import { initWeapons, attemptFire, getWeaponDef, hostBroadcastPickups } from './modules/battle/weapons-three.js';
 
 console.log('🎮 BATTLE MODE LOADING...');
 
@@ -76,10 +76,12 @@ const keyState = {
 let currentSpeedKPH = 0;
 
 // Camera parameters
-const CAMERA_DISTANCE = 12;  
-const CAMERA_HEIGHT = 6;     
 const CAMERA_LERP = 0.1;     
-const CAMERA_LOOK_AHEAD = 2; 
+const CAMERA_MODES = [
+  { name: 'Chase', distance: 12, height: 6, lookAhead: 2 },
+  { name: 'Low Behind', distance: 9, height: 2.8, lookAhead: 3 },
+];
+let activeCameraModeIndex = 0;
 
 // Steering parameters
 let currentSteeringAngle = 0;
@@ -112,6 +114,14 @@ const CTF_FLAG_PICKUP_RADIUS = 3.4;
 
 // Multiplayer variables
 let multiplayerState;
+
+function getActiveCameraMode() {
+  return CAMERA_MODES[activeCameraModeIndex];
+}
+
+function cycleCameraMode() {
+  activeCameraModeIndex = (activeCameraModeIndex + 1) % CAMERA_MODES.length;
+}
 
 // Initialize everything
 async function init() {
@@ -341,6 +351,10 @@ function setupControls() {
     const key = normalizeKey(e);
     if (key in keyState) {
       keyState[key] = true;
+      e.preventDefault();
+    }
+    if (key === 'c' && !e.repeat) {
+      cycleCameraMode();
       e.preventDefault();
     }
     // Dev: test damage key (H)
@@ -775,6 +789,7 @@ window.receiveCtfState = function(payload) {
 function updateCamera() {
   // Prefer carModel (visual) for camera target; it reflects the final orientation used in rendering
   if (!carModel) return;
+  const cameraMode = getActiveCameraMode();
 
   // Get car world position and forward direction
   const carPos = carModel.position.clone();
@@ -782,16 +797,16 @@ function updateCamera() {
   carModel.getWorldDirection(carDir); // carDir points forward
 
   // Place camera behind and above the car
-  const behindOffset = carDir.clone().multiplyScalar(-CAMERA_DISTANCE);
+  const behindOffset = carDir.clone().multiplyScalar(-cameraMode.distance);
   const targetPos = carPos.clone()
     .add(behindOffset)
-    .add(new THREE.Vector3(0, CAMERA_HEIGHT, 0));
+    .add(new THREE.Vector3(0, cameraMode.height, 0));
 
   // Smooth camera movement
   camera.position.lerp(targetPos, CAMERA_LERP);
 
   // Look slightly ahead of the car
-  const lookAtPos = carPos.clone().add(carDir.clone().multiplyScalar(CAMERA_LOOK_AHEAD));
+  const lookAtPos = carPos.clone().add(carDir.clone().multiplyScalar(cameraMode.lookAhead));
   camera.lookAt(lookAtPos);
 }
 

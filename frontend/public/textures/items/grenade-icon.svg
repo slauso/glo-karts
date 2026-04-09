@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs><radialGradient id="gg"><stop offset="0%" stop-color="#6b7a3a"/><stop offset="100%" stop-color="#3d4a1f"/></radialGradient></defs>
+  <circle cx="32" cy="34" r="18" fill="url(#gg)"/>
+  <line x1="14" y1="34" x2="50" y2="34" stroke="#2d3a12" stroke-width="1.5"/>
+  <line x1="23" y1="20" x2="41" y2="48" stroke="#2d3a12" stroke-width="1.5"/>
+  <line x1="41" y1="20" x2="23" y2="48" stroke="#2d3a12" stroke-width="1.5"/>
+  <rect x="29" y="14" width="6" height="8" rx="2" fill="#888877"/>
+  <circle cx="32" cy="12" r="3.5" fill="none" stroke="#ccbb44" stroke-width="2"/>
+  <rect x="34" y="14" width="8" height="2.5" rx="1" fill="#888877"/>
+</svg>

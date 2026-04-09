@@ -3,41 +3,71 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>GLO Karts</title>
+  <title>GLO KARTS</title>
   <link rel="icon" type="image/png" href="/favicon.png" />
   <link rel="stylesheet" href="src/lobby-style.css">
   <script type="module" src="/src/lobby-car.js"></script>
+  <script type="module" src="/src/lobby-track-preview.js"></script>
   <script type="module" src="/src/lobby.js"></script>
+  <script type="module" src="/src/title-glow.js"></script>
+  <script type="module" src="/src/game-modes.js"></script>
   <link href="https://fonts.googleapis.com/css2?family=Bungee&family=Exo+2:wght@400;700&display=swap" rel="stylesheet">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.min.js"></script>
-  <script src="https://kit.fontawesome.com/1ab8f48e0a.js" crossorigin="anonymous"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" integrity="sha512-Evv84Mr4kqVGRNSgIGL/F/aIDqQb7xQ2vcrdIwxfjThSH8CSR7PBEakCr51Ck+w+/U6swU2Im1vVX0SVk9ABhg==" crossorigin="anonymous" referrerpolicy="no-referrer" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Funnel+Sans:ital,wght@0,300..800;1,300..800&family=Poppins:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900&display=swap" rel="stylesheet">
   <script type="module">
     import LobbyBackground from '/src/lobby-background.js';
-    
-    // Create the background with default map (map1)
-    let lobbyBackground;
-    
     document.addEventListener('DOMContentLoaded', () => {
-      // Initialize the background
-      lobbyBackground = new LobbyBackground('map1');
-      
-      // Add a global event listener for map changes
-      document.addEventListener('mapChanged', (event) => {
-        if (lobbyBackground && event.detail && event.detail.mapId) {
-          lobbyBackground.updateMap(event.detail.mapId);
-        }
-      });
+      new LobbyBackground();
     });
-    
-    // Make background available globally if needed
-    window.lobbyBackground = lobbyBackground;
   </script>
 </head>
 <body>
+
+  <!-- ╔══════════════════════════════════════════════════╗
+       ║  LIQUID GLASS — hidden SVG displacement filters  ║
+       ╚══════════════════════════════════════════════════╝ -->
+  <svg xmlns="http://www.w3.org/2000/svg"
+       aria-hidden="true" focusable="false"
+       style="position:absolute;width:0;height:0;overflow:hidden;pointer-events:none">
+    <defs>
+      <!-- Main liquid refraction filter — used on panels via backdrop-filter -->
+      <filter id="lg-refract" x="-30%" y="-30%" width="160%" height="160%" color-interpolation-filters="linearRGB">
+        <feTurbulence type="fractalNoise" baseFrequency="0.012 0.018"
+                      numOctaves="3" seed="7" stitchTiles="stitch" result="noise"/>
+        <feColorMatrix in="noise" type="saturate" values="0" result="grayNoise"/>
+        <feDisplacementMap in="SourceGraphic" in2="grayNoise"
+                           scale="9" xChannelSelector="R" yChannelSelector="G"
+                           result="displaced"/>
+        <feGaussianBlur in="displaced" stdDeviation="0.4" result="softDisplace"/>
+        <feComposite in="softDisplace" in2="SourceGraphic" operator="in"/>
+      </filter>
+
+      <!-- Chromatic aberration — subtle RGB channel split on button edges -->
+      <filter id="lg-chroma" x="-10%" y="-10%" width="120%" height="120%">
+        <feOffset in="SourceGraphic" dx="-0.8" dy="0" result="r"/>
+        <feOffset in="SourceGraphic" dx="0.8"  dy="0" result="b"/>
+        <feBlend in="r" in2="SourceGraphic" mode="screen" result="rb"/>
+        <feBlend in="rb" in2="b" mode="screen"/>
+      </filter>
+
+      <!-- Soft specular glow for panel rim highlights -->
+      <filter id="lg-glow" x="-15%" y="-15%" width="130%" height="130%">
+        <feGaussianBlur in="SourceGraphic" stdDeviation="3" result="blur"/>
+        <feColorMatrix in="blur" type="matrix"
+          values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 14 -3"
+          result="thicken"/>
+        <feMerge>
+          <feMergeNode in="thicken"/>
+          <feMergeNode in="SourceGraphic"/>
+        </feMerge>
+      </filter>
+    </defs>
+  </svg>
+
   <div id="rotate-message">
     <div class="rotate-content">
       <i class="fas fa-sync-alt rotate-icon"></i>
@@ -47,7 +77,7 @@
 
   <!-- Loading Screen -->
   <div id="loading-screen">
-  <h1 class="loading-title">GLO Karts</h1>
+  <h1 class="loading-title">GLO KARTS</h1>
     <div class="loader-container">
       <div class="loader">
         <div class="bar"></div>
@@ -61,181 +91,290 @@
   </div>
 
   <div class="game-container">
-    <!-- Title Area -->
-    <header class="game-header">
-  <h1 class="game-title">GLO Karts</h1>
-    </header>
-    
+    <!-- Title Area (Deleted to allow center title rendering) -->
+
     <!-- Main Content Area -->
     <main class="game-content">
-      <!-- Left Side - Host Controls -->
-      <section class="left-panel">
-        <div class="panel-content">
-          <div id="host-controls">
-            <button id="create-party-btn" class="icon-btn create-btn">Create Party</button>
-            <button id="quick-match-btn" class="icon-btn join-btn">Quick Match</button>
-            <div class="lobby-privacy-row">
-              <label for="lobby-privacy-select">Lobby</label>
-              <select id="lobby-privacy-select">
-                <option value="private" selected>Private (Code)</option>
-                <option value="open">Open (Public)</option>
-              </select>
-            </div>
-            
-            <div id="host-info" class="hidden">
-              <!-- Party Code Display -->
-              <div class="code-display">
-                <div class="code-box">
-                  <span id="party-code" class="code">XXXXXX</span>
-                  <button id="copy-code-btn" class="icon-btn">Copy</button>
-                </div>
-                <p class="code-instructions">Share this code with friends</p>
-                <button id="host-stop-btn" class="icon-btn stop-btn">Stop Hosting</button>
-              </div>
-              
-              <!-- Host's Stop Hosting Button -->
-              
-            </div>
-          </div>
-          
-          <!-- Game Mode Selector -->
+      <!-- Left Panel — Simplified: Mode + Setup all-in-one -->
+      <section class="lens-stack lens-stack-left">
+        <div class="panel-content simplified-left-panel mode-initial">
+          <!-- Game Mode Selector — 3 modes as horizontal cards -->
           <div class="mode-selector-container">
             <h3 class="mode-selector-title">GAME MODE</h3>
-            <div class="mode-buttons">
-              <button class="mode-btn active" data-mode="race">
-                <i class="fas fa-flag-checkered"></i>
-                <span>RACE</span>
-              </button>
-              <button class="mode-btn" data-mode="battle">
-                <i class="fas fa-crosshairs"></i>
-                <span>BATTLE</span>
-              </button>
-            </div>
+            <div class="mode-cards mode-cards-row" id="mode-cards"></div>
           </div>
-          
-          <div class="map-selector-container">
-            <div class="map-dropdown">
-              <button class="dropdown-button">
-                <span class="dropdown-arrow">▼</span>
-                <span class="selected-map-name">Forest Freeway</span>
+
+          <!-- Inline Setup Section — appears below mode cards when a mode is selected -->
+          <div id="inline-setup" class="inline-setup hidden">
+            <!-- Back to Main Menu Header -->
+            <div class="setup-header">
+              <button id="back-to-modes-btn" class="glass-back-btn">
+                <i class="fas fa-chevron-left"></i> Main Menu
               </button>
-              <div class="dropdown-content" id="track-dropdown-options">
-                <!-- Populated dynamically by lobby.js from STK manifest -->
+              <h3 id="active-mode-title" class="active-mode-title"></h3>
+            </div>
+
+            <!-- Track / Arena Carousel -->
+            <div class="map-selector-container">
+              <div class="track-carousel">
+                <div id="track-preview-container" class="track-preview-box">
+                  <img id="track-preview-thumb" class="track-preview-thumb" alt="Track preview" />
+                </div>
+                <p class="track-carousel-title">SELECT TRACK</p>
+                <div class="track-nav-row">
+                  <button id="track-prev-btn" class="kart-nav-btn" aria-label="Previous track">
+                    <svg class="nav-arrow" viewBox="0 0 24 24" fill="currentColor"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
+                  </button>
+                  <div class="track-name-display">
+                    <span id="track-carousel-name">Pompeii Ruins</span>
+                    <span id="track-carousel-index" class="track-carousel-index">1 / 3</span>
+                  </div>
+                  <button id="track-next-btn" class="kart-nav-btn" aria-label="Next track">
+                    <svg class="nav-arrow" viewBox="0 0 24 24" fill="currentColor"><path d="M8.59 16.59L10 18l6-6-6-6-1.41 1.41L13.17 12z"/></svg>
+                  </button>
+                </div>
+              </div>
+              <div class="map-dropdown" style="display:none">
+                <span class="selected-map-name">Pompeii Ruins</span>
+                <div class="dropdown-content" id="track-dropdown-options"></div>
               </div>
             </div>
-          </div>
-          <!-- Battle Settings Panel (hidden unless battle mode) -->
-          <div id="battle-settings" class="battle-settings hidden">
-            <h3 class="battle-settings-title">BATTLE SETTINGS</h3>
-            <div class="battle-setting-group">
-              <label for="battle-type-select">Game Type</label>
-              <select id="battle-type-select">
-                <option value="deathmatch" selected>Deathmatch</option>
+
+            <!-- Race Settings (Quick Race) -->
+            <div id="race-settings" class="battle-settings hidden">
+              <h3 class="battle-settings-title">RACE SETTINGS</h3>
+              <div class="battle-setting-group">
+                <label for="race-bot-count">AI Opponents</label>
+                <input type="number" id="race-bot-count" value="5" min="0" max="11" />
+              </div>
+              <div class="battle-setting-group">
+                <label for="race-laps">Laps</label>
+                <select id="race-laps">
+                  <option value="3" selected>3 Laps</option>
+                  <option value="5">5 Laps</option>
+                  <option value="7">7 Laps</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- Battle Settings (Online Battle) -->
+            <div id="battle-settings" class="battle-settings hidden">
+              <h3 class="battle-settings-title">BATTLE</h3>
+
+              <div class="battle-minimal-shell">
+                <!-- Game Type Cards (like MK8 battle mode picker) -->
+                <div class="battle-mode-grid" role="radiogroup" aria-label="Game type">
+                  <button type="button" class="battle-mode-card battle-preset-btn active" data-rule-preset="classic" aria-pressed="true">
+                    <span class="battle-mode-icon" aria-hidden="true">🏁</span>
+                    <span class="battle-mode-name">Kart Tag</span>
+                    <span class="battle-mode-desc">Free-for-all battle</span>
+                  </button>
+                  <button type="button" class="battle-mode-card battle-preset-btn" data-rule-preset="golden-gun" aria-pressed="false">
+                    <span class="battle-mode-icon" aria-hidden="true">👑</span>
+                    <span class="battle-mode-name">Golden Kart</span>
+                    <span class="battle-mode-desc">One hit, one win</span>
+                  </button>
+                  <button type="button" class="battle-mode-card battle-preset-btn" data-rule-preset="mayhem" aria-pressed="false">
+                    <span class="battle-mode-icon" aria-hidden="true">🚩</span>
+                    <span class="battle-mode-name">Flag Frenzy</span>
+                    <span class="battle-mode-desc">Team capture chaos</span>
+                  </button>
+                </div>
+
+                <!-- Quick Tune (players + win target) -->
+                <div class="battle-tune-bar">
+                  <label class="battle-tune-item" for="battle-max-players-range">
+                    <span class="battle-tune-head">
+                      <span class="battle-tune-label">Players</span>
+                      <output id="battle-max-players-output" class="battle-tune-num" for="battle-max-players-range">8</output>
+                    </span>
+                    <input id="battle-max-players-range" class="battle-tune-slider" type="range" min="2" max="8" step="1" value="8" />
+                  </label>
+                  <label class="battle-tune-item" for="battle-score-limit-range">
+                    <span class="battle-tune-head">
+                      <span id="battle-score-limit-unit" class="battle-tune-label">Knockouts</span>
+                      <output id="battle-score-limit-output" class="battle-tune-num" for="battle-score-limit-range">5</output>
+                    </span>
+                    <input id="battle-score-limit-range" class="battle-tune-slider" type="range" min="1" max="20" step="1" value="5" />
+                  </label>
+                </div>
+
+                <details class="battle-advanced-block" open>
+                  <summary>Weapon Loadout</summary>
+                  <div id="weapon-loadout-row" class="weapon-loadout-row" role="tablist" aria-label="Battle weapon loadouts"></div>
+                  <div id="custom-weapon-panel" class="custom-weapon-panel hidden">
+                    <div class="custom-weapon-head">
+                      <span class="custom-weapon-title">Custom Weapon Pool</span>
+                      <span id="custom-weapon-count" class="custom-weapon-count">0 selected</span>
+                    </div>
+                    <div id="custom-weapon-grid" class="custom-weapon-grid" role="group" aria-label="Custom battle weapon pool"></div>
+                  </div>
+                </details>
+              </div>
+
+              <input type="hidden" id="battle-arena-select" value="battleisland" />
+              <select id="battle-type-select" class="hidden" aria-hidden="true" tabindex="-1">
+                <option value="deathmatch" selected>Kart Tag</option>
                 <option value="ctf">Capture The Flag</option>
               </select>
-            </div>
-            <div class="battle-setting-group">
-              <label for="battle-arena-select">Arena</label>
-              <select id="battle-arena-select">
-                <!-- Populated dynamically by lobby.js from STK manifest -->
+
+              <select id="battle-max-players" class="hidden" aria-hidden="true" tabindex="-1">
+                <option value="2">2 Players</option>
+                <option value="3">3 Players</option>
+                <option value="4">4 Players</option>
+                <option value="5">5 Players</option>
+                <option value="6">6 Players</option>
+                <option value="7">7 Players</option>
+                <option value="8" selected>8 Players</option>
+              </select>
+              <input id="battle-score-limit" class="hidden" aria-hidden="true" tabindex="-1" type="number" value="5" min="1" max="50" />
+              <input id="battle-bot-count" class="hidden" aria-hidden="true" tabindex="-1" type="number" value="0" min="0" max="11" />
+
+              <input id="battle-collision-damage" class="hidden" aria-hidden="true" tabindex="-1" type="checkbox" checked />
+              <input id="battle-radar-enabled" class="hidden" aria-hidden="true" tabindex="-1" type="checkbox" checked />
+              <input id="battle-auto-aim" class="hidden" aria-hidden="true" tabindex="-1" type="checkbox" checked />
+              <input id="battle-random-spawns" class="hidden" aria-hidden="true" tabindex="-1" type="checkbox" checked />
+              <input id="battle-power-weapons" class="hidden" aria-hidden="true" tabindex="-1" type="checkbox" checked />
+              <input id="battle-friendly-fire" class="hidden" aria-hidden="true" tabindex="-1" type="checkbox" />
+              <input id="battle-one-hit-kills" class="hidden" aria-hidden="true" tabindex="-1" type="checkbox" />
+
+              <select id="battle-match-length" class="hidden" aria-hidden="true" tabindex="-1">
+                <option value="8" selected>8 min</option>
+              </select>
+              <select id="battle-health-multiplier" class="hidden" aria-hidden="true" tabindex="-1">
+                <option value="1" selected>100% Standard</option>
+              </select>
+              <select id="battle-respawn-time" class="hidden" aria-hidden="true" tabindex="-1">
+                <option value="4" selected>4s Standard</option>
               </select>
             </div>
-            <div class="battle-setting-group">
-              <label for="battle-max-players">Player Cap</label>
-              <select id="battle-max-players">
-                <option value="12" selected>12 Players</option>
-              </select>
+
+            <!-- GloFLUX Settings -->
+            <div id="gloflux-settings" class="battle-settings hidden">
+              <h3 class="battle-settings-title">GLOFLUX SETTINGS</h3>
+              <div class="battle-setting-group">
+                <label for="gloflux-theme">Wasteland Theme</label>
+                <select id="gloflux-theme">
+                  <option value="nuclear_desert" selected>Nuclear Desert</option>
+                  <option value="fungal_wastes">Fungal Wastes</option>
+                  <option value="frozen_fallout">Frozen Fallout</option>
+                  <option value="molten_ruins">Molten Ruins</option>
+                </select>
+              </div>
+              <div class="battle-setting-group">
+                <label for="gloflux-player-cap">Player Cap</label>
+                <select id="gloflux-player-cap">
+                  <option value="4">4 Players</option>
+                  <option value="6">6 Players</option>
+                  <option value="8" selected>8 Players</option>
+                  <option value="10">10 Players</option>
+                  <option value="12">12 Players</option>
+                </select>
+              </div>
+              <p class="battle-hint">Flux matches are online-only. Host the lobby, ready up, then ignite the start.</p>
             </div>
-            <div class="battle-setting-group">
-              <label for="battle-bot-count">Bots (solo only)</label>
-              <input type="number" id="battle-bot-count" value="6" min="0" max="11" />
+
+            <!-- Split Screen Settings -->
+            <div id="splitscreen-settings" class="battle-settings hidden">
+              <h3 class="battle-settings-title">SPLIT SCREEN</h3>
+              <div class="battle-setting-group">
+                <label for="split-type-select">Mode</label>
+                <select id="split-type-select">
+                  <option value="race" selected>Race</option>
+                  <option value="battle">Battle</option>
+                </select>
+              </div>
+              <p class="battle-hint">WASD vs Arrow Keys — vertical splitscreen.</p>
             </div>
-            <div class="battle-setting-group">
-              <label class="battle-settings-title">WEAPON LOADOUT</label>
-              <div id="weapon-loadout-row" class="weapon-loadout-row"></div>
-            </div>
-            <div class="battle-setting-group">
-              <label class="toggle-label">
-                <input type="checkbox" id="battle-collision-damage" checked>
-                <span>Collision Damage</span>
-              </label>
-            </div>
-            <div class="battle-setting-group">
-              <label for="battle-score-limit">Score / KOs to Win</label>
-              <input type="number" id="battle-score-limit" value="5" min="1" max="50" />
-            </div>
-            <p class="battle-hint">Players Ready Up. Host starts countdown.</p>
           </div>
         </div>
       </section>
       
       <!-- Center - Car Preview -->
       <section class="center-panel">
+        <!-- Title Background Area -->
+        <header class="game-header-bg">
+          <h1 class="game-title pt-bg">GLO KARTS</h1>
+        </header>
+
         <!-- 3D Car Model -->
         <div id="car-model-container"></div>
         
-        <!-- Kart Character Selector -->
-        <div class="kart-selector">
-          <p class="kart-selector-title">SELECT KART</p>
-          <div class="kart-nav-row">
-            <button id="kart-prev-btn" class="kart-nav-btn" aria-label="Previous kart">
-              <i class="fas fa-chevron-left"></i>
-            </button>
-            <div class="kart-name-display">
-              <span id="kart-name">Tux</span>
-              <span id="kart-index" class="kart-index">1 / 18</span>
+        <!-- Kart & GLO Controls Row -->
+        <div class="kart-glo-row">
+          <!-- Kart Character Selector -->
+          <div class="kart-selector">
+            <p class="kart-selector-title">SELECT KART</p>
+            <div class="kart-nav-row">
+              <button id="kart-prev-btn" class="kart-nav-btn" aria-label="Previous kart">
+                <svg class="nav-arrow" viewBox="0 0 24 24" fill="currentColor"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
+              </button>
+              <div class="kart-name-display">
+                <span id="kart-name">Tux</span>
+                <span id="kart-index" class="kart-index">1 / 18</span>
+              </div>
+              <button id="kart-next-btn" class="kart-nav-btn" aria-label="Next kart">
+                <svg class="nav-arrow" viewBox="0 0 24 24" fill="currentColor"><path d="M8.59 16.59L10 18l6-6-6-6-1.41 1.41L13.17 12z"/></svg>
+              </button>
             </div>
-            <button id="kart-next-btn" class="kart-nav-btn" aria-label="Next kart">
-              <i class="fas fa-chevron-right"></i>
-            </button>
+            <p class="kart-selector-title">RACER NAME</p>
+            <input type="text" id="player-name-input" placeholder="Enter Your Nickname" maxlength="15">
           </div>
-        </div>
-        
-        <!-- Player Name Input -->
-        <div class="player-name-container">
-          <h3>YOUR NAME</h3>
-          <input type="text" id="player-name-input" placeholder="Enter your name" maxlength="15">
-        </div>
 
-        <!-- GLO Underglow Picker -->
-        <div id="glo-picker-container" class="glo-picker">
-          <p class="glo-picker-title">PICK YOUR GLO</p>
-          <div id="glo-effects-row" class="glo-effects-row"></div>
-          <div id="glo-swatches" class="glo-swatches"></div>
-          <div class="glo-custom-row">
-            <label class="glo-label">Color</label>
-            <input type="color" id="glo-color-picker" value="#ff0080">
-          </div>
-          <div id="glo-color2-row" class="glo-custom-row" style="display:none">
-            <label class="glo-label">Color 2</label>
-            <input type="color" id="glo-color-picker2" value="#00e5ff">
+          <!-- GLO Underglow Picker -->
+          <div id="glo-picker-container" class="glo-picker">
+            <p class="glo-picker-title">PICK YOUR GLO</p>
+            <div id="glo-carousel" class="glo-carousel"></div>
           </div>
         </div>
 
-        <!-- Always-visible Play Button -->
-        <button id="play-btn" class="game-btn play-btn">PLAY GAME</button>
-        <button id="battle-start-btn" class="game-btn play-btn hidden">START BATTLE</button>
+        <!-- Action Buttons -->
+        <button id="play-btn" class="game-btn play-btn" disabled>PLAY GAME</button>
+        <div id="play-btn-indicator" class="play-indicator hidden">
+          <span class="play-indicator-dot"></span>
+          <span id="play-indicator-label" class="play-indicator-label">Select a mode</span>
+        </div>
+        <button id="ready-btn" class="game-btn ready-btn hidden">READY UP</button>
+        <button id="start-match-btn" class="game-btn start-match-btn hidden">START MATCH</button>
       </section>
       
-      <!-- Right Side - Players List and Join -->
-      <section class="right-panel">
-        <div class="panel-content">
-          <h2 class="panel-title hidden">RACERS</h2>
-          <div class="players-container hidden">
-            <ul id="player-list" class="player-list">
-              <li class="no-players">No racers have joined yet</li>
-            </ul>
-            <div id="ready-states" class="ready-states hidden"></div>
-          </div>
-          
-          <!-- Join Lobby Section -->
-          <div class="join-section">
-            <div id="code-input">
-              <div class="code-input">
-                <input type="text" id="join-code-input" placeholder="Enter lobby code" maxlength="64">
-                <button id="join-party-btn" class="icon-btn join-btn">Join</button>
+      <!-- Right Lens Stack -->
+      <section class="lens-stack lens-stack-right">
+        <nav class="lens-nav">
+          <div class="lens-pill lens-pill-join active" data-lens="lobby-join">
+            <div class="lens-pill-join-header"><i class="fas fa-users"></i> LOBBY & JOIN</div>
+            <div class="join-section">
+              <div id="code-input">
+                <div class="code-input lens-pill-code-input">
+                  <input type="text" id="join-code-input" placeholder="Enter three-word party code" maxlength="64">
+                  <button id="join-party-btn" class="icon-btn join-btn">Join</button>
+                </div>
+                <p id="join-status" class="status-message"></p>
               </div>
-              <p id="join-status" class="status-message"></p>
+            </div>
+          </div>
+        </nav>
+        <div class="lens-deck">
+          <div class="lens-card active" data-lens="lobby-join">
+            <div class="panel-content">
+              <h2 class="panel-title racers-title"><span class="gb-g">G</span><span class="gb-s">L</span><span class="gb-s">O</span><span class="gb-l">B</span><span class="gb-l">B</span><span class="gb-l">Y</span></h2>
+
+              <!-- Lobby Dashboard — hidden until a lobby connects -->
+              <div id="host-info" class="lobby-dashboard hidden">
+                <div class="lobby-dash-code-block">
+                  <div class="code-box">
+                    <span id="party-code" class="code">NEON-FOX-BOOST</span>
+                    <button id="copy-code-btn" class="icon-btn">Copy</button>
+                  </div>
+                </div>
+
+                <button id="host-stop-btn" class="icon-btn stop-btn">Stop Hosting</button>
+              </div>
+
+              <div class="players-container">
+                <ul id="player-list" class="player-list"></ul>
+                <div id="ready-count" class="ready-count hidden"></div>
+              </div>
             </div>
           </div>
         </div>
@@ -243,33 +382,23 @@
     </main>
   </div>
 
-  <!-- Personal website link button -->
-  <a href="https://aadikulshrestha.ca" target="_blank" class="website-link-btn" aria-label="Visit Aadi Kulshrestha's website">
-    <i class="fas fa-external-link-alt"></i>
-  </a>
-
-  <!-- Info button -->
-  <button class="info-btn" id="info-btn" aria-label="Game information">
-    <i class="fas fa-info"></i>
-  </button>
-
   <!-- Music toggle -->
   <button class="mute-btn" id="mute-btn" aria-label="Toggle music">
-    <i class="fas fa-music" id="mute-icon"></i>
+    <i class="fas fa-volume-up" id="mute-icon"></i>
   </button>
 
   <!-- Background music (STK menu theme) -->
-  <audio id="menu-music" src="/audio/music/menutheme.ogg" loop preload="auto"></audio>
+  <audio id="menu-music" src="/audio/music/music%202/main%20menu.mp3" loop preload="auto"></audio>
 
   <!-- Info popup -->
   <div id="info-popup" class="info-popup hidden">
     <div class="info-overlay"></div>
     <div class="info-content">
-      <h2>GLO Karts</h2>
+      <h2>GLO KARTS</h2>
       
       <div class="info-section">
         <h3>About the Game</h3>
-        <p>GLO Karts is a multiplayer 3D kart racing game featuring characters, tracks, and arenas from <strong>SuperTuxKart</strong>. Race across 18 unique courses or battle it out in 9 dedicated arenas — solo or with friends.</p>
+        <p>GLO KARTS is a multiplayer 3D kart racing game featuring characters, tracks, and arenas from <strong>SuperTuxKart</strong>. Race across 18 unique courses or battle it out in 9 dedicated arenas — solo or with friends.</p>
       </div>
       
       <div class="info-section">
@@ -291,7 +420,7 @@
 
       <div class="info-section">
         <h3>Asset Credits</h3>
-        <p>Kart characters, tracks, arenas, music, and sound effects are from <strong>SuperTuxKart</strong> (supertuxkart.net), released under GPL v3 / Creative Commons licenses. GLO Karts is a fan project and is not affiliated with the STK team.</p>
+        <p>Kart characters, tracks, arenas, music, and sound effects are from <strong>SuperTuxKart</strong> (supertuxkart.net), released under GPL v3 / Creative Commons licenses. GLO KARTS is a fan project and is not affiliated with the STK team.</p>
       </div>
       
       <button id="close-info-btn" class="icon-btn">Close</button>
@@ -308,3 +437,5 @@
   </script>
 </body>
 </html>
+
+
