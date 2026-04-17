@@ -36,6 +36,8 @@
         <button id="bv2-save" class="bv2-btn bv2-btn--accent" title="Save (Ctrl+S)"><svg viewBox="0 0 24 24"><path d="M17 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V7l-4-4zm-5 16c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zm3-10H5V5h10v4z"/></svg></button>
         <button id="bv2-load" class="bv2-btn" title="Load project"><svg viewBox="0 0 24 24"><path d="M9 16h6v-6h4l-7-7-7 7h4v6zm-4 2h14v2H5v-2z"/></svg></button>
         <button id="bv2-share" class="bv2-btn" title="Share"><svg viewBox="0 0 24 24"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81 1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9c-1.66 0-3 1.34-3 3s1.34 3 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.16c-.05.21-.08.43-.08.65 0 1.61 1.31 2.92 2.92 2.92s2.92-1.31 2.92-2.92-1.31-2.92-2.92-2.92z"/></svg></button>
+        <button id="bv2-publish" class="bv2-btn" title="Publish to community"><svg viewBox="0 0 24 24"><path d="M5 4v2h14V4H5zm0 10h4v6h6v-6h4l-7-7-7 7z"/></svg></button>
+        <button id="bv2-browse" class="bv2-btn" title="Browse community tracks"><svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg></button>
         <div class="bv2-sep"></div>
         <button id="bv2-play" class="bv2-btn bv2-btn--cta" title="Test drive your track"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></button>
       </header>
@@ -116,30 +118,75 @@
                 <h1 class="bv2-landing-title">Build. Race. Repeat.</h1>
                 <p id="bv2-landing-subtitle" class="bv2-landing-subtitle"></p>
               </div>
-              <button id="bv2-landing-close" class="bv2-btn" type="button"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg> Enter</button>
+              <div class="bv2-landing-head-actions">
+                <button id="bv2-land-back" class="bv2-btn bv2-btn--ghost" type="button"><svg viewBox="0 0 24 24" width="16" height="16"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg> Lobby</button>
+                <button id="bv2-landing-close" class="bv2-btn bv2-btn--accent" type="button"><svg viewBox="0 0 24 24" width="16" height="16"><path d="M8 5v14l11-7z"/></svg> Enter</button>
+              </div>
             </div>
             <div class="bv2-landing-grid">
               <section class="bv2-landing-panel">
-                <div class="bv2-panel-section-head">Start</div>
+                <div class="bv2-panel-section-head"><svg viewBox="0 0 24 24" width="14" height="14"><path d="M13 7h-2v4H7v2h4v4h2v-4h4v-2h-4V7zm-1-5C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z"/></svg> Start</div>
                 <div class="bv2-launch-actions">
-                  <button id="bv2-landing-resume" class="bv2-launch-card" type="button">
-                    <span class="bv2-launch-label">Resume Session</span>
-                    <span id="bv2-landing-resume-copy" class="bv2-launch-copy">Continue from auto-save.</span>
+                  <button id="bv2-land-continue" class="bv2-launch-card" type="button">
+                    <span class="bv2-launch-icon"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></span>
+                    <div class="bv2-launch-text">
+                      <span class="bv2-launch-label">Resume Session</span>
+                      <span id="bv2-land-autosave-info" class="bv2-launch-copy">Continue from auto-save.</span>
+                    </div>
                   </button>
-                  <button id="bv2-landing-new-track" class="bv2-launch-card" type="button">
-                    <span class="bv2-launch-label">New Race Track</span>
-                    <span class="bv2-launch-copy">Paint roads, add pieces, race.</span>
+                  <button id="bv2-land-new" class="bv2-launch-card" type="button">
+                    <span class="bv2-launch-icon bv2-launch-icon--track"><svg viewBox="0 0 24 24"><path d="M11 2h2v4h-2zm0 6h2v4h-2zm0 6h2v4h-2zm0 6h2v2h-2zM4 2h4v20H4zM16 2h4v20h-4z" fill-rule="evenodd"/></svg></span>
+                    <div class="bv2-launch-text">
+                      <span class="bv2-launch-label">New Race Track</span>
+                      <span class="bv2-launch-copy">Paint roads, add pieces, race.</span>
+                    </div>
                   </button>
-                  <button id="bv2-landing-new-arena" class="bv2-launch-card" type="button">
-                    <span class="bv2-launch-label">New Battle Arena</span>
-                    <span class="bv2-launch-copy">Place structures, set spawns, fight.</span>
+                  <button id="bv2-land-new-arena" class="bv2-launch-card" type="button">
+                    <span class="bv2-launch-icon bv2-launch-icon--arena"><svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5zm0 13L2 10v5l10 5 10-5v-5z"/></svg></span>
+                    <div class="bv2-launch-text">
+                      <span class="bv2-launch-label">New Battle Arena</span>
+                      <span class="bv2-launch-copy">Place structures, set spawns, fight.</span>
+                    </div>
+                  </button>
+                  <button id="bv2-land-saved" class="bv2-launch-card" type="button">
+                    <span class="bv2-launch-icon bv2-launch-icon--saved"><svg viewBox="0 0 24 24"><path d="M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg></span>
+                    <div class="bv2-launch-text">
+                      <span class="bv2-launch-label">Load Saved</span>
+                      <span class="bv2-launch-copy">Open a previously saved project.</span>
+                    </div>
+                  </button>
+                  <button id="bv2-land-import" class="bv2-launch-card" type="button">
+                    <span class="bv2-launch-icon bv2-launch-icon--import"><svg viewBox="0 0 24 24"><path d="M9 16h6v-6h4l-7-7-7 7h4v6zm-4 2h14v2H5v-2z"/></svg></span>
+                    <div class="bv2-launch-text">
+                      <span class="bv2-launch-label">Import Share Code</span>
+                      <span class="bv2-launch-copy">Paste a code from a friend.</span>
+                    </div>
                   </button>
                 </div>
               </section>
               <section class="bv2-landing-panel">
-                <div class="bv2-panel-section-head">Recent</div>
+                <div class="bv2-panel-section-head"><svg viewBox="0 0 24 24" width="14" height="14"><path d="M13 3c-4.97 0-9 4.03-9 9H1l3.89 3.89.07.14L9 12H6c0-3.87 3.13-7 7-7s7 3.13 7 7-3.13 7-7 7c-1.93 0-3.68-.79-4.94-2.06l-1.42 1.42A8.954 8.954 0 0013 21c4.97 0 9-4.03 9-9s-4.03-9-9-9zm-1 5v5l4.28 2.54.72-1.21-3.5-2.08V8H12z"/></svg> Recent</div>
                 <div id="bv2-recent-projects" class="bv2-recent-projects"></div>
               </section>
+            </div>
+            <!-- Saves sub-panel -->
+            <div id="bv2-land-saves-panel" class="bv2-land-subpanel" hidden>
+              <div class="bv2-land-subpanel-head">
+                <span>Saved Projects</span>
+                <button id="bv2-land-saves-close" class="bv2-btn bv2-btn--icon" type="button"><svg viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg></button>
+              </div>
+              <div id="bv2-land-saves-list" class="bv2-land-saves-list"></div>
+            </div>
+            <!-- Import sub-panel -->
+            <div id="bv2-land-import-panel" class="bv2-land-subpanel" hidden>
+              <div class="bv2-land-subpanel-head">
+                <span>Import Share Code</span>
+                <button id="bv2-land-import-close" class="bv2-btn bv2-btn--icon" type="button"><svg viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg></button>
+              </div>
+              <div class="bv2-land-import-body">
+                <input id="bv2-land-import-code" class="bv2-land-import-input" type="text" placeholder="Paste share code…" autocomplete="off" spellcheck="false" />
+                <button id="bv2-land-import-go" class="bv2-btn bv2-btn--accent" type="button">Import</button>
+              </div>
             </div>
           </div>
         </div>
@@ -152,7 +199,8 @@
         </div>
 
         <!-- Floating action ring (TinkerCad-style, follows selected piece) -->
-        <div id="bv2-action-ring" class="bv2-action-ring" hidden>
+        <div id="bv2-marquee" class="bv2-marquee" hidden></div>
+        <div id="bv2-action-ring" class="bv2-action-ring" hidden>>
           <button id="bv2-ring-ccw" class="bv2-ring-btn" type="button" title="Rotate 90° left">
             <svg viewBox="0 0 24 24"><path d="M7.11 8.53L5.7 7.11C4.8 8.27 4.24 9.61 4.07 11h2.02c.14-.87.49-1.72 1.02-2.47zM6.09 13H4.07c.17 1.39.72 2.73 1.62 3.89l1.41-1.42c-.52-.75-.87-1.59-1.01-2.47zm1.01 5.32c1.16.9 2.51 1.44 3.9 1.61V17.9c-.87-.15-1.71-.49-2.46-1.03L7.1 18.32zM13 4.07V1L8.45 5.55 13 10V6.09c2.84.48 5 2.94 5 5.91s-2.16 5.43-5 5.91v2.02c3.95-.49 7-3.85 7-7.93s-3.05-7.44-7-7.93z"/></svg>
           </button>

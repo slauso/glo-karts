@@ -48,6 +48,7 @@ export class ViewCube {
     this._hoveredFace = null;
     this._isDragging = false;
     this._dragStart = { x: 0, y: 0 };
+    this._dragLast  = { x: 0, y: 0 };
     this._onDragRotate = null; // callback: (deltaAzimuth, deltaPolar) => void
 
     const w = canvas.width = 140;
@@ -160,10 +161,10 @@ export class ViewCube {
 
   _onPointerMove(e) {
     if (this._isDragging && this._onDragRotate) {
-      const dx = e.clientX - this._dragStart.x;
-      const dy = e.clientY - this._dragStart.y;
-      this._dragStart.x = e.clientX;
-      this._dragStart.y = e.clientY;
+      const dx = e.clientX - this._dragLast.x;
+      const dy = e.clientY - this._dragLast.y;
+      this._dragLast.x = e.clientX;
+      this._dragLast.y = e.clientY;
       // Convert pixel delta to radians (sensitivity)
       this._onDragRotate(-dx * 0.008, -dy * 0.008);
       return;
@@ -190,6 +191,7 @@ export class ViewCube {
 
   _onPointerDown(e) {
     this._dragStart = { x: e.clientX, y: e.clientY };
+    this._dragLast  = { x: e.clientX, y: e.clientY };
     this._isDragging = true;
     this._dragFace = this._hoveredFace;
     this._canvas.setPointerCapture(e.pointerId);

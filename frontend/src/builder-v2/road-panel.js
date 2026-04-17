@@ -131,7 +131,7 @@ export class RoadPainter {
   }
 
   /** Determine piece + rotation from 4-bit neighbor bitmask. */
-  _classifyCell(x, z) {
+  classifyCell(x, z) {
     const N = this.cells.has(cellKey(x, z - GRID_SIZE)) ? 8 : 0;
     const S = this.cells.has(cellKey(x, z + GRID_SIZE)) ? 4 : 0;
     const E = this.cells.has(cellKey(x + GRID_SIZE, z)) ? 2 : 0;
@@ -182,7 +182,7 @@ export class RoadPainter {
       cell.mesh = null;
     }
 
-    const { model, rotation } = this._classifyCell(x, z);
+    const { model, rotation } = this.classifyCell(x, z);
 
     try {
       const mesh = await this._loadModel(model);

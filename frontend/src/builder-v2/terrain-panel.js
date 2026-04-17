@@ -2,19 +2,24 @@
  * terrain-panel.js — Ground plane size, material, simple height editing.
  */
 import * as THREE from 'three';
+import { GROUND_PRESETS, SKYBOX_PRESETS } from '../modules/track-materials.js';
 
 export class TerrainPanel {
   /**
    * @param {HTMLElement} container
    * @param {THREE.Mesh} ground
    * @param {THREE.GridHelper} grid
+   * @param {THREE.Scene} [scene]
    */
-  constructor(container, ground, grid) {
+  constructor(container, ground, grid, scene) {
     this._container = container;
     this._ground = ground;
     this._grid = grid;
+    this._scene = scene || null;
     this._size = 200;
     this._color = '#222240';
+    this._groundPreset = 'dark';
+    this._skyboxPreset = 'day';
     this._center = new THREE.Vector3(0, 0, 0);
     this._build();
   }
@@ -66,6 +71,50 @@ export class TerrainPanel {
     });
     gridRow.appendChild(gridCheck);
     this._container.appendChild(gridRow);
+
+    // Ground preset
+    const groundRow = this._makeRow('Ground Preset');
+    const groundSel = document.createElement('select');
+    groundSel.className = 'bv2-select';
+    for (const [key, preset] of Object.entries(GROUND_PRESETS)) {
+      const opt = document.createElement('option');
+      opt.value = key;
+      opt.textContent = preset.label;
+      if (key === this._groundPreset) opt.selected = true;
+      groundSel.appendChild(opt);
+    }
+    groundSel.addEventListener('change', () => {
+      this._groundPreset = groundSel.value;
+      const p = GROUND_PRESETS[this._groundPreset];
+      if (p) {
+        this._color = '#' + p.color.toString(16).padStart(6, '0');
+        this._ground.material.color.set(p.color);
+      }
+    });
+    groundRow.appendChild(groundSel);
+    this._container.appendChild(groundRow);
+
+    // Skybox preset
+    const skyRow = this._makeRow('Skybox');
+    const skySel = document.createElement('select');
+    skySel.className = 'bv2-select';
+    for (const [key, preset] of Object.entries(SKYBOX_PRESETS)) {
+      const opt = document.createElement('option');
+      opt.value = key;
+      opt.textContent = preset.label;
+      if (key === this._skyboxPreset) opt.selected = true;
+      skySel.appendChild(opt);
+    }
+    skySel.addEventListener('change', () => {
+      this._skyboxPreset = skySel.value;
+      const p = SKYBOX_PRESETS[this._skyboxPreset];
+      if (p && this._scene) {
+        this._scene.background = new THREE.Color(p.clearColor);
+        this._scene.fog = new THREE.FogExp2(p.fogColor, p.fogDensity);
+      }
+    });
+    skyRow.appendChild(skySel);
+    this._container.appendChild(skyRow);
   }
 
   _makeRow(label) {
@@ -107,7 +156,7 @@ export class TerrainPanel {
   }
 
   getSettings() {
-    return { size: this._size, color: this._color };
+    return { size: this._size, color: this._color, groundPreset: this._groundPreset, skyboxPreset: this._skyboxPreset };
   }
 
   applySettings(settings) {
@@ -118,6 +167,20 @@ export class TerrainPanel {
     if (settings?.color) {
       this._color = settings.color;
       this._ground.material.color.set(this._color);
+    }
+    if (settings?.groundPreset && GROUND_PRESETS[settings.groundPreset]) {
+      this._groundPreset = settings.groundPreset;
+      const p = GROUND_PRESETS[this._groundPreset];
+      this._color = '#' + p.color.toString(16).padStart(6, '0');
+      this._ground.material.color.set(p.color);
+    }
+    if (settings?.skyboxPreset && SKYBOX_PRESETS[settings.skyboxPreset]) {
+      this._skyboxPreset = settings.skyboxPreset;
+      const p = SKYBOX_PRESETS[this._skyboxPreset];
+      if (this._scene) {
+        this._scene.background = new THREE.Color(p.clearColor);
+        this._scene.fog = new THREE.FogExp2(p.fogColor, p.fogDensity);
+      }
     }
   }
 }

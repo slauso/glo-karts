@@ -16,12 +16,15 @@ import {
   PhysicsMotionType,
   PhysicsRaycastResult,
   StandardMaterial,
+  PBRMaterial,
   Color3,
   Color4,
   PostProcess,
   Effect,
   VertexBuffer,
 } from "@babylonjs/core";
+import { ShadowGenerator } from "@babylonjs/core/Lights/Shadows/shadowGenerator";
+import "@babylonjs/core/Lights/Shadows/shadowGeneratorSceneComponent";
 import { TransformNode } from "@babylonjs/core/Meshes/transformNode";
 import { ParticleSystem } from "@babylonjs/core/Particles/particleSystem";
 import { CubeTexture } from "@babylonjs/core/Materials/Textures/cubeTexture";
@@ -501,6 +504,12 @@ export class ColyseusBabylonClient {
     dirLight.intensity = 0.8;
     dirLight.position = new Vector3(20, 40, 20);
 
+    // Shadow generator — matches builder viewport (PCFSoft, 2048)
+    const shadowGen = new ShadowGenerator(2048, dirLight);
+    shadowGen.usePercentageCloserFiltering = true;
+    shadowGen.filteringQuality = ShadowGenerator.QUALITY_MEDIUM;
+    this._shadowGenerator = shadowGen;
+
     try {
       const hk = await HavokPhysics({
         locateFile: (path) => (path.endsWith(".wasm") ? HAVOK_WASM_PUBLIC_PATH : path),
@@ -785,6 +794,7 @@ export class ColyseusBabylonClient {
         }
 
         // Bake the full world transform into vertex data
+        if (clone.makeGeometryUnique) clone.makeGeometryUnique();
         clone.computeWorldMatrix(true);
         clone.bakeCurrentTransformIntoVertices();
         clone.parent = null;
@@ -872,7 +882,13 @@ export class ColyseusBabylonClient {
       blockfort:  { clear: [0.45, 0.65, 0.95, 1], fog: 'exp2', fogDensity: 0.003, fogColor: [0.45, 0.65, 0.95], hemiInt: 0.7, dirInt: 1.0 },
       stadium:    { clear: [0.35, 0.55, 0.85, 1], fog: 'exp2', fogDensity: 0.002, fogColor: [0.35, 0.55, 0.85], hemiInt: 0.8, dirInt: 1.0 },
       debug_arena:{ clear: [0.55, 0.62, 0.72, 1], fog: 'none', fogDensity: 0, fogColor: [0.55, 0.62, 0.72], hemiInt: 1.0, dirInt: 1.2 },
-      custom_import: { clear: [0.05, 0.08, 0.12, 1], fog: 'none', fogDensity: 0, fogColor: [0.05, 0.08, 0.12], hemiInt: 0.92, dirInt: 1.1, exposure: 1.0, contrast: 1.03 },
+      custom_import: {
+        clear: [0.102, 0.102, 0.180, 1],
+        fog: 'exp2', fogDensity: 0.004, fogColor: [0.102, 0.102, 0.180],
+        hemiInt: 0.85, dirInt: 1.2, exposure: 1.0, contrast: 1.03,
+        hemiSky: [0.533, 0.600, 0.800], hemiGround: [0.267, 0.200, 0.133],
+        dirPosition: [40, 60, 30],
+      },
       test_box:   { clear: [0.45, 0.65, 0.95, 1], fog: 'exp2', fogDensity: 0.003, fogColor: [0.45, 0.65, 0.95], hemiInt: 0.7, dirInt: 1.0 },
     };
     const env = ENVS[arenaId] || ENVS.test_box;
@@ -890,8 +906,15 @@ export class ColyseusBabylonClient {
     // Tune existing lights
     const hemi = this.scene.getLightByName('hemiLight');
     const dir  = this.scene.getLightByName('dirLight');
-    if (hemi) hemi.intensity = env.hemiInt;
-    if (dir)  dir.intensity  = env.dirInt;
+    if (hemi) {
+      hemi.intensity = env.hemiInt;
+      if (env.hemiSky)    hemi.diffuse  = new Color3(env.hemiSky[0], env.hemiSky[1], env.hemiSky[2]);
+      if (env.hemiGround) hemi.groundColor = new Color3(env.hemiGround[0], env.hemiGround[1], env.hemiGround[2]);
+    }
+    if (dir) {
+      dir.intensity = env.dirInt;
+      if (env.dirPosition) dir.position = new Vector3(env.dirPosition[0], env.dirPosition[1], env.dirPosition[2]);
+    }
 
     this.scene.imageProcessingConfiguration.exposure = env.exposure || 1;
     this.scene.imageProcessingConfiguration.contrast = env.contrast || 1;
@@ -1149,9 +1172,10 @@ export class ColyseusBabylonClient {
       const floorHeight = 0.6;
       const floorY = Math.min(bounds.min.y || 0, 0) - floorHeight;
 
-      const floorMat = new StandardMaterial('custom-arena-floor-mat', this.scene);
-      floorMat.diffuseColor = new Color3(0.07, 0.1, 0.15);
-      floorMat.specularColor = new Color3(0.03, 0.05, 0.07);
+      const floorMat = new PBRMaterial('custom-arena-floor-mat', this.scene);
+      floorMat.albedoColor = new Color3(0.07, 0.1, 0.15);
+      floorMat.roughness = 0.95;
+      floorMat.metallic = 0.02;
 
       const floor = MeshBuilder.CreateBox('custom-arena-floor', {
         width: floorWidth,
@@ -1173,7 +1197,7 @@ export class ColyseusBabylonClient {
       }
 
       const importSegmentVisual = async (segment, index) => {
-        const procedural = buildCustomArenaSegmentVisual(this.scene, segment?.type, segment.id || index);
+        const procedural = await buildCustomArenaSegmentVisual(this.scene, segment?.type, segment.id || index);
         if (!procedural) {
           console.warn(`[realtime] Unknown custom arena segment type: ${String(segment?.type || 'unknown')}`);
         }
@@ -1196,9 +1220,10 @@ export class ColyseusBabylonClient {
           depth: dims.length,
           height: dims.height,
         }, this.scene);
-        const material = new StandardMaterial(`custom-segment-fallback-mat-${index}`, this.scene);
-        material.diffuseColor = color;
-        material.specularColor = new Color3(0.1, 0.12, 0.18);
+        const material = new PBRMaterial(`custom-segment-fallback-mat-${index}`, this.scene);
+        material.albedoColor = color;
+        material.roughness = 0.92;
+        material.metallic = 0.04;
         mesh.material = material;
         mesh.position.y = dims.height * 0.5;
         mesh.receiveShadows = true;
@@ -1345,10 +1370,10 @@ export class ColyseusBabylonClient {
       const createResidualSegmentSeamBlends = (pairs) => {
         if (!pairs.length) return;
 
-        const seamMaterial = new StandardMaterial('custom-arena-seam-mat', this.scene);
-        seamMaterial.diffuseColor = new Color3(0.155, 0.165, 0.18);
-        seamMaterial.specularColor = new Color3(0.01, 0.01, 0.01);
-        seamMaterial.emissiveColor = new Color3(0.015, 0.016, 0.018);
+        const seamMaterial = new PBRMaterial('custom-arena-seam-mat', this.scene);
+        seamMaterial.albedoColor = new Color3(0.155, 0.165, 0.18);
+        seamMaterial.roughness = 0.95;
+        seamMaterial.metallic = 0.02;
         seamMaterial.alpha = 0.98;
 
         for (const pair of pairs) {
@@ -1502,11 +1527,19 @@ export class ColyseusBabylonClient {
             progress: 0.42 + (((segmentIndex + 1) / totalSegments) * 0.28),
           });
         }
+
+        // Register segment meshes as shadow casters
+        if (this._shadowGenerator && segmentVisual.renderMeshes?.length) {
+          for (const rm of segmentVisual.renderMeshes) {
+            this._shadowGenerator.addShadowCaster(rm);
+            rm.receiveShadows = true;
+          }
+        }
       }
 
       // Builder playtests already provide authored world coordinates.
       // Do not nudge pieces in runtime; preserve 1:1 placement.
-      const connectorPairs = [];
+      const connectorPairs = findMatchedConnectorPairs(segmentRecords);
 
       if (typeof window !== 'undefined' && window.__gloDebug) {
         window.__gloDebug.customArenaInputSegments = (trackData?.segments || []).map((segment) => ({
@@ -1543,6 +1576,7 @@ export class ColyseusBabylonClient {
               const absScale = new Vector3();
               mesh.getWorldMatrix().decompose(absScale);
               clone.scaling.copyFrom(absScale);
+              if (clone.makeGeometryUnique) clone.makeGeometryUnique();
               clone.bakeCurrentTransformIntoVertices();
               clone.isVisible = false;
               const agg = new PhysicsAggregate(clone, PhysicsShapeType.MESH, {
@@ -1617,14 +1651,18 @@ export class ColyseusBabylonClient {
           obstacleMesh.scaling.scaleInPlace(7.2);
         } else if (obstacleType === 'boost_pad') {
           obstacleMesh = MeshBuilder.CreateBox(`custom-obstacle-${index}`, { width: 7.2, height: 0.6, depth: 11.2 }, this.scene);
-          const boostMat = new StandardMaterial(`custom-obstacle-mat-${index}`, this.scene);
-          boostMat.diffuseColor = new Color3(0, 0.66, 1);
+          const boostMat = new PBRMaterial(`custom-obstacle-mat-${index}`, this.scene);
+          boostMat.albedoColor = new Color3(0, 0.66, 1);
           boostMat.emissiveColor = new Color3(0.06, 0.31, 0.4);
+          boostMat.roughness = 0.6;
+          boostMat.metallic = 0.1;
           obstacleMesh.material = boostMat;
         } else {
           obstacleMesh = MeshBuilder.CreateBox(`custom-obstacle-${index}`, { width: 9.5, height: 5.5, depth: 2.5 }, this.scene);
-          const barrierMat = new StandardMaterial(`custom-obstacle-mat-${index}`, this.scene);
-          barrierMat.diffuseColor = new Color3(0.4, 0.46, 0.54);
+          const barrierMat = new PBRMaterial(`custom-obstacle-mat-${index}`, this.scene);
+          barrierMat.albedoColor = new Color3(0.4, 0.46, 0.54);
+          barrierMat.roughness = 0.85;
+          barrierMat.metallic = 0.1;
           obstacleMesh.material = barrierMat;
         }
 
@@ -1651,8 +1689,10 @@ export class ColyseusBabylonClient {
 
       const wallThickness = 8;
       const wallHeight = 6;
-      const wallMat = new StandardMaterial('custom-arena-wall-mat', this.scene);
-      wallMat.diffuseColor = new Color3(0.16, 0.18, 0.24);
+      const wallMat = new PBRMaterial('custom-arena-wall-mat', this.scene);
+      wallMat.albedoColor = new Color3(0.16, 0.18, 0.24);
+      wallMat.roughness = 0.9;
+      wallMat.metallic = 0.05;
 
       const createWall = (name, width, height, depth, x, y, z) => {
         const wall = MeshBuilder.CreateBox(name, { width, height, depth }, this.scene);

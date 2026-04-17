@@ -33,7 +33,7 @@ function hideCountdownOverlay() {
 
 function getGameConfig() {
   try {
-    const raw = sessionStorage.getItem('gameConfig');
+    const raw = sessionStorage.getItem('gameConfig') || localStorage.getItem('gameConfig');
     return raw ? JSON.parse(raw) : null;
   } catch {
     return null;
@@ -155,7 +155,7 @@ async function bootRealtime() {
     gloColor: playerInfo.gloColor || sessionStorage.getItem('gloColor') || localStorage.getItem('gloColor') || '#ff0080',
     gloColor2: playerInfo.gloColor2 || sessionStorage.getItem('gloColor2') || localStorage.getItem('gloColor2') || '#00e5ff',
   };
-  const stagedCustomTrackData = config?.customTrackData || sessionStorage.getItem('customTrackData') || '';
+  const stagedCustomTrackData = config?.customTrackData || sessionStorage.getItem('customTrackData') || localStorage.getItem('customTrackData') || '';
 
   logCustomArenaHandoff('bootRealtime config', {
     roomName,

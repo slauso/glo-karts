@@ -26,7 +26,7 @@ export function oppositeDir(d) { return (d + 2) % 4; }
 export const PIECE_DEFS = {
   // ── Basics (flat, common) ──
   'straight':          { ports: [DIR.N, DIR.S], category: 'basic' },
-  'wide':              { ports: [DIR.N, DIR.E, DIR.S, DIR.W], category: 'basic' },
+  'wide':              { ports: [DIR.N, DIR.E, DIR.S, DIR.W], category: 'basic', footprint: [[0,0],[1,0],[0,1],[1,1]] },
 
   // ── Corners & curves ──
   'corner-small':      { ports: [DIR.N, DIR.E], category: 'corner' },
@@ -55,15 +55,71 @@ export const PIECE_DEFS = {
   'cap-front':         { ports: [DIR.S], category: 'cap' },
   'cap-back':          { ports: [DIR.N], category: 'cap' },
   'end':               { ports: [DIR.S], category: 'cap' },
+
+  // ── Phase 3 — Junctions ──
+  't-junction':        { ports: [DIR.N, DIR.E, DIR.S], category: 'junction' },
+  'crossroads':        { ports: [DIR.N, DIR.E, DIR.S, DIR.W], category: 'junction' },
+
+  // ── Phase 3 — Elevation ──
+  'ramp-up':           { ports: [DIR.N, DIR.S], category: 'elevation', elevationDelta: 1 },
+  'ramp-down':         { ports: [DIR.N, DIR.S], category: 'elevation', elevationDelta: -1 },
+  'bridge':            { ports: [DIR.N, DIR.S], category: 'elevation' },
+  'jump':              { ports: [DIR.N, DIR.S], category: 'elevation' },
+  'bridge-onramp':     { ports: [DIR.N, DIR.S], category: 'pgh-bridge', footprint: [[0,0],[0,1]] },
+  'bridge-offramp':    { ports: [DIR.N, DIR.S], category: 'pgh-bridge', footprint: [[0,0],[0,1]] },
+
+  // ── Phase 3 — Advanced ──
+  'banked-turn':       { ports: [DIR.N, DIR.E], category: 'advanced' },
+  'tunnel':            { ports: [DIR.N, DIR.S], category: 'advanced' },
+  'chicane':           { ports: [DIR.N, DIR.S], category: 'advanced' },
+
+  // ── Pittsburgh Bridge Collection ──
+  'pgh-clemente':      { ports: [DIR.N, DIR.S], category: 'pgh-bridge' },
+  'pgh-warhol':        { ports: [DIR.N, DIR.S], category: 'pgh-bridge' },
+  'pgh-carson':        { ports: [DIR.N, DIR.S], category: 'pgh-bridge' },
+  'pgh-fort-pitt':     { ports: [DIR.N, DIR.S], category: 'pgh-bridge' },
+  'pgh-fort-duquesne': { ports: [DIR.N, DIR.S], category: 'pgh-bridge' },
+  'pgh-west-end':      { ports: [DIR.N, DIR.S], category: 'pgh-bridge' },
+  'pgh-veterans':      { ports: [DIR.N, DIR.S], category: 'pgh-bridge' },
+  'pgh-16th-st':       { ports: [DIR.N, DIR.S], category: 'pgh-bridge' },
+  'pgh-south-10th':    { ports: [DIR.N, DIR.S], category: 'pgh-bridge' },
+  'pgh-31st-st':       { ports: [DIR.N, DIR.S], category: 'pgh-bridge' },
+  'pgh-mckees-rocks':  { ports: [DIR.N, DIR.S], category: 'pgh-bridge' },
+  'pgh-smithfield':    { ports: [DIR.N, DIR.S], category: 'pgh-bridge' },
+  'pgh-liberty':       { ports: [DIR.N, DIR.S], category: 'pgh-bridge' },
+  'pgh-62nd-st':       { ports: [DIR.N, DIR.S], category: 'pgh-bridge' },
+  'pgh-birmingham':    { ports: [DIR.N, DIR.S], category: 'pgh-bridge' },
+  'pgh-40th-st':       { ports: [DIR.N, DIR.S], category: 'pgh-bridge' },
+  'pgh-hot-metal':     { ports: [DIR.N, DIR.S], category: 'pgh-bridge' },
+  'pgh-glenwood':      { ports: [DIR.N, DIR.S], category: 'pgh-bridge' },
+  'pgh-highland-park': { ports: [DIR.N, DIR.S], category: 'pgh-bridge' },
+  'pgh-homestead':     { ports: [DIR.N, DIR.S], category: 'pgh-bridge' },
 };
+
+// ── Elevation layer helpers ───────────────────────────────────
+/**
+ * Return the grid layer for a piece: 0 = ground, 1 = elevated (bridges).
+ * Pieces on different layers can coexist at the same (gx, gz) cell.
+ */
+export function getGridLayer(pieceKey) {
+  const def = PIECE_DEFS[pieceKey];
+  return def?.category === 'pgh-bridge' ? 1 : 0;
+}
+
+/** Internal key that includes the layer. */
+function layerKey(gx, gz, layer) { return cellKey(gx, gz) + ':' + layer; }
 
 /** Display categories in sidebar order. */
 export const CATEGORIES = [
-  { id: 'basic',  label: 'Road Basics',      icon: '━' },
-  { id: 'corner', label: 'Corners & Curves',  icon: '╭' },
-  { id: 'hill',   label: 'Hills & Ramps',     icon: '⟋' },
-  { id: 'bend',   label: 'Bends & Offsets',   icon: '↝' },
-  { id: 'cap',    label: 'End Pieces',         icon: '⊣' },
+  { id: 'basic',     label: 'Road Basics',      icon: '━' },
+  { id: 'corner',    label: 'Corners & Curves',  icon: '╭' },
+  { id: 'hill',      label: 'Hills & Ramps',     icon: '⟋' },
+  { id: 'bend',      label: 'Bends & Offsets',   icon: '↝' },
+  { id: 'junction',  label: 'Junctions',          icon: '┬' },
+  { id: 'elevation', label: 'Elevation',           icon: '△' },
+  { id: 'advanced',  label: 'Advanced',            icon: '★' },
+  { id: 'pgh-bridge', label: 'Pittsburgh Bridges',  icon: '⌒' },
+  { id: 'cap',       label: 'End Pieces',         icon: '⊣' },
 ];
 
 // ── Port rotation helpers ─────────────────────────────────────
@@ -112,15 +168,25 @@ export class GridState {
 
   // ── cell CRUD ───────────────────────────────────────────────
 
-  isOccupied(gx, gz) { return this.cells.has(cellKey(gx, gz)); }
+  isOccupied(gx, gz, layer = 0) { return this.cells.has(layerKey(gx, gz, layer)); }
 
-  get(gx, gz) { return this.cells.get(cellKey(gx, gz)) || null; }
+  get(gx, gz, layer = 0) { return this.cells.get(layerKey(gx, gz, layer)) || null; }
 
-  set(gx, gz, pieceKey, rotation, source = 'entity', entityId = 0) {
-    this.cells.set(cellKey(gx, gz), { pieceKey, rotation, source, entityId });
+  /** Return occupant at any layer (for erase / pick operations). */
+  getAny(gx, gz) {
+    return this.cells.get(layerKey(gx, gz, 0))
+        || this.cells.get(layerKey(gx, gz, 1))
+        || null;
   }
 
-  remove(gx, gz) { this.cells.delete(cellKey(gx, gz)); }
+  set(gx, gz, pieceKey, rotation, source = 'entity', entityId = 0, elevation = 0, surface = 'asphalt') {
+    const layer = getGridLayer(pieceKey);
+    this.cells.set(layerKey(gx, gz, layer), { pieceKey, rotation, source, entityId, elevation, surface });
+  }
+
+  remove(gx, gz, layer = 0) { this.cells.delete(layerKey(gx, gz, layer)); }
+
+  removeByPiece(gx, gz, pieceKey) { this.cells.delete(layerKey(gx, gz, getGridLayer(pieceKey))); }
 
   clearBySource(source) {
     for (const [key, cell] of this.cells) {
@@ -139,6 +205,7 @@ export class GridState {
   findBestRotation(pieceKey, gx, gz) {
     const def = PIECE_DEFS[pieceKey];
     if (!def) return 0;
+    const layer = getGridLayer(pieceKey);
 
     let bestRot = 0;
     let bestScore = -Infinity;
@@ -151,7 +218,7 @@ export class GridState {
       for (const dir of ports) {
         const nx = gx + DIR_DX[dir] * GRID_SIZE;
         const nz = gz + DIR_DZ[dir] * GRID_SIZE;
-        const neighbor = this.get(nx, nz);
+        const neighbor = this.get(nx, nz, layer);
         if (neighbor) {
           const opp = oppositeDir(dir);
           if (hasPort(neighbor.pieceKey, neighbor.rotation, opp)) {
@@ -168,6 +235,41 @@ export class GridState {
       }
     }
 
+    // Proximity fallback: when no mutual connections are possible (best ≤ 0)
+    // but there ARE occupied neighbors, prefer the rotation that aims a port
+    // toward a neighbor. This orients the piece toward the existing track
+    // even when port types don't match up (e.g. straight next to another
+    // straight placed side-by-side).
+    if (bestScore <= 0) {
+      let hasAnyNeighbor = false;
+      for (const d of [0, 1, 2, 3]) {
+        if (this.get(gx + DIR_DX[d] * GRID_SIZE, gz + DIR_DZ[d] * GRID_SIZE, layer)) {
+          hasAnyNeighbor = true;
+          break;
+        }
+      }
+
+      if (hasAnyNeighbor) {
+        let fallbackBest = -Infinity;
+        for (let steps = 0; steps < 4; steps++) {
+          const rotDeg = steps * 90;
+          const ports = getPortsAtRotation(pieceKey, rotDeg);
+          let proximity = 0;
+          for (const dir of ports) {
+            const nx = gx + DIR_DX[dir] * GRID_SIZE;
+            const nz = gz + DIR_DZ[dir] * GRID_SIZE;
+            if (this.get(nx, nz, layer)) {
+              proximity += 1;
+            }
+          }
+          if (proximity > fallbackBest) {
+            fallbackBest = proximity;
+            bestRot = rotDeg;
+          }
+        }
+      }
+    }
+
     return bestRot;
   }
 
@@ -180,12 +282,13 @@ export class GridState {
    */
   getConnections(gx, gz, pieceKey, rotDeg) {
     const ports = getPortsAtRotation(pieceKey, rotDeg);
+    const layer = getGridLayer(pieceKey);
     const out = [];
 
     for (const dir of ports) {
       const nx = gx + DIR_DX[dir] * GRID_SIZE;
       const nz = gz + DIR_DZ[dir] * GRID_SIZE;
-      const neighbor = this.get(nx, nz);
+      const neighbor = this.get(nx, nz, layer);
 
       if (!neighbor) {
         out.push({ dir, status: 'open' });

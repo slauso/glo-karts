@@ -168,6 +168,16 @@ body {
 }
 
 .bv2-sep { width: 1px; height: 24px; background: rgba(255, 255, 255, 0.10); margin: 0 2px; }
+
+/* Marquee box-select overlay */
+.bv2-marquee {
+  position: absolute;
+  border: 1.5px dashed rgba(255, 0, 128, 0.8);
+  background: rgba(255, 0, 128, 0.08);
+  pointer-events: none;
+  z-index: 50;
+  border-radius: 2px;
+}
 .bv2-spacer { flex: 1; }
 
 .bv2-name {
@@ -487,18 +497,19 @@ body {
 }
 
 .bv2-landing {
-  position: absolute;
+  position: fixed;
   inset: 0;
   display: flex;
-  align-items: stretch;
+  align-items: flex-start;
   justify-content: center;
   padding: 28px;
+  overflow-y: auto;
   background:
     radial-gradient(ellipse 100% 70% at 50% 20%, rgba(255,0,128,0.06), transparent 60%),
-    rgba(5,5,10,0.88);
+    rgba(5,5,10,0.92);
   backdrop-filter: blur(16px) saturate(140%);
   -webkit-backdrop-filter: blur(16px) saturate(140%);
-  z-index: 6;
+  z-index: 100;
 }
 
 .bv2-landing-card {
@@ -571,9 +582,41 @@ body {
   padding: 14px;
 }
 
+/* ── Landing entrance animation ── */
+@keyframes bv2-land-enter {
+  from { opacity: 0; transform: translateY(18px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+.bv2-landing:not([hidden]) .bv2-landing-card {
+  animation: bv2-land-enter 0.38s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.bv2-landing-head-actions {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  flex-shrink: 0;
+}
+
+.bv2-btn--ghost {
+  background: transparent;
+  border-color: rgba(255,255,255,0.12);
+}
+.bv2-btn--ghost:hover {
+  background: rgba(255,255,255,0.06);
+  border-color: rgba(255,255,255,0.22);
+}
+
+.bv2-panel-section-head svg {
+  fill: var(--bv2-text-soft);
+  vertical-align: -2px;
+  margin-right: 6px;
+}
+
 .bv2-launch-card {
-  display: grid;
-  gap: 5px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
   width: 100%;
   padding: 14px 16px;
   border: 1px solid var(--lg-border);
@@ -602,6 +645,71 @@ body {
   transform: none;
 }
 
+/* ── Launch card icon badges ── */
+.bv2-launch-icon {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: var(--bv2-accent-soft);
+  border: 1px solid rgba(255,0,128,0.25);
+  transition: background 0.2s, box-shadow 0.2s;
+}
+.bv2-launch-icon svg {
+  width: 18px;
+  height: 18px;
+  fill: var(--bv2-accent);
+}
+.bv2-launch-card:hover .bv2-launch-icon {
+  background: rgba(255,0,128,0.25);
+  box-shadow: 0 0 14px rgba(255,0,128,0.3);
+}
+.bv2-launch-icon--track {
+  background: rgba(35,179,127,0.12);
+  border-color: rgba(35,179,127,0.25);
+}
+.bv2-launch-icon--track svg { fill: var(--bv2-success); }
+.bv2-launch-card:hover .bv2-launch-icon--track {
+  background: rgba(35,179,127,0.22);
+  box-shadow: 0 0 14px rgba(35,179,127,0.3);
+}
+.bv2-launch-icon--arena {
+  background: rgba(255,155,65,0.12);
+  border-color: rgba(255,155,65,0.25);
+}
+.bv2-launch-icon--arena svg { fill: var(--bv2-warm); }
+.bv2-launch-card:hover .bv2-launch-icon--arena {
+  background: rgba(255,155,65,0.22);
+  box-shadow: 0 0 14px rgba(255,155,65,0.3);
+}
+.bv2-launch-icon--saved {
+  background: rgba(100,140,255,0.10);
+  border-color: rgba(100,140,255,0.25);
+}
+.bv2-launch-icon--saved svg { fill: #648cff; }
+.bv2-launch-card:hover .bv2-launch-icon--saved {
+  background: rgba(100,140,255,0.22);
+  box-shadow: 0 0 14px rgba(100,140,255,0.3);
+}
+.bv2-launch-icon--import {
+  background: rgba(180,130,255,0.10);
+  border-color: rgba(180,130,255,0.25);
+}
+.bv2-launch-icon--import svg { fill: #b482ff; }
+.bv2-launch-card:hover .bv2-launch-icon--import {
+  background: rgba(180,130,255,0.22);
+  box-shadow: 0 0 14px rgba(180,130,255,0.3);
+}
+
+.bv2-launch-text {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
 .bv2-launch-label {
   font-family: var(--font-ui);
   font-size: 0.9rem;
@@ -614,6 +722,91 @@ body {
   color: var(--bv2-text-soft);
   font-size: 0.76rem;
   line-height: 1.55;
+}
+
+/* ── Sub-panels (Saved projects, Import share code) ── */
+.bv2-land-subpanel {
+  margin-top: 14px;
+  border: 1px solid var(--lg-border);
+  border-radius: 18px;
+  background: rgba(255,255,255,0.025);
+  overflow: hidden;
+  animation: bv2-land-enter 0.25s ease-out both;
+}
+.bv2-land-subpanel-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--lg-border);
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--bv2-text);
+}
+.bv2-land-saves-list {
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+  max-height: 240px;
+  overflow-y: auto;
+}
+.bv2-land-slot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border: 1px solid var(--lg-border);
+  border-radius: 14px;
+  background: rgba(255,255,255,0.025);
+  transition: border-color 0.18s, background 0.18s;
+}
+.bv2-land-slot:hover {
+  border-color: var(--lg-border-hi);
+  background: var(--lg-surface-hover);
+}
+.bv2-land-slot-name {
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+.bv2-land-slot-date {
+  color: var(--bv2-text-soft);
+  font-size: 0.72rem;
+}
+.bv2-land-slot-actions {
+  display: flex;
+  gap: 6px;
+}
+.bv2-land-empty {
+  padding: 18px;
+  border: 1px dashed var(--lg-border);
+  border-radius: 14px;
+  color: var(--bv2-text-soft);
+  font-size: 0.78rem;
+  line-height: 1.6;
+}
+.bv2-land-import-body {
+  display: flex;
+  gap: 10px;
+  padding: 14px;
+}
+.bv2-land-import-input {
+  flex: 1;
+  padding: 10px 14px;
+  border: 1px solid var(--lg-border);
+  border-radius: 12px;
+  background: rgba(0,0,0,0.3);
+  color: var(--bv2-text);
+  font-family: var(--font-ui);
+  font-size: 0.85rem;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.bv2-land-import-input::placeholder { color: rgba(255,255,255,0.3); }
+.bv2-land-import-input:focus {
+  outline: none;
+  border-color: var(--bv2-accent);
+  box-shadow: 0 0 0 2px var(--bv2-accent-soft);
 }
 
 .bv2-recent-projects {

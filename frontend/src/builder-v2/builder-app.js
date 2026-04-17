@@ -21,8 +21,9 @@ import { TerrainPanel } from './terrain-panel.js';
 import { Serializer } from './serializer.js';
 import { PlaytestBridge } from './playtest-bridge.js';
 import { ViewCube } from './view-cube.js';
-import { GridState, PIECE_DEFS, makeGhostMaterial, tintGhost } from './grid-placement.js';
+import { GridState, PIECE_DEFS, getGridLayer, makeGhostMaterial, tintGhost } from './grid-placement.js';
 import { GRID_SIZE, snapToGrid, cellKey } from '../modules/track-placement.js';
+import { publishTrack, browseTracks } from '../modules/track-api.js';
 
 // ── DOM refs ──────────────────────────────────────────────────
 const builderRoot = document.getElementById('builder-root');
@@ -33,12 +34,22 @@ const nameInput = document.getElementById('bv2-name');
 const sidebarModeEl = document.getElementById('bv2-sidebar-mode');
 const landingOverlay = document.getElementById('bv2-landing');
 const landingSubtitle = document.getElementById('bv2-landing-subtitle');
-const landingResumeBtn = document.getElementById('bv2-landing-resume');
-const landingResumeCopy = document.getElementById('bv2-landing-resume-copy');
-const landingNewTrackBtn = document.getElementById('bv2-landing-new-track');
-const landingNewArenaBtn = document.getElementById('bv2-landing-new-arena');
+const landingResumeBtn = document.getElementById('bv2-land-continue');
+const landingResumeCopy = document.getElementById('bv2-land-autosave-info');
+const landingNewTrackBtn = document.getElementById('bv2-land-new');
+const landingNewArenaBtn = document.getElementById('bv2-land-new-arena');
 const landingCloseBtn = document.getElementById('bv2-landing-close');
 const recentProjectsEl = document.getElementById('bv2-recent-projects');
+const landSavedBtn = document.getElementById('bv2-land-saved');
+const landImportBtn = document.getElementById('bv2-land-import');
+const landBackBtn = document.getElementById('bv2-land-back');
+const landSavesPanel = document.getElementById('bv2-land-saves-panel');
+const landSavesClose = document.getElementById('bv2-land-saves-close');
+const landSavesList = document.getElementById('bv2-land-saves-list');
+const landImportPanel = document.getElementById('bv2-land-import-panel');
+const landImportClose = document.getElementById('bv2-land-import-close');
+const landImportCode = document.getElementById('bv2-land-import-code');
+const landImportGo = document.getElementById('bv2-land-import-go');
 const selectionHudEl = document.getElementById('bv2-selection-hud');
 const selectionTitleEl = document.getElementById('bv2-selection-title');
 const selectionMetaEl = document.getElementById('bv2-selection-meta');
@@ -57,6 +68,7 @@ const camToggleLabel = document.getElementById('bv2-cam-toggle-label');
 const playtestBtn = document.getElementById('bv2-play');
 const actionRing = document.getElementById('bv2-action-ring');
 const contextMenu = document.getElementById('bv2-context-menu');
+const marqueeEl = document.getElementById('bv2-marquee');
 const urlParams = new URLSearchParams(window.location.search);
 const forcedPreset = ['track', 'arena'].includes(urlParams.get('preset')) ? urlParams.get('preset') : null;
 const forceFreshWorkspace = urlParams.get('fresh') === '1';
@@ -98,13 +110,35 @@ const PRESET_UI = Object.freeze({
           id: 'road-elevation',
           label: 'Elevation',
           icon: 'E',
-          assetKeys: ['bump-up', 'bump-down', 'hill-beginning', 'hill-end', 'hill-complete', 'hill-complete-half', 'corner-small-ramp', 'corner-large-ramp'],
+          assetKeys: ['bump-up', 'bump-down', 'hill-beginning', 'hill-end', 'hill-complete', 'hill-complete-half', 'corner-small-ramp', 'corner-large-ramp', 'ramp-up', 'ramp-down', 'bridge', 'jump'],
         },
         {
           id: 'road-shaping',
           label: 'Offsets',
           icon: 'F',
-          assetKeys: ['bend', 'bend-large', 'skew-left', 'skew-right', 'skew-left-side', 'skew-right-side'],
+          assetKeys: ['bend', 'bend-large', 'skew-left', 'skew-right', 'skew-left-side', 'skew-right-side', 'chicane', 'banked-turn'],
+        },
+        {
+          id: 'road-junctions',
+          label: 'Junctions',
+          icon: 'J',
+          assetKeys: ['t-junction', 'crossroads', 'tunnel'],
+        },
+        {
+          id: 'road-pgh-bridges',
+          label: 'Pittsburgh Bridges',
+          icon: 'P',
+          assetKeys: [
+            'bridge-onramp', 'bridge-offramp',
+            'pgh-clemente', 'pgh-warhol', 'pgh-carson',
+            'pgh-fort-pitt', 'pgh-fort-duquesne',
+            'pgh-west-end', 'pgh-veterans', 'pgh-16th-st',
+            'pgh-south-10th', 'pgh-31st-st', 'pgh-mckees-rocks',
+            'pgh-smithfield', 'pgh-liberty', 'pgh-62nd-st',
+            'pgh-birmingham', 'pgh-40th-st',
+            'pgh-hot-metal', 'pgh-glenwood',
+            'pgh-highland-park', 'pgh-homestead',
+          ],
         },
         {
           id: 'road-finish',
@@ -152,7 +186,7 @@ const PRESET_UI = Object.freeze({
     namePlaceholder: 'Track Name',
     defaultHint: 'Paint the road first, then add pieces and race markers.',
     toolHints: {
-      [TOOL.SELECT]: 'Click to select. Double-click to edit.',
+      [TOOL.SELECT]: 'Click to select. Drag empty space to box-select. Ctrl+A to select all.',
       [TOOL.ROAD]: 'Click and drag to paint road. W for top-down view.',
       [TOOL.PLACE]: 'Pick a piece from the sidebar, then click to place.',
       [TOOL.ERASE]: 'Click or drag to erase.',
@@ -182,13 +216,13 @@ const PRESET_UI = Object.freeze({
           id: 'arena-floor',
           label: 'Floor Plates',
           icon: 'P',
-          assetKeys: ['wide', 'straight'],
+          assetKeys: ['wide', 'straight', 't-junction', 'crossroads'],
         },
         {
           id: 'arena-choke',
           label: 'Chokepoints',
           icon: 'C',
-          assetKeys: ['corner-small', 'corner-large', 'curve', 'cap-front', 'cap-back', 'end'],
+          assetKeys: ['corner-small', 'corner-large', 'curve', 'banked-turn', 'tunnel', 'chicane', 'cap-front', 'cap-back', 'end'],
         },
         {
           id: 'arena-cover',
@@ -200,7 +234,23 @@ const PRESET_UI = Object.freeze({
           id: 'arena-height',
           label: 'Height',
           icon: 'V',
-          assetKeys: ['bump-up', 'bump-down', 'hill-beginning', 'hill-end', 'hill-complete', 'hill-complete-half', 'corner-small-ramp', 'corner-large-ramp'],
+          assetKeys: ['bump-up', 'bump-down', 'hill-beginning', 'hill-end', 'hill-complete', 'hill-complete-half', 'corner-small-ramp', 'corner-large-ramp', 'ramp-up', 'ramp-down', 'bridge', 'jump'],
+        },
+        {
+          id: 'arena-pgh-bridges',
+          label: 'Pittsburgh Bridges',
+          icon: 'P',
+          assetKeys: [
+            'bridge-onramp', 'bridge-offramp',
+            'pgh-clemente', 'pgh-warhol', 'pgh-carson',
+            'pgh-fort-pitt', 'pgh-fort-duquesne',
+            'pgh-west-end', 'pgh-veterans', 'pgh-16th-st',
+            'pgh-south-10th', 'pgh-31st-st', 'pgh-mckees-rocks',
+            'pgh-smithfield', 'pgh-liberty', 'pgh-62nd-st',
+            'pgh-birmingham', 'pgh-40th-st',
+            'pgh-hot-metal', 'pgh-glenwood',
+            'pgh-highland-park', 'pgh-homestead',
+          ],
         },
       ],
     },
@@ -242,7 +292,7 @@ const PRESET_UI = Object.freeze({
     namePlaceholder: 'Arena Name',
     defaultHint: 'Place structures and combat markers to build your arena.',
     toolHints: {
-      [TOOL.SELECT]: 'Click to select. Double-click to edit.',
+      [TOOL.SELECT]: 'Click to select. Drag empty space to box-select. Ctrl+A to select all.',
       [TOOL.ROAD]: 'Click and drag to paint movement lanes.',
       [TOOL.PLACE]: 'Pick a piece from the sidebar, then click to place.',
       [TOOL.ERASE]: 'Click or drag to erase.',
@@ -343,6 +393,7 @@ let ghostRotation = 0;         // current ghost rotation (degrees)
 let manualRotation = null;     // null = auto-connect, number = user override
 let lastGhostCell = null;      // cellKey of last ghost position
 let isPainting = false;        // road painting in progress
+let roadGridDirty = false;     // road grid needs re-sync (after erase)
 let currentPreset = 'arena';
 let currentAutoSave = null;
 
@@ -446,7 +497,7 @@ const objectsPanel = new ObjectsPanel(
     manualRotation = null;
     if (key) {
       inputRouter.setTool(TOOL.PLACE);
-      setHint(`Click to place ${key}. R to rotate.`);
+      setHint(`Click to place ${key}. Move mouse to orient, R to rotate.`);
     } else {
       removeGhost();
       setHint('');
@@ -484,7 +535,7 @@ if (roadPanelEl) {
 
 const terrainPanel = new TerrainPanel(
   document.getElementById('bv2-panel-terrain'),
-  ground, grid,
+  ground, grid, scene,
 );
 
 // ── Input Router ──────────────────────────────────────────────
@@ -497,6 +548,8 @@ const inputRouter = new InputRouter(canvas, {
   onRedo: () => cmdStack.redo(),
   onDelete: onDelete,
   onDuplicate: onDuplicate,
+  onCopy: onCopy,
+  onPaste: onPaste,
   onSelectAll: () => selection.selectAll(),
   onEscape: onEscape,
   onSave: onSave,
@@ -574,6 +627,8 @@ document.getElementById('bv2-cam-toggle')?.addEventListener('click', () => {
 document.getElementById('bv2-save')?.addEventListener('click', onSave);
 document.getElementById('bv2-load')?.addEventListener('click', onLoad);
 document.getElementById('bv2-share')?.addEventListener('click', onShare);
+document.getElementById('bv2-publish')?.addEventListener('click', onPublish);
+document.getElementById('bv2-browse')?.addEventListener('click', onBrowse);
 document.getElementById('bv2-play')?.addEventListener('click', onPlaytest);
 projectsBtn?.addEventListener('click', openLanding);
 helpBtn?.addEventListener('click', toggleHelpPanel);
@@ -599,6 +654,12 @@ landingResumeBtn?.addEventListener('click', () => {
 landingNewTrackBtn?.addEventListener('click', () => openDedicatedFork('track'));
 landingNewArenaBtn?.addEventListener('click', () => openDedicatedFork('arena'));
 landingCloseBtn?.addEventListener('click', closeLanding);
+landSavedBtn?.addEventListener('click', toggleSavesPanel);
+landImportBtn?.addEventListener('click', toggleImportPanel);
+landBackBtn?.addEventListener('click', () => { window.location.href = '/'; });
+landSavesClose?.addEventListener('click', () => { landSavesPanel?.setAttribute('hidden', ''); });
+landImportClose?.addEventListener('click', () => { landImportPanel?.setAttribute('hidden', ''); });
+landImportGo?.addEventListener('click', handleImportGo);
 document.getElementById('bv2-back')?.addEventListener('click', () => {
   window.location.href = '/';
 });
@@ -799,7 +860,6 @@ function updateSelectionHud() {
 
   if (selection.isEmpty) {
     selectionHudEl.hidden = true;
-    updateGizmoButtons();
     return;
   }
 
@@ -811,13 +871,10 @@ function updateSelectionHud() {
   selectionTitleEl.textContent = entities.length === 1 ? primary.type : `${entities.length} items selected`;
   selectionMetaEl.textContent = entities.length === 1
     ? `${primary.category} · ${Math.round(pos.x)}, ${Math.round(pos.z)}`
-    : 'Drag handles or use toolbar buttons.';
-  selectionTipEl.textContent = gizmo.mode === 'translate'
-    ? 'Drag to move. Double-click another piece to switch.'
-    : gizmo.mode === 'rotate'
-      ? 'Rotate in 90° steps for clean joins.'
-      : 'Scale props and decorations.';
-  updateGizmoButtons();
+    : 'Drag to move. Ctrl+C to copy.';
+  selectionTipEl.textContent = entities.length > 1
+    ? 'Drag to move group. Ctrl+C / Ctrl+V to copy & paste.'
+    : 'Click & drag to move. Use ring buttons to rotate/delete.';
 }
 
 // ── Floating action ring (TinkerCad-style) ────────────────────
@@ -988,6 +1045,88 @@ function setGizmoMode(mode, { forceSelect = false } = {}) {
 
 function closeLanding() {
   landingOverlay?.setAttribute('hidden', '');
+  landSavesPanel?.setAttribute('hidden', '');
+  landImportPanel?.setAttribute('hidden', '');
+}
+
+function toggleSavesPanel() {
+  landImportPanel?.setAttribute('hidden', '');
+  if (landSavesPanel?.hasAttribute('hidden')) {
+    renderSavesPanel();
+    landSavesPanel?.removeAttribute('hidden');
+  } else {
+    landSavesPanel?.setAttribute('hidden', '');
+  }
+}
+
+function toggleImportPanel() {
+  landSavesPanel?.setAttribute('hidden', '');
+  if (landImportPanel?.hasAttribute('hidden')) {
+    landImportPanel?.removeAttribute('hidden');
+    landImportCode?.focus();
+  } else {
+    landImportPanel?.setAttribute('hidden', '');
+  }
+}
+
+function renderSavesPanel() {
+  if (!landSavesList) return;
+  const slots = serializer.listSlots().sort((a, b) => b.savedAt - a.savedAt);
+  landSavesList.innerHTML = '';
+  if (!slots.length) {
+    landSavesList.innerHTML = '<p class="bv2-land-empty">No saved projects yet.</p>';
+    return;
+  }
+  for (const slot of slots) {
+    const row = document.createElement('div');
+    row.className = 'bv2-land-slot';
+    const dateStr = slot.savedAt
+      ? new Date(slot.savedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+      : '';
+    row.innerHTML = `
+      <div class="bv2-land-slot-info">
+        <div class="bv2-land-slot-name">${escapeSlotHTML(slot.name || 'Untitled')}</div>
+        <div class="bv2-land-slot-date">${escapeSlotHTML(dateStr)}</div>
+      </div>
+      <div class="bv2-land-slot-actions">
+        <button class="bv2-btn" data-action="load" title="Open">▶</button>
+        <button class="bv2-btn bv2-btn--danger" data-action="del" title="Delete">✕</button>
+      </div>`;
+    row.querySelector('[data-action="load"]').addEventListener('click', () => loadSavedProject(slot.key));
+    row.querySelector('[data-action="del"]').addEventListener('click', () => {
+      serializer.deleteSlot(slot.key);
+      renderSavesPanel();
+      renderRecentProjects();
+    });
+    landSavesList.appendChild(row);
+  }
+}
+
+function handleImportGo() {
+  const code = landImportCode?.value?.trim();
+  if (!code) return;
+  try {
+    const data = serializer.importShareCode(code);
+    if (data) {
+      landImportPanel?.setAttribute('hidden', '');
+      loadTrackData(data).then(() => {
+        closeLanding();
+        showToast('Imported track from share code.', 'success');
+      });
+    } else {
+      landImportCode.style.borderColor = '#f66';
+      setTimeout(() => { landImportCode.style.borderColor = ''; }, 1200);
+    }
+  } catch {
+    landImportCode.style.borderColor = '#f66';
+    setTimeout(() => { landImportCode.style.borderColor = ''; }, 1200);
+  }
+}
+
+function escapeSlotHTML(str) {
+  const d = document.createElement('div');
+  d.textContent = str;
+  return d.innerHTML;
 }
 
 function renderRecentProjects() {
@@ -1123,6 +1262,15 @@ function onToolChange(tool) {
   updateSelectionHud();
 }
 
+// ── Drag state for click-hold-drag repositioning ──────────────
+let dragState = null; // { entityIds[], startPointerWorld, startPositions{}, dragging }
+
+// ── Marquee box-select state ──────────────────────────────────
+let marqueeState = null; // { startX, startY } in stage-relative pixels
+
+// ── Clipboard for copy/paste ──────────────────────────────────
+let clipboard = null; // [{ type, category, rotation, scale, offset:{x,z}, extra }]
+
 // ── Pointer handlers ──────────────────────────────────────────
 function onPointerDown(ndcX, ndcY, event) {
   const pointer = new THREE.Vector2(ndcX, ndcY);
@@ -1131,9 +1279,8 @@ function onPointerDown(ndcX, ndcY, event) {
   if (event.detail >= 2 && pickedEntityId !== null) {
     inputRouter.setTool(TOOL.SELECT);
     selection.select(pickedEntityId);
-    setGizmoMode('translate');
     closeLanding();
-    setHint('Editing. Drag handles to transform.');
+    setHint('Selected. Drag to move, or use ring buttons.');
     return;
   }
 
@@ -1141,11 +1288,33 @@ function onPointerDown(ndcX, ndcY, event) {
     if (pickedEntityId !== null) {
       if (event.shiftKey) {
         selection.toggle(pickedEntityId);
+      } else if (selection.has(pickedEntityId)) {
+        // Already selected — begin multi-entity drag tracking
+        const worldPos = selection.pickGround(camCtrl.camera, pointer, ground);
+        if (worldPos) {
+          const entities = selection.all();
+          const startPositions = {};
+          entities.forEach(e => { startPositions[e.id] = { ...e.position }; });
+          dragState = {
+            entityIds: entities.map(e => e.id),
+            startPointerWorld: worldPos.clone(),
+            startPositions,
+            dragging: false,
+          };
+        }
       } else {
         selection.select(pickedEntityId);
       }
     } else {
-      selection.clear();
+      // Click on empty space — start marquee box-select or clear
+      if (!event.shiftKey) selection.clear(true);
+      const rect = stage.getBoundingClientRect();
+      marqueeState = {
+        startX: event.clientX - rect.left,
+        startY: event.clientY - rect.top,
+        active: false,
+        shiftKey: event.shiftKey,
+      };
     }
     return;
   }
@@ -1184,6 +1353,54 @@ function onPointerDown(ndcX, ndcY, event) {
 function onPointerMove(ndcX, ndcY, event) {
   const pointer = new THREE.Vector2(ndcX, ndcY);
 
+  // Click-hold-drag for selected entities (multi-entity)
+  if (inputRouter.tool === TOOL.SELECT && dragState) {
+    const worldPos = selection.pickGround(camCtrl.camera, pointer, ground);
+    if (worldPos) {
+      if (!dragState.dragging) {
+        const dx = worldPos.x - dragState.startPointerWorld.x;
+        const dz = worldPos.z - dragState.startPointerWorld.z;
+        if (Math.sqrt(dx * dx + dz * dz) < GRID_SIZE * 0.3) return; // movement threshold
+        dragState.dragging = true;
+        camCtrl.controls.enabled = false;
+        if (actionRing) actionRing.hidden = true;
+      }
+
+      const offsetX = worldPos.x - dragState.startPointerWorld.x;
+      const offsetZ = worldPos.z - dragState.startPointerWorld.z;
+      for (const eid of dragState.entityIds) {
+        const entity = sceneGraph.get(eid);
+        if (entity?.object3D) {
+          const sp = dragState.startPositions[eid];
+          entity.object3D.position.x = snapToGrid(sp.x + offsetX);
+          entity.object3D.position.z = snapToGrid(sp.z + offsetZ);
+        }
+      }
+    }
+    return;
+  }
+
+  // Marquee box-select drawing
+  if (inputRouter.tool === TOOL.SELECT && marqueeState) {
+    const rect = stage.getBoundingClientRect();
+    const curX = event.clientX - rect.left;
+    const curY = event.clientY - rect.top;
+    const dx = curX - marqueeState.startX;
+    const dy = curY - marqueeState.startY;
+    if (!marqueeState.active && (Math.abs(dx) > 4 || Math.abs(dy) > 4)) {
+      marqueeState.active = true;
+      camCtrl.controls.enabled = false;
+    }
+    if (marqueeState.active && marqueeEl) {
+      marqueeEl.hidden = false;
+      marqueeEl.style.left = `${Math.min(marqueeState.startX, curX)}px`;
+      marqueeEl.style.top = `${Math.min(marqueeState.startY, curY)}px`;
+      marqueeEl.style.width = `${Math.abs(dx)}px`;
+      marqueeEl.style.height = `${Math.abs(dy)}px`;
+    }
+    return;
+  }
+
   // Model ghost preview for placement
   if (inputRouter.tool === TOOL.PLACE && (activePlacementKey || activeExtraTool)) {
     const worldPos = selection.pickGround(camCtrl.camera, pointer, ground);
@@ -1212,7 +1429,74 @@ function onPointerMove(ndcX, ndcY, event) {
 }
 
 function onPointerUp(ndcX, ndcY, event) {
-  isPainting = false;
+  if (isPainting || roadGridDirty) {
+    isPainting = false;
+    roadGridDirty = false;
+    // Refresh all road cell classifications — neighbors may have changed
+    syncRoadToGrid();
+  } else {
+    isPainting = false;
+  }
+
+  // Finalize click-hold-drag (multi-entity)
+  if (dragState) {
+    if (dragState.dragging) {
+      for (const eid of dragState.entityIds) {
+        const entity = sceneGraph.get(eid);
+        if (entity) {
+          entity.position = {
+            x: entity.object3D.position.x,
+            y: entity.object3D.position.y,
+            z: entity.object3D.position.z,
+          };
+          onTransformEnd(
+            eid,
+            dragState.startPositions[eid],
+            entity.rotation,
+            entity.scale,
+          );
+        }
+      }
+      camCtrl.controls.enabled = true;
+      updateActionRing();
+    }
+    dragState = null;
+    return;
+  }
+
+  // Finalize marquee box-select
+  if (marqueeState) {
+    if (marqueeState.active) {
+      const rect = stage.getBoundingClientRect();
+      const curX = event.clientX - rect.left;
+      const curY = event.clientY - rect.top;
+      const x1 = Math.min(marqueeState.startX, curX);
+      const y1 = Math.min(marqueeState.startY, curY);
+      const x2 = Math.max(marqueeState.startX, curX);
+      const y2 = Math.max(marqueeState.startY, curY);
+
+      if (!marqueeState.shiftKey) selection.clear(true);
+
+      for (const entity of sceneGraph.getAll()) {
+        if (!entity.object3D) continue;
+        const worldPos = new THREE.Vector3(entity.position.x, 0, entity.position.z);
+        worldPos.project(camCtrl.camera);
+        const sx = ((worldPos.x + 1) / 2) * rect.width;
+        const sy = ((-worldPos.y + 1) / 2) * rect.height;
+        if (sx >= x1 && sx <= x2 && sy >= y1 && sy <= y2) {
+          selection.toggle(entity.id);
+        }
+      }
+      camCtrl.controls.enabled = true;
+    } else {
+      // Tiny drag — treat as a click on empty space (clear)
+      if (!marqueeState.shiftKey) selection.clear();
+    }
+    if (marqueeEl) marqueeEl.hidden = true;
+    marqueeState = null;
+    return;
+  }
+
   if (inputRouter.tool === TOOL.ROAD) {
     triggerAutoSave();
   }
@@ -1223,9 +1507,8 @@ function registerRoadCell(worldX, worldZ) {
   const gx = snapToGrid(worldX);
   const gz = snapToGrid(worldZ);
   if (!gridState.isOccupied(gx, gz)) {
-    // Road painter auto-classifies, so we register the auto-tiled result
-    const classification = 'straight'; // default, updated below
-    gridState.set(gx, gz, classification, 0, 'road');
+    const { model, rotation } = roadPainter.classifyCell(gx, gz);
+    gridState.set(gx, gz, model, rotation, 'road');
   }
 }
 
@@ -1233,7 +1516,8 @@ function registerRoadCell(worldX, worldZ) {
 function syncRoadToGrid() {
   gridState.clearBySource('road');
   for (const [key, cell] of roadPainter.cells) {
-    gridState.set(cell.x, cell.z, 'straight', 0, 'road');
+    const { model, rotation } = roadPainter.classifyCell(cell.x, cell.z);
+    gridState.set(cell.x, cell.z, model, rotation, 'road');
   }
 }
 
@@ -1242,7 +1526,12 @@ function syncEntityGridFromScene() {
   for (const entity of sceneGraph.getByCategory('segment')) {
     const gx = snapToGrid(entity.position.x);
     const gz = snapToGrid(entity.position.z);
-    gridState.set(gx, gz, entity.type, entity.rotation || 0, 'entity', entity.id);
+    const rot = entity.rotation || 0;
+    const def = PIECE_DEFS[entity.type];
+    const footprint = def?.footprint || [[0, 0]];
+    for (const [dx, dz] of footprint) {
+      gridState.set(gx + dx * GRID_SIZE, gz + dz * GRID_SIZE, entity.type, rot, 'entity', entity.id);
+    }
   }
 }
 
@@ -1269,15 +1558,22 @@ function normalizeEntityTransform(entity, { position, rotation, scale }, fallbac
     nextPosition.y = 0;
     nextRotation = normalizeRotation(nextRotation);
     nextScale = 1;
-    const occupant = gridState.get(nextPosition.x, nextPosition.z);
-    if (occupant && !(occupant.source === 'entity' && occupant.entityId === entity.id)) {
-      return {
-        ok: false,
-        reason: 'occupied',
-        position: { ...fallback.position },
-        rotation: fallback.rotation,
-        scale: fallback.scale,
-      };
+    const def = PIECE_DEFS[entity.type];
+    const footprint = def?.footprint || [[0, 0]];
+    const layer = getGridLayer(entity.type);
+    const gx = nextPosition.x;
+    const gz = nextPosition.z;
+    for (const [dx, dz] of footprint) {
+      const occupant = gridState.get(gx + dx * GRID_SIZE, gz + dz * GRID_SIZE, layer);
+      if (occupant && !(occupant.source === 'entity' && occupant.entityId === entity.id)) {
+        return {
+          ok: false,
+          reason: 'occupied',
+          position: { ...fallback.position },
+          rotation: fallback.rotation,
+          scale: fallback.scale,
+        };
+      }
     }
   } else {
     nextPosition.y = Math.round(nextPosition.y || 0);
@@ -1301,6 +1597,7 @@ function eraseAtWorld(worldPos, pointer) {
   const erased = roadPainter.erase(worldPos.x, worldPos.z);
   if (erased) {
     gridState.remove(gx, gz);
+    roadGridDirty = true;
     return;
   }
 
@@ -1310,10 +1607,15 @@ function eraseAtWorld(worldPos, pointer) {
     const entity = sceneGraph.get(entityId);
     if (entity) {
       cmdStack.execute(DeleteObjectCmd(sceneGraph, entityId, entity));
-      gridState.remove(
-        snapToGrid(entity.position.x),
-        snapToGrid(entity.position.z),
-      );
+      // Remove all footprint cells for this piece
+      const def = PIECE_DEFS[entity.type];
+      const footprint = def?.footprint || [[0, 0]];
+      const eraseLayer = getGridLayer(entity.type);
+      const ex = snapToGrid(entity.position.x);
+      const ez = snapToGrid(entity.position.z);
+      for (const [dx, dz] of footprint) {
+        gridState.remove(ex + dx * GRID_SIZE, ez + dz * GRID_SIZE, eraseLayer);
+      }
     }
   }
 }
@@ -1323,14 +1625,22 @@ async function placeObject(worldPos) {
   const gx = snapToGrid(worldPos.x);
   const gz = snapToGrid(worldPos.z);
 
-  // Prevent double-placement
-  if (gridState.isOccupied(gx, gz)) {
-    showToast('Cell is already occupied', 'warn');
-    return;
+  // Get footprint cells (default: single cell at origin)
+  const def = PIECE_DEFS[activePlacementKey];
+  const footprint = def?.footprint || [[0, 0]];
+  const layer = getGridLayer(activePlacementKey);
+  const cells = footprint.map(([dx, dz]) => [gx + dx * GRID_SIZE, gz + dz * GRID_SIZE]);
+
+  // Prevent double-placement: check ALL footprint cells at the same layer
+  for (const [cx, cz] of cells) {
+    if (gridState.isOccupied(cx, cz, layer)) {
+      showToast('Cell is already occupied', 'warn');
+      return;
+    }
   }
 
-  // Determine rotation: manual override or auto-connect
-  const rotation = manualRotation ?? gridState.findBestRotation(activePlacementKey, gx, gz);
+  // Determine rotation: manual override, or ghost preview (mouse-directed / auto-connect)
+  const rotation = manualRotation ?? ghostRotation;
 
   try {
     const model = await loadModel(activePlacementKey);
@@ -1349,11 +1659,25 @@ async function placeObject(worldPos) {
     };
 
     cmdStack.execute(PlaceObjectCmd(sceneGraph, entity));
-    gridState.set(gx, gz, activePlacementKey, rotation, 'entity', entity.id);
+
+    // Register all footprint cells
+    for (const [cx, cz] of cells) {
+      gridState.set(cx, cz, activePlacementKey, rotation, 'entity', entity.id);
+    }
 
     const conns = gridState.getConnections(gx, gz, activePlacementKey, rotation);
     const connected = conns.filter(c => c.status === 'connected').length;
-    setHint(`Placed ${activePlacementKey} · ${connected} join${connected !== 1 ? 's' : ''}`);
+    const rotLabel = manualRotation != null ? `manual ${rotation}°` : (rotation !== 0 ? `auto-rotated ${rotation}°` : '');
+    const msg = `Placed ${activePlacementKey}${rotLabel ? ' · ' + rotLabel : ''} · ${connected} join${connected !== 1 ? 's' : ''}`;
+    showToast(msg, connected > 0 ? 'success' : 'info');
+
+    // Reset to cursor after placing — user picks next action explicitly
+    activePlacementKey = null;
+    manualRotation = null;
+    removeGhost();
+    lastGhostCell = null;
+    gridState.hideIndicators();
+    inputRouter.setTool(TOOL.SELECT);
   } catch (err) {
     console.error('[builder] Failed to place object:', err);
     showToast('Failed to load model', 'error');
@@ -1401,9 +1725,11 @@ function placeExtra(worldPos) {
 // ── Rotate piece shortcut ─────────────────────────────────────
 function onRotatePiece() {
   if (inputRouter.tool === TOOL.PLACE && activePlacementKey) {
-    // Cycle manual rotation: null → 0 → 90 → 180 → 270 → null (auto)
+    // Cycle manual rotation: advance +90 from current ghost rotation
     if (manualRotation === null) {
-      manualRotation = 0;
+      // Start from the current auto-connect rotation + 90° so the
+      // user always sees an immediate visual change.
+      manualRotation = ((ghostRotation || 0) + 90) % 360;
     } else {
       manualRotation = (manualRotation + 90) % 360;
     }
@@ -1422,63 +1748,113 @@ function onRotatePiece() {
   }
 }
 
-// ── Ghost preview (actual model, auto-rotated) ────────────────
+// ── Ghost preview (actual model, mouse-directed rotation) ─────
 async function updatePlacementGhost(worldPos) {
   const gx = snapToGrid(worldPos.x);
   const gz = snapToGrid(worldPos.z);
   const key = cellKey(gx, gz);
+  const cellChanged = key !== lastGhostCell;
 
-  // Skip update if cursor is on the same cell
-  if (key === lastGhostCell && ghostObj && ghostPieceKey === activePlacementKey) return;
-  lastGhostCell = key;
+  const activeLayer = activePlacementKey ? getGridLayer(activePlacementKey) : 0;
+  const occupied = gridState.isOccupied(gx, gz, activeLayer);
 
-  const occupied = gridState.isOccupied(gx, gz);
+  // Model swap & position/tint only on cell or piece change
+  if (cellChanged || !ghostObj || (activeExtraTool || activePlacementKey) !== ghostPieceKey) {
+    lastGhostCell = key;
 
-  // Swap ghost model if piece type changed
-  const neededKey = activeExtraTool || activePlacementKey;
-  if (neededKey !== ghostPieceKey) {
-    removeGhost();
-    try {
-      if (activePlacementKey && PIECE_DEFS[activePlacementKey]) {
-        ghostObj = await loadModel(activePlacementKey);
-      } else {
-        // Extras / unknown — simple box ghost
-        const geo = new THREE.BoxGeometry(4, 2, 4);
-        const mat = new THREE.MeshBasicMaterial({ color: 0x66aaff, wireframe: true });
-        ghostObj = new THREE.Mesh(geo, mat);
+    const neededKey = activeExtraTool || activePlacementKey;
+    if (neededKey !== ghostPieceKey) {
+      removeGhost();
+      try {
+        if (activePlacementKey && PIECE_DEFS[activePlacementKey]) {
+          ghostObj = await loadModel(activePlacementKey);
+        } else {
+          // Extras / unknown — simple box ghost
+          const geo = new THREE.BoxGeometry(4, 2, 4);
+          const mat = new THREE.MeshBasicMaterial({ color: 0x66aaff, wireframe: true });
+          ghostObj = new THREE.Mesh(geo, mat);
+        }
+        makeGhostMaterial(ghostObj);
+        ghostObj.name = '__ghost';
+        scene.add(ghostObj);
+        ghostPieceKey = neededKey;
+      } catch {
+        return; // model load failed, skip ghost
       }
-      makeGhostMaterial(ghostObj);
-      ghostObj.name = '__ghost';
-      scene.add(ghostObj);
-      ghostPieceKey = neededKey;
-    } catch {
-      return; // model load failed, skip ghost
+    }
+
+    if (ghostObj) {
+      ghostObj.position.set(gx, 0, gz);
+      ghostObj.visible = true;
+      tintGhost(ghostObj, !occupied);
     }
   }
 
   if (!ghostObj) return;
 
-  // Auto-rotate (segments only)
+  // ── Rotation (runs every mouse-move for mouse-directed control) ──
   if (activePlacementKey && PIECE_DEFS[activePlacementKey]) {
-    const rot = manualRotation ?? gridState.findBestRotation(activePlacementKey, gx, gz);
-    ghostRotation = rot;
-    ghostObj.rotation.y = -(rot * Math.PI / 180);
-
-    // Connection indicators
-    const conns = gridState.getConnections(gx, gz, activePlacementKey, rot);
-    gridState.showIndicators(gx, gz, conns);
-    if (typeof window !== 'undefined' && window.__builderDebug) {
-      window.__builderDebug.placement = {
-        cell: { x: gx, z: gz },
-        pieceKey: activePlacementKey,
-        rotation: rot,
-        occupied,
-        snapped: conns.some((conn) => conn.status === 'connected'),
-        connected: conns.filter((conn) => conn.status === 'connected').length,
-        connections: conns.map((conn) => ({ dir: conn.dir, status: conn.status })),
-      };
+    let rot;
+    if (manualRotation !== null) {
+      rot = manualRotation;
+    } else {
+      // Mouse-directed rotation: pick the rotation whose ports best
+      // face the mouse direction.  Primary score = best single-port
+      // alignment (max cosine), tiebreak = sum of all port cosines.
+      // Falls back to auto-connect when mouse is near cell center.
+      const dx = worldPos.x - gx;
+      const dz = worldPos.z - gz;
+      const dist = Math.sqrt(dx * dx + dz * dz);
+      if (dist > GRID_SIZE * 0.15) {
+        let mouseAngle = Math.atan2(dx, -dz) * (180 / Math.PI);
+        if (mouseAngle < 0) mouseAngle += 360;
+        const basePorts = PIECE_DEFS[activePlacementKey].ports;
+        const DIR_ANGLE = [0, 90, 180, 270]; // N E S W
+        let bestRot = 0, bestMax = -Infinity, bestSum = -Infinity;
+        for (const candidate of [0, 90, 180, 270]) {
+          const steps = candidate / 90;
+          let maxAlign = -Infinity, sumAlign = 0;
+          for (const p of basePorts) {
+            const portAngle = DIR_ANGLE[(p + steps) % 4];
+            let diff = mouseAngle - portAngle;
+            if (diff > 180) diff -= 360;
+            if (diff < -180) diff += 360;
+            const c = Math.cos(diff * Math.PI / 180);
+            if (c > maxAlign) maxAlign = c;
+            sumAlign += c;
+          }
+          if (maxAlign > bestMax + 1e-6 ||
+              (Math.abs(maxAlign - bestMax) < 1e-6 && sumAlign > bestSum + 1e-6)) {
+            bestMax = maxAlign; bestSum = sumAlign; bestRot = candidate;
+          }
+        }
+        rot = bestRot;
+      } else {
+        // Mouse near cell center — fall back to auto-connect
+        rot = gridState.findBestRotation(activePlacementKey, gx, gz);
+      }
     }
-  } else {
+
+    if (rot !== ghostRotation || cellChanged) {
+      ghostRotation = rot;
+      ghostObj.rotation.y = -(rot * Math.PI / 180);
+
+      // Connection indicators
+      const conns = gridState.getConnections(gx, gz, activePlacementKey, rot);
+      gridState.showIndicators(gx, gz, conns);
+      if (typeof window !== 'undefined' && window.__builderDebug) {
+        window.__builderDebug.placement = {
+          cell: { x: gx, z: gz },
+          pieceKey: activePlacementKey,
+          rotation: rot,
+          occupied,
+          snapped: conns.some((conn) => conn.status === 'connected'),
+          connected: conns.filter((conn) => conn.status === 'connected').length,
+          connections: conns.map((conn) => ({ dir: conn.dir, status: conn.status })),
+        };
+      }
+    }
+  } else if (cellChanged) {
     gridState.hideIndicators();
     if (typeof window !== 'undefined' && window.__builderDebug) {
       window.__builderDebug.placement = activeExtraTool
@@ -1494,11 +1870,6 @@ async function updatePlacementGhost(worldPos) {
         : null;
     }
   }
-
-  // Position & tint
-  ghostObj.position.set(gx, 0, gz);
-  ghostObj.visible = true;
-  tintGhost(ghostObj, !occupied);
 }
 
 function removeGhost() {
@@ -1524,19 +1895,17 @@ function removeGhost() {
 // ── Selection change → update inspector + gizmo ───────────────
 function onSelectionChange() {
   updateInspector();
-  gizmo.detach();
+  // Attach gizmo to first selected entity (or detach if nothing selected)
+  reattachGizmo();
   updateSelectionHud();
   updateActionRing();
   hideContextMenu();
 }
 
 function reattachGizmo() {
-  const entity = selection.first();
-  if (entity) {
-    gizmo.attach(entity);
-  } else {
-    gizmo.detach();
-  }
+  // Gizmo arrows removed — click-hold-drag replaces translate handles.
+  // Always keep detached so no arrows show.
+  gizmo.detach();
 }
 
 function onTransformEnd(entityId, oldPos, oldRot, oldScale) {
@@ -1570,10 +1939,30 @@ function onTransformEnd(entityId, oldPos, oldRot, oldScale) {
     oldPos, oldRot, oldScale,
     normalized.position, normalized.rotation, normalized.scale,
   ));
-  reattachGizmo();
+
+  // Update gridState so the cell registry tracks the new position
   if (entity.category === 'segment') {
-    setHint('Track piece snapped back onto the build grid.');
+    const def = PIECE_DEFS[entity.type];
+    const footprint = def?.footprint || [[0, 0]];
+    const layer = getGridLayer(entity.type);
+
+    // Remove old footprint cells
+    const ox = snapToGrid(oldPos.x);
+    const oz = snapToGrid(oldPos.z);
+    for (const [dx, dz] of footprint) {
+      gridState.remove(ox + dx * GRID_SIZE, oz + dz * GRID_SIZE, layer);
+    }
+
+    // Register new footprint cells
+    const nx = snapToGrid(normalized.position.x);
+    const nz = snapToGrid(normalized.position.z);
+    for (const [dx, dz] of footprint) {
+      gridState.set(nx + dx * GRID_SIZE, nz + dz * GRID_SIZE, entity.type, normalized.rotation, 'entity', entityId);
+    }
+    setHint('Moved track piece to new grid cell.');
   }
+
+  reattachGizmo();
 }
 
 // ── Inspector panel ───────────────────────────────────────────
@@ -1672,7 +2061,8 @@ function canMoveSelectionBy(deltaX, deltaZ) {
     if (entity.category !== 'segment') return true;
     const targetX = snapToGrid(entity.position.x + deltaX);
     const targetZ = snapToGrid(entity.position.z + deltaZ);
-    const occupant = gridState.get(targetX, targetZ);
+    const layer = getGridLayer(entity.type);
+    const occupant = gridState.get(targetX, targetZ, layer);
     return !occupant || (occupant.source === 'entity' && selectedIds.has(occupant.entityId));
   });
 }
@@ -1807,7 +2197,7 @@ async function onDuplicate() {
       if (entity.category !== 'segment') return true;
       const gx = snapToGrid(entity.position.x + offset.x);
       const gz = snapToGrid(entity.position.z + offset.z);
-      return !gridState.isOccupied(gx, gz);
+      return !gridState.isOccupied(gx, gz, getGridLayer(entity.type));
     });
     if (canUseOffset) {
       chosenOffset = offset;
@@ -1837,17 +2227,115 @@ async function onDuplicate() {
   setHint(`Duplicated ${created.length} item${created.length === 1 ? '' : 's'}.`);
 }
 
+function onCopy() {
+  const entities = selection.all();
+  if (!entities.length) {
+    showToast('Select something to copy.', 'info');
+    return;
+  }
+  // Compute centroid as anchor
+  let cx = 0, cz = 0;
+  entities.forEach(e => { cx += e.position.x; cz += e.position.z; });
+  cx /= entities.length;
+  cz /= entities.length;
+  cx = snapToGrid(cx);
+  cz = snapToGrid(cz);
+
+  clipboard = entities.map(e => ({
+    type: e.type,
+    category: e.category,
+    modelKey: e.modelKey,
+    rotation: e.rotation,
+    scale: e.scale,
+    heading: e.heading || 0,
+    offset: { x: e.position.x - cx, z: e.position.z - cz },
+  }));
+  showToast(`Copied ${clipboard.length} item${clipboard.length === 1 ? '' : 's'}.`, 'info');
+}
+
+async function onPaste() {
+  if (!clipboard || !clipboard.length) {
+    showToast('Nothing on clipboard. Copy first (Ctrl+C).', 'info');
+    return;
+  }
+
+  // Place near center of current view
+  const cam = camCtrl.camera;
+  const center = new THREE.Vector3(0, 0, -1).applyMatrix4(cam.matrixWorld);
+  const dir = new THREE.Vector3().subVectors(center, cam.position).normalize();
+  const planeY = 0;
+  const t = (planeY - cam.position.y) / dir.y;
+  const pasteCenter = cam.position.clone().add(dir.multiplyScalar(Math.abs(t)));
+  const pcx = snapToGrid(pasteCenter.x);
+  const pcz = snapToGrid(pasteCenter.z);
+
+  const created = [];
+  for (const item of clipboard) {
+    const pos = { x: pcx + item.offset.x, y: 0, z: pcz + item.offset.z };
+
+    let object3D;
+    if (item.category === 'segment' || item.category === 'prop') {
+      const modelResult = await loadModel(item.modelKey || item.type);
+      if (!modelResult) continue;
+      object3D = modelResult.scene ? modelResult.scene.clone() : modelResult.clone();
+      object3D.position.set(pos.x, pos.y, pos.z);
+      object3D.rotation.y = -(item.rotation * Math.PI / 180);
+      object3D.scale.setScalar(item.scale);
+    } else {
+      object3D = createMarkerClone(item, pos);
+    }
+
+    const clone = {
+      id: 0,
+      type: item.type,
+      category: item.category,
+      modelKey: item.modelKey,
+      object3D,
+      position: pos,
+      rotation: item.rotation,
+      scale: item.scale,
+      heading: item.heading,
+    };
+
+    cmdStack.execute(PlaceObjectCmd(sceneGraph, clone));
+
+    if (item.category === 'segment') {
+      const def = PIECE_DEFS[item.type];
+      const footprint = def?.footprint || [[0, 0]];
+      const gx = snapToGrid(pos.x);
+      const gz = snapToGrid(pos.z);
+      for (const [fdx, fdz] of footprint) {
+        gridState.set(gx + fdx * GRID_SIZE, gz + fdz * GRID_SIZE, item.type, item.rotation, 'entity', clone.id);
+      }
+    }
+    created.push(clone);
+  }
+
+  if (created.length) {
+    selection.clear(true);
+    created.forEach(e => selection.toggle(e.id));
+    setHint(`Pasted ${created.length} item${created.length === 1 ? '' : 's'}.`);
+    triggerAutoSave();
+  } else {
+    showToast('Paste failed — could not load models.', 'warn');
+  }
+}
+
 function onDelete() {
   const entities = selection.all();
   if (entities.length === 0) return;
   selection.clear(true);
   for (const entity of entities) {
     cmdStack.execute(DeleteObjectCmd(sceneGraph, entity.id, entity));
-    // Remove from grid
-    gridState.remove(
-      snapToGrid(entity.position.x),
-      snapToGrid(entity.position.z),
-    );
+    // Remove all footprint cells for this piece
+    const def = PIECE_DEFS[entity.type];
+    const footprint = def?.footprint || [[0, 0]];
+    const delLayer = getGridLayer(entity.type);
+    const gx = snapToGrid(entity.position.x);
+    const gz = snapToGrid(entity.position.z);
+    for (const [dx, dz] of footprint) {
+      gridState.remove(gx + dx * GRID_SIZE, gz + dz * GRID_SIZE, delLayer);
+    }
   }
   gizmo.detach();
   updateInspector();
@@ -1912,6 +2400,89 @@ function onPlaytest() {
   if (!result.ok) {
     showToast(result.reason, 'warn');
   }
+}
+
+async function onPublish() {
+  const name = nameInput?.value?.trim();
+  if (!name) {
+    showToast('Give your track a name before publishing.', 'warn');
+    return;
+  }
+  const trackData = serializer.buildTrackData(name, 'TinkerTracks', { preset: currentPreset });
+  if (!trackData?.segments?.length && !trackData?.roadCells?.length) {
+    showToast('Nothing to publish — place some objects first.', 'warn');
+    return;
+  }
+  try {
+    const result = await publishTrack({
+      name,
+      author: 'Anonymous',
+      description: '',
+      trackData: trackData,
+      tags: currentPreset,
+    });
+    if (result?.id) {
+      showToast(`Published "${name}" to the community!`, 'success');
+    } else {
+      showToast('Publish failed — try again later.', 'warn');
+    }
+  } catch (err) {
+    console.error('[Publish]', err);
+    showToast('Publish failed — server unreachable.', 'warn');
+  }
+}
+
+async function onBrowse() {
+  try {
+    const result = await browseTracks({ sort: 'newest', limit: 20 });
+    const tracks = result?.results || [];
+    if (!tracks.length) {
+      showToast('No community tracks found yet.', 'info');
+      return;
+    }
+    // Build and show a lightweight modal
+    let existing = document.getElementById('bv2-browse-modal');
+    if (existing) existing.remove();
+
+    const modal = document.createElement('div');
+    modal.id = 'bv2-browse-modal';
+    modal.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;';
+    const card = document.createElement('div');
+    card.style.cssText = 'background:#1a1d24;border-radius:12px;padding:24px;max-width:560px;width:90%;max-height:70vh;overflow-y:auto;color:#e8eaed;font-family:system-ui,sans-serif;';
+    card.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+      <h2 style="margin:0;font-size:1.2rem;">Community Tracks</h2>
+      <button id="bv2-browse-close" style="background:none;border:none;color:#e8eaed;font-size:1.4rem;cursor:pointer;">&times;</button>
+    </div>`;
+    const list = document.createElement('div');
+    for (const t of tracks) {
+      const row = document.createElement('div');
+      row.style.cssText = 'padding:10px 12px;border-radius:8px;cursor:pointer;margin-bottom:6px;background:#252830;';
+      row.innerHTML = `<strong>${escapeHtml(t.name)}</strong> <span style="opacity:.6;font-size:.85rem;">by ${escapeHtml(t.author || 'Anon')}</span>
+        <div style="font-size:.8rem;opacity:.5;">${t.play_count || 0} plays</div>`;
+      row.addEventListener('click', () => {
+        modal.remove();
+        if (t.track_data) {
+          loadTrackData(typeof t.track_data === 'string' ? JSON.parse(t.track_data) : t.track_data);
+          showToast(`Loaded "${t.name}"`, 'success');
+        }
+      });
+      list.appendChild(row);
+    }
+    card.appendChild(list);
+    modal.appendChild(card);
+    modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
+    document.body.appendChild(modal);
+    card.querySelector('#bv2-browse-close')?.addEventListener('click', () => modal.remove());
+  } catch (err) {
+    console.error('[Browse]', err);
+    showToast('Could not load community tracks.', 'warn');
+  }
+}
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
 }
 
 // ── Load track data into scene ────────────────────────────────
@@ -2126,6 +2697,9 @@ async function loadTrackData(data) {
 
   const maxEntityId = usedEntityIds.size ? Math.max(...usedEntityIds) : 0;
   sceneGraph.setIdCounter(maxEntityId + 1);
+
+  // Ensure complete grid registration (including multi-cell footprints)
+  syncEntityGridFromScene();
 
   // Fit camera to content
   const bounds = computeViewBounds({

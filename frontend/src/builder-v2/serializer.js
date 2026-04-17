@@ -40,6 +40,39 @@ const PLAYTEST_SEGMENT_TYPE_MAP = Object.freeze({
   'cap-front': 'cap-front',
   'cap-back': 'cap-back',
   end: 'end',
+  // Phase 3 — new piece types
+  't-junction': 't-junction',
+  crossroads: 'crossroads',
+  'banked-turn': 'banked-turn',
+  jump: 'jump',
+  tunnel: 'tunnel',
+  bridge: 'bridge',
+  'bridge-onramp': 'bridge-onramp',
+  'bridge-offramp': 'bridge-offramp',
+  chicane: 'chicane',
+  'ramp-up': 'ramp-up',
+  'ramp-down': 'ramp-down',
+  // Pittsburgh Bridge Collection
+  'pgh-clemente': 'pgh-clemente',
+  'pgh-warhol': 'pgh-warhol',
+  'pgh-carson': 'pgh-carson',
+  'pgh-fort-pitt': 'pgh-fort-pitt',
+  'pgh-fort-duquesne': 'pgh-fort-duquesne',
+  'pgh-west-end': 'pgh-west-end',
+  'pgh-veterans': 'pgh-veterans',
+  'pgh-16th-st': 'pgh-16th-st',
+  'pgh-south-10th': 'pgh-south-10th',
+  'pgh-31st-st': 'pgh-31st-st',
+  'pgh-mckees-rocks': 'pgh-mckees-rocks',
+  'pgh-smithfield': 'pgh-smithfield',
+  'pgh-liberty': 'pgh-liberty',
+  'pgh-62nd-st': 'pgh-62nd-st',
+  'pgh-birmingham': 'pgh-birmingham',
+  'pgh-40th-st': 'pgh-40th-st',
+  'pgh-hot-metal': 'pgh-hot-metal',
+  'pgh-glenwood': 'pgh-glenwood',
+  'pgh-highland-park': 'pgh-highland-park',
+  'pgh-homestead': 'pgh-homestead',
 });
 
 function roadCellKey(position) {
@@ -162,13 +195,15 @@ function deriveTrackSpawnPositions(playtestSegments = [], existingStartPositions
 }
 
 function toPlaytestSegment(segment) {
-  const type = PLAYTEST_SEGMENT_TYPE_MAP[segment.type] || 'straight';
+  const type = PLAYTEST_SEGMENT_TYPE_MAP[segment.type] || segment.type || 'straight';
   return {
     id: segment.id,
     type,
     position: { ...segment.position, y: Number(segment.position?.y || 0) },
     rotation: Number(segment.rotation || 0),
     scale: Number(segment.scale || 1) || 1,
+    elevation: Number(segment.elevation || 0),
+    surface: segment.surface || 'asphalt',
     builderRole: 'placed',
   };
 }
@@ -196,6 +231,8 @@ export class Serializer {
         position: { ...e.position },
         rotation: e.rotation || 0,
         scale: e.scale || 1,
+        elevation: e.elevation || 0,
+        surface: e.surface || 'asphalt',
       }));
 
     const obstacles = entities
@@ -434,5 +471,25 @@ export class Serializer {
         position: { ...rc.position },
         width: 12,
       }));
+  }
+
+  /** Validate track data and return an array of warning strings. */
+  validate(options = {}) {
+    const data = this.buildTrackData('__validate__', '__validate__', options);
+    const warnings = [];
+    const hasRoad = data.roadCells?.length > 0;
+    const hasSegments = data.segments?.length > 0;
+    if (!hasRoad && !hasSegments) warnings.push('Track is empty — place road cells or segments.');
+    if (!data.startPositions?.length) {
+      const spawns = this._graph.getAll().filter(e => e.category === 'spawn');
+      if (!spawns.length) warnings.push('No spawn point — the kart will spawn at the first segment.');
+    }
+    if (hasRoad || hasSegments) {
+      const cells = new Set();
+      for (const rc of (data.roadCells || [])) cells.add(`${rc.position.x}:${rc.position.z}`);
+      for (const seg of (data.segments || [])) cells.add(`${seg.position.x}:${seg.position.z}`);
+      if (cells.size === 1) warnings.push('Only 1 cell placed — add more segments to form a track.');
+    }
+    return warnings;
   }
 }

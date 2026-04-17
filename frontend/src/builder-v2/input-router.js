@@ -97,6 +97,8 @@ export class InputRouter {
     if (ctrl && lower === 's') { e.preventDefault(); this._h.onSave(); return; }
     if (ctrl && lower === 'a') { e.preventDefault(); this._h.onSelectAll(); return; }
     if (ctrl && lower === 'd') { e.preventDefault(); this._h.onDuplicate?.(); return; }
+    if (ctrl && lower === 'c') { e.preventDefault(); this._h.onCopy?.(); return; }
+    if (ctrl && lower === 'v') { e.preventDefault(); this._h.onPaste?.(); return; }
 
     if (key === '1') { this.setTool(TOOL.SELECT); return; }
     if (key === '2') { this.setTool(TOOL.ROAD); return; }

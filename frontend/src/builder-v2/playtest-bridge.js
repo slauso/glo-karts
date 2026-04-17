@@ -16,12 +16,13 @@ export class PlaytestBridge {
    * Launch playtest: saves TrackData to sessionStorage, opens realtime.html.
    * @param {string} name
    * @param {string} author
-   * @param {{ preset?: 'track' | 'arena' }} options
+   * @param {{ preset?: 'track' | 'arena', timeTrial?: boolean }} options
    */
   launch(name, author, options = {}) {
     const preset = options?.preset === 'track' ? 'track' : 'arena';
+    const timeTrial = !!options?.timeTrial;
     const data = this._serializer.buildPlaytestTrackData(name, author, { preset });
-    const playtestMode = data.playtestMode || 'race';
+    const playtestMode = timeTrial ? 'time_trial' : (data.playtestMode || 'race');
     const selectedKart = sessionStorage.getItem('selectedKart') || localStorage.getItem('selectedKart') || 'tux';
     const playerColor = sessionStorage.getItem('carColor') || localStorage.getItem('carColor') || 'red';
     const gloEffect = sessionStorage.getItem('gloEffect') || localStorage.getItem('gloEffect') || 'solid';
