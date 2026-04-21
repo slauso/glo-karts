@@ -7,10 +7,13 @@ export class Selection {
   /**
    * @param {import('./scene-graph.js').SceneGraph} sceneGraph
    * @param {() => void} onChange
+   * @param {{resolveEntity?: (id: string|number) => any, listAdditionalEntities?: () => any[]}} [options]
    */
-  constructor(sceneGraph, onChange) {
+  constructor(sceneGraph, onChange, options = {}) {
     this._graph = sceneGraph;
     this._onChange = onChange;
+    this._resolveEntity = options.resolveEntity || null;
+    this._listAdditionalEntities = options.listAdditionalEntities || null;
     /** @type {Set<number>} */
     this._ids = new Set();
     this._highlightColor = new THREE.Color(0x66aaff);
@@ -23,15 +26,19 @@ export class Selection {
   get count() { return this._ids.size; }
   get isEmpty() { return this._ids.size === 0; }
 
+  _resolve(id) {
+    return this._graph.get(id) || this._resolveEntity?.(id) || null;
+  }
+
   /** Get first selected entity. */
   first() {
     if (this._ids.size === 0) return null;
-    return this._graph.get(this._ids.values().next().value);
+    return this._resolve(this._ids.values().next().value);
   }
 
   /** Get all selected entities. */
   all() {
-    return Array.from(this._ids).map(id => this._graph.get(id)).filter(Boolean);
+    return Array.from(this._ids).map((id) => this._resolve(id)).filter(Boolean);
   }
 
   /** Select a single entity, replacing current selection. */
@@ -67,6 +74,10 @@ export class Selection {
       this._ids.add(entity.id);
       this._highlight(entity.id, true);
     }
+    for (const entity of this._listAdditionalEntities?.() || []) {
+      this._ids.add(entity.id);
+      this._highlight(entity.id, true);
+    }
     this._onChange();
   }
 
@@ -74,26 +85,40 @@ export class Selection {
   has(id) { return this._ids.has(id); }
 
   /** Raycast pick from a pixel coordinate. Returns entity id or null. */
-  pick(camera, pointer, entityGroup) {
+  pick(camera, pointer, targetGroups) {
     const raycaster = new THREE.Raycaster();
     raycaster.setFromCamera(pointer, camera);
 
+    const groups = Array.isArray(targetGroups) ? targetGroups.filter(Boolean) : [targetGroups].filter(Boolean);
     const meshes = [];
-    entityGroup.traverse((child) => {
-      if (child.isMesh && child.visible) meshes.push(child);
+    groups.forEach((group) => {
+      group.traverse((child) => {
+        if (child.isMesh && child.visible) meshes.push(child);
+      });
     });
 
     const hits = raycaster.intersectObjects(meshes, false);
     if (hits.length === 0) return null;
 
-    // Walk up to find the entity root (direct child of entityGroup)
-    let obj = hits[0].object;
-    while (obj && obj.parent !== entityGroup) obj = obj.parent;
-    if (!obj) return null;
+    for (const hit of hits) {
+      let matchedRoot = null;
+      for (const group of groups) {
+        let obj = hit.object;
+        while (obj && obj.parent !== group) obj = obj.parent;
+        if (obj) {
+          matchedRoot = obj;
+          break;
+        }
+      }
+      if (!matchedRoot) continue;
+      if (matchedRoot.userData?._selectionId) return matchedRoot.userData._selectionId;
 
-    // Find entity whose object3D matches
-    for (const entity of this._graph.getAll()) {
-      if (entity.object3D === obj) return entity.id;
+      for (const entity of this._graph.getAll()) {
+        if (entity.object3D === matchedRoot) return entity.id;
+      }
+
+      const matchedId = matchedRoot.userData?._selectionId;
+      if (matchedId) return matchedId;
     }
     return null;
   }
@@ -108,7 +133,7 @@ export class Selection {
   }
 
   _highlight(id, on) {
-    const entity = this._graph.get(id);
+    const entity = this._resolve(id);
     if (!entity?.object3D) return;
 
     entity.object3D.traverse((child) => {

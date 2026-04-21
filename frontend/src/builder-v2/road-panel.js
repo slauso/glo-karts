@@ -1,11 +1,16 @@
 /**
- * road-panel.js — Grid-based road painting with auto-tiling bitmask.
+ * road-panel.js — Grid-based road painting with auto-tiling.
  *
- * Inspired by Starter-Kit-Racing's editor.html auto-tile system.
- * Uses 4-bit neighbor mask (N=8, S=4, E=2, W=1) to pick piece + rotation.
+ * Uses track-data.js auto-tile engine for intelligent piece resolution.
+ * Ghost preview shows actual 3D models with neighbor change previews.
  */
 import * as THREE from 'three';
 import { GRID_SIZE, snapToGrid, cellKey } from '../modules/track-placement.js';
+import {
+  TRACK_CELLS, addCell, removeCell, clearAllCells,
+  resolveTile, getGhostPreview, importCells, exportCells,
+  cellKey as tdCellKey,
+} from './track-data.js';
 
 /**
  * Road cell storage keyed by "x:z".
@@ -21,12 +26,46 @@ export class RoadPainter {
     this._loadModel = loadModelFn;
     /** @type {Map<string, { x: number, z: number, mesh: THREE.Object3D|null }>} */
     this.cells = new Map();
-    this._ghostMesh = null;
+    this._ghostGroup = new THREE.Group();
+    this._ghostGroup.name = '__road_ghost_group';
+    this._ghostMeshes = [];
   }
 
   /** Check if a cell exists at grid coords. */
   hasCell(x, z) {
     return this.cells.has(cellKey(snapToGrid(x), snapToGrid(z)));
+  }
+
+  getCell(key) {
+    return this.cells.get(key) || null;
+  }
+
+  getSelectionId(key) {
+    return `road:${key}`;
+  }
+
+  getSelectionEntity(key) {
+    const cell = this.cells.get(key);
+    if (!cell?.mesh) return null;
+    const td = TRACK_CELLS.get(tdCellKey(cell.x, cell.z));
+    const rotation = td?.rotation || 0;
+    return {
+      id: this.getSelectionId(key),
+      type: td?.type || 'road',
+      category: 'road',
+      modelKey: 'road',
+      object3D: cell.mesh,
+      position: { x: cell.x, y: 0, z: cell.z },
+      rotation,
+      scale: 1,
+      roadCellKey: key,
+    };
+  }
+
+  getSelectionEntities() {
+    return Array.from(this.cells.keys())
+      .map((key) => this.getSelectionEntity(key))
+      .filter(Boolean);
   }
 
   /** Paint a road cell at world position. Returns the cell key or null if already exists. */
@@ -37,11 +76,22 @@ export class RoadPainter {
 
     if (this.cells.has(key)) return null;
 
+    // Add to track-data auto-tile engine (resolves self + neighbors)
+    const changes = addCell(gx, gz);
+
+    // Add to local mesh map
     this.cells.set(key, { x: gx, z: gz, mesh: null });
 
-    // Rebuild affected neighbors + self
+    // Rebuild self
     await this._rebuildCell(gx, gz);
-    await this._rebuildNeighbors(gx, gz);
+
+    // Rebuild changed neighbors
+    if (changes) {
+      for (const change of changes) {
+        if (change.gx === gx && change.gz === gz) continue;
+        await this._rebuildCell(change.gx, change.gz);
+      }
+    }
 
     return key;
   }
@@ -60,9 +110,50 @@ export class RoadPainter {
     }
     this.cells.delete(key);
 
-    // Rebuild neighbors
-    await this._rebuildNeighbors(gx, gz);
+    // Remove from track-data engine and re-resolve neighbors
+    const changes = removeCell(gx, gz);
+    for (const change of changes) {
+      await this._rebuildCell(change.gx, change.gz);
+    }
+
     return true;
+  }
+
+  async eraseByKey(key) {
+    const cell = this.cells.get(key);
+    if (!cell) return false;
+    return this.erase(cell.x, cell.z);
+  }
+
+  async moveCellByKey(key, worldX, worldZ) {
+    const cell = this.cells.get(key);
+    if (!cell) return null;
+
+    const gx = snapToGrid(worldX);
+    const gz = snapToGrid(worldZ);
+    const nextKey = cellKey(gx, gz);
+    if (nextKey === key) return key;
+    if (this.cells.has(nextKey)) return null;
+
+    // Erase old
+    if (cell.mesh) this._group.remove(cell.mesh);
+    this.cells.delete(key);
+    removeCell(cell.x, cell.z);
+
+    // Paint new
+    this.cells.set(nextKey, { x: gx, z: gz, mesh: null });
+    addCell(gx, gz);
+    await this._rebuildCell(gx, gz);
+
+    // Rebuild old neighbors
+    const offsets = [[0, -GRID_SIZE], [0, GRID_SIZE], [GRID_SIZE, 0], [-GRID_SIZE, 0]];
+    for (const [dx, dz] of offsets) {
+      if (this.cells.has(cellKey(cell.x + dx, cell.z + dz))) {
+        await this._rebuildCell(cell.x + dx, cell.z + dz);
+      }
+    }
+
+    return nextKey;
   }
 
   /** Get all cells as an array for serialization. */
@@ -76,6 +167,17 @@ export class RoadPainter {
   /** Load cells from serialized data. */
   async deserialize(roadCells) {
     this.clearAll();
+
+    // Import into track-data engine
+    const cellData = roadCells
+      .filter(rc => rc?.position)
+      .map(rc => ({
+        gx: snapToGrid(rc.position.x),
+        gz: snapToGrid(rc.position.z),
+      }));
+    importCells(cellData);
+
+    // Sync local mesh map
     for (const rc of roadCells) {
       if (!rc?.position) continue;
       const gx = snapToGrid(rc.position.x);
@@ -100,75 +202,95 @@ export class RoadPainter {
       if (cell.mesh) this._group.remove(cell.mesh);
     }
     this.cells.clear();
+    clearAllCells();
   }
 
-  /** Show a ghost preview at position. */
-  showGhost(worldX, worldZ, scene) {
+  /** Show a ghost preview at position using actual 3D models. */
+  async showGhost(worldX, worldZ, scene) {
     const gx = snapToGrid(worldX);
     const gz = snapToGrid(worldZ);
 
-    if (!this._ghostMesh) {
+    // Ensure ghost group is in scene
+    if (!this._ghostGroup.parent) scene.add(this._ghostGroup);
+
+    // Clear previous ghosts
+    this._clearGhosts();
+
+    // If cell already occupied, don't show ghost
+    if (this.cells.has(cellKey(gx, gz))) return;
+
+    // Get preview from auto-tile engine
+    const preview = getGhostPreview(gx, gz);
+    if (!preview) return;
+
+    // Show ghost for the new cell
+    try {
+      const ghostMesh = await this._loadModel(preview.self.type);
+      ghostMesh.position.set(gx, 0, gz);
+      ghostMesh.rotation.y = THREE.MathUtils.degToRad(preview.self.rotation);
+      this._makeGhostTransparent(ghostMesh, 0x44ff88);
+      this._ghostGroup.add(ghostMesh);
+      this._ghostMeshes.push(ghostMesh);
+    } catch {
+      // Fallback flat plane
       const geo = new THREE.PlaneGeometry(GRID_SIZE * 0.9, GRID_SIZE * 0.9);
       geo.rotateX(-Math.PI / 2);
       const mat = new THREE.MeshBasicMaterial({
-        color: 0x44ff88,
-        transparent: true,
-        opacity: 0.3,
-        side: THREE.DoubleSide,
+        color: 0x44ff88, transparent: true, opacity: 0.3, side: THREE.DoubleSide,
       });
-      this._ghostMesh = new THREE.Mesh(geo, mat);
-      this._ghostMesh.name = '__road_ghost';
+      const plane = new THREE.Mesh(geo, mat);
+      plane.position.set(gx, 0.05, gz);
+      this._ghostGroup.add(plane);
+      this._ghostMeshes.push(plane);
     }
 
-    this._ghostMesh.position.set(gx, 0.05, gz);
-
-    if (!this._ghostMesh.parent) scene.add(this._ghostMesh);
-    this._ghostMesh.visible = true;
+    // Show neighbor change previews
+    for (const change of preview.neighborChanges) {
+      try {
+        const nbMesh = await this._loadModel(change.type);
+        nbMesh.position.set(change.gx, 0, change.gz);
+        nbMesh.rotation.y = THREE.MathUtils.degToRad(change.rotation);
+        this._makeGhostTransparent(nbMesh, 0xffaa22, 0.25);
+        this._ghostGroup.add(nbMesh);
+        this._ghostMeshes.push(nbMesh);
+      } catch {
+        // skip failed neighbor previews
+      }
+    }
   }
 
   hideGhost() {
-    if (this._ghostMesh) this._ghostMesh.visible = false;
+    this._clearGhosts();
   }
 
-  /** Determine piece + rotation from 4-bit neighbor bitmask. */
-  classifyCell(x, z) {
-    const N = this.cells.has(cellKey(x, z - GRID_SIZE)) ? 8 : 0;
-    const S = this.cells.has(cellKey(x, z + GRID_SIZE)) ? 4 : 0;
-    const E = this.cells.has(cellKey(x + GRID_SIZE, z)) ? 2 : 0;
-    const W = this.cells.has(cellKey(x - GRID_SIZE, z)) ? 1 : 0;
-    const mask = N | S | E | W;
-
-    // Count connections
-    const count = [N,S,E,W].filter(Boolean).length;
-
-    if (count === 0) return { model: 'wide', rotation: 0 };
-
-    if (count === 1) {
-      // Dead end — straight pointing toward the neighbor
-      if (N) return { model: 'straight', rotation: 0 };
-      if (S) return { model: 'straight', rotation: 0 };
-      if (E) return { model: 'straight', rotation: 90 };
-      if (W) return { model: 'straight', rotation: 90 };
+  _clearGhosts() {
+    for (const m of this._ghostMeshes) {
+      this._ghostGroup.remove(m);
     }
+    this._ghostMeshes.length = 0;
+  }
 
-    if (count === 2) {
-      // Straight or corner
-      if (N && S) return { model: 'straight', rotation: 0 };
-      if (E && W) return { model: 'straight', rotation: 90 };
-      // Corners
-      if (N && E) return { model: 'corner-small', rotation: 0 };
-      if (E && S) return { model: 'corner-small', rotation: 90 };
-      if (S && W) return { model: 'corner-small', rotation: 180 };
-      if (W && N) return { model: 'corner-small', rotation: 270 };
-    }
+  _makeGhostTransparent(obj, color = 0x44ff88, opacity = 0.4) {
+    obj.traverse(child => {
+      if (!child.isMesh) return;
+      const mat = Array.isArray(child.material) ? child.material : [child.material];
+      mat.forEach(m => {
+        m.transparent = true;
+        m.opacity = opacity;
+        m.depthWrite = false;
+        if (m.emissive) {
+          m.emissive.setHex(color);
+          m.emissiveIntensity = 0.3;
+        }
+      });
+    });
+  }
 
-    if (count === 3) {
-      // T-junction — use wide pad as we don't have a T-piece
-      return { model: 'wide', rotation: 0 };
-    }
-
-    // count === 4 — crossroads
-    return { model: 'wide', rotation: 0 };
+  /** Get resolved type and rotation from track-data engine. */
+  _getResolved(x, z) {
+    const td = TRACK_CELLS.get(tdCellKey(x, z));
+    if (td) return { model: td.type, rotation: td.rotation };
+    return { model: 'straight', rotation: 0 };
   }
 
   async _rebuildCell(x, z) {
@@ -182,19 +304,19 @@ export class RoadPainter {
       cell.mesh = null;
     }
 
-    const { model, rotation } = this.classifyCell(x, z);
+    const { model, rotation } = this._getResolved(x, z);
 
     try {
       const mesh = await this._loadModel(model);
       mesh.position.set(x, 0, z);
-      mesh.rotation.y = -(rotation * Math.PI / 180);
+      mesh.rotation.y = THREE.MathUtils.degToRad(rotation);
       mesh.userData._roadCell = true;
       mesh.userData._cellKey = key;
+      mesh.userData._selectionId = this.getSelectionId(key);
       cell.mesh = mesh;
       this._group.add(mesh);
     } catch (err) {
       console.warn(`[road-painter] Failed to load model '${model}':`, err);
-      // Fallback: colored plane
       const geo = new THREE.PlaneGeometry(GRID_SIZE * 0.95, GRID_SIZE * 0.95);
       geo.rotateX(-Math.PI / 2);
       const mat = new THREE.MeshStandardMaterial({ color: 0x555577 });
@@ -202,20 +324,9 @@ export class RoadPainter {
       fallback.position.set(x, 0.02, z);
       fallback.userData._roadCell = true;
       fallback.userData._cellKey = key;
+      fallback.userData._selectionId = this.getSelectionId(key);
       cell.mesh = fallback;
       this._group.add(fallback);
-    }
-  }
-
-  async _rebuildNeighbors(x, z) {
-    const offsets = [
-      [0, -GRID_SIZE], [0, GRID_SIZE],
-      [GRID_SIZE, 0], [-GRID_SIZE, 0],
-    ];
-    for (const [dx, dz] of offsets) {
-      if (this.cells.has(cellKey(x + dx, z + dz))) {
-        await this._rebuildCell(x + dx, z + dz);
-      }
     }
   }
 }

@@ -1,6 +1,9 @@
 import { ColyseusBabylonClient } from './modules/realtime/colyseus-babylon-client.js';
 import { resolveKartAsset } from './modules/content-registry.js';
 import { getColyseusEndpoint, shouldUseColyseus } from './modules/realtime/feature-flag.js';
+import { initPageTransitions } from './ui/page-transition.js';
+
+initPageTransitions();
 
 const statusEl = document.getElementById('rt-status');
 const canvas = document.getElementById('realtime-canvas');
@@ -142,11 +145,11 @@ async function bootRealtime() {
     return;
   }
 
-  const roomName = config?.gameMode === 'battle' ? 'battle_room' : 'race_room';
+  const roomName = config?.roomName || (config?.gameMode === 'battle' ? 'battle_room' : 'race_room');
   const endpoint = getColyseusEndpoint();
   const playerName = smokeName || resolvePlayerName(config);
   const myPlayerId = getCurrentPlayerId();
-  const smokeMode = sessionStorage.getItem('realtimeSmokeMode') || '';
+  const smokeMode = sessionStorage.getItem('realtimeSmokeMode') || localStorage.getItem('realtimeSmokeMode') || '';
   const playerInfo = config?.players?.find((player) => player.id === myPlayerId) || {};
   const joinCustomization = {
     kartId: playerInfo.playerKart || config?.selectedKart || sessionStorage.getItem('selectedKart') || localStorage.getItem('selectedKart') || 'tux',
@@ -193,7 +196,7 @@ async function bootRealtime() {
     scoreLimit: config?.scoreLimit || 5,
     loadoutId: config?.loadoutId || 'random-all',
     weaponPool: Array.isArray(config?.weaponPool) ? config.weaponPool : [],
-    partyCode: config?.lobbyCode || '',
+    partyCode: config?.partyCode || config?.lobbyCode || '',
     customTrackData: stagedCustomTrackData,
     smokeMode,
     ...joinCustomization,

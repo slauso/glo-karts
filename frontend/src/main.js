@@ -16,6 +16,9 @@ import {
 } from './modules/multiplayer.js';
 import { initPhysics, updatePhysics, FIXED_PHYSICS_STEP } from './modules/physics-ammo.js';
 import { createMinimap, extractTrackData, updateMinimapPlayers } from './modules/minimap-three.js';
+import { initPageTransitions, navigateWithTransition } from './ui/page-transition.js';
+
+initPageTransitions();
 
 // Check for game config from lobby
 let gameConfig = null;
@@ -45,7 +48,7 @@ const useColyseusRealtime = Boolean(gameConfig?.multiplayer)
   && String(gameConfig?.multiplayerProvider || '').toLowerCase() === 'colyseus';
 
 if (useColyseusRealtime) {
-  window.location.replace('realtime.html');
+  void navigateWithTransition('realtime.html', { replace: true, immediate: true });
 }
 
 // Global variables
@@ -853,7 +856,7 @@ function showFinalLeaderboard() {
   
   // Add click handler to return to lobby
   homeButton.addEventListener('click', () => {
-    window.location.href = 'index.html';
+    void navigateWithTransition('index.html');
   });
   
   // Assemble final leaderboard

@@ -24,6 +24,8 @@ export class InputRouter {
    * @param {() => void} handlers.onSelectAll
    * @param {() => void} handlers.onEscape
    * @param {() => void} handlers.onSave
+   * @param {() => void} [handlers.onCopy]
+   * @param {() => void} [handlers.onPaste]
    * @param {() => void} handlers.onRotate
    * @param {() => void} handlers.onToggleGrid
    * @param {() => void} handlers.onToggleCam
@@ -96,9 +98,9 @@ export class InputRouter {
     if (ctrl && shift && key === 'Z') { e.preventDefault(); this._h.onRedo(); return; }
     if (ctrl && lower === 's') { e.preventDefault(); this._h.onSave(); return; }
     if (ctrl && lower === 'a') { e.preventDefault(); this._h.onSelectAll(); return; }
+    if (ctrl && !shift && lower === 'c') { e.preventDefault(); this._h.onCopy?.(); return; }
+    if (ctrl && !shift && lower === 'v') { e.preventDefault(); this._h.onPaste?.(); return; }
     if (ctrl && lower === 'd') { e.preventDefault(); this._h.onDuplicate?.(); return; }
-    if (ctrl && lower === 'c') { e.preventDefault(); this._h.onCopy?.(); return; }
-    if (ctrl && lower === 'v') { e.preventDefault(); this._h.onPaste?.(); return; }
 
     if (key === '1') { this.setTool(TOOL.SELECT); return; }
     if (key === '2') { this.setTool(TOOL.ROAD); return; }
@@ -114,6 +116,7 @@ export class InputRouter {
     if (key === 'Delete' || key === 'Backspace') { e.preventDefault(); this._h.onDelete(); return; }
     if (key === 'Escape') { this._h.onEscape(); return; }
     if (lower === 'r' && !ctrl && !shift) { this._h.onRotate?.(); return; }
+    if (lower === 'l' && !ctrl && !shift) { e.preventDefault(); this._h.onCycleLayer?.(); return; }
 
     if (key === 'ArrowUp') { e.preventDefault(); this._h.onNudge?.(0, -1, { shift, alt }); return; }
     if (key === 'ArrowDown') { e.preventDefault(); this._h.onNudge?.(0, 1, { shift, alt }); return; }

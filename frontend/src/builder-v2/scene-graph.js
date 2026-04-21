@@ -72,6 +72,9 @@ export class SceneGraph {
     }
     if (rotation !== undefined) {
       entity.rotation = rotation;
+      if (entity.category === 'spawn') {
+        entity.heading = rotation;
+      }
       if (entity.object3D) entity.object3D.rotation.y = -(rotation * Math.PI / 180);
     }
     if (scale !== undefined) {

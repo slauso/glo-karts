@@ -39,3 +39,8 @@ db.sqlite3
 frontend/public/havok/
 frontend/builder-visual-smoke.png
 frontend/snap-verify.png
+frontend/.codex-logs/
+frontend/.tmp-*
+frontend/*-screenshot.png
+frontend/scripts/_debug-*
+

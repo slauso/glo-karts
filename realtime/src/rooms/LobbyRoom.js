@@ -60,6 +60,10 @@ function defaultModeId(gameMode) {
   return "race_online";
 }
 
+function normalizePerformanceMode(value) {
+  return value === "ultra_low" ? "ultra_low" : "auto";
+}
+
 export class LobbyRoom extends Room {
   static activeLobbyPlayers = 0;
 
@@ -80,6 +84,9 @@ export class LobbyRoom extends Room {
     state.battleType = options.battleType === "ctf" ? "ctf" : DEFAULT_BATTLE_TYPE;
     state.maxPlayers = Math.min(Math.max(Number(options.maxPlayers) || DEFAULT_MAX_PLAYERS, 1), 12);
     state.loadoutId = initialLoadoutId;
+    state.performanceMode = normalizePerformanceMode(options.performanceMode);
+    state.scoreLimit = Math.min(Math.max(Number(options.scoreLimit) || 5, 1), 50);
+    state.botCount = Math.min(Math.max(Number(options.botCount) || 0, 0), 10);
     initialWeaponPool.forEach((weaponId) => state.weaponPool.push(weaponId));
     state.status = "waiting";
     state.countdown = 0;
@@ -116,6 +123,9 @@ export class LobbyRoom extends Room {
       this.state.arenaTheme = String(data.arenaTheme || this.state.arenaTheme || "nuclear_desert");
       this.state.battleType = data.battleType === "ctf" ? "ctf" : "deathmatch";
       this.state.loadoutId = String(data.loadoutId || this.state.loadoutId || "random-all");
+      this.state.performanceMode = normalizePerformanceMode(data.performanceMode || this.state.performanceMode);
+      this.state.scoreLimit = Math.min(Math.max(Number(data.scoreLimit) || this.state.scoreLimit || 5, 1), 50);
+      this.state.botCount = Math.min(Math.max(Number(data.botCount) || this.state.botCount || 0, 0), 10);
       this.state.maxPlayers = Math.min(Math.max(Number(data.maxPlayers) || this.state.maxPlayers || DEFAULT_MAX_PLAYERS, 1), 12);
       this.maxClients = this.state.maxPlayers;
 
@@ -261,6 +271,9 @@ export class LobbyRoom extends Room {
         isHost: p.isHost,
         playerColor: p.playerColor,
         playerKart: p.playerKart,
+        gloEffect: p.gloEffect || "solid",
+        gloColor: p.gloColor || "#ff0080",
+        gloColor2: p.gloColor2 || "#00e5ff",
       }));
 
       const gameConfig = {
@@ -272,7 +285,10 @@ export class LobbyRoom extends Room {
         arenaTheme: this.state.arenaTheme,
         battleType: this.state.battleType,
         loadoutId: this.state.loadoutId,
+        performanceMode: this.state.performanceMode,
         weaponPool: Array.from(this.state.weaponPool),
+        scoreLimit: this.state.scoreLimit,
+        botCount: this.state.botCount,
         maxPlayers: this.state.maxPlayers,
         lobbyCode: this.state.lobbyCode,
         customTrackData: this.state.customTrackData || "",

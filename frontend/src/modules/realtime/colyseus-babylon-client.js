@@ -16,19 +16,17 @@ import {
   PhysicsMotionType,
   PhysicsRaycastResult,
   StandardMaterial,
-  PBRMaterial,
   Color3,
   Color4,
   PostProcess,
   Effect,
   VertexBuffer,
 } from "@babylonjs/core";
-import { ShadowGenerator } from "@babylonjs/core/Lights/Shadows/shadowGenerator";
-import "@babylonjs/core/Lights/Shadows/shadowGeneratorSceneComponent";
 import { TransformNode } from "@babylonjs/core/Meshes/transformNode";
 import { ParticleSystem } from "@babylonjs/core/Particles/particleSystem";
 import { CubeTexture } from "@babylonjs/core/Materials/Textures/cubeTexture";
 import { DynamicTexture } from "@babylonjs/core/Materials/Textures/dynamicTexture";
+import { navigateWithTransition } from '../../ui/page-transition.js';
 import {
   createGloUnderglow, updateGloUnderglow, setGloVisible, disposeGloUnderglow,
 } from './glo-underglow.js';
@@ -42,6 +40,7 @@ import {
   CUSTOM_ARENA_DIR,
   getFallbackSegmentFootprint,
   oppositeCustomArenaDir,
+  resolveCustomArenaSegmentSpec,
 } from '../custom-arena-segments.js';
 import {
   createFallbackPortAnchors,
@@ -102,7 +101,7 @@ import {
 import { createWeaponModel, createItemBoxModel } from '../battle/weapon-models.js';
 import { createLockState, tickLockOn } from '../weapons/targeting.js';
 import { initWeaponFXEnhance, disposeWeaponFXEnhance, tickDecals, syncWeaponFXQuality } from '../battle/weapon-fx-enhance.js';
-import { detectPerformanceTier, startAdaptiveMonitor, stopAdaptiveMonitor, getTier, TIER, updateRuntimePerformanceBudget, runtimeFXBudget, runtimePostFXBudget, runtimePressure } from '../perf-tier.js';
+import { detectPerformanceTier, forcePerformanceTier, startAdaptiveMonitor, stopAdaptiveMonitor, getTier, TIER, updateRuntimePerformanceBudget, runtimeFXBudget, runtimePostFXBudget, runtimePressure } from '../perf-tier.js';
 
 const HAVOK_WASM_PUBLIC_PATH = `${import.meta.env.BASE_URL}havok/HavokPhysics.wasm`;
 const CUSTOM_ARENA_DIR_VECTORS = {
@@ -136,34 +135,34 @@ function emitPlaytestProgress(detail = {}) {
 }
 
 const WEAPON_DISPLAY = {
-  missile: { icon: "🚀", hue: "#ff7448", accent: "#ffd1b8", category: "Projectile" },
-  crimson_hydra: { icon: "🐉", hue: "#ff425d", accent: "#ffd0d8", category: "Projectile", displayName: "Crimson Hydra" },
-  bowling_ball: { icon: "🎳", hue: "#9aa3b7", accent: "#eef3ff", category: "Projectile" },
-  shield: { icon: "🛡️", hue: "#55bbff", accent: "#c7efff", category: "Defence" },
-  cake: { icon: "🎂", hue: "#ffb347", accent: "#fff0c8", category: "Projectile" },
-  plunger: { icon: "🪠", hue: "#f85b44", accent: "#ffd7cc", category: "Projectile" },
-  nitro: { icon: "💥", hue: "#12d59c", accent: "#d8fff2", category: "Projectile" },
-  bubblegum: { icon: "🫧", hue: "#ff73cb", accent: "#ffe2f5", category: "Trap" },
-  banana: { icon: "🍌", hue: "#f6d53f", accent: "#fff6ba", category: "Trap" },
-  swatter: { icon: "🪰", hue: "#ff8f6b", accent: "#ffe0d6", category: "Melee" },
-  parachute: { icon: "🪂", hue: "#8fb6ff", accent: "#e2ecff", category: "Debuff" },
-  anchor: { icon: "⚓", hue: "#83a7c8", accent: "#e0eef9", category: "Debuff" },
-  ludicrous_mode: { icon: "🔋", hue: "#ff00ff", accent: "#ff99ff", category: "Buff" },
-  pirateleportation: { icon: "🏴‍☠️", hue: "#9b59b6", accent: "#e8d5f5", category: "Utility" },
-  mirror_realm: { icon: "🪞", hue: "#91d6ff", accent: "#e8f8ff", category: "Defence" },
-  phase_shift: { icon: "👻", hue: "#9ef2d0", accent: "#ebfff8", category: "Defence" },
-  weather_dominion: { icon: "⛈️", hue: "#7ab4ff", accent: "#e2f0ff", category: "Utility" },
-  fireball: { icon: "🔥", hue: "#ff7a30", accent: "#ffd6bf", category: "Elemental" },
-  toxic_spread: { icon: "☣️", hue: "#6fd34a", accent: "#e6ffd9", category: "Elemental" },
-  ice_lance: { icon: "🧊", hue: "#74d3ff", accent: "#e6f8ff", category: "Elemental" },
-  tornado: { icon: "🌪️", hue: "#93e0c2", accent: "#e8fff4", category: "Elemental" },
-  super_nova: { icon: "☢️", hue: "#f6d64a", accent: "#fff7bf", category: "Elemental", displayName: "Final Fusion" },
-  rock_barrage: { icon: "🪨", hue: "#b08b67", accent: "#f2e6d9", category: "Elemental" },
-  lightning_bolt: { icon: "⚡", hue: "#c6ccff", accent: "#f0f2ff", category: "Elemental" },
-  wind_slash: { icon: "💨", hue: "#9de7c8", accent: "#eefff7", category: "Elemental" },
-  toxic_cloud: { icon: "🧪", hue: "#5bb33d", accent: "#dbffd0", category: "Elemental" },
-  glow_thrower: { icon: "🔥", hue: "#ff0080", accent: "#ff99cc", category: "Stream", displayName: "Glo Thrower" },
-  glo_burst: { icon: "💠", hue: "#00e5ff", accent: "#b3f5ff", category: "Stream", displayName: "Glo Burst" },
+  missile: { icon: "ðŸš€", hue: "#ff7448", accent: "#ffd1b8", category: "Projectile" },
+  crimson_hydra: { icon: "ðŸ‰", hue: "#ff425d", accent: "#ffd0d8", category: "Projectile", displayName: "Crimson Hydra" },
+  bowling_ball: { icon: "ðŸŽ³", hue: "#9aa3b7", accent: "#eef3ff", category: "Projectile" },
+  shield: { icon: "ðŸ›¡ï¸", hue: "#55bbff", accent: "#c7efff", category: "Defence" },
+  cake: { icon: "ðŸŽ‚", hue: "#ffb347", accent: "#fff0c8", category: "Projectile" },
+  plunger: { icon: "ðŸª ", hue: "#f85b44", accent: "#ffd7cc", category: "Projectile" },
+  nitro: { icon: "ðŸ’¥", hue: "#12d59c", accent: "#d8fff2", category: "Projectile" },
+  bubblegum: { icon: "ðŸ«§", hue: "#ff73cb", accent: "#ffe2f5", category: "Trap" },
+  banana: { icon: "ðŸŒ", hue: "#f6d53f", accent: "#fff6ba", category: "Trap" },
+  swatter: { icon: "ðŸª°", hue: "#ff8f6b", accent: "#ffe0d6", category: "Melee" },
+  parachute: { icon: "ðŸª‚", hue: "#8fb6ff", accent: "#e2ecff", category: "Debuff" },
+  anchor: { icon: "âš“", hue: "#83a7c8", accent: "#e0eef9", category: "Debuff" },
+  ludicrous_mode: { icon: "ðŸ”‹", hue: "#ff00ff", accent: "#ff99ff", category: "Buff" },
+  pirateleportation: { icon: "ðŸ´â€â˜ ï¸", hue: "#9b59b6", accent: "#e8d5f5", category: "Utility" },
+  mirror_realm: { icon: "ðŸªž", hue: "#91d6ff", accent: "#e8f8ff", category: "Defence" },
+  phase_shift: { icon: "ðŸ‘»", hue: "#9ef2d0", accent: "#ebfff8", category: "Defence" },
+  weather_dominion: { icon: "â›ˆï¸", hue: "#7ab4ff", accent: "#e2f0ff", category: "Utility" },
+  fireball: { icon: "ðŸ”¥", hue: "#ff7a30", accent: "#ffd6bf", category: "Elemental" },
+  toxic_spread: { icon: "â˜£ï¸", hue: "#6fd34a", accent: "#e6ffd9", category: "Elemental" },
+  ice_lance: { icon: "ðŸ§Š", hue: "#74d3ff", accent: "#e6f8ff", category: "Elemental" },
+  tornado: { icon: "ðŸŒªï¸", hue: "#93e0c2", accent: "#e8fff4", category: "Elemental" },
+  super_nova: { icon: "â˜¢ï¸", hue: "#f6d64a", accent: "#fff7bf", category: "Elemental", displayName: "Final Fusion" },
+  rock_barrage: { icon: "ðŸª¨", hue: "#b08b67", accent: "#f2e6d9", category: "Elemental" },
+  lightning_bolt: { icon: "âš¡", hue: "#c6ccff", accent: "#f0f2ff", category: "Elemental" },
+  wind_slash: { icon: "ðŸ’¨", hue: "#9de7c8", accent: "#eefff7", category: "Elemental" },
+  toxic_cloud: { icon: "ðŸ§ª", hue: "#5bb33d", accent: "#dbffd0", category: "Elemental" },
+  glow_thrower: { icon: "ðŸ”¥", hue: "#ff0080", accent: "#ff99cc", category: "Stream", displayName: "Glo Thrower" },
+  glo_burst: { icon: "ðŸ’ ", hue: "#00e5ff", accent: "#b3f5ff", category: "Stream", displayName: "Glo Burst" },
 };
 
 const PROJECTILE_MODEL_ALIASES = {
@@ -218,6 +217,7 @@ export class ColyseusBabylonClient {
     this.playerName = options.playerName || "Player";
     this.maxPlayers = options.maxPlayers || 12;
     this.gameType = options.gameType || "deathmatch";
+    this.performanceMode = options.performanceMode === 'ultra_low' ? 'ultra_low' : 'auto';
 
     this.client = new Client(this.endpoint);
     this.room = null;
@@ -228,11 +228,11 @@ export class ColyseusBabylonClient {
     this.remoteMeshes = new Map();
     this.entityMeshes = new Map();
     this.loadingPromises = new Map();
-    this.entityAggregates = new Map();      // entityId → PhysicsAggregate
-    this.remoteKartAggregates = new Map();  // playerId → PhysicsAggregate
-    this._remoteTargets = new Map();           // playerId → { pos: Vector3, rot: Quaternion }
-    this._remoteWheelMeshes = new Map();       // playerId → mesh[] (wheel child meshes)
-    this._projectileTargets = new Map();       // entityId → { pos, vel, lastUpdate, subType }
+    this.entityAggregates = new Map();      // entityId â†’ PhysicsAggregate
+    this.remoteKartAggregates = new Map();  // playerId â†’ PhysicsAggregate
+    this._remoteTargets = new Map();           // playerId â†’ { pos: Vector3, rot: Quaternion }
+    this._remoteWheelMeshes = new Map();       // playerId â†’ mesh[] (wheel child meshes)
+    this._projectileTargets = new Map();       // entityId â†’ { pos, vel, lastUpdate, subType }
     /** @type {KartEntity|null} */
     this._localKartEntity = null;
     /** @type {KartVFX|null} */
@@ -259,7 +259,7 @@ export class ColyseusBabylonClient {
     this._inputKeepaliveMs = 100;
     this._inputKeepaliveInterval = null;
 
-    // Weapon state — dual weapon system + reserve
+    // Weapon state â€” dual weapon system + reserve
     this.currentWeapon = "";        // primary (always glo_burst)
     this.currentWeapon2 = "";       // secondary (pickup slot)
     this.reserveWeapon = "";        // reserve (MK-style backup)
@@ -340,7 +340,9 @@ export class ColyseusBabylonClient {
       && !!navigator.webdriver
       && /HeadlessChrome/i.test(navigator.userAgent || '');
     this._lastPerfSampleAt = 0;
+    this._hardwareScalingLevel = 1;
     this._lastPerfSnapshot = {
+      players: 1,
       drawCalls: 0,
       particles: 0,
       particleSystems: 0,
@@ -357,9 +359,9 @@ export class ColyseusBabylonClient {
     this._lapCount = 0;
     this._totalLaps = 3;
     this._raceFinished = false;
-    this._lapCooldownUntil = 0;   // timestamp — ignore finish-line triggers before this
+    this._lapCooldownUntil = 0;   // timestamp â€” ignore finish-line triggers before this
 
-    // ── Mini-turbo drift state ──────────────────────────────────────────────
+    // â”€â”€ Mini-turbo drift state â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     this._driftCharge     = 0;
     this._wasDrifting     = false;
     this._miniBoostTimer  = 0;
@@ -393,7 +395,7 @@ export class ColyseusBabylonClient {
       lastTimeSyncAt: 0,
     };
 
-    // ── Automated-test debug bus ─────────────────────────────────────────────
+    // â”€â”€ Automated-test debug bus â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     // window.__gloDebug is read by Playwright specs to assert game state without
     // relying purely on fragile console-log scraping.
     if (typeof window !== 'undefined') {
@@ -423,12 +425,13 @@ export class ColyseusBabylonClient {
         readySignalSent: false,   // explicit ready gate signal sent to server
         errors: [],               // runtime JS errors captured internally
         burstQueues: null,        // queued Colyseus burst counts
+        performanceMode: this.performanceMode,
       };
     }
 
     // GLO underglow system (shader decal + trail)
     this._gloKit = null;           // local player's GLO kit
-    this._remoteGloKits = new Map(); // sessionId → GLO kit for remote players
+    this._remoteGloKits = new Map(); // sessionId â†’ GLO kit for remote players
 
     // Kart pre-match state
     this._kartReady       = false;   // true only after matchLive fires
@@ -441,11 +444,11 @@ export class ColyseusBabylonClient {
     this._countdownAudioTimer = null;
     this._countdownVisualTimer = null;
     this._lowLevelTraceInstalled = false;
-    this._wheelMeshes     = [];      // child meshes whose name contains "wheel" — rotated by speed
+    this._wheelMeshes     = [];      // child meshes whose name contains "wheel" â€” rotated by speed
     this._targetCamRadius = 12;      // camera's ideal follow radius (may shorten for wall-clip avoidance)
     this._arenaKartScale  = null;    // per-arena kart scale override from content-registry
 
-    // ── Camera view modes (C key cycles) ──────────────────────────────
+    // â”€â”€ Camera view modes (C key cycles) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     this._cameraMode = 0;
     this._cameraModes = [
       { name: 'Chase',  radius: 12, height: 6,   fovBase: 75, accel: 0.035, maxSpeed: 12 },
@@ -474,14 +477,113 @@ export class ColyseusBabylonClient {
     this[slot] = null;
   }
 
+  _allowRemoteVisualFlair() {
+    if (this.performanceMode === 'ultra_low') return false;
+    return getTier() !== TIER.LOW && runtimePressure() < 0.58;
+  }
+
+  _allowLocalVisualFlair() {
+    if (this.performanceMode === 'ultra_low') return false;
+    return !(getTier() === TIER.LOW && runtimePressure() >= 0.42);
+  }
+
+  _allowBattleHudPolish() {
+    return this.performanceMode !== 'ultra_low';
+  }
+
+  _allowBattleImpactPolish() {
+    return this.performanceMode !== 'ultra_low' && runtimeFXBudget() > 0.34;
+  }
+
+  _allowBattleCameraJuice() {
+    return this.performanceMode !== 'ultra_low';
+  }
+
+  _allowBattleMinimap() {
+    return this.performanceMode !== 'ultra_low';
+  }
+
+  _allowArenaAmbience() {
+    return this.performanceMode !== 'ultra_low';
+  }
+
+  _shedLocalVisualOverhead() {
+    if (this._allowLocalVisualFlair()) return;
+    if (this._localKartVFX) {
+      try { this._localKartVFX.dispose(); } catch (_) {}
+      this._localKartVFX = null;
+    }
+    if (this._gloKit) {
+      try { disposeGloUnderglow(this._gloKit); } catch (_) {}
+      this._gloKit = null;
+    }
+  }
+
+  _shedRemoteVisualOverhead() {
+    if (this._allowRemoteVisualFlair()) return;
+    this._remoteKartVFXs.forEach((remoteVFX) => {
+      try { remoteVFX?.dispose?.(); } catch (_) {}
+    });
+    this._remoteKartVFXs.clear();
+    this._remoteGloKits.forEach((kit) => {
+      try { disposeGloUnderglow(kit); } catch (_) {}
+    });
+    this._remoteGloKits.clear();
+  }
+
+  _computeTargetHardwareScaling(perfSnapshot = null) {
+    const tier = getTier();
+    const pressure = Number(perfSnapshot?.pressure ?? runtimePressure() ?? 0);
+    const snapshotPlayers = perfSnapshot?.players;
+    const authoritativePlayers = this.authoritativeState?.players?.size;
+    const roomPlayers = this.room?.state?.players?.size;
+    const players = Math.max(1, Number(snapshotPlayers ?? authoritativePlayers ?? roomPlayers ?? 1));
+    const fps = Math.max(1, Number(this.engine?.getFps?.() || 60));
+    let scale = this.performanceMode === 'ultra_low'
+      ? 2.2
+      : tier === TIER.LOW ? 1.7 : tier === TIER.MEDIUM ? 1.3 : 1.0;
+
+    if (players >= 4) scale += 0.45;
+    else if (players >= 3) scale += 0.2;
+
+    if (pressure >= 0.9) scale += 1.1;
+    else if (pressure >= 0.75) scale += 0.85;
+    else if (pressure >= 0.6) scale += 0.55;
+    else if (pressure >= 0.45) scale += 0.3;
+
+    if (fps < 18) scale += 0.55;
+    else if (fps < 24) scale += 0.35;
+    else if (fps < 30) scale += 0.2;
+
+    return Math.max(1, Math.min(3, Math.round(scale * 20) / 20));
+  }
+
+  _syncHardwareScaling(perfSnapshot = null, force = false) {
+    if (!this.engine) return;
+    const nextScale = this._computeTargetHardwareScaling(perfSnapshot);
+    if (!force && Math.abs(nextScale - (this._hardwareScalingLevel || 1)) < 0.05) return;
+    this.engine.setHardwareScalingLevel(nextScale);
+    this._hardwareScalingLevel = nextScale;
+    if (typeof window !== 'undefined' && window.__gloDebug) {
+      window.__gloDebug.hardwareScalingLevel = nextScale;
+    }
+  }
+
   async initBabylon(canvas) {
     this.engine = new Engine(canvas, true);
     detectPerformanceTier(this.engine);
+    if (this.performanceMode === 'ultra_low') {
+      forcePerformanceTier(TIER.LOW);
+    }
     console.log('[PerfTier] Detected tier:', getTier());
     this.scene = new Scene(this.engine);
+    this._syncHardwareScaling(null, true);
+    if (typeof window !== 'undefined' && window.__gloDebug) {
+      window.__gloDebug.performanceMode = this.performanceMode;
+    }
     this.scene.useRightHandedSystem = true; // Phase 1: STK uses right-handed
 
-    // GLO animation — no longer needs GlowLayer (shaders handle glow internally)
+    // GLO animation â€” no longer needs GlowLayer (shaders handle glow internally)
     this._gloTime = 0;
 
     const initialCameraMode = this._cameraModes[this._cameraMode];
@@ -504,12 +606,6 @@ export class ColyseusBabylonClient {
     dirLight.intensity = 0.8;
     dirLight.position = new Vector3(20, 40, 20);
 
-    // Shadow generator — matches builder viewport (PCFSoft, 2048)
-    const shadowGen = new ShadowGenerator(2048, dirLight);
-    shadowGen.usePercentageCloserFiltering = true;
-    shadowGen.filteringQuality = ShadowGenerator.QUALITY_MEDIUM;
-    this._shadowGenerator = shadowGen;
-
     try {
       const hk = await HavokPhysics({
         locateFile: (path) => (path.endsWith(".wasm") ? HAVOK_WASM_PUBLIC_PATH : path),
@@ -522,7 +618,7 @@ export class ColyseusBabylonClient {
       console.error("[realtime] Havok init failed, continuing without physics", error);
     }
 
-    // ── Smooth interpolation for remote karts + GLO animation ──
+    // â”€â”€ Smooth interpolation for remote karts + GLO animation â”€â”€
     this._setSceneBeforeRender("_remoteInterpolationBeforeRender", () => {
       resetParticleBudget(); // (21.39) reset per-frame particle emission budget
       const dtSeconds = this.engine.getDeltaTime() / 1000;
@@ -553,13 +649,13 @@ export class ColyseusBabylonClient {
         if (mesh.rotationQuaternion && target.rot) {
           Quaternion.SlerpToRef(mesh.rotationQuaternion, target.rot, lerpAlpha, mesh.rotationQuaternion);
         }
-        // ── Wheel spin for remote karts ──
+        // â”€â”€ Wheel spin for remote karts â”€â”€
         const wheels = this._remoteWheelMeshes.get(id);
-        if (wheels) {
+        if (wheels && runtimePressure() < 0.72) {
           const rotAmt = preLerpDist * lerpAlpha * 2.5;
           for (const w of wheels) w.rotation.x -= rotAmt;
         }
-        // ── Steering visuals for remote karts (synced steer input) ──
+        // â”€â”€ Steering visuals for remote karts (synced steer input) â”€â”€
         const remoteEntity = this._remoteKartEntities.get(id);
         if (remoteEntity) {
           const speed = target.vel ? Math.sqrt(target.vel.x ** 2 + target.vel.z ** 2) : 0;
@@ -572,13 +668,13 @@ export class ColyseusBabylonClient {
       if (this._gloKit) updateGloUnderglow(this._gloKit, dt);
       this._remoteGloTick = (this._remoteGloTick || 0) + 1;
       const remoteGloStride = runtimePressure() > 0.72 ? 4 : runtimePressure() > 0.45 ? 2 : 1;
-      if ((this._remoteGloTick % remoteGloStride) === 0) {
+      if (this._allowRemoteVisualFlair() && (this._remoteGloTick % remoteGloStride) === 0) {
         for (const kit of this._remoteGloKits.values()) {
           updateGloUnderglow(kit, dt * remoteGloStride);
         }
       }
 
-      // ── Smooth projectile interpolation — velocity extrapolation + facing ──
+      // â”€â”€ Smooth projectile interpolation â€” velocity extrapolation + facing â”€â”€
       for (const [id, pt] of this._projectileTargets.entries()) {
         const mesh = this.entityMeshes.get(id);
         if (!mesh || !mesh.isEnabled()) {
@@ -610,7 +706,7 @@ export class ColyseusBabylonClient {
         mesh.position.y += (serverY - mesh.position.y) * correctionAlpha;
         mesh.position.z += (serverZ - mesh.position.z) * correctionAlpha;
 
-        // Clamp Y to arena floor — prevent projectiles from visually sinking below ground
+        // Clamp Y to arena floor â€” prevent projectiles from visually sinking below ground
         if (mesh.position.y < 0.35) mesh.position.y = 0.35;
 
         // Face direction of travel (Y-axis rotation from XZ velocity)
@@ -645,7 +741,7 @@ export class ColyseusBabylonClient {
 
       // Update minimap (builds opponents map from remoteMeshes)
       if (this.localMesh) {
-        if (this._joinOptions?.gameMode === 'battle') {
+        if (this._joinOptions?.gameMode === 'battle' && this._allowBattleMinimap()) {
           updateBattleMinimapPlayers(
             this.localMesh,
             this.room?.sessionId,
@@ -664,7 +760,7 @@ export class ColyseusBabylonClient {
       this._updateMissileLockReticle(dtSeconds);
     });
 
-    // (21.39) Lightweight debug FPS overlay — toggle with F3
+    // (21.39) Lightweight debug FPS overlay â€” toggle with F3
     this._perfOverlay = null;
     this._perfVisible = false;
     this._perfKeyHandler = (e) => {
@@ -692,16 +788,24 @@ export class ColyseusBabylonClient {
         for (const [, mesh] of this.entityMeshes.entries()) {
           if (mesh?._entityType === 'projectile' && mesh.isEnabled?.()) projectileCount++;
         }
+        const playerCount = this.authoritativeState?.players?.size || this.room?.state?.players?.size || 1;
         const perfSnapshot = updateRuntimePerformanceBudget({
-          players: this.authoritativeState?.players?.size || this.room?.state?.players?.size || 1,
+          players: playerCount,
           particles,
           particleSystems,
           drawCalls,
           projectiles: projectileCount,
           fps: this.engine.getFps(),
         });
+        if (playerCount >= 4 && getTier() !== TIER.LOW) {
+          forcePerformanceTier(TIER.LOW);
+        }
+        if (this.performanceMode === 'ultra_low' && getTier() !== TIER.LOW) {
+          forcePerformanceTier(TIER.LOW);
+        }
         syncWeaponFXQuality();
         this._lastPerfSnapshot = {
+          players: playerCount,
           drawCalls,
           particles,
           particleSystems,
@@ -711,6 +815,9 @@ export class ColyseusBabylonClient {
           postFXBudget: Number(perfSnapshot.postFXBudget.toFixed(3)),
           pressure: Number(perfSnapshot.pressure.toFixed(3)),
         };
+        this._syncHardwareScaling(this._lastPerfSnapshot);
+        this._shedLocalVisualOverhead();
+        this._shedRemoteVisualOverhead();
       }
       if (typeof window !== 'undefined' && window.__gloDebug) {
         window.__gloDebug.performanceBudget = this._lastPerfSnapshot;
@@ -727,7 +834,7 @@ export class ColyseusBabylonClient {
         const drawCalls = this.scene.getEngine()._drawCalls?.current ?? '?';
         const activeMeshes = this.scene.getActiveMeshes().length;
         const particles = this.scene.particleSystems?.reduce((n, ps) => n + (ps.getActiveCount?.() ?? 0), 0) ?? 0;
-        this._perfOverlay.textContent = `FPS: ${fps} | Draw: ${drawCalls} | Mesh: ${activeMeshes} | Ptcl: ${particles} | Tier: ${getTier()} | FX: ${runtimeFXBudget().toFixed(2)} | PFX: ${runtimePostFXBudget().toFixed(2)} | Load: ${runtimePressure().toFixed(2)}`;
+        this._perfOverlay.textContent = `FPS: ${fps} | Draw: ${drawCalls} | Mesh: ${activeMeshes} | Ptcl: ${particles} | Tier: ${getTier()} | Scale: ${this._hardwareScalingLevel.toFixed(2)} | FX: ${runtimeFXBudget().toFixed(2)} | PFX: ${runtimePostFXBudget().toFixed(2)} | Load: ${runtimePressure().toFixed(2)}`;
       }
     });
     if (!this._automationMode) {
@@ -747,15 +854,15 @@ export class ColyseusBabylonClient {
   _createTrackPhysics(importResult) {
     if (!importResult?.meshes?.length) return;
     if (!this.havokPlugin) {
-      console.warn("[realtime] No physics engine — skipping track physics");
+      console.warn("[realtime] No physics engine â€” skipping track physics");
       this._createFallbackGround();
       return;
     }
 
     // Collect all geometry-bearing meshes (broader filter for GLTF imports).
-    // GLTF __root__ is a TransformNode with no geometry — skip it.
-    // InstancedMesh shares geometry via sourceMesh — include those too.
-    // Do NOT filter by isVisible — STK exports set isVisible=false on some geometry children.
+    // GLTF __root__ is a TransformNode with no geometry â€” skip it.
+    // InstancedMesh shares geometry via sourceMesh â€” include those too.
+    // Do NOT filter by isVisible â€” STK exports set isVisible=false on some geometry children.
     const geometryMeshes = importResult.meshes.filter((m) => {
       if (!m.getTotalVertices) return false;
       if (m.getTotalVertices() > 0) return true;
@@ -766,7 +873,7 @@ export class ColyseusBabylonClient {
     console.log(`[realtime] Geometry meshes found: ${geometryMeshes.length} / ${importResult.meshes.length} total`);
 
     if (geometryMeshes.length === 0) {
-      console.warn("[realtime] Track has zero geometry meshes – using fallback ground");
+      console.warn("[realtime] Track has zero geometry meshes â€“ using fallback ground");
       this._createFallbackGround();
       return;
     }
@@ -783,6 +890,9 @@ export class ColyseusBabylonClient {
         const sourceMesh = mesh.sourceMesh || mesh;
         const clone = sourceMesh.clone(`${mesh.name}_collider`, null);
         if (!clone) continue;
+        if (typeof clone.makeGeometryUnique === 'function') {
+          clone.makeGeometryUnique();
+        }
 
         // If this was an instance, overlay the instance's world transform
         if (mesh.sourceMesh) {
@@ -794,7 +904,6 @@ export class ColyseusBabylonClient {
         }
 
         // Bake the full world transform into vertex data
-        if (clone.makeGeometryUnique) clone.makeGeometryUnique();
         clone.computeWorldMatrix(true);
         clone.bakeCurrentTransformIntoVertices();
         clone.parent = null;
@@ -815,7 +924,7 @@ export class ColyseusBabylonClient {
         applyFilterToAggregate(agg, FILTER.TRACK);
         physicsCreated++;
       } catch (err) {
-        // Non-fatal — some decorative meshes may fail
+        // Non-fatal â€” some decorative meshes may fail
         console.warn(`[realtime] Physics failed for mesh "${mesh.name}":`, err.message);
       }
     }
@@ -858,7 +967,7 @@ export class ColyseusBabylonClient {
     }
   }
 
-  // ── Per-arena environment: skybox color, fog, lighting tuning ──────
+  // â”€â”€ Per-arena environment: skybox color, fog, lighting tuning â”€â”€â”€â”€â”€â”€
   _setupArenaEnvironment(arenaId) {
     const ENVS = {
       glo_arena:  {
@@ -882,13 +991,7 @@ export class ColyseusBabylonClient {
       blockfort:  { clear: [0.45, 0.65, 0.95, 1], fog: 'exp2', fogDensity: 0.003, fogColor: [0.45, 0.65, 0.95], hemiInt: 0.7, dirInt: 1.0 },
       stadium:    { clear: [0.35, 0.55, 0.85, 1], fog: 'exp2', fogDensity: 0.002, fogColor: [0.35, 0.55, 0.85], hemiInt: 0.8, dirInt: 1.0 },
       debug_arena:{ clear: [0.55, 0.62, 0.72, 1], fog: 'none', fogDensity: 0, fogColor: [0.55, 0.62, 0.72], hemiInt: 1.0, dirInt: 1.2 },
-      custom_import: {
-        clear: [0.102, 0.102, 0.180, 1],
-        fog: 'exp2', fogDensity: 0.004, fogColor: [0.102, 0.102, 0.180],
-        hemiInt: 0.85, dirInt: 1.2, exposure: 1.0, contrast: 1.03,
-        hemiSky: [0.533, 0.600, 0.800], hemiGround: [0.267, 0.200, 0.133],
-        dirPosition: [40, 60, 30],
-      },
+      custom_import: { clear: [0.05, 0.08, 0.12, 1], fog: 'none', fogDensity: 0, fogColor: [0.05, 0.08, 0.12], hemiInt: 0.92, dirInt: 1.1, exposure: 1.0, contrast: 1.03 },
       test_box:   { clear: [0.45, 0.65, 0.95, 1], fog: 'exp2', fogDensity: 0.003, fogColor: [0.45, 0.65, 0.95], hemiInt: 0.7, dirInt: 1.0 },
     };
     const env = ENVS[arenaId] || ENVS.test_box;
@@ -906,15 +1009,8 @@ export class ColyseusBabylonClient {
     // Tune existing lights
     const hemi = this.scene.getLightByName('hemiLight');
     const dir  = this.scene.getLightByName('dirLight');
-    if (hemi) {
-      hemi.intensity = env.hemiInt;
-      if (env.hemiSky)    hemi.diffuse  = new Color3(env.hemiSky[0], env.hemiSky[1], env.hemiSky[2]);
-      if (env.hemiGround) hemi.groundColor = new Color3(env.hemiGround[0], env.hemiGround[1], env.hemiGround[2]);
-    }
-    if (dir) {
-      dir.intensity = env.dirInt;
-      if (env.dirPosition) dir.position = new Vector3(env.dirPosition[0], env.dirPosition[1], env.dirPosition[2]);
-    }
+    if (hemi) hemi.intensity = env.hemiInt;
+    if (dir)  dir.intensity  = env.dirInt;
 
     this.scene.imageProcessingConfiguration.exposure = env.exposure || 1;
     this.scene.imageProcessingConfiguration.contrast = env.contrast || 1;
@@ -1024,7 +1120,7 @@ export class ColyseusBabylonClient {
   }
 
   _createFallbackGround() {
-    console.warn("[realtime] Creating debug arena (100×100, flat floor + 4 walls)");
+    console.warn("[realtime] Creating debug arena (100Ã—100, flat floor + 4 walls)");
     const hasPhysics = typeof this.scene.getPhysicsEngine === 'function' && this.scene.getPhysicsEngine();
 
     const SIZE = 100;
@@ -1044,11 +1140,11 @@ export class ColyseusBabylonClient {
       return m;
     };
 
-    // ── Materials ──
+    // â”€â”€ Materials â”€â”€
     const matGround = new StandardMaterial("dbg-ground-mat", this.scene);
     // Procedural checkerboard grid texture for spatial reference & VFX visibility
     const GRID_RES = 1024;
-    const CELLS = 20;           // 20×20 = 5m per cell at 100×100 arena
+    const CELLS = 20;           // 20Ã—20 = 5m per cell at 100Ã—100 arena
     const floorTex = new DynamicTexture("dbg-floor-tex", GRID_RES, this.scene, true);
     const ctx = floorTex.getContext();
     const cellPx = GRID_RES / CELLS;
@@ -1081,7 +1177,7 @@ export class ColyseusBabylonClient {
     const matWall = new StandardMaterial("dbg-wall-mat", this.scene);
     matWall.diffuseColor = new Color3(0.22, 0.22, 0.25);
 
-    // ── Ground slab (thick box so Havok has a solid collision surface) ──
+    // â”€â”€ Ground slab (thick box so Havok has a solid collision surface) â”€â”€
     const GROUND_THICKNESS = 2;
     const ground = MeshBuilder.CreateBox("dbg-ground", { width: SIZE, height: GROUND_THICKNESS, depth: SIZE }, this.scene);
     ground.position.y = -GROUND_THICKNESS / 2; // top surface at y=0
@@ -1092,13 +1188,13 @@ export class ColyseusBabylonClient {
       applyFilterToAggregate(gAgg, FILTER.TRACK);
     }
 
-    // ── 4 Walls (use TRACK filter for solid collision, not BOUNDARY which is for triggers) ──
+    // â”€â”€ 4 Walls (use TRACK filter for solid collision, not BOUNDARY which is for triggers) â”€â”€
     _box("dbg-wall-N", SIZE + WALL_T * 2, WALL_H, WALL_T, 0, WALL_H / 2, -(HALF + WALL_T / 2), matWall, FILTER.TRACK);
     _box("dbg-wall-S", SIZE + WALL_T * 2, WALL_H, WALL_T, 0, WALL_H / 2,  (HALF + WALL_T / 2), matWall, FILTER.TRACK);
     _box("dbg-wall-E", WALL_T, WALL_H, SIZE + WALL_T * 2,  (HALF + WALL_T / 2), WALL_H / 2, 0, matWall, FILTER.TRACK);
     _box("dbg-wall-W", WALL_T, WALL_H, SIZE + WALL_T * 2, -(HALF + WALL_T / 2), WALL_H / 2, 0, matWall, FILTER.TRACK);
 
-    // ── Corner markers for orientation (small colored pillars) ──
+    // â”€â”€ Corner markers for orientation (small colored pillars) â”€â”€
     const corners = [
       { name: 'NW', x: -HALF + 3, z: -HALF + 3, color: new Color3(0.9, 0.2, 0.2) },
       { name: 'NE', x:  HALF - 3, z: -HALF + 3, color: new Color3(0.2, 0.4, 0.9) },
@@ -1111,7 +1207,7 @@ export class ColyseusBabylonClient {
       _box(`dbg-pillar-${c.name}`, 2, 3, 2, c.x, 1.5, c.z, cMat);
     }
 
-    if (!hasPhysics) console.warn('[realtime] Physics not available — arena created without collision');
+    if (!hasPhysics) console.warn('[realtime] Physics not available â€” arena created without collision');
 
     // Store arena half-size for game-level bounds enforcement
     this._arenaBoundsHalf = HALF;
@@ -1172,10 +1268,9 @@ export class ColyseusBabylonClient {
       const floorHeight = 0.6;
       const floorY = Math.min(bounds.min.y || 0, 0) - floorHeight;
 
-      const floorMat = new PBRMaterial('custom-arena-floor-mat', this.scene);
-      floorMat.albedoColor = new Color3(0.07, 0.1, 0.15);
-      floorMat.roughness = 0.95;
-      floorMat.metallic = 0.02;
+      const floorMat = new StandardMaterial('custom-arena-floor-mat', this.scene);
+      floorMat.diffuseColor = new Color3(0.07, 0.1, 0.15);
+      floorMat.specularColor = new Color3(0.03, 0.05, 0.07);
 
       const floor = MeshBuilder.CreateBox('custom-arena-floor', {
         width: floorWidth,
@@ -1185,7 +1280,7 @@ export class ColyseusBabylonClient {
       emitPlaytestProgress({
         phase: 'scene-load',
         label: 'Forging arena floor',
-        detail: `${(trackData?.segments || []).length || 0} tiles · ${(trackData?.obstacles || []).length || 0} props`,
+        detail: `${(trackData?.segments || []).length || 0} tiles Â· ${(trackData?.obstacles || []).length || 0} props`,
         progress: 0.42,
       });
       floor.position.set(floorCenterX, floorY, floorCenterZ);
@@ -1220,10 +1315,9 @@ export class ColyseusBabylonClient {
           depth: dims.length,
           height: dims.height,
         }, this.scene);
-        const material = new PBRMaterial(`custom-segment-fallback-mat-${index}`, this.scene);
-        material.albedoColor = color;
-        material.roughness = 0.92;
-        material.metallic = 0.04;
+        const material = new StandardMaterial(`custom-segment-fallback-mat-${index}`, this.scene);
+        material.diffuseColor = color;
+        material.specularColor = new Color3(0.1, 0.12, 0.18);
         mesh.material = material;
         mesh.position.y = dims.height * 0.5;
         mesh.receiveShadows = true;
@@ -1370,10 +1464,10 @@ export class ColyseusBabylonClient {
       const createResidualSegmentSeamBlends = (pairs) => {
         if (!pairs.length) return;
 
-        const seamMaterial = new PBRMaterial('custom-arena-seam-mat', this.scene);
-        seamMaterial.albedoColor = new Color3(0.155, 0.165, 0.18);
-        seamMaterial.roughness = 0.95;
-        seamMaterial.metallic = 0.02;
+        const seamMaterial = new StandardMaterial('custom-arena-seam-mat', this.scene);
+        seamMaterial.diffuseColor = new Color3(0.155, 0.165, 0.18);
+        seamMaterial.specularColor = new Color3(0.01, 0.01, 0.01);
+        seamMaterial.emissiveColor = new Color3(0.015, 0.016, 0.018);
         seamMaterial.alpha = 0.98;
 
         for (const pair of pairs) {
@@ -1527,18 +1621,12 @@ export class ColyseusBabylonClient {
             progress: 0.42 + (((segmentIndex + 1) / totalSegments) * 0.28),
           });
         }
-
-        // Register segment meshes as shadow casters
-        if (this._shadowGenerator && segmentVisual.renderMeshes?.length) {
-          for (const rm of segmentVisual.renderMeshes) {
-            this._shadowGenerator.addShadowCaster(rm);
-            rm.receiveShadows = true;
-          }
-        }
       }
 
       // Builder playtests already provide authored world coordinates.
       // Do not nudge pieces in runtime; preserve 1:1 placement.
+      // We still detect matched connectors so tiny authored/render gaps can be
+      // visually blended without moving the user's layout.
       const connectorPairs = findMatchedConnectorPairs(segmentRecords);
 
       if (typeof window !== 'undefined' && window.__gloDebug) {
@@ -1553,15 +1641,35 @@ export class ColyseusBabylonClient {
           rotation: Number(segment?.rotation || 0),
           scale: Number(segment?.scale || 1),
         }));
+        window.__gloDebug.customArenaInputSpawns = (trackData?.startPositions || []).map((spawn, index) => ({
+          id: String(spawn?.id || index + 1),
+          position: {
+            x: Number(spawn?.position?.x || 0),
+            y: Number(spawn?.position?.y || 0),
+            z: Number(spawn?.position?.z || 0),
+          },
+          heading: Number(spawn?.heading || 0),
+        }));
+        window.__gloDebug.customArenaInputObstacles = (trackData?.obstacles || []).map((obstacle, index) => ({
+          id: String(obstacle?.id || index + 1),
+          type: String(obstacle?.type || 'barrier'),
+          position: {
+            x: Number(obstacle?.position?.x || 0),
+            y: Number(obstacle?.position?.y || 0),
+            z: Number(obstacle?.position?.z || 0),
+          },
+          rotation: Number(obstacle?.rotation || 0),
+          scale: Number(obstacle?.scale || 1),
+        }));
         window.__gloDebug.customArenaSegments = segmentRecords.map(collectSegmentDebugRecord);
       }
 
       for (const record of segmentRecords) {
         if (!hasPhysics) continue;
 
-        // Prefer per-mesh trimesh colliders for accurate ramp/slope physics.
-        // Fall back to BOX for fallback segments (no renderMeshes).
-        const colliderMeshes = record.physicsMeshes?.length ? record.physicsMeshes : record.renderMeshes;
+        // Use rendered meshes as driveable surface colliders (trimesh).
+        // Wall colliders come from cell data (below), not from mesh geometry.
+        const colliderMeshes = record.renderMeshes;
         let trimeshSuccess = 0;
         if (colliderMeshes?.length) {
           record.root.computeWorldMatrix(true);
@@ -1570,13 +1678,15 @@ export class ColyseusBabylonClient {
             try {
               const clone = mesh.clone(`${mesh.name}_col`, null);
               if (!clone) continue;
+              if (typeof clone.makeGeometryUnique === 'function') {
+                clone.makeGeometryUnique();
+              }
               clone.setParent(null);
               clone.position.copyFrom(mesh.absolutePosition);
               clone.rotationQuaternion = mesh.absoluteRotationQuaternion?.clone() || null;
               const absScale = new Vector3();
               mesh.getWorldMatrix().decompose(absScale);
               clone.scaling.copyFrom(absScale);
-              if (clone.makeGeometryUnique) clone.makeGeometryUnique();
               clone.bakeCurrentTransformIntoVertices();
               clone.isVisible = false;
               const agg = new PhysicsAggregate(clone, PhysicsShapeType.MESH, {
@@ -1593,17 +1703,51 @@ export class ColyseusBabylonClient {
         }
         // BOX fallback if no trimesh colliders succeeded
         if (!trimeshSuccess) {
-          const aggregate = new PhysicsAggregate(record.root, PhysicsShapeType.BOX, {
+          const collider = MeshBuilder.CreateBox(`custom-segment-collider-${record.id}`, {
+            width: Math.max(1, record.bounds.x),
+            height: Math.max(1.4, record.bounds.y),
+            depth: Math.max(1, record.bounds.z),
+          }, this.scene);
+          collider.parent = record.root;
+          collider.position.y = Math.max(
+            0,
+            (Math.max(1.4, record.bounds.y) * 0.5) - 0.04,
+          );
+          collider.isVisible = false;
+          collider.isPickable = false;
+
+          const aggregate = new PhysicsAggregate(collider, PhysicsShapeType.BOX, {
             mass: 0,
             friction: 0.9,
             restitution: 0.02,
-            extents: new Vector3(
-              Math.max(1, record.bounds.x * record.segmentScale),
-              Math.max(1.4, record.bounds.y * record.segmentScale),
-              Math.max(1, record.bounds.z * record.segmentScale),
-            ),
           }, this.scene);
           applyFilterToAggregate(aggregate, FILTER.TRACK);
+        }
+      }
+
+      // ── Wall colliders from cell data ──────────────────────────
+      // Walls only appear on outer track edges, never between connected segments.
+      if (hasPhysics && Array.isArray(trackData.wallColliders)) {
+        for (const [wallIndex, wall] of trackData.wallColliders.entries()) {
+          const wallMesh = MeshBuilder.CreateBox(`wall-collider-${wallIndex}`, {
+            width: wall.size.x,
+            height: wall.size.y,
+            depth: wall.size.z,
+          }, this.scene);
+          wallMesh.position = new Vector3(
+            Number(wall.position.x),
+            Number(wall.position.y),
+            Number(wall.position.z),
+          );
+          wallMesh.isVisible = false;
+          wallMesh.isPickable = false;
+
+          const wallAgg = new PhysicsAggregate(wallMesh, PhysicsShapeType.BOX, {
+            mass: 0,
+            friction: 0.3,
+            restitution: 0.5,
+          }, this.scene);
+          applyFilterToAggregate(wallAgg, FILTER.TRACK);
         }
       }
 
@@ -1635,6 +1779,7 @@ export class ColyseusBabylonClient {
         }));
       }
 
+      const builtObstacleRecords = [];
       for (const [index, obstacle] of authoredStaticObstacles.entries()) {
         const obstacleType = String(obstacle?.type || 'barrier');
         const obstacleFilter = obstacleType === 'item_box'
@@ -1644,25 +1789,24 @@ export class ColyseusBabylonClient {
             : FILTER.TRACK;
         let obstacleMesh;
         if (obstacleType === 'item_box') {
-          obstacleMesh = createItemBoxModel(this.scene);
+          obstacleMesh = createItemBoxModel(this.scene, {
+            includeCarousel: false,
+            includeSparkles: false,
+          });
           obstacleMesh.scaling.scaleInPlace(3.1);
         } else if (obstacleType === 'banana') {
           obstacleMesh = createBananaModel(this.scene);
           obstacleMesh.scaling.scaleInPlace(7.2);
         } else if (obstacleType === 'boost_pad') {
           obstacleMesh = MeshBuilder.CreateBox(`custom-obstacle-${index}`, { width: 7.2, height: 0.6, depth: 11.2 }, this.scene);
-          const boostMat = new PBRMaterial(`custom-obstacle-mat-${index}`, this.scene);
-          boostMat.albedoColor = new Color3(0, 0.66, 1);
+          const boostMat = new StandardMaterial(`custom-obstacle-mat-${index}`, this.scene);
+          boostMat.diffuseColor = new Color3(0, 0.66, 1);
           boostMat.emissiveColor = new Color3(0.06, 0.31, 0.4);
-          boostMat.roughness = 0.6;
-          boostMat.metallic = 0.1;
           obstacleMesh.material = boostMat;
         } else {
           obstacleMesh = MeshBuilder.CreateBox(`custom-obstacle-${index}`, { width: 9.5, height: 5.5, depth: 2.5 }, this.scene);
-          const barrierMat = new PBRMaterial(`custom-obstacle-mat-${index}`, this.scene);
-          barrierMat.albedoColor = new Color3(0.4, 0.46, 0.54);
-          barrierMat.roughness = 0.85;
-          barrierMat.metallic = 0.1;
+          const barrierMat = new StandardMaterial(`custom-obstacle-mat-${index}`, this.scene);
+          barrierMat.diffuseColor = new Color3(0.4, 0.46, 0.54);
           obstacleMesh.material = barrierMat;
         }
 
@@ -1671,6 +1815,19 @@ export class ColyseusBabylonClient {
           obstacleType === 'boost_pad' ? 0.3 : obstacleType === 'item_box' ? 2.6 : obstacleType === 'banana' ? 1.7 : 2.75,
           Number(obstacle.position?.z || 0),
         );
+        obstacleMesh.rotation.y = -(Number(obstacle.rotation || 0) * Math.PI) / 180;
+        obstacleMesh.scaling.scaleInPlace(Number(obstacle.scale || 1) || 1);
+        builtObstacleRecords.push({
+          id: String(obstacle?.id || index + 1),
+          type: obstacleType,
+          position: {
+            x: Number(obstacleMesh.position.x.toFixed(3)),
+            y: Number(obstacleMesh.position.y.toFixed(3)),
+            z: Number(obstacleMesh.position.z.toFixed(3)),
+          },
+          rotation: Number(obstacle?.rotation || 0),
+          scale: Number(obstacle?.scale || 1),
+        });
 
         if (hasPhysics) {
           const obstacleAggregate = new PhysicsAggregate(obstacleMesh, PhysicsShapeType.BOX, { mass: 0, friction: 0.7, restitution: 0.05 }, this.scene);
@@ -1689,10 +1846,8 @@ export class ColyseusBabylonClient {
 
       const wallThickness = 8;
       const wallHeight = 6;
-      const wallMat = new PBRMaterial('custom-arena-wall-mat', this.scene);
-      wallMat.albedoColor = new Color3(0.16, 0.18, 0.24);
-      wallMat.roughness = 0.9;
-      wallMat.metallic = 0.05;
+      const wallMat = new StandardMaterial('custom-arena-wall-mat', this.scene);
+      wallMat.diffuseColor = new Color3(0.16, 0.18, 0.24);
 
       const createWall = (name, width, height, depth, x, y, z) => {
         const wall = MeshBuilder.CreateBox(name, { width, height, depth }, this.scene);
@@ -1716,10 +1871,14 @@ export class ColyseusBabylonClient {
         progress: 0.9,
       });
 
+      if (typeof window !== 'undefined' && window.__gloDebug) {
+        window.__gloDebug.customArenaBuiltObstacles = builtObstacleRecords;
+      }
+
       this._arenaBoundsHalf = Math.max(floorWidth, floorDepth) * 0.5;
     };
 
-    // ── DEBUG: skip GLB loading, use procedural debug arena ──
+    // â”€â”€ DEBUG: skip GLB loading, use procedural debug arena â”€â”€
     const USE_DEBUG_ARENA = !customTrackParsed;
     if (USE_DEBUG_ARENA) {
       if (typeof window !== 'undefined' && window.__gloDebug) {
@@ -1738,7 +1897,7 @@ export class ColyseusBabylonClient {
         progress: 0.34,
         state: 'warning',
       });
-      console.log('[realtime] DEBUG ARENA mode — skipping GLB load');
+      console.log('[realtime] DEBUG ARENA mode â€” skipping GLB load');
       this._createFallbackGround();
       const debugSpawns = [
         { x: 10, y: 0.35, z: 0 }, { x: -10, y: 0.35, z: 0 },
@@ -1818,7 +1977,7 @@ export class ColyseusBabylonClient {
               .catch((e) => console.warn(`[realtime] Decorations load skipped:`, e.message));
           }
         } else {
-          console.warn("[realtime] No track/arena path found — using fallback ground");
+          console.warn("[realtime] No track/arena path found â€” using fallback ground");
           this._createFallbackGround();
         }
       }
@@ -1829,7 +1988,7 @@ export class ColyseusBabylonClient {
     } // end else (non-debug arena path)
 
     if (!USE_DEBUG_ARENA) {
-    // ── Spawn positions ──
+    // â”€â”€ Spawn positions â”€â”€
     // Priority: custom track data > track-data.js registry > auto-generated from mesh
     const customSpawns = customTrackParsed?.startPositions;
     const customSegments = Array.isArray(customTrackParsed?.segments) ? customTrackParsed.segments : [];
@@ -1850,7 +2009,9 @@ export class ColyseusBabylonClient {
         return normalizeSpawn({
           position: {
             x: Number(endpoint?.position?.x || 0),
-            y: Math.max(2, Number(endpoint?.position?.y || 0) + 2),
+            // Hint Y just above the authored segment; `_sampleSurfaceY` snaps
+            // the kart to the actual TRACK surface at runtime.
+            y: Number(endpoint?.position?.y || 0) + 1,
             z: Number(endpoint?.position?.z || 0),
           },
           heading: Number(endpoint?.rotation || 0),
@@ -1870,7 +2031,7 @@ export class ColyseusBabylonClient {
         spawnPositions = [ normalizeSpawn(trackInfo.start || { x: 0, y: 5, z: 0 }) ];
         }
 
-      // ── Kill-plane boundary below the track ──
+      // â”€â”€ Kill-plane boundary below the track â”€â”€
     const baseY = spawnPositions[0]?.y || 0;
     const killY = baseY - 30;
     const killPlane = MeshBuilder.CreateGround("kill-plane", { width: 2000, height: 2000 }, this.scene);
@@ -1885,6 +2046,18 @@ export class ColyseusBabylonClient {
     this._spawnPos = spawnPositions[0] || { x: 0, y: 5, z: 0 };
     this._allSpawnPositions = spawnPositions;
     this._fallThreshold = killY + 10; // trigger respawn 10 units above kill plane
+
+    if (typeof window !== 'undefined' && window.__gloDebug) {
+      window.__gloDebug.customArenaResolvedSpawns = spawnPositions.map((spawn, index) => ({
+        id: String(customSpawns?.[index]?.id || index + 1),
+        position: {
+          x: Number(spawn?.x || 0),
+          y: Number(spawn?.y || 0),
+          z: Number(spawn?.z || 0),
+        },
+        heading: Number(spawn?.heading || 0),
+      }));
+    }
 
     // Per-arena kart scale override (e.g. blockfort needs much smaller karts)
     this._arenaKartScale = trackInfo.kartScale || null;
@@ -1924,7 +2097,7 @@ export class ColyseusBabylonClient {
     try {
       console.log(`[realtime] Loading local player kart (id: ${kartInfo.id}, color: ${options.playerColor})...`);
 
-      // ── KartEntity: isolated materials, auto-detected wheels, attach points ──
+      // â”€â”€ KartEntity: isolated materials, auto-detected wheels, attach points â”€â”€
       const localKartEntity = await createLocalKartEntity(this.scene, {
         id: 'local',
         kartId: options.kartId,
@@ -1936,7 +2109,7 @@ export class ColyseusBabylonClient {
       this.localMesh = localKartEntity.rootMesh;
       this.localMesh.name = "local-player";
 
-      // ── KartVFX: all effects parented to attachment points ──
+      // â”€â”€ KartVFX: all effects parented to attachment points â”€â”€
       this._localKartVFX = new KartVFX(this.scene, localKartEntity);
 
       this._gloKit = createGloUnderglow(this.scene, this.localMesh, {
@@ -1954,7 +2127,7 @@ export class ColyseusBabylonClient {
         localKartEntity.createPhysics(this.havokPlugin, 'DYNAMIC');
         this.localKartAggregate = localKartEntity.aggregate;
 
-        // ── Raycast vehicle: force-based suspension on the physics body ──
+        // â”€â”€ Raycast vehicle: force-based suspension on the physics body â”€â”€
         if (this.localKartAggregate?.body) {
           const wheelOffsets = localKartEntity.getWheelRayOffsets?.() || undefined;
           this._raycastVehicle = createKartRaycastVehicle(
@@ -1965,7 +2138,7 @@ export class ColyseusBabylonClient {
         }
       }
 
-      // ── Pre-match: hide kart & freeze physics until matchLive fires ──
+      // â”€â”€ Pre-match: hide kart & freeze physics until matchLive fires â”€â”€
       localKartEntity.setVisible(false);
       if (localKartEntity.aggregate) localKartEntity.freezePhysics();
       this._kartReady = false;
@@ -2042,7 +2215,7 @@ export class ColyseusBabylonClient {
     emitPlaytestProgress({
       phase: 'connect',
       label: 'Preparing realtime shell',
-      detail: `${joinOptions.gameMode.toUpperCase()} · ${joinOptions.arenaId || joinOptions.trackId}`,
+      detail: `${joinOptions.gameMode.toUpperCase()} Â· ${joinOptions.arenaId || joinOptions.trackId}`,
       progress: 0.18,
     });
 
@@ -2054,12 +2227,12 @@ export class ColyseusBabylonClient {
     // Per-arena environment (sky, fog, lighting)
     this._setupArenaEnvironment(joinOptions.arenaId || joinOptions.trackId || 'debug_arena');
 
-    // ── Defer heavy init work across frames to avoid jank ──
+    // â”€â”€ Defer heavy init work across frames to avoid jank â”€â”€
     // Each setTimeout(fn, 0) yields to the browser between operations,
     // preventing long frames during the sync init that blocks rendering.
     const _deferFrame = () => new Promise(r => setTimeout(r, 0));
 
-    // Particles — 4 systems + textures
+    // Particles â€” 4 systems + textures
     initParticles(this.scene);
     createLockReticle();
     await _deferFrame();
@@ -2079,7 +2252,7 @@ export class ColyseusBabylonClient {
     // Init minimap
     if (joinOptions.gameMode !== "battle") {
       try { createMinimap(joinOptions.trackId || 'test_box', this.scene); } catch (_) {}
-    } else if (this._autoMapDef?.aabb) {
+    } else if (this._autoMapDef?.aabb && this._allowBattleMinimap()) {
       try {
         const aabb = this._autoMapDef.aabb;
         createBattleMinimap(
@@ -2110,7 +2283,7 @@ export class ColyseusBabylonClient {
       window.__gloClient = this;
     }
 
-    // ── Show prematch lobby (hides loading screen) ──
+    // â”€â”€ Show prematch lobby (hides loading screen) â”€â”€
     if (!joinOptions.directPlaytest) {
       const ls = document.getElementById('loading-screen');
       if (ls) { ls.style.opacity = '0'; setTimeout(() => ls.style.display = 'none', 500); }
@@ -2130,7 +2303,7 @@ export class ColyseusBabylonClient {
       );
     }
 
-    // ── Havok trigger observable — physics-based item pickup + projectile/trap hits ──
+    // â”€â”€ Havok trigger observable â€” physics-based item pickup + projectile/trap hits â”€â”€
     if (this.havokPlugin) {
       this.havokPlugin.onTriggerCollisionObservable.add((event) => {
         if (event.type !== "TRIGGER_ENTERED") return;
@@ -2251,7 +2424,7 @@ export class ColyseusBabylonClient {
       if (areBattleAssetsLoaded()) playBattleSound('pickup', { volume: 0.52 });
       else playSFX('pickup');
       window.dispatchEvent(new CustomEvent("weaponEquipped", { detail: msg }));
-      // Quick green screen flash — confirms the pickup without any extra assets
+      // Quick green screen flash â€” confirms the pickup without any extra assets
       const flash = document.createElement('div');
       Object.assign(flash.style, {
         position: 'fixed', inset: '0', pointerEvents: 'none', zIndex: '10000',
@@ -2336,17 +2509,17 @@ export class ColyseusBabylonClient {
       }
     });
 
-    // ── Kill feed for battle mode ─────────────────────────────────────────
+    // â”€â”€ Kill feed for battle mode â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     this.room.onMessage("playerKilled", (msg) => {
       this._addKillFeedEntry(msg.attackerName, msg.victimName, msg.weapon, msg);
       if (typeof window !== 'undefined' && window.__gloDebug) window.__gloDebug.lastKill = msg;
 
       // Kill celebration VFX + multi-kill banner for local attacker
       if (this.room && msg.attackerId === this.room.sessionId) {
-        if (this.localMesh) emitKillCelebration(this.localMesh.position);
+        if (this.localMesh && this._allowBattleImpactPolish()) emitKillCelebration(this.localMesh.position);
         playBattleSound('sparkle_hit', { volume: 0.48, cooldownMs: 80 });
         const streak = msg.multiKill || msg.killStreak || 1;
-        if (streak >= 2) showMultiKillBanner(streak);
+        if (streak >= 2 && this._allowBattleHudPolish()) showMultiKillBanner(streak);
       }
       // Death VFX at victim position
       const killVictimMesh = this.remoteMeshes.get(msg.victimId);
@@ -2356,25 +2529,25 @@ export class ColyseusBabylonClient {
           && recentImpact.victimId === msg.victimId
           && recentImpact.subType === msg.weapon
           && (performance.now() - recentImpact.at) < 260;
-        if (!duplicatedImpact) {
+        if (!duplicatedImpact && this._allowBattleImpactPolish()) {
           emitBattleExplosion(killVictimMesh.position, msg.weapon);
         }
         playBattleSound('death', { volume: 0.72, cooldownMs: 110 });
       }
     });
 
-    // ── Death sequence trigger ────────────────────────────────────────────
+    // â”€â”€ Death sequence trigger â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     this.room.onMessage("playerDied", (msg) => {
       if (this.room && msg.victimId === this.room.sessionId) {
-        shakeCamera(this.camera, 0.5, 600);
-        flashDamageVignette();
+        if (this._allowBattleCameraJuice()) shakeCamera(this.camera, 0.5, 600);
+        if (this._allowBattleHudPolish()) flashDamageVignette();
         this._startDeathSequence(msg);
       }
     });
 
-    // ── Elimination (balloon mode) ─────────────────────────────────────
+    // â”€â”€ Elimination (balloon mode) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     this.room.onMessage("playerEliminated", (msg) => {
-      this._addKillFeedEntry('', msg.playerName, '', { callout: '☠️ ELIMINATED' });
+      this._addKillFeedEntry('', msg.playerName, '', { callout: 'â˜ ï¸ ELIMINATED' });
       // If we were eliminated, enter spectator
       if (this.room && msg.playerId === this.room.sessionId) {
         this._localLives = 0;
@@ -2396,7 +2569,7 @@ export class ColyseusBabylonClient {
       this._showMatchEndScreen(msg);
     });
 
-    // ── Race lap messages ─────────────────────────────────────────────────
+    // â”€â”€ Race lap messages â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     this.room.onMessage("lapStarted", (msg) => {
       this._lapCount = msg.lap || 1;
       this._totalLaps = msg.totalLaps || 3;
@@ -2409,12 +2582,12 @@ export class ColyseusBabylonClient {
       this._updateLapHud();
       this._showLapOverlay(`LAP ${msg.lap} / ${msg.totalLaps}`);
       if (msg.lap === msg.totalLaps) playSFX('last_lap');
-      // Extend cooldown — don't re-trigger finish line for 18s
+      // Extend cooldown â€” don't re-trigger finish line for 18s
       this._lapCooldownUntil = Date.now() + 18000;
     });
 
     this.room.onMessage("lapComplete", (msg) => {
-      // Another player completed a lap — update leaderboard if exposed
+      // Another player completed a lap â€” update leaderboard if exposed
       console.log(`[race] ${msg.name} completed lap ${msg.lap}/${msg.totalLaps}`);
     });
 
@@ -2484,7 +2657,7 @@ export class ColyseusBabylonClient {
     this._cancelServerCountdown(false);
     this._countdownStartAt = startAt;
 
-    console.log("[realtime] Start sequence — match begins in", durationMs, "ms");
+    console.log("[realtime] Start sequence â€” match begins in", durationMs, "ms");
     const totalSec = Math.max(0, Math.round(durationMs / 1000));
     PrematchLobby.startCountdown(totalSec);
 
@@ -2640,7 +2813,9 @@ export class ColyseusBabylonClient {
       startEngineSound();
       if (joinOptions.gameMode === 'battle') {
         playBattleMusic(joinOptions.trackId || 'glo_arena');
-        startAmbientLoop(joinOptions.trackId || 'glo_arena');
+        if (this._allowArenaAmbience()) {
+          startAmbientLoop(joinOptions.trackId || 'glo_arena');
+        }
       } else {
         playTrackMusic(joinOptions.trackId || 'test_box');
       }
@@ -2891,7 +3066,7 @@ export class ColyseusBabylonClient {
     this._renderWeaponLab(panel);
   }
 
-  // ── Weapon Lab — individual pickup test mode ──────────────────────────
+  // â”€â”€ Weapon Lab â€” individual pickup test mode â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   _renderWeaponLab(panel) {
     if (this.roomName !== 'battle_room') return;
 
@@ -2925,7 +3100,7 @@ export class ColyseusBabylonClient {
 
     // Current weapon status
     const activeDisplay = WEAPON_DISPLAY[activeW2];
-    const statusIcon = activeDisplay ? activeDisplay.icon : '—';
+    const statusIcon = activeDisplay ? activeDisplay.icon : 'â€”';
     const statusName = activeDisplay ? (activeDisplay.displayName || activeW2.replace(/_/g, ' ')) : 'NONE';
     const statusColor = activeDisplay ? activeDisplay.hue : '#666';
 
@@ -2934,21 +3109,21 @@ export class ColyseusBabylonClient {
     let html = `<div id="weapon-lab-header" style="${headerStyle}">
       <div style="display:flex;align-items:center;gap:6px;">
         <div style="font-size:10px;font-weight:800;letter-spacing:0.18em;text-transform:uppercase;color:rgba(245,210,160,0.9);">Weapon Lab</div>
-        <div style="font-size:12px;opacity:0.7;">${expanded ? '▾' : '▸'}</div>
+        <div style="font-size:12px;opacity:0.7;">${expanded ? 'â–¾' : 'â–¸'}</div>
       </div>
       <div style="display:flex;align-items:center;gap:5px;">
         <span style="font-size:13px;">${statusIcon}</span>
         <span style="font-size:10px;font-weight:700;color:${statusColor};text-transform:uppercase;letter-spacing:0.06em;">${statusName}</span>
-        ${ammo2 > 0 ? `<span style="font-size:9px;font-weight:700;color:rgba(255,255,255,0.5);margin-left:2px;">×${ammo2}</span>` : ''}
+        ${ammo2 > 0 ? `<span style="font-size:9px;font-weight:700;color:rgba(255,255,255,0.5);margin-left:2px;">Ã—${ammo2}</span>` : ''}
       </div>
     </div>`;
 
     if (expanded) {
       // Fire + Clear buttons
       html += `<div style="display:flex;gap:6px;margin:10px 0 8px;">
-        <button id="wlab-fire" style="flex:1;height:28px;border-radius:8px;border:1px solid rgba(255,120,80,0.6);background:rgba(255,80,40,0.25);color:#ffb899;font-family:inherit;font-size:10px;font-weight:800;letter-spacing:0.12em;text-transform:uppercase;cursor:pointer;">🔥 Fire</button>
-        <button id="wlab-fire-reserve" style="flex:1;height:28px;border-radius:8px;border:1px solid rgba(180,140,255,0.5);background:rgba(140,100,220,0.2);color:#d4bbff;font-family:inherit;font-size:10px;font-weight:800;letter-spacing:0.12em;text-transform:uppercase;cursor:pointer;">🔄 Swap+Fire</button>
-        <button id="wlab-clear" style="width:42px;height:28px;border-radius:8px;border:1px solid rgba(255,255,255,0.18);background:rgba(255,255,255,0.06);color:rgba(255,255,255,0.5);font-family:inherit;font-size:10px;font-weight:700;cursor:pointer;">✕</button>
+        <button id="wlab-fire" style="flex:1;height:28px;border-radius:8px;border:1px solid rgba(255,120,80,0.6);background:rgba(255,80,40,0.25);color:#ffb899;font-family:inherit;font-size:10px;font-weight:800;letter-spacing:0.12em;text-transform:uppercase;cursor:pointer;">ðŸ”¥ Fire</button>
+        <button id="wlab-fire-reserve" style="flex:1;height:28px;border-radius:8px;border:1px solid rgba(180,140,255,0.5);background:rgba(140,100,220,0.2);color:#d4bbff;font-family:inherit;font-size:10px;font-weight:800;letter-spacing:0.12em;text-transform:uppercase;cursor:pointer;">ðŸ”„ Swap+Fire</button>
+        <button id="wlab-clear" style="width:42px;height:28px;border-radius:8px;border:1px solid rgba(255,255,255,0.18);background:rgba(255,255,255,0.06);color:rgba(255,255,255,0.5);font-family:inherit;font-size:10px;font-weight:700;cursor:pointer;">âœ•</button>
       </div>`;
 
       // Weapon status detail
@@ -2959,7 +3134,7 @@ export class ColyseusBabylonClient {
             <span style="font-size:16px;">${statusIcon}</span>
             <div>
               <div style="font-size:11px;font-weight:800;color:#fff;text-transform:uppercase;">${statusName}</div>
-              <div style="font-size:9px;color:rgba(255,255,255,0.5);">ammo ${ammo2} · cd ${Math.round(cooldown2)}ms</div>
+              <div style="font-size:9px;color:rgba(255,255,255,0.5);">ammo ${ammo2} Â· cd ${Math.round(cooldown2)}ms</div>
             </div>
           </div>
         </div>`;
@@ -2967,7 +3142,7 @@ export class ColyseusBabylonClient {
       if (activeW3) {
         const resDisp = WEAPON_DISPLAY[activeW3];
         html += `<div style="margin-bottom:10px;padding:4px 8px;border-radius:6px;background:rgba(140,100,220,0.1);border:1px solid rgba(140,100,220,0.2);">
-          <div style="font-size:9px;font-weight:700;color:rgba(200,180,255,0.7);text-transform:uppercase;">Reserve: ${resDisp?.icon || ''} ${activeW3.replace(/_/g, ' ')} ×${ammo3}</div>
+          <div style="font-size:9px;font-weight:700;color:rgba(200,180,255,0.7);text-transform:uppercase;">Reserve: ${resDisp?.icon || ''} ${activeW3.replace(/_/g, ' ')} Ã—${ammo3}</div>
         </div>`;
       }
 
@@ -2993,7 +3168,7 @@ export class ColyseusBabylonClient {
       // Infinite ammo toggle
       const infAmmo = !!this._weaponLabInfiniteAmmo;
       html += `<div style="display:flex;align-items:center;gap:8px;margin-top:10px;padding-top:8px;border-top:1px solid rgba(152,230,247,0.12);">
-        <button id="wlab-inf-ammo" style="width:18px;height:18px;border-radius:4px;border:1px solid ${infAmmo ? '#98e6f7' : 'rgba(255,255,255,0.2)'};background:${infAmmo ? 'rgba(152,230,247,0.3)' : 'transparent'};color:${infAmmo ? '#98e6f7' : 'rgba(255,255,255,0.4)'};font-size:11px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;">${infAmmo ? '✓' : ''}</button>
+        <button id="wlab-inf-ammo" style="width:18px;height:18px;border-radius:4px;border:1px solid ${infAmmo ? '#98e6f7' : 'rgba(255,255,255,0.2)'};background:${infAmmo ? 'rgba(152,230,247,0.3)' : 'transparent'};color:${infAmmo ? '#98e6f7' : 'rgba(255,255,255,0.4)'};font-size:11px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;">${infAmmo ? 'âœ“' : ''}</button>
         <span style="font-size:9px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:rgba(255,255,255,0.5);">Infinite Ammo</span>
       </div>`;
     }
@@ -3129,7 +3304,9 @@ export class ColyseusBabylonClient {
     const firerMesh = (msg.ownerId === this.room?.sessionId)
       ? this.localMesh
       : this.remoteMeshes.get(msg.ownerId);
-    if (firerMesh) emitMuzzleFlash(firerMesh.position, msg.subType);
+    if (firerMesh && getTier() !== TIER.LOW && runtimePressure() < 0.62) {
+      emitMuzzleFlash(firerMesh.position, msg.subType);
+    }
   }
 
   _handleProjectileHitMessage(msg) {
@@ -3169,18 +3346,26 @@ export class ColyseusBabylonClient {
     if (victimMesh) {
       const pos = impactPosition || victimMesh.position;
       if (msg.subType === 'lightning_bolt') {
-        if (attackerMesh) {
+        if (attackerMesh && this._allowBattleImpactPolish()) {
           emitTeslaArcBetween(
             attackerMesh.position.add(new Vector3(0, 1.2, 0)),
             pos.clone ? pos.clone() : new Vector3(pos.x, pos.y, pos.z),
             1.05,
           );
         }
-        emitLightningStrike(pos);
+        if (this._allowBattleImpactPolish()) emitLightningStrike(pos);
       } else if (msg.subType === 'glo_burst' || msg.subType === 'glow_thrower') {
-        emitStreamImpactVFX(pos, msg.subType);
+        if (this._allowBattleImpactPolish()) emitStreamImpactVFX(pos, msg.subType);
+      } else if (msg.subType === 'missile' || msg.subType === 'crimson_hydra') {
+        if (this._allowBattleImpactPolish()) {
+          emitWeaponExplosion(
+            pos,
+            Math.min(msg.damage || 30, 40),
+            msg.subType === 'crimson_hydra' ? 0xff4a2a : 0xff7a1c,
+          );
+        }
       } else {
-        emitWeaponImpactVFX(pos, msg.subType, msg.damage || 30);
+        if (this._allowBattleImpactPolish()) emitWeaponImpactVFX(pos, msg.subType, msg.damage || 30);
       }
       const victimVFX = msg.victimId === this.room?.sessionId
         ? this._localKartVFX
@@ -3194,9 +3379,9 @@ export class ColyseusBabylonClient {
     }
     if (this.room && msg.victimId === this.room.sessionId) {
       this.flashDamage();
-      flashDamageVignette();
+      if (this._allowBattleHudPolish()) flashDamageVignette();
       if (!areBattleAssetsLoaded()) playSFX('crash');
-      if (this.localMesh && msg.subType === 'lightning_bolt' && attackerMesh) {
+      if (this._allowBattleImpactPolish() && this.localMesh && msg.subType === 'lightning_bolt' && attackerMesh) {
         emitTeslaArcBetween(
           attackerMesh.position.add(new Vector3(0, 1.2, 0)),
           this.localMesh.position.add(new Vector3(0, 1.0, 0)),
@@ -3204,7 +3389,7 @@ export class ColyseusBabylonClient {
         );
       }
       const shakeIntensity = Math.min(1.0, (msg.damage || 30) / 50);
-      shakeCamera(this.camera, shakeIntensity, 400);
+      if (this._allowBattleCameraJuice()) shakeCamera(this.camera, shakeIntensity, 400);
       this._triggerShockwave(msg.damage || 30);
       if (typeof msg.remainingHealth === 'number') {
         this._localHealth = msg.remainingHealth;
@@ -3217,14 +3402,16 @@ export class ColyseusBabylonClient {
         const dx = atkMesh.position.x - this.localMesh.position.x;
         const dz = atkMesh.position.z - this.localMesh.position.z;
         const angle = Math.atan2(dx, dz);
-        showDamageDirection(angle, msg.subType);
-        showOffscreenDamageArrow(angle);
+        if (this._allowBattleHudPolish()) {
+          showDamageDirection(angle, msg.subType);
+          showOffscreenDamageArrow(angle);
+        }
       }
     }
 
     if (this.room && msg.attackerId === this.room.sessionId) {
-      showHitConfirm(msg.damage || 30);
-      showHitMarkerVFX();
+      if (this._allowBattleHudPolish()) showHitConfirm(msg.damage || 30);
+      if (this._allowBattleImpactPolish()) showHitMarkerVFX();
       playHitConfirmSFX();
     }
   }
@@ -3242,7 +3429,7 @@ export class ColyseusBabylonClient {
       ? this._localKartEntity
       : this._remoteKartEntities.get(msg.playerBId);
 
-    if (impactPosition) {
+    if (impactPosition && this._allowBattleImpactPolish()) {
       emitShockwaveRing(impactPosition, 6 + Math.min(10, severity * 0.6), [1, 0.58, 0.18]);
       emitWeaponImpactVFX(impactPosition, 'wind_slash');
     }
@@ -3286,8 +3473,10 @@ export class ColyseusBabylonClient {
     }
     if (localDamage > 0 || severity >= 2) {
       this.flashDamage();
-      flashDamageVignette();
-      shakeCamera(this.camera, Math.min(0.95, 0.22 + severity * 0.05), 320);
+      if (this._allowBattleHudPolish()) flashDamageVignette();
+      if (this._allowBattleCameraJuice()) {
+        shakeCamera(this.camera, Math.min(0.95, 0.22 + severity * 0.05), 320);
+      }
     }
     if (typeof remainingHealth === 'number') {
       this._localHealth = remainingHealth;
@@ -3301,14 +3490,14 @@ export class ColyseusBabylonClient {
       const dx = otherMesh.position.x - this.localMesh.position.x;
       const dz = otherMesh.position.z - this.localMesh.position.z;
       const angle = Math.atan2(dx, dz);
-      showDamageDirection(angle, 'wind_slash');
+      if (this._allowBattleHudPolish()) showDamageDirection(angle, 'wind_slash');
     }
   }
 
   _getRemoteProjectileVisualBudget() {
     const tier = getTier();
-    const base = tier === TIER.LOW ? 18 : (tier === TIER.MEDIUM ? 32 : 52);
-    return Math.max(12, Math.round(base * runtimeFXBudget()));
+    const base = tier === TIER.LOW ? 6 : (tier === TIER.MEDIUM ? 10 : 16);
+    return Math.max(4, Math.round(base * runtimeFXBudget()));
   }
 
   _installBattleDebugHooks() {
@@ -3392,9 +3581,9 @@ export class ColyseusBabylonClient {
 
     this._debugScenarioTimer = setTimeout(() => {
       this._cleanupDebugScenario();
-      if (subTypes?.includes('final_fission')) {
+      if (this._allowBattleImpactPolish() && subTypes?.includes('final_fission')) {
         emitNuclearFissionDetonation(center);
-      } else if (!subTypes || subTypes.includes('super_nova')) {
+      } else if (this._allowBattleImpactPolish() && (!subTypes || subTypes.includes('super_nova'))) {
         emitWeaponImpactVFX(center, 'super_nova');
       }
       if (typeof window !== 'undefined' && window.__gloDebug) {
@@ -3451,6 +3640,17 @@ export class ColyseusBabylonClient {
   _canPickupAnotherItem() {
     return (!this.currentWeapon2 || (this._localCombatState?.ammo2 ?? 0) <= 0)
       || (!this.reserveWeapon || (this._localCombatState?.ammo3 ?? 0) <= 0);
+  }
+
+  _getBuilderPlaytestHandling() {
+    if (!this._joinOptions?.directPlaytest) return null;
+    if (typeof this.roomName !== 'string' || !this.roomName.startsWith('builder_')) return null;
+    return {
+      turnResponse: 2.5,
+      lateralGrip: 0.18,
+      driftGripMul: 0.14,
+      velocityAlign: 0.45,
+    };
   }
 
   _queueItemBoxPickup(entityId, entityMesh = null, source = 'unknown') {
@@ -3589,9 +3789,24 @@ export class ColyseusBabylonClient {
       const hit = new PhysicsRaycastResult();
 
       try {
-        this.havokPlugin.raycast(from, to, hit);
+        // Restrict the surface probe to drivable TRACK geometry so the
+        // sample is never contaminated by the kart's own collider, other karts,
+        // item boxes, projectiles, or decorative props above the road. Without
+        // this filter the raycast can latch onto the local kart aggregate during
+        // `_syncAuthoritativeSpawn` and ratchet the spawn Y upward, producing
+        // the visible "kart hovering above the play surface" bug in builder
+        // arena playtests.
+        this.havokPlugin.raycast(from, to, hit, { collideWith: LAYER.TRACK });
         if (hit.hasHit && Number.isFinite(hit.hitDistance)) {
-          return from.y - hit.hitDistance + clearance;
+          const sampledY = from.y - hit.hitDistance + clearance;
+          // Builder-authored custom tracks can momentarily report the fallback
+          // kill plane or arena floor before segment colliders settle. When that
+          // happens, trust the authored spawn height instead of dropping the kart
+          // far below the visible track shell.
+          if (sampledY < baseY - 1.25) {
+            return baseY + clearance;
+          }
+          return sampledY;
         }
       } catch (_) {
         // Fall back to the authored Y when Havok raycasts are unavailable.
@@ -3642,6 +3857,12 @@ export class ColyseusBabylonClient {
     });
 
     if (PrematchLobby.isVisible()) PrematchLobby.hide();
+    // Fallback: force-remove prematch overlay even if rAF hasn't added 'visible' yet
+    const pmOverlay = document.getElementById('prematch-lobby');
+    if (pmOverlay && (pmOverlay.style.display !== 'none')) {
+      pmOverlay.classList.remove('visible', 'fade-out');
+      pmOverlay.style.display = 'none';
+    }
     this._showGoOverlay();
 
     const self = this.authoritativeState?.players?.get?.(this.room?.sessionId || '');
@@ -3724,7 +3945,7 @@ export class ColyseusBabylonClient {
         e.preventDefault();
         this._updateAndShowScoreboard();
       }
-      // C: cycle camera view (Chase → Low Behind → Close …)
+      // C: cycle camera view (Chase â†’ Low Behind â†’ Close â€¦)
       if (e.code === 'KeyC') {
         this._cameraMode = (this._cameraMode + 1) % this._cameraModes.length;
         const mode = this._cameraModes[this._cameraMode];
@@ -3769,14 +3990,14 @@ export class ColyseusBabylonClient {
       this._sendRealtimeInputKeepalive();
     }, this._inputKeepaliveMs);
 
-    // Per-frame input polling → sendInput()
+    // Per-frame input polling â†’ sendInput()
     this._setSceneBeforeRender("_inputPollingBeforeRender", () => {
       if (!this.localMesh || !this.room) return;
 
       // Block all input/physics until the match goes LIVE (avoids pre-match kart movement)
       if (!this._kartReady) return;
 
-      // ── Death/respawn state machine ─────────────────────────────────
+      // â”€â”€ Death/respawn state machine â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       if (this._deathState) {
         const dDt = this.engine.getDeltaTime() / 1000;
         this._deathState.timer -= dDt;
@@ -3803,7 +4024,7 @@ export class ColyseusBabylonClient {
         return; // Block all input during death
       }
 
-      // ── Invulnerability blink ────────────────────────────────────────
+      // â”€â”€ Invulnerability blink â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       if (this._invulnTimer > 0) {
         const iDt = this.engine.getDeltaTime() / 1000;
         this._invulnTimer -= iDt;
@@ -3816,7 +4037,7 @@ export class ColyseusBabylonClient {
         }
       }
 
-      // ── Low health heartbeat ─────────────────────────────────────────
+      // â”€â”€ Low health heartbeat â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       if (this._localHealth <= 25 && this._localHealth > 0) {
         this._heartbeatTimer -= this.engine.getDeltaTime() / 1000;
         if (this._heartbeatTimer <= 0) {
@@ -3827,7 +4048,7 @@ export class ColyseusBabylonClient {
       }
       updateLowHealthWarning(this._localHealth);
 
-      // ── Battle music intensity (21.26) ──────────────────────────────
+      // â”€â”€ Battle music intensity (21.26) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       if (this._joinOptions?.gameMode === 'battle' && this.authoritativeState?.players) {
         const scoreLimit = this.authoritativeState?.scoreLimit || 10;
         let maxScore = 0;
@@ -3892,13 +4113,13 @@ export class ColyseusBabylonClient {
         }
       }
 
-      // Status effect VFX — authoritative effect state drives local anchors.
+      // Status effect VFX â€” authoritative effect state drives local anchors.
       this._applyKartEffectVFX(this._localKartVFX, this._localCombatState.effectType);
 
-      // ── Dynamic forcefield shield (HP-based, green→red) ─────────────
+      // â”€â”€ Dynamic forcefield shield (HP-based, greenâ†’red) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       this._updateForceFieldShield();
 
-      // ── KartVFX per-frame update ─────────────────────────────────────
+      // â”€â”€ KartVFX per-frame update â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       const dtVFX = this.engine.getDeltaTime() / 1000;
       if (this._localKartVFX) {
         const speed = this.localKartAggregate?.body
@@ -3923,10 +4144,10 @@ export class ColyseusBabylonClient {
         }
       }
 
-      // ── Ludicrous Mode VFX ──────────────────────────────────────────
+      // â”€â”€ Ludicrous Mode VFX â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       this._updateLudicrousVFX(dtVFX);
 
-      // Spectator mode — ignore normal inputs, fire cycles target
+      // Spectator mode â€” ignore normal inputs, fire cycles target
       if (this._spectating) {
         if (fireSecondary && !this._spectatorFireHeld) {
           this._cycleSpectatorTarget();
@@ -3976,7 +4197,7 @@ export class ColyseusBabylonClient {
         const vel = this.localKartAggregate.body.getLinearVelocity();
         const speed = vel ? Math.sqrt(vel.x * vel.x + vel.z * vel.z) : 0;
         updateEnginePitch(speed);
-        // Legacy wheel spin removed — handled in applyLocalPrediction via KartEntity.spinWheels()
+        // Legacy wheel spin removed â€” handled in applyLocalPrediction via KartEntity.spinWheels()
       }
 
       // Out-of-bounds respawn (arena-aware threshold)
@@ -3987,7 +4208,7 @@ export class ColyseusBabylonClient {
         this._respawnLocalKart(nearest);
       }
 
-      // ── Finish-line detection (race mode) ────────────────────────────────
+      // â”€â”€ Finish-line detection (race mode) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       // Uses proximity to the spawn position as a simple finish-line trigger.
       // Once a lap is started by crossing the line, subsequent crossings
       // advance the lap counter. A cooldown prevents double-triggers.
@@ -4010,7 +4231,7 @@ export class ColyseusBabylonClient {
         }
       }
 
-      // ── Camera clip avoidance ─────────────────────────────────────────────
+      // â”€â”€ Camera clip avoidance â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       // Raycast from the kart toward the camera's current position.
       // If anything obstructs the line-of-sight, shorten the camera radius so
       // the player never loses sight of their kart behind walls or pillars.
@@ -4027,7 +4248,7 @@ export class ColyseusBabylonClient {
             // Gradually restore to ideal radius once clear
             this.camera.radius = Math.min(this._targetCamRadius, this.camera.radius + 0.2);
           }
-        } catch (_) { /* raycast API unavailable — skip clip avoidance this frame */ }
+        } catch (_) { /* raycast API unavailable â€” skip clip avoidance this frame */ }
       }
     });
   }
@@ -4110,7 +4331,7 @@ export class ColyseusBabylonClient {
     console.log("[realtime] Respawned local kart at spawn position");
   }
 
-  /** Trigger death animation — hide kart, show debris + KO overlay */
+  /** Trigger death animation â€” hide kart, show debris + KO overlay */
   _startDeathSequence(msg) {
     if (this._deathState) return;
     const pos = this.localMesh ? this.localMesh.position.clone() : new Vector3(0, 2, 0);
@@ -4158,7 +4379,7 @@ export class ColyseusBabylonClient {
     console.log("[realtime] Death sequence started");
   }
 
-  // ── 21.32 Spectator Mode ─────────────────────────────────────────────────
+  // â”€â”€ 21.32 Spectator Mode â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   _enterSpectatorMode() {
     this._spectating = true;
@@ -4201,7 +4422,7 @@ export class ColyseusBabylonClient {
     this._spectatorIdx++;
   }
 
-  // ── Lap HUD ─────────────────────────────────────────────────────────────
+  // â”€â”€ Lap HUD â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   /** Create or return the persistent lap counter element */
   _initLapHud() {
@@ -4294,7 +4515,7 @@ export class ColyseusBabylonClient {
         amHost = true;
       }
 
-      // Game room player schema doesn't have isHost — check gameConfig from lobby
+      // Game room player schema doesn't have isHost â€” check gameConfig from lobby
       try {
         const gc = JSON.parse(sessionStorage.getItem('gameConfig') || '{}');
         if (gc.players) {
@@ -4317,7 +4538,7 @@ export class ColyseusBabylonClient {
       const curScoreLimit = roomState.scoreLimit ?? opts.scoreLimit ?? 5;
       const curBotCount = roomState.botCount ?? opts.botCount ?? 0;
 
-      // ── Build full-screen overlay ─────────────────────────────────────
+      // â”€â”€ Build full-screen overlay â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       const screen = document.createElement('div');
       screen.id = '_glo-match-end';
       Object.assign(screen.style, {
@@ -4334,7 +4555,7 @@ export class ColyseusBabylonClient {
         overflowY: 'auto',
       });
 
-      // ── Shared styles ─────────────────────────────────────────────────
+      // â”€â”€ Shared styles â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       const labelStyle = {
         fontSize: 'clamp(0.65rem, 1.4vw, 0.78rem)',
         color: 'rgba(255,255,255,0.5)',
@@ -4362,9 +4583,9 @@ export class ColyseusBabylonClient {
         textAlign: 'center',
       };
 
-      // ── Title ─────────────────────────────────────────────────────────
+      // â”€â”€ Title â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       const title = document.createElement('div');
-      title.textContent = isRace ? '🏁 RACE OVER' : (isSelfWinner ? '🏆 VICTORY!' : '⚔️  MATCH OVER');
+      title.textContent = isRace ? 'ðŸ RACE OVER' : (isSelfWinner ? 'ðŸ† VICTORY!' : 'âš”ï¸  MATCH OVER');
       Object.assign(title.style, {
         fontSize: 'clamp(1.8rem, 6vw, 3.2rem)',
         textShadow: '0 0 30px rgba(255,200,0,0.7)',
@@ -4373,10 +4594,10 @@ export class ColyseusBabylonClient {
       });
       screen.appendChild(title);
 
-      // ── Winner banner ─────────────────────────────────────────────────
+      // â”€â”€ Winner banner â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       if (msg?.winner || standings[0]?.name) {
         const winBanner = document.createElement('div');
-        winBanner.textContent = `🏆 ${msg?.winner || standings[0]?.name}`;
+        winBanner.textContent = `ðŸ† ${msg?.winner || standings[0]?.name}`;
         Object.assign(winBanner.style, {
           fontSize: 'clamp(1.2rem, 4vw, 2.2rem)',
           color: '#ffd700',
@@ -4390,7 +4611,7 @@ export class ColyseusBabylonClient {
         screen.appendChild(winBanner);
       }
 
-      // ── Standings table ───────────────────────────────────────────────
+      // â”€â”€ Standings table â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       if (standings.length > 0) {
         const table = document.createElement('div');
         Object.assign(table.style, {
@@ -4412,7 +4633,7 @@ export class ColyseusBabylonClient {
 
         standings.forEach((entry, i) => {
           const row = document.createElement('div');
-          const medal = ['🥇', '🥈', '🥉'][i] || `${i + 1}.`;
+          const medal = ['ðŸ¥‡', 'ðŸ¥ˆ', 'ðŸ¥‰'][i] || `${i + 1}.`;
           const kills = entry.score ?? 0;
           const deaths = entry.deaths ?? 0;
           const kd = deaths === 0 ? kills.toFixed(1) : (kills / deaths).toFixed(1);
@@ -4434,7 +4655,7 @@ export class ColyseusBabylonClient {
         screen.appendChild(table);
       }
 
-      // ── Divider ───────────────────────────────────────────────────────
+      // â”€â”€ Divider â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       const divider = document.createElement('div');
       Object.assign(divider.style, {
         width: '100%', maxWidth: '500px', height: '1px',
@@ -4443,7 +4664,7 @@ export class ColyseusBabylonClient {
       });
       screen.appendChild(divider);
 
-      // ── Next Match Settings (host-editable) ───────────────────────────
+      // â”€â”€ Next Match Settings (host-editable) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       const settingsSection = document.createElement('div');
       Object.assign(settingsSection.style, {
         width: '100%', maxWidth: '500px',
@@ -4452,7 +4673,7 @@ export class ColyseusBabylonClient {
       });
 
       const settingsTitle = document.createElement('div');
-      settingsTitle.textContent = amHost ? '⚙️  NEXT MATCH SETTINGS' : '⚙️  MATCH SETTINGS';
+      settingsTitle.textContent = amHost ? 'âš™ï¸  NEXT MATCH SETTINGS' : 'âš™ï¸  MATCH SETTINGS';
       Object.assign(settingsTitle.style, {
         fontSize: 'clamp(0.85rem, 2vw, 1.1rem)',
         color: '#ff0080',
@@ -4463,7 +4684,7 @@ export class ColyseusBabylonClient {
 
       if (!amHost) {
         const hostNote = document.createElement('div');
-        hostNote.textContent = 'Waiting for host to configure…';
+        hostNote.textContent = 'Waiting for host to configureâ€¦';
         Object.assign(hostNote.style, {
           fontSize: 'clamp(0.7rem, 1.6vw, 0.85rem)',
           color: 'rgba(255,255,255,0.4)',
@@ -4558,7 +4779,7 @@ export class ColyseusBabylonClient {
 
       // Settings-changed indicator (hidden until host changes something)
       const settingsChangedBadge = document.createElement('div');
-      settingsChangedBadge.textContent = '● Changes saved — REMATCH will use these settings';
+      settingsChangedBadge.textContent = 'â— Changes saved â€” REMATCH will use these settings';
       Object.assign(settingsChangedBadge.style, {
         fontSize: 'clamp(0.65rem, 1.4vw, 0.8rem)',
         color: '#00e5ff',
@@ -4604,7 +4825,7 @@ export class ColyseusBabylonClient {
 
       screen.appendChild(settingsSection);
 
-      // ── Connected Players ─────────────────────────────────────────────
+      // â”€â”€ Connected Players â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       const playersSection = document.createElement('div');
       Object.assign(playersSection.style, {
         width: '100%', maxWidth: '500px',
@@ -4633,7 +4854,7 @@ export class ColyseusBabylonClient {
             background: isMe ? 'rgba(0,255,100,0.12)' : 'rgba(255,255,255,0.06)',
             border: `1px solid ${isMe ? 'rgba(0,255,100,0.3)' : 'rgba(255,255,255,0.1)'}`,
           });
-          chip.textContent = (p.name || 'Player') + (p.isHost ? ' ★' : '');
+          chip.textContent = (p.name || 'Player') + (p.isHost ? ' â˜…' : '');
           playersSection.appendChild(chip);
         });
       };
@@ -4655,7 +4876,7 @@ export class ColyseusBabylonClient {
         if (this.room) this.room.send('triggerStart', {});
       };
 
-      // ── Action Buttons ────────────────────────────────────────────────
+      // â”€â”€ Action Buttons â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       const btnRow = document.createElement('div');
       Object.assign(btnRow.style, {
         display: 'flex', gap: '12px', flexWrap: 'wrap',
@@ -4683,18 +4904,18 @@ export class ColyseusBabylonClient {
         return btn;
       };
 
-      // REMATCH — same settings, instant restart
+      // REMATCH â€” same settings, instant restart
       const btnRematch = makeBtn('REMATCH', 'linear-gradient(135deg, #00cc66, #009944)', 'rgba(0,200,100,0.4)');
       btnRematch.addEventListener('click', () => {
         startNextMatch();
       });
       btnRow.appendChild(btnRematch);
 
-      // LEAVE — go back to main menu
+      // LEAVE â€” go back to main menu
       const btnLeave = makeBtn('LEAVE', 'linear-gradient(135deg, #ff0080, #7700ff)', 'rgba(255,0,128,0.4)');
       btnLeave.addEventListener('click', () => {
         this._postGamePlayerRefresh = null;
-        window.location.href = '/index.html';
+        void navigateWithTransition('/index.html');
       });
       btnRow.appendChild(btnLeave);
 
@@ -4714,7 +4935,7 @@ export class ColyseusBabylonClient {
     }, 1200);
   }
 
-  /** Visual countdown overlay: 3 → 2 → 1 → GO! with scale-pulse */
+  /** Visual countdown overlay: 3 â†’ 2 â†’ 1 â†’ GO! with scale-pulse */
   _showCountdownOverlay(durationMs) {
     // Remove any existing overlay
     if (this._countdownEl) { this._countdownEl.remove(); this._countdownEl = null; }
@@ -4873,7 +5094,7 @@ export class ColyseusBabylonClient {
       return;
     }
 
-    // ── Primary fire (Space) — glo_burst, continuous stream with overheat ──
+    // â”€â”€ Primary fire (Space) â€” glo_burst, continuous stream with overheat â”€â”€
     if (input.firePrimary && this.currentWeapon && !this._localCombatState.overheated) {
       const now = performance.now();
       if (this.currentWeapon === 'glo_burst') {
@@ -4899,7 +5120,7 @@ export class ColyseusBabylonClient {
       this._lastPrimaryFireSentAt = 0;
     }
 
-    // ── Secondary fire (E) — pickup weapon ──
+    // â”€â”€ Secondary fire (E) â€” pickup weapon â”€â”€
     if (input.fireSecondary && this.currentWeapon2) {
       const isStream2 = this.currentWeapon2 === 'glow_thrower';
       if (isStream2) {
@@ -5159,7 +5380,9 @@ export class ColyseusBabylonClient {
       this._missileLockScreenY = null;
       this._missileLockWasLocked = false;
       updateLockReticle(null, null, false);
-      updateGUILockTelemetry({ lockWeapon: activeLockWeapon || '', lockProgress: 0, locked: false, targetName: '' });
+      if (this._allowBattleHudPolish()) {
+        updateGUILockTelemetry({ lockWeapon: activeLockWeapon || '', lockProgress: 0, locked: false, targetName: '' });
+      }
       return;
     }
 
@@ -5204,12 +5427,14 @@ export class ColyseusBabylonClient {
       this._missileLockScreenX = null;
       this._missileLockScreenY = null;
       updateLockReticle(null, null, false);
-      updateGUILockTelemetry({
-        lockWeapon: activeLockWeapon,
-        lockProgress: lockResult.lockProgress,
-        locked: lockResult.locked,
-        targetName,
-      });
+      if (this._allowBattleHudPolish()) {
+        updateGUILockTelemetry({
+          lockWeapon: activeLockWeapon,
+          lockProgress: lockResult.lockProgress,
+          locked: lockResult.locked,
+          targetName,
+        });
+      }
       this._missileLockWasLocked = false;
       return;
     }
@@ -5222,12 +5447,14 @@ export class ColyseusBabylonClient {
       lockResult.locked,
       lockResult.lockProgress,
     );
-    updateGUILockTelemetry({
-      lockWeapon: activeLockWeapon,
-      lockProgress: lockResult.lockProgress,
-      locked: lockResult.locked,
-      targetName,
-    });
+    if (this._allowBattleHudPolish()) {
+      updateGUILockTelemetry({
+        lockWeapon: activeLockWeapon,
+        lockProgress: lockResult.lockProgress,
+        locked: lockResult.locked,
+        targetName,
+      });
+    }
 
     const now = performance.now();
     const justLocked = lockResult.locked && !this._missileLockWasLocked;
@@ -5270,7 +5497,7 @@ export class ColyseusBabylonClient {
     const transform = this.localMesh;
     const dt = 1 / 60;
 
-    // ── Restore clean physics quaternion before running physics ────────
+    // â”€â”€ Restore clean physics quaternion before running physics â”€â”€â”€â”€â”€â”€â”€â”€
     // The previous frame may have added visual offsets (pitch/roll/lean).
     // We must restore the physics-only orientation so Havok doesn't
     // integrate on top of visual tilt and cause runaway accumulation.
@@ -5278,7 +5505,7 @@ export class ColyseusBabylonClient {
       this.localMesh.rotationQuaternion.copyFrom(this._physicsQuat);
     }
 
-    // ── Force-based raycast suspension + ground detection ───────────────
+    // â”€â”€ Force-based raycast suspension + ground detection â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     // RaycastVehicle applies spring-damper forces to the physics body at each
     // wheel contact point (replaces the old visual-only suspension model).
     // Also populates drift state ground data so applyKartDriving knows isGrounded.
@@ -5302,18 +5529,24 @@ export class ColyseusBabylonClient {
       }
     }
 
-    // ── Delegate to shared kart-physics.js (eliminates inline duplication) ──
-    const result = applyKartDriving(body, transform, input, dt, this._driftState, { spdMult, strMult });
-    updateGUIBattleTelemetry({
-      speedKPH: result.speedKPH,
-      driftTier: result.driftTier,
-      miniBoostTier: result.miniBoostTier,
-      boostActive: result.miniBoostActive,
-      isGrounded: result.isGrounded,
-      isReversing: result.isReversing,
+    // â”€â”€ Delegate to shared kart-physics.js (eliminates inline duplication) â”€â”€
+    const result = applyKartDriving(body, transform, input, dt, this._driftState, {
+      spdMult,
+      strMult,
+      handling: this._getBuilderPlaytestHandling(),
     });
+    if (this._allowBattleHudPolish()) {
+      updateGUIBattleTelemetry({
+        speedKPH: result.speedKPH,
+        driftTier: result.driftTier,
+        miniBoostTier: result.miniBoostTier,
+        boostActive: result.miniBoostActive,
+        isGrounded: result.isGrounded,
+        isReversing: result.isReversing,
+      });
+    }
 
-    // ── Arena bounds enforcement ─────────────────────────────────────────
+    // â”€â”€ Arena bounds enforcement â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     if (this._arenaBoundsHalf) {
       const pos = transform.position;
       const half = this._arenaBoundsHalf;
@@ -5330,7 +5563,7 @@ export class ColyseusBabylonClient {
       }
     }
 
-    // ── Drift / boost audiovisual feedback ──────────────────────────────
+    // â”€â”€ Drift / boost audiovisual feedback â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     const driftTier = result.driftTier;
     const boostActive = result.miniBoostActive;
     const isDrifting = driftTier > 0 || this._driftState.wasDrifting;
@@ -5340,7 +5573,7 @@ export class ColyseusBabylonClient {
     this._prevBoostActive = boostActive;
 
     // Update particles (sparks / flames) for local kart
-    if (this.localMesh) {
+    if (this.localMesh && this._allowLocalVisualFlair()) {
       updateParticles(dt, this.localMesh, {
         isDrifting: this._driftState.wasDrifting,
         sparksLevel: driftTier,
@@ -5349,7 +5582,7 @@ export class ColyseusBabylonClient {
       });
     }
 
-    // ── KartVFX drift integration ────────────────────────────────────────
+    // â”€â”€ KartVFX drift integration â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     if (this._localKartVFX) {
       if (isDrifting && this._localKartVFX.state !== VFXState.DRIFT) {
         this._localKartVFX.setState(VFXState.DRIFT);
@@ -5368,7 +5601,7 @@ export class ColyseusBabylonClient {
       }
     }
 
-    // ── MK3.js per-frame kart entity visuals ────────────────────────────
+    // â”€â”€ MK3.js per-frame kart entity visuals â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     if (this._localKartEntity) {
       const speedMS = result.hSpeed || (result.speedKPH / 3.6);
       // Wheel spin (MK3.js: wheelRotation += speed * 0.01)
@@ -5387,9 +5620,9 @@ export class ColyseusBabylonClient {
       computeSuspension(this._driftState, bodyY, dt, justLanded);
     }
 
-    // ── Terrain-conforming body pitch/roll ─────────────────────────────
+    // â”€â”€ Terrain-conforming body pitch/roll â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     // With raycast vehicle active, the physics body already pitches/rolls
-    // naturally from suspension forces — skip the visual-only computation.
+    // naturally from suspension forces â€” skip the visual-only computation.
     // Still populate drift state fields for test compatibility.
     if (this._raycastVehicle) {
       // Physics body orientation already reflects terrain tilt
@@ -5403,12 +5636,12 @@ export class ColyseusBabylonClient {
       computeBodyPitchRoll(this._driftState, dt, wheelOffsPR);
     }
 
-    // ── Steering lean + acceleration lean ───────────────────────────────
+    // â”€â”€ Steering lean + acceleration lean â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     const speedMS = result.hSpeed || (result.speedKPH / 3.6);
     const steerLean = computeSteerLean(this._driftState, result.steer || 0, speedMS, dt);
     const accelLean = computeAccelLean(this._driftState, result.throttle || 0, result.brake, speedMS, dt);
 
-    // ── Visual body orientation ──────────────────────────────────────────
+    // â”€â”€ Visual body orientation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     // CRITICAL: Visual offsets (lean/tilt/driftYaw) must NOT feed back into
     // the physics body.  Before the next physics step the mesh rotation is
     // restored to the clean physics quat (see top of this method).
@@ -5418,6 +5651,21 @@ export class ColyseusBabylonClient {
       // Save the clean physics quaternion BEFORE adding visual offsets.
       if (!this._physicsQuat) this._physicsQuat = this.localMesh.rotationQuaternion.clone();
       else this._physicsQuat.copyFrom(this.localMesh.rotationQuaternion);
+
+      // -- Manual yaw integration ----------------------------------------
+      // The _physicsQuat restore at the top of this method overwrites the
+      // body rotation that Havok integrated from angular velocity.  This
+      // prevents steering from accumulating across frames.  Manually
+      // integrate the yaw component so turns persist, then zero the
+      // body yaw angular velocity to prevent double-integration.
+      {
+        const av = body.getAngularVelocity();
+        if (Math.abs(av.y) > 0.001) {
+          const dq = Quaternion.RotationAxis(Vector3.Up(), av.y * dt);
+          this._physicsQuat.copyFrom(dq.multiply(this._physicsQuat));
+          body.setAngularVelocity(new Vector3(av.x, 0, av.z));
+        }
+      }
 
       const euler = this._physicsQuat.toEulerAngles();
       const driftYaw = result.driftBodyYaw || 0;
@@ -5442,12 +5690,12 @@ export class ColyseusBabylonClient {
       this.localMesh.rotationQuaternion.copyFrom(tiltedQuat);
     }
 
-    // ── Apply suspension WITH tilt compensation (must come AFTER quat) ──
+    // â”€â”€ Apply suspension WITH tilt compensation (must come AFTER quat) â”€â”€
     if (this._localKartEntity) {
       this._localKartEntity.applySuspension(this._driftState.suspTravel, pitchOff, totalRoll);
     }
 
-    // ── FOV shift at speed (21.4) ───────────────────────────────────────
+    // â”€â”€ FOV shift at speed (21.4) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     if (this.camera) {
       const speedRatio = Math.min((result.speedKPH / 3.6) / 35, 1);
       const boostFOV = boostActive ? 3 * (Math.PI / 180) : 0;
@@ -5567,7 +5815,7 @@ export class ColyseusBabylonClient {
             // Ensure remote kart is visible
             remoteEntity.setVisible(true);
 
-            // ── Remote kart ANIMATED physics ──
+            // â”€â”€ Remote kart ANIMATED physics â”€â”€
             if (this.havokPlugin) {
               remoteEntity.createPhysics(this.havokPlugin, 'ANIMATED');
               if (remoteEntity.aggregate) {
@@ -5575,29 +5823,33 @@ export class ColyseusBabylonClient {
               }
             }
 
-            // ── Cache wheel meshes for remote kart spin animation ──
+            // â”€â”€ Cache wheel meshes for remote kart spin animation â”€â”€
             if (remoteEntity.wheelMeshes.length) {
               this._remoteWheelMeshes.set(id, remoteEntity.wheelMeshes);
             }
 
-            // ── Remote KartVFX ──
-            const remoteVFX = new KartVFX(this.scene, remoteEntity, { remote: true });
-            this._remoteKartVFXs.set(id, remoteVFX);
+            // â”€â”€ Remote KartVFX â”€â”€
+            if (this._allowRemoteVisualFlair()) {
+              const remoteVFX = new KartVFX(this.scene, remoteEntity, { remote: true });
+              this._remoteKartVFXs.set(id, remoteVFX);
+            }
 
-            // ── GLO underglow for remote player ──
-            try {
-              const gloKit = createGloUnderglow(this.scene, realMesh, {
-                effect: player.gloEffect || 'solid',
-                color:  player.gloColor  || '#ff0080',
-                color2: player.gloColor2 || '#00e5ff',
-                id: id,
-                isRemote: true,
-                enableLight: false,
-                trailLength: 36,
-              });
-              setGloVisible(gloKit, true);
-              this._remoteGloKits.set(id, gloKit);
-            } catch (e) { console.warn(`[realtime] Remote GLO failed for ${id}:`, e); }
+            // â”€â”€ GLO underglow for remote player â”€â”€
+            if (this._allowRemoteVisualFlair()) {
+              try {
+                const gloKit = createGloUnderglow(this.scene, realMesh, {
+                  effect: player.gloEffect || 'solid',
+                  color:  player.gloColor  || '#ff0080',
+                  color2: player.gloColor2 || '#00e5ff',
+                  id: id,
+                  isRemote: true,
+                  enableLight: false,
+                  trailLength: 36,
+                });
+                setGloVisible(gloKit, true);
+                this._remoteGloKits.set(id, gloKit);
+              } catch (e) { console.warn(`[realtime] Remote GLO failed for ${id}:`, e); }
+            }
 
             console.log(`[realtime] Loaded remote kart for ${id} (KartEntity)`);
           })
@@ -5616,7 +5868,7 @@ export class ColyseusBabylonClient {
         this.loadingPromises.set(id, loadPromise);
       } else if (mesh && mesh.position) {
         // Store target for smooth interpolation (lerped in beforeRender)
-        // Use server Y directly — it's authoritative. Don't override with _sampleSurfaceY.
+        // Use server Y directly â€” it's authoritative. Don't override with _sampleSurfaceY.
         let target = this._remoteTargets.get(id);
         if (!target) {
           target = {
@@ -5687,14 +5939,21 @@ export class ColyseusBabylonClient {
         this._suppressedEntityIds.add(id);
         return;
       }
+      if (!mesh && !entity.active) {
+        this._suppressedEntityIds.delete(id);
+        return;
+      }
       if (!mesh) {
         if (entity.type === "projectile") {
           mesh = entity.subType === "gravity_well"
             ? this._createGravityWellMesh(id)
             : this._createProjectileMesh(id, entity.subType);
         } else {
-          // Item boxes — enhanced MK-style question block
-          mesh = createItemBoxModel(this.scene);
+          // Item boxes â€” enhanced MK-style question block
+          mesh = createItemBoxModel(this.scene, {
+            includeCarousel: false,
+            includeSparkles: false,
+          });
         }
         mesh.position = new Vector3(entity.x, entity.y, entity.z);
         // Tag mesh with entity metadata for trigger lookups
@@ -5712,6 +5971,8 @@ export class ColyseusBabylonClient {
           entity.type === "projectile"
           && entity.subType !== "bubblegum"
           && entity.subType !== "banana"
+          && entity.subType !== "missile"
+          && entity.subType !== "crimson_hydra"
           && entity.subType !== "glow_thrower"
           && entity.subType !== "lightning_bolt"
           && entity.subType !== "glo_burst"
@@ -5720,7 +5981,7 @@ export class ColyseusBabylonClient {
           if (trailId) mesh._trailId = trailId;
         }
 
-        // ── Trigger physics for item boxes ──
+        // â”€â”€ Trigger physics for item boxes â”€â”€
         if (entity.type === "item_box" && this.havokPlugin) {
           try {
             const triggerAgg = new PhysicsAggregate(mesh, PhysicsShapeType.SPHERE, {
@@ -5732,7 +5993,7 @@ export class ColyseusBabylonClient {
           } catch (e) { console.warn(`[realtime] Item box trigger physics failed for ${id}:`, e); }
         }
 
-        // ── Trigger physics for projectiles ──
+        // â”€â”€ Trigger physics for projectiles â”€â”€
         if (entity.type === "projectile" && this.havokPlugin) {
           try {
             const isTrap = (entity.subType === "bubblegum" || entity.subType === "banana");
@@ -5796,7 +6057,7 @@ export class ColyseusBabylonClient {
             mesh.position.y = groundedEntityY;
             mesh.position.z = entity.z;
             if (entity.type !== "projectile") {
-              // Enhanced item box animation — tilted spin + rainbow glow + core pulse
+              // Enhanced item box animation â€” tilted spin + rainbow glow + core pulse
               const t = Date.now() * 0.001;
               mesh.rotation.y += 0.04;
               mesh.rotation.x = Math.sin(t * 0.7) * 0.12;
@@ -5835,8 +6096,12 @@ export class ColyseusBabylonClient {
             }
           }
         } else {
-          mesh.setEnabled(false);
           this._suppressedEntityIds.delete(id);
+          if (entity.type === 'projectile') {
+            this._removeEntityVisual(id, mesh);
+          } else {
+            mesh.setEnabled(false);
+          }
         }
       }
     });
@@ -5856,39 +6121,7 @@ export class ColyseusBabylonClient {
     }
     for (const [id, mesh] of this.entityMeshes.entries()) {
       if (!currentEntities.has(id)) {
-        const entAgg = this.entityAggregates.get(id);
-        if (entAgg) {
-          // (22.3) WM-style: switch body to STATIC before dispose to stop
-          // physics sim immediately on spent projectiles
-          try {
-            if (entAgg.body) {
-              entAgg.body.setMotionType(PhysicsMotionType.STATIC);
-              entAgg.body.setMassProperties({ mass: 0 });
-            }
-          } catch (_) { /* body already disposed */ }
-          entAgg.dispose();
-          this.entityAggregates.delete(id);
-        }
-        if (!mesh._impactHandled && mesh._subType === 'rock_barrage' && mesh.position) {
-          const now = performance.now();
-          const recentImpact = this._lastRockImpactPos
-            && (now - this._lastRockImpactTime) < 250
-            && Vector3.DistanceSquared(mesh.position, this._lastRockImpactPos) < 9;
-          if (!recentImpact) {
-            emitWeaponImpactVFX(mesh.position.clone ? mesh.position.clone() : mesh.position, 'rock_barrage');
-          }
-        }
-        if (!mesh._impactHandled && mesh.position && mesh._subType === 'super_nova') {
-          emitWeaponImpactVFX(mesh.position.clone ? mesh.position.clone() : mesh.position, 'super_nova');
-        } else if (!mesh._impactHandled && mesh.position && (mesh._subType === 'missile' || mesh._subType === 'crimson_hydra' || mesh._subType === 'fireball')) {
-          emitWeaponImpactVFX(mesh.position.clone ? mesh.position.clone() : mesh.position, mesh._subType);
-        }
-        if (mesh._trailId) disposeProjectileTrail(mesh._trailId);
-        this._disposeProjectileVisual(mesh);
-        mesh.dispose();
-        this.entityMeshes.delete(id);
-        this._projectileTargets.delete(id);
-        this._suppressedEntityIds.delete(id);
+        this._removeEntityVisual(id, mesh);
       }
     }
   }
@@ -5932,9 +6165,59 @@ export class ColyseusBabylonClient {
     }
   }
 
+  _removeEntityVisual(id, mesh, options = {}) {
+    if (!mesh) return;
+
+    const { emitImpact = true } = options;
+    const entAgg = this.entityAggregates.get(id);
+    if (entAgg) {
+      try {
+        if (entAgg.body) {
+          entAgg.body.setMotionType(PhysicsMotionType.STATIC);
+          entAgg.body.setMassProperties({ mass: 0 });
+        }
+      } catch (_) { /* body already disposed */ }
+      entAgg.dispose();
+      this.entityAggregates.delete(id);
+    }
+
+    if (emitImpact) {
+      if (!mesh._impactHandled && mesh._subType === 'rock_barrage' && mesh.position) {
+        const now = performance.now();
+        const recentImpact = this._lastRockImpactPos
+          && (now - this._lastRockImpactTime) < 250
+          && Vector3.DistanceSquared(mesh.position, this._lastRockImpactPos) < 9;
+        if (!recentImpact && this._allowBattleImpactPolish()) {
+          emitWeaponImpactVFX(mesh.position.clone ? mesh.position.clone() : mesh.position, 'rock_barrage');
+        }
+      }
+      if (!mesh._impactHandled && mesh.position && mesh._subType === 'super_nova' && this._allowBattleImpactPolish()) {
+        emitWeaponImpactVFX(mesh.position.clone ? mesh.position.clone() : mesh.position, 'super_nova');
+      } else if (!mesh._impactHandled && mesh.position && (mesh._subType === 'missile' || mesh._subType === 'crimson_hydra')) {
+        if (this._allowBattleImpactPolish()) {
+          emitWeaponExplosion(
+            mesh.position.clone ? mesh.position.clone() : mesh.position,
+            30,
+            mesh._subType === 'crimson_hydra' ? 0xff4a2a : 0xff7a1c,
+          );
+        }
+      } else if (!mesh._impactHandled && mesh.position && mesh._subType === 'fireball' && this._allowBattleImpactPolish()) {
+        emitWeaponImpactVFX(mesh.position.clone ? mesh.position.clone() : mesh.position, mesh._subType);
+      }
+    }
+
+    if (mesh._trailId) disposeProjectileTrail(mesh._trailId);
+    this._disposeProjectileVisual(mesh);
+    mesh.dispose();
+    this.entityMeshes.delete(id);
+    this._projectileTargets.delete(id);
+    this._suppressedEntityIds.delete(id);
+  }
+
   _createProjectileMesh(id, subType) {
     const modelWeaponId = PROJECTILE_MODEL_ALIASES[subType] || subType;
-    if (this.roomName === 'battle_room' || subType === 'missile' || subType === 'crimson_hydra') {
+    const preferLightweightMissiles = this.roomName === 'battle_room' && (subType === 'missile' || subType === 'crimson_hydra');
+    if ((this.roomName === 'battle_room' || subType === 'missile' || subType === 'crimson_hydra') && !preferLightweightMissiles) {
       const visualRoot = createWeaponModel(modelWeaponId, this.scene);
       if (visualRoot) {
         const anchor = MeshBuilder.CreateSphere(`entity-${id}`, { diameter: 0.42, segments: 6 }, this.scene);
@@ -5968,6 +6251,7 @@ export class ColyseusBabylonClient {
 
     const PROJ_VISUALS = {
       missile:      { shape: "sphere", diameter: 0.6,  diffuse: [1, 0.2, 0.1],  emissive: [1, 0.3, 0] },
+      crimson_hydra:{ shape: "sphere", diameter: 0.54, diffuse: [1, 0.14, 0.12], emissive: [1, 0.24, 0.14], alpha: 0.95 },
       bowling_ball: { shape: "sphere", diameter: 0.9,  diffuse: [0.12, 0.12, 0.14], emissive: [0.05, 0.05, 0.08] },
       cake:         { shape: "box",    size: 0.6,      diffuse: [1, 0.85, 0.3], emissive: [0.6, 0.4, 0.1] },
       plunger:      { shape: "cylinder", diameter: 0.3, height: 0.8, diffuse: [0.9, 0.15, 0], emissive: [0.7, 0.1, 0] },
@@ -5984,7 +6268,7 @@ export class ColyseusBabylonClient {
     } else if (vis.shape === "cylinder") {
       mesh = MeshBuilder.CreateCylinder(`entity-${id}`, { diameter: vis.diameter || 0.3, height: vis.height || 0.7, tessellation: 8 }, this.scene);
     } else {
-      // (21.39) Low-poly spheres for projectiles — 8 segments instead of default 32
+      // (21.39) Low-poly spheres for projectiles â€” 8 segments instead of default 32
       mesh = MeshBuilder.CreateSphere(`entity-${id}`, { diameter: vis.diameter || 0.5, segments: 8 }, this.scene);
     }
     const mat = new StandardMaterial(`mat-${id}`, this.scene);
@@ -5994,7 +6278,7 @@ export class ColyseusBabylonClient {
       mat.alpha = vis.alpha;
     }
     mesh.material = mat;
-    // (22.8) WM-style mesh optimization flags — skip bounding info sync,
+    // (22.8) WM-style mesh optimization flags â€” skip bounding info sync,
     // exclude from picking rays, prevent frustum culling on fast projectiles
     mesh.doNotSyncBoundingInfo = true;
     mesh.isPickable = false;
@@ -6074,13 +6358,13 @@ export class ColyseusBabylonClient {
 
     switch (sub) {
       case 'bowling_ball': {
-        // Rolling — spin on X axis proportional to speed
+        // Rolling â€” spin on X axis proportional to speed
         const speed = Math.sqrt(pt.vel.x * pt.vel.x + pt.vel.z * pt.vel.z);
         mesh.rotation.x -= speed * dt * 0.8;
         break;
       }
       case 'cake': {
-        // Tumble in arc — gentle end-over-end rotation
+        // Tumble in arc â€” gentle end-over-end rotation
         mesh.rotation.x += dt * 4.5;
         mesh.rotation.z += dt * 2.0;
         break;
@@ -6130,7 +6414,7 @@ export class ColyseusBabylonClient {
         break;
       }
       case 'fireball': {
-        // Flickering flame — scale oscillation + rotation
+        // Flickering flame â€” scale oscillation + rotation
         const flicker = 1.0 + Math.sin(time * 18) * 0.08 + Math.sin(time * 27) * 0.05;
         mesh.scaling.setAll(flicker);
         mesh.rotation.z += dt * 6;
@@ -6147,7 +6431,7 @@ export class ColyseusBabylonClient {
         break;
       }
       case 'ice_lance': {
-        // Crystal shimmer — gentle twist + emissive pulse
+        // Crystal shimmer â€” gentle twist + emissive pulse
         mesh.rotation.z = Math.sin(time * 8) * 0.1;
         const children = mesh.getChildMeshes?.();
         if (children) {
@@ -6239,16 +6523,16 @@ export class ColyseusBabylonClient {
         break;
       }
       case 'tornado': {
-        // Intense vortex spin — accelerates over time
+        // Intense vortex spin â€” accelerates over time
         const spinSpeed = 22 + Math.min(age * 7, 34);
         mesh.rotation.y += dt * spinSpeed;
-        // Breathing pulse — vertical stretch + horizontal sway
+        // Breathing pulse â€” vertical stretch + horizontal sway
         const breathe = 1.08 + Math.sin(time * 6.5) * 0.18;
         mesh.scaling.y = breathe;
         const sway = 1.1 + Math.sin(time * 10.5) * 0.1;
         mesh.scaling.x = sway;
         mesh.scaling.z = sway;
-        // Wobble — slight tilt oscillation for organic feel
+        // Wobble â€” slight tilt oscillation for organic feel
         mesh.rotation.x = Math.sin(time * 4.6) * 0.12;
         mesh.rotation.z = Math.cos(time * 5.1) * 0.09;
         // Animate swirl rings if present
@@ -6469,13 +6753,13 @@ export class ColyseusBabylonClient {
     }
   }
 
-  // ── (22.5) Shockwave Post-Process — WM-style screen distortion on heavy hits ──
+  // â”€â”€ (22.5) Shockwave Post-Process â€” WM-style screen distortion on heavy hits â”€â”€
 
-  // ── (22.10) Multi-Projectile Spread — WM toxic ball pattern ──
+  // â”€â”€ (22.10) Multi-Projectile Spread â€” WM toxic ball pattern â”€â”€
 
   /**
    * Spawn visual-only spread projectile meshes that fly outward in a fan.
-   * Uses Quaternion.RotationAxis(Y, ±5° × i) for even angular distribution.
+   * Uses Quaternion.RotationAxis(Y, Â±5Â° Ã— i) for even angular distribution.
    * Meshes auto-dispose after 1.5s (no physics, client-side visual only).
    */
   _spawnSpreadVisuals(ownerId, subType, count) {
@@ -6485,7 +6769,7 @@ export class ColyseusBabylonClient {
       : this.remoteMeshes.get(ownerId);
     if (!ownerMesh) return;
 
-    const spreadAngle = 5 * (Math.PI / 180); // ±5° per step
+    const spreadAngle = 5 * (Math.PI / 180); // Â±5Â° per step
     const forward = ownerMesh.forward || new Vector3(0, 0, 1);
     const speed = 0.8;
 
@@ -6614,7 +6898,7 @@ export class ColyseusBabylonClient {
     });
   }
 
-  // ── Kill feed ──────────────────────────────────────────────────────────
+  // â”€â”€ Kill feed â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   _addKillFeedEntry(attackerName, victimName, weapon, extra = {}) {
     if (!this._killFeedEl) {
       this._killFeedEl = document.createElement("div");
@@ -6627,25 +6911,25 @@ export class ColyseusBabylonClient {
       document.body.appendChild(this._killFeedEl);
     }
     const WEAPON_ICONS = {
-      missile: "🚀", crimson_hydra: "🐉", bowling_ball: "🎳", cake: "🎂", plunger: "🪠",
-      bubblegum: "🫧", banana: "🍌", swatter: "🪰", nitro: "💥",
-      parachute: "🪂", anchor: "⚓", ludicrous_mode: "🔋", shield: "🛡️",
-      fireball: "🔥", toxic_spread: "☣️", ice_lance: "🧊", tornado: "🌪️",
-      super_nova: "☢️", rock_barrage: "🪨", lightning_bolt: "⚡", wind_slash: "💨", toxic_cloud: "🧪",
-      glow_thrower: "🔥", glo_burst: "💫", pirateleportation: "🏴‍☠️",
+      missile: "ðŸš€", crimson_hydra: "ðŸ‰", bowling_ball: "ðŸŽ³", cake: "ðŸŽ‚", plunger: "ðŸª ",
+      bubblegum: "ðŸ«§", banana: "ðŸŒ", swatter: "ðŸª°", nitro: "ðŸ’¥",
+      parachute: "ðŸª‚", anchor: "âš“", ludicrous_mode: "ðŸ”‹", shield: "ðŸ›¡ï¸",
+      fireball: "ðŸ”¥", toxic_spread: "â˜£ï¸", ice_lance: "ðŸ§Š", tornado: "ðŸŒªï¸",
+      super_nova: "â˜¢ï¸", rock_barrage: "ðŸª¨", lightning_bolt: "âš¡", wind_slash: "ðŸ’¨", toxic_cloud: "ðŸ§ª",
+      glow_thrower: "ðŸ”¥", glo_burst: "ðŸ’«", pirateleportation: "ðŸ´â€â˜ ï¸",
     };
 
     // Build callout prefix
     let callout = extra.callout || '';
     if (!callout) {
-      if (extra.isFirstBlood) callout = '🩸 FIRST BLOOD';
-      else if (extra.multiKill >= 4) callout = '🔥 RAMPAGE';
-      else if (extra.multiKill === 3) callout = '⚡ TRIPLE KILL';
-      else if (extra.multiKill === 2) callout = '💥 DOUBLE KILL';
-      if (extra.isRevenge) callout = (callout ? callout + ' · ' : '') + '🔄 REVENGE';
+      if (extra.isFirstBlood) callout = 'ðŸ©¸ FIRST BLOOD';
+      else if (extra.multiKill >= 4) callout = 'ðŸ”¥ RAMPAGE';
+      else if (extra.multiKill === 3) callout = 'âš¡ TRIPLE KILL';
+      else if (extra.multiKill === 2) callout = 'ðŸ’¥ DOUBLE KILL';
+      if (extra.isRevenge) callout = (callout ? callout + ' Â· ' : '') + 'ðŸ”„ REVENGE';
     }
 
-    const icon = WEAPON_ICONS[weapon] || "💀";
+    const icon = WEAPON_ICONS[weapon] || "ðŸ’€";
     const row = document.createElement("div");
     Object.assign(row.style, {
       background: "rgba(0,0,0,0.65)", color: "#fff", padding: "4px 10px",
@@ -6684,7 +6968,7 @@ export class ColyseusBabylonClient {
     return d.innerHTML;
   }
 
-  // ── Balloon meshes (three-strikes mode) ────────────────────────────────
+  // â”€â”€ Balloon meshes (three-strikes mode) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   _createBalloons() {
     if (this._balloonMeshes) return;
     this._balloonMeshes = [];
@@ -6720,7 +7004,7 @@ export class ColyseusBabylonClient {
     playBalloonPop();
   }
 
-  // ── Dynamic Forcefield Shield ──────────────────────────────────────
+  // â”€â”€ Dynamic Forcefield Shield â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   _updateForceFieldShield() {
     const shielded = this._localCombatState.shielded;
     const hp = this._localCombatState.shieldHP;
@@ -6850,7 +7134,7 @@ export class ColyseusBabylonClient {
     try { field.emitter?.dispose(); } catch (_) {}
   }
 
-  // ── Ludicrous Mode VFX ─────────────────────────────────────────────
+  // â”€â”€ Ludicrous Mode VFX â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   _updateLudicrousVFX(dt) {
     const isLudicrous = this._localCombatState.effectType === 'ludicrous';
 
@@ -7162,7 +7446,7 @@ export class ColyseusBabylonClient {
     title,
     subtitle = '',
     chip = '',
-    icon = '•',
+    icon = 'â€¢',
     accent = '#ffffff',
     surface = 'rgba(10, 14, 22, 0.88)',
     border = 'rgba(255,255,255,0.14)',
@@ -7277,7 +7561,7 @@ export class ColyseusBabylonClient {
     const statusStyles = {
       blind: {
         accent: "#ff9d54",
-        icon: "◉",
+        icon: "â—‰",
         title: "Visual Feed Interrupted",
         subtitle: "Optics degraded. Drive by instinct.",
         chip: "Impaired",
@@ -7288,7 +7572,7 @@ export class ColyseusBabylonClient {
       },
       stuck: {
         accent: "#ff7fd7",
-        icon: "◎",
+        icon: "â—Ž",
         title: "Adhesion Lock",
         subtitle: "Mobility compromised by sticky residue.",
         chip: "Entrapped",
@@ -7299,7 +7583,7 @@ export class ColyseusBabylonClient {
       },
       spinout: {
         accent: "#ffd25e",
-        icon: "↺",
+        icon: "â†º",
         title: "Handling Destabilized",
         subtitle: "Spin recovery engaged.",
         chip: "Skid",
@@ -7310,7 +7594,7 @@ export class ColyseusBabylonClient {
       },
       slow: {
         accent: "#b8beff",
-        icon: "∿",
+        icon: "âˆ¿",
         title: "Drag Field Active",
         subtitle: "Acceleration dampened for a short burst.",
         chip: "Debuff",
@@ -7321,7 +7605,7 @@ export class ColyseusBabylonClient {
       },
       heavy: {
         accent: "#aeb8ca",
-        icon: "⬣",
+        icon: "â¬£",
         title: "Mass Surge",
         subtitle: "Weight spike detected across the chassis.",
         chip: "Burdened",
@@ -7332,7 +7616,7 @@ export class ColyseusBabylonClient {
       },
       squash: {
         accent: "#95ff6f",
-        icon: "▣",
+        icon: "â–£",
         title: "Compression Shock",
         subtitle: "Profile reduced until the chassis rebounds.",
         chip: "Crushed",
@@ -7343,7 +7627,7 @@ export class ColyseusBabylonClient {
       },
       boost: {
         accent: "#45f5db",
-        icon: "»",
+        icon: "Â»",
         title: "Boost Window Open",
         subtitle: "Output elevated. Keep the throttle pinned.",
         chip: "Buff",
@@ -7354,7 +7638,7 @@ export class ColyseusBabylonClient {
       },
       ludicrous: {
         accent: "#ff69f3",
-        icon: "∞",
+        icon: "âˆž",
         title: "Ludicrous Engaged",
         subtitle: "Overclocked thrust envelope now online.",
         chip: "Overdrive",
@@ -7365,7 +7649,7 @@ export class ColyseusBabylonClient {
       },
       shielded: {
         accent: "#6cc8ff",
-        icon: "◌",
+        icon: "â—Œ",
         title: "Shield Matrix Stable",
         subtitle: "Deflection layer wrapped around the kart.",
         chip: "Protected",
@@ -7376,7 +7660,7 @@ export class ColyseusBabylonClient {
       },
       mirror: {
         accent: "#c4ecff",
-        icon: "◇",
+        icon: "â—‡",
         title: "Mirror Drift",
         subtitle: "Perception bent by reflected vectors.",
         chip: "Disorient",
@@ -7387,7 +7671,7 @@ export class ColyseusBabylonClient {
       },
       pirateleportation: {
         accent: "#c58dff",
-        icon: "☍",
+        icon: "â˜",
         title: "Signal Hijacked",
         subtitle: "Position routing was tampered with mid-match.",
         chip: "Pirated",
@@ -7412,20 +7696,22 @@ export class ColyseusBabylonClient {
     };
     const statusStyle = statusStyles[normalizedEffectType] || {
       accent: "#ffffff",
-      icon: "•",
+      icon: "â€¢",
       title: String(effectType || "status").replace(/_/g, " ").replace(/\b\w/g, (m) => m.toUpperCase()),
       subtitle: "System state updated.",
       chip: "Status",
     };
-    showGUIStatusLane({
-      title: statusStyle.title,
-      subtitle: statusStyle.subtitle,
-      chip: statusStyle.chip,
-      icon: statusStyle.icon,
-      accent: statusStyle.accent,
-      duration,
-      sourceZone: statusZoneByEffect[normalizedEffectType] || 'center',
-    });
+    if (this._allowBattleHudPolish()) {
+      showGUIStatusLane({
+        title: statusStyle.title,
+        subtitle: statusStyle.subtitle,
+        chip: statusStyle.chip,
+        icon: statusStyle.icon,
+        accent: statusStyle.accent,
+        duration,
+        sourceZone: statusZoneByEffect[normalizedEffectType] || 'center',
+      });
+    }
     return;
 
     // Remove existing overlay
@@ -7439,17 +7725,17 @@ export class ColyseusBabylonClient {
     this.activeEffect = effectType;
 
     const EFFECT_STYLES = {
-      blind:   { bg: "rgba(60,30,0,0.85)", text: "🪠 BLINDED!", color: "#ff6600" },
-      stuck:   { bg: "rgba(200,50,150,0.45)", text: "🫧 STUCK!", color: "#ff66cc" },
-      spinout: { bg: "rgba(255,180,0,0.35)", text: "💫 SPIN OUT!", color: "#ffcc00" },
-      slow:    { bg: "rgba(100,100,180,0.3)", text: "🪂 SLOWED!", color: "#aaaaff" },
-      heavy:   { bg: "rgba(50,60,80,0.4)", text: "⚓ HEAVY!", color: "#8899aa" },
-      squash:  { bg: "rgba(80,200,40,0.35)", text: "🪰 SQUASHED!", color: "#88ff44" },
-      boost:   { bg: "rgba(0,255,200,0.15)", text: "⚡ BOOST!", color: "#00ffcc" },
-      ludicrous: { bg: "rgba(255,0,255,0.25)", text: "🔋 LUDICROUS MODE!", color: "#ff00ff" },
-      shielded:{ bg: "rgba(80,180,255,0.1)", text: "🛡️ FORCEFIELD ON", color: "#55bbff" },
-      mirror:  { bg: "rgba(145,214,255,0.14)", text: "🪞 MIRROR REALM", color: "#a6dfff" },
-      pirateleportation: { bg: "rgba(155,89,182,0.25)", text: "🏴‍☠️ PIRATED!", color: "#bb77dd" },
+      blind:   { bg: "rgba(60,30,0,0.85)", text: "ðŸª  BLINDED!", color: "#ff6600" },
+      stuck:   { bg: "rgba(200,50,150,0.45)", text: "ðŸ«§ STUCK!", color: "#ff66cc" },
+      spinout: { bg: "rgba(255,180,0,0.35)", text: "ðŸ’« SPIN OUT!", color: "#ffcc00" },
+      slow:    { bg: "rgba(100,100,180,0.3)", text: "ðŸª‚ SLOWED!", color: "#aaaaff" },
+      heavy:   { bg: "rgba(50,60,80,0.4)", text: "âš“ HEAVY!", color: "#8899aa" },
+      squash:  { bg: "rgba(80,200,40,0.35)", text: "ðŸª° SQUASHED!", color: "#88ff44" },
+      boost:   { bg: "rgba(0,255,200,0.15)", text: "âš¡ BOOST!", color: "#00ffcc" },
+      ludicrous: { bg: "rgba(255,0,255,0.25)", text: "ðŸ”‹ LUDICROUS MODE!", color: "#ff00ff" },
+      shielded:{ bg: "rgba(80,180,255,0.1)", text: "ðŸ›¡ï¸ FORCEFIELD ON", color: "#55bbff" },
+      mirror:  { bg: "rgba(145,214,255,0.14)", text: "ðŸªž MIRROR REALM", color: "#a6dfff" },
+      pirateleportation: { bg: "rgba(155,89,182,0.25)", text: "ðŸ´â€â˜ ï¸ PIRATED!", color: "#bb77dd" },
     };
 
     const style = EFFECT_STYLES[effectType];
@@ -7530,7 +7816,7 @@ export class ColyseusBabylonClient {
         title: "Fog Bank Rolling In",
         subtitle: "Visibility softened across the arena floor.",
         chip: "Arena",
-        icon: "◌",
+        icon: "â—Œ",
         accent: "#e6f1ff",
         surface: "rgba(10, 16, 24, 0.8)",
         border: "rgba(230, 241, 255, 0.16)",
@@ -7541,7 +7827,7 @@ export class ColyseusBabylonClient {
         title: "Rain Slick Active",
         subtitle: "Traction is reduced on the racing line.",
         chip: "Arena",
-        icon: "∕",
+        icon: "âˆ•",
         accent: "#a9d0ff",
         surface: "rgba(8, 18, 30, 0.8)",
         border: "rgba(169, 208, 255, 0.18)",
@@ -7550,20 +7836,28 @@ export class ColyseusBabylonClient {
       },
     };
     const statusStyle = statusStyles[effectType] || statusStyles.arena_fog;
-    showGUIArenaMood({
-      title: statusStyle.title,
-      subtitle: statusStyle.subtitle,
-      chip: statusStyle.chip,
-      icon: statusStyle.icon,
-      accent: statusStyle.accent,
-      duration,
-    });
+    if (this._allowBattleHudPolish()) {
+      showGUIArenaMood({
+        title: statusStyle.title,
+        subtitle: statusStyle.subtitle,
+        chip: statusStyle.chip,
+        icon: statusStyle.icon,
+        accent: statusStyle.accent,
+        duration,
+      });
+    }
 
     this._arenaWeatherType = effectType || 'arena_fog';
     this._applyArenaWeatherToScene(this._arenaWeatherType);
     if (this._arenaEffectOverlayTimer) {
       window.clearTimeout(this._arenaEffectOverlayTimer);
       this._arenaEffectOverlayTimer = null;
+    }
+    if (!this._allowArenaAmbience()) {
+      this._arenaEffectOverlayTimer = window.setTimeout(() => {
+        if (this._arenaWeatherType === effectType) this._clearArenaEffectOverlay();
+      }, Math.max(1200, Number(duration || 0) + 250));
+      return;
     }
     const overlay = document.createElement("div");
     this._arenaEffectOverlayEl = overlay;
@@ -7829,5 +8123,3 @@ export class ColyseusBabylonClient {
     this.engine = null;
   }
 }
-
-

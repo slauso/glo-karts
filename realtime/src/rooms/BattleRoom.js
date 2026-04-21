@@ -34,6 +34,7 @@ const ARENA_SURFACE_Y = {
 const CUSTOM_TRACK_ID = "custom_import";
 const DEFAULT_BATTLE_TRACK = "glo_arena";
 const DEFAULT_LOADOUT_ID = "classic";
+const BUILDER_PLAYTEST_COUNTDOWN_MS = 2500;
 
 function parseCustomTrackData(raw) {
   if (!raw) return null;
@@ -80,7 +81,15 @@ function normalizeBattleGameType(value) {
 }
 
 export class BattleRoom extends Room {
+  _isBuilderPlaytestRoom() {
+    return typeof this.roomName === "string" && this.roomName.startsWith("builder_");
+  }
+
   onCreate(options = {}) {
+    const countdownOptions = {
+      ...options,
+      countdownMs: options.countdownMs ?? (this.roomName?.startsWith("builder_") ? BUILDER_PLAYTEST_COUNTDOWN_MS : undefined),
+    };
     const state = new BattleState();
     state.gameType = normalizeBattleGameType(options.gameType || options.battleType);
     state.trackId = String(options.trackId || DEFAULT_BATTLE_TRACK);
@@ -97,7 +106,7 @@ export class BattleRoom extends Room {
     this.inputBySession = new Map();
     this.countdownActive = false;
     this.staleInputMs = syncConfig.staleInputMs || REALTIME_SYNC_DEFAULTS.staleInputMs;
-    this.countdownDurationMs = getRealtimeCountdownMs(options);
+    this.countdownDurationMs = getRealtimeCountdownMs(countdownOptions);
     this._countdownTimer = null;
     this._matchEnded = false;
     this._joinedAtBySession = new Map();
@@ -319,9 +328,12 @@ export class BattleRoom extends Room {
       const weaponDef = WEAPONS[weaponId];
       if (!target || !weaponDef) return;
 
+      const isSameSecondaryWeapon = target.weapon2 === weaponId;
       target.weapon2 = weaponId;
       target.ammo2 = Number.isFinite(Number(data.ammo)) ? Math.max(1, Number(data.ammo)) : weaponDef.ammo;
-      target.fireCooldown2 = 0;
+      if (!isSameSecondaryWeapon) {
+        target.fireCooldown2 = 0;
+      }
 
       const targetClient = this.clients.find((entry) => entry.sessionId === targetId);
       targetClient?.send("itemReceived", {
@@ -656,7 +668,7 @@ export class BattleRoom extends Room {
 
     const idx = this.state.players.size;
     p.team = idx % 2 === 0 ? "red" : "blue";
-    p.ready = !!this.state.started;
+    p.ready = !!this.state.started || this._isBuilderPlaytestRoom();
     p.readyAt = p.ready ? Date.now() : 0;
 
     const spawn = this.getSpawnPoint(this.maxClients, idx);
@@ -723,6 +735,7 @@ export class BattleRoom extends Room {
   }
 
   _getMinReadyPlayers() {
+    if (this._isBuilderPlaytestRoom()) return 1;
     return this.maxClients > 1 ? 2 : 1;
   }
 

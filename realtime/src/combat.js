@@ -989,7 +989,22 @@ export function handleFireWeapon(player, entitiesMap, playersMap, context = {}) 
   // ── Projectile (forward-fired) ───────────────────────────────────────
   const fwd = resolveFireVector(player, fireInput);
   if (wepId === "crimson_hydra") {
-    const volleyCount = Math.max(1, Number(def.volleyCount) || 3);
+    let activeProjectileCount = 0;
+    entitiesMap.forEach((entity) => {
+      if (entity?.active && entity.type === 'projectile') activeProjectileCount += 1;
+    });
+    const playerCount = Math.max(1, Number(context.roomState?.players?.size || playersMap?.size || 1));
+    const baseVolleyCount = Math.max(1, Number(def.volleyCount) || 3);
+    const volleyCount = activeProjectileCount >= 18 || playerCount >= 4
+      ? 1
+      : activeProjectileCount >= 10 || playerCount >= 3
+        ? Math.min(2, baseVolleyCount)
+        : baseVolleyCount;
+    const hydraLifespan = activeProjectileCount >= 18 || playerCount >= 4
+      ? Math.min(def.lifespan, 2600)
+      : activeProjectileCount >= 10 || playerCount >= 3
+        ? Math.min(def.lifespan, 4200)
+        : def.lifespan;
     const halfAngle = Number(def.volleySpreadAngle) || 0.14;
     const projectileOrigin = resolveProjectileOrigin(player, fireInput, fwd, 3.5, 1.0);
     const lockStrength = Math.max(0, Math.min(1, Number(fireInput?.lockStrength) || 0));
@@ -1007,7 +1022,10 @@ export function handleFireWeapon(player, entitiesMap, playersMap, context = {}) 
           playersMap,
           def,
         );
-    const guaranteedHits = lockStrength >= 0.95 ? 3 : lockStrength >= 0.55 ? 2 : target ? 1 : 0;
+    const guaranteedHits = Math.min(
+      volleyCount,
+      lockStrength >= 0.95 ? 3 : lockStrength >= 0.55 ? 2 : target ? 1 : 0,
+    );
     const projectiles = [];
 
     for (let i = 0; i < volleyCount; i++) {
@@ -1027,7 +1045,7 @@ export function handleFireWeapon(player, entitiesMap, playersMap, context = {}) 
       ent.ownerId = player.id;
       ent.active = true;
       ent.damage = def.damage;
-      ent.lifespan = def.lifespan;
+      ent.lifespan = hydraLifespan;
       ent.x = projectileOrigin.x;
       ent.y = projectileOrigin.y;
       ent.z = projectileOrigin.z;

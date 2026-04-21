@@ -108,6 +108,22 @@ export function initWeaponFXEnhance(scene, camera) {
   syncWeaponFXQuality();
 }
 
+function _disposeDynamicRenderFX() {
+  if (_glowLayer) {
+    try { _glowLayer.dispose(); } catch (_) {}
+    _glowLayer = null;
+  }
+  if (_pipeline) {
+    try { _pipeline.dispose(); } catch (_) {}
+    _pipeline = null;
+  }
+  if (_clusteredContainer) {
+    try { _clusteredContainer.dispose(); } catch (_) {}
+    _clusteredContainer = null;
+    _clusteredLightCount = 0;
+  }
+}
+
 export function disposeWeaponFXEnhance() {
   _observers.forEach(o => {
     try { _scene?.onBeforeRenderObservable?.remove(o); } catch (_) {}
@@ -117,13 +133,7 @@ export function disposeWeaponFXEnhance() {
     try { d.mesh?.dispose(); d.material?.dispose(); } catch (_) {}
   });
   _decals = [];
-  if (_glowLayer) { _glowLayer.dispose(); _glowLayer = null; }
-  if (_pipeline) { _pipeline.dispose(); _pipeline = null; }
-  if (_clusteredContainer) {
-    try { _clusteredContainer.dispose(); } catch (_) {}
-    _clusteredContainer = null;
-    _clusteredLightCount = 0;
-  }
+  _disposeDynamicRenderFX();
   // Reset Havok singleton so re-init uses the new scene
   _havokPlugin = null;
   _havokReady = null;
@@ -204,18 +214,20 @@ function _setupRenderPipeline(scene, camera) {
     _pipeline.grain.intensity = 8;
     _pipeline.grain.animated = isGrainEnabled();
     // Vignette — tier-dependent
+    _pipeline.imageProcessingEnabled = true;
     _pipeline.vignetteEnabled = isVignetteEnabled();
-    _pipeline.vignette.vignetteWeight = 1.2;
-    _pipeline.vignette.vignetteStretch = 0.5;
-    _pipeline.vignette.vignetteColor = new Color4(0, 0, 0, 0);
-    _pipeline.vignette.vignetteCentreX = 0;
-    _pipeline.vignette.vignetteCentreY = 0;
+    _pipeline.imageProcessing.vignetteWeight = 1.2;
+    _pipeline.imageProcessing.vignetteStretch = 0.5;
+    _pipeline.imageProcessing.vignetteColor = new Color4(0, 0, 0, 0);
+    _pipeline.imageProcessing.vignetteCentreX = 0;
+    _pipeline.imageProcessing.vignetteCentreY = 0;
     // Image processing
     _pipeline.imageProcessingEnabled = true;
     _pipeline.imageProcessing.contrast = 1.05;
     _pipeline.imageProcessing.exposure = 1.02;
   } catch (e) {
     console.warn('[weapon-fx-enhance] Pipeline setup failed (WebGL1?):', e.message);
+    if (_pipeline) { try { _pipeline.dispose(); } catch (_) { /* ignore */ } }
     _pipeline = null;
   }
 }
@@ -223,6 +235,23 @@ function _setupRenderPipeline(scene, camera) {
 export function getPipeline() { return _pipeline; }
 
 export function syncWeaponFXQuality() {
+  if (!_scene) return false;
+
+  if (getTier() === TIER.LOW) {
+    _disposeDynamicRenderFX();
+    return false;
+  }
+
+  if (!_glowLayer && isGlowEnabled()) {
+    _setupGlowLayer(_scene);
+  }
+  if (!_pipeline && isPostFXEnabled() && _camera) {
+    _setupRenderPipeline(_scene, _camera);
+  }
+  if (!_clusteredContainer && clusteredLightsEnabled()) {
+    _setupClusteredLighting(_scene);
+  }
+
   const postBudget = runtimePostFXBudget();
   const fxBudget = runtimeFXBudget();
 
@@ -250,8 +279,8 @@ export function syncWeaponFXQuality() {
   }
 
   _pipeline.vignetteEnabled = isVignetteEnabled() && postBudget > 0.54;
-  if (_pipeline.vignette) {
-    _pipeline.vignette.vignetteWeight = 0.65 + postBudget * 0.35;
+  if (_pipeline.imageProcessing) {
+    _pipeline.imageProcessing.vignetteWeight = 0.65 + postBudget * 0.35;
   }
 
   _pipeline.imageProcessingEnabled = true;
@@ -727,7 +756,7 @@ async function _loadClusteredLighting() {
 function _setupClusteredLighting(scene) {
   if (!clusteredLightsEnabled()) return;
   _loadClusteredLighting().then(CLC => {
-    if (!CLC || CLC === false || _clusteredContainer) return;
+    if (!CLC || CLC === false || _clusteredContainer || !clusteredLightsEnabled() || !_scene) return;
     try {
       _clusteredContainer = new CLC('weaponCluster', [], scene);
       console.log(`[weapon-fx] Clustered lighting enabled (max ${maxClusteredLights()})`);

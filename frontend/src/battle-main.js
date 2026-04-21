@@ -18,8 +18,11 @@ import {
 import { loadArena } from './modules/battle/arena-three.js';
 import { createHealthSystem } from './modules/battle/health-three.js';
 import { initWeapons, attemptFire, getWeaponDef, hostBroadcastPickups } from './modules/battle/weapons-three.js';
+import { initPageTransitions, navigateWithTransition } from './ui/page-transition.js';
 
 console.log('🎮 BATTLE MODE LOADING...');
+
+initPageTransitions();
 
 function getCurrentPlayerId() {
   return sessionStorage.getItem('myPlayerId') || localStorage.getItem('myPlayerId');
@@ -53,7 +56,7 @@ const useColyseusRealtime = Boolean(gameConfig?.multiplayer)
   && String(gameConfig?.multiplayerProvider || '').toLowerCase() === 'colyseus';
 
 if (useColyseusRealtime) {
-  window.location.replace('realtime.html');
+  void navigateWithTransition('realtime.html', { replace: true, immediate: true });
 }
 
 // Global variables

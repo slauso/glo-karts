@@ -5,6 +5,10 @@
  * When a piece is placed the system finds the rotation that best
  * connects to existing neighbors.  Shared occupancy prevents
  * road-paint cells and manual segments from overlapping.
+ *
+ * Multi-layer support: pieces exist on layers (0 = ground, 1 = bridge).
+ * Ground track can be placed under bridge decks because they occupy
+ * different layers.  Bridge ramps block BOTH layers.
  */
 import * as THREE from 'three';
 import { GRID_SIZE, snapToGrid, cellKey } from '../modules/track-placement.js';
@@ -19,108 +23,111 @@ const DIR_DZ = [-1, 0, 1, 0];
 /** Opposite direction: N↔S, E↔W. */
 export function oppositeDir(d) { return (d + 2) % 4; }
 
+// ── Layered cell key ──────────────────────────────────────────
+function layeredKey(gx, gz, layer) { return `${gx},${gz},${layer}`; }
+
 // ── Piece port definitions (at rotation 0°) ──────────────────
 // ports: which edges of the cell have road (as DIR indices).
 // When a piece is rotated r×90° each port index becomes (p+r)%4.
+//
+// layer: 0 = ground, 1 = bridge  (default 0)
+// layers: array override when a piece blocks multiple layers (e.g. ramps)
+// portLayers: per-port layer  [port0Layer, port1Layer, ...]
+//             omit when all ports share the piece's layer
 
 export const PIECE_DEFS = {
-  // ── Basics (flat, common) ──
-  'straight':          { ports: [DIR.N, DIR.S], category: 'basic' },
-  'wide':              { ports: [DIR.N, DIR.E, DIR.S, DIR.W], category: 'basic', footprint: [[0,0],[1,0],[0,1],[1,1]] },
+  // ── SKR core tiles (auto-tiled) ──
+  'skr-straight':      { ports: [DIR.N, DIR.S], category: 'basic' },
+  'skr-corner':        { ports: [DIR.S, DIR.W], category: 'corner' },
 
-  // ── Corners & curves ──
-  'corner-small':      { ports: [DIR.N, DIR.E], category: 'corner' },
-  'corner-large':      { ports: [DIR.N, DIR.E], category: 'corner' },
-  'curve':             { ports: [DIR.N, DIR.E], category: 'corner' },
+  // ── SKR base tiles (manual) ──
+  'skr-finish':        { ports: [DIR.N, DIR.S], category: 'basic' },
+  'skr-bump':          { ports: [DIR.N, DIR.S], category: 'basic' },
 
-  // ── Hills & ramps ──
-  'bump-up':           { ports: [DIR.N, DIR.S], category: 'hill' },
-  'bump-down':         { ports: [DIR.N, DIR.S], category: 'hill' },
-  'hill-beginning':    { ports: [DIR.N, DIR.S], category: 'hill' },
-  'hill-end':          { ports: [DIR.N, DIR.S], category: 'hill' },
-  'hill-complete':     { ports: [DIR.N, DIR.S], category: 'hill' },
-  'hill-complete-half':{ ports: [DIR.N, DIR.S], category: 'hill' },
-  'corner-small-ramp': { ports: [DIR.N, DIR.E], category: 'hill' },
-  'corner-large-ramp': { ports: [DIR.N, DIR.E], category: 'hill' },
+  // ── Stretched straights (multi-cell) ──
+  'straight-2x':       { ports: [DIR.N, DIR.S], category: 'basic', span: { x: 1, z: 2 } },
+  'straight-3x':       { ports: [DIR.N, DIR.S], category: 'basic', span: { x: 1, z: 3 } },
+  'straight-4x':       { ports: [DIR.N, DIR.S], category: 'basic', span: { x: 1, z: 4 } },
 
-  // ── Bends & skews ──
-  'bend':              { ports: [DIR.N, DIR.S], category: 'bend' },
-  'bend-large':        { ports: [DIR.N, DIR.S], category: 'bend' },
-  'skew-left':         { ports: [DIR.N, DIR.S], category: 'bend' },
-  'skew-right':        { ports: [DIR.N, DIR.S], category: 'bend' },
-  'skew-left-side':    { ports: [DIR.N, DIR.S], category: 'bend' },
-  'skew-right-side':   { ports: [DIR.N, DIR.S], category: 'bend' },
+  // ── Elevation warps (single-cell) ──
+  'ramp-up':           { ports: [DIR.N, DIR.S], category: 'hill' },
+  'ramp-down':         { ports: [DIR.N, DIR.S], category: 'hill' },
+  'jump-ramp':         { ports: [DIR.N, DIR.S], category: 'hill' },
+  'landing-ramp':      { ports: [DIR.N, DIR.S], category: 'hill' },
+  'hill':              { ports: [DIR.N, DIR.S], category: 'hill' },
+  'dip':               { ports: [DIR.N, DIR.S], category: 'hill' },
 
-  // ── End caps ──
-  'cap-front':         { ports: [DIR.S], category: 'cap' },
-  'cap-back':          { ports: [DIR.N], category: 'cap' },
-  'end':               { ports: [DIR.S], category: 'cap' },
+  // ── Lateral warps (single-cell) ──
+  's-curve':           { ports: [DIR.N, DIR.S], category: 'bend' },
+  'bank-left':         { ports: [DIR.N, DIR.S], category: 'bend' },
+  'bank-right':        { ports: [DIR.N, DIR.S], category: 'bend' },
 
-  // ── Phase 3 — Junctions ──
-  't-junction':        { ports: [DIR.N, DIR.E, DIR.S], category: 'junction' },
-  'crossroads':        { ports: [DIR.N, DIR.E, DIR.S, DIR.W], category: 'junction' },
+  // ── Multi-cell curve warps ──
+  'gentle-s':          { ports: [DIR.N, DIR.S], category: 'bend', span: { x: 1, z: 3 } },
 
-  // ── Phase 3 — Elevation ──
-  'ramp-up':           { ports: [DIR.N, DIR.S], category: 'elevation', elevationDelta: 1 },
-  'ramp-down':         { ports: [DIR.N, DIR.S], category: 'elevation', elevationDelta: -1 },
-  'bridge':            { ports: [DIR.N, DIR.S], category: 'elevation' },
-  'jump':              { ports: [DIR.N, DIR.S], category: 'elevation' },
-  'bridge-onramp':     { ports: [DIR.N, DIR.S], category: 'pgh-bridge', footprint: [[0,0],[0,1]] },
-  'bridge-offramp':    { ports: [DIR.N, DIR.S], category: 'pgh-bridge', footprint: [[0,0],[0,1]] },
+  // ── Junctions (multi-port) ──
+  'crossover':         { ports: [DIR.N, DIR.E, DIR.S, DIR.W], category: 'basic' },
+  't-junction':        { ports: [DIR.N, DIR.E, DIR.S], category: 'basic' },
 
-  // ── Phase 3 — Advanced ──
-  'banked-turn':       { ports: [DIR.N, DIR.E], category: 'advanced' },
-  'tunnel':            { ports: [DIR.N, DIR.S], category: 'advanced' },
-  'chicane':           { ports: [DIR.N, DIR.S], category: 'advanced' },
+  // ── Bridge segments (layer 1 — ground track can pass underneath) ──
+  'bridge-ramp-up':    { ports: [DIR.N, DIR.S], category: 'bridge', span: { x: 1, z: 2 },
+                         layers: [0, 1], portLayers: [0, 1] },
+  'bridge-ramp-down':  { ports: [DIR.N, DIR.S], category: 'bridge', span: { x: 1, z: 2 },
+                         layers: [0, 1], portLayers: [1, 0] },
+  'bridge-1x':         { ports: [DIR.N, DIR.S], category: 'bridge', layer: 1 },
+  'bridge-2x':         { ports: [DIR.N, DIR.S], category: 'bridge', layer: 1, span: { x: 1, z: 2 } },
+  'bridge-3x':         { ports: [DIR.N, DIR.S], category: 'bridge', layer: 1, span: { x: 1, z: 3 } },
+  'bridge-4x':         { ports: [DIR.N, DIR.S], category: 'bridge', layer: 1, span: { x: 1, z: 4 } },
 
-  // ── Pittsburgh Bridge Collection ──
-  'pgh-clemente':      { ports: [DIR.N, DIR.S], category: 'pgh-bridge' },
-  'pgh-warhol':        { ports: [DIR.N, DIR.S], category: 'pgh-bridge' },
-  'pgh-carson':        { ports: [DIR.N, DIR.S], category: 'pgh-bridge' },
-  'pgh-fort-pitt':     { ports: [DIR.N, DIR.S], category: 'pgh-bridge' },
-  'pgh-fort-duquesne': { ports: [DIR.N, DIR.S], category: 'pgh-bridge' },
-  'pgh-west-end':      { ports: [DIR.N, DIR.S], category: 'pgh-bridge' },
-  'pgh-veterans':      { ports: [DIR.N, DIR.S], category: 'pgh-bridge' },
-  'pgh-16th-st':       { ports: [DIR.N, DIR.S], category: 'pgh-bridge' },
-  'pgh-south-10th':    { ports: [DIR.N, DIR.S], category: 'pgh-bridge' },
-  'pgh-31st-st':       { ports: [DIR.N, DIR.S], category: 'pgh-bridge' },
-  'pgh-mckees-rocks':  { ports: [DIR.N, DIR.S], category: 'pgh-bridge' },
-  'pgh-smithfield':    { ports: [DIR.N, DIR.S], category: 'pgh-bridge' },
-  'pgh-liberty':       { ports: [DIR.N, DIR.S], category: 'pgh-bridge' },
-  'pgh-62nd-st':       { ports: [DIR.N, DIR.S], category: 'pgh-bridge' },
-  'pgh-birmingham':    { ports: [DIR.N, DIR.S], category: 'pgh-bridge' },
-  'pgh-40th-st':       { ports: [DIR.N, DIR.S], category: 'pgh-bridge' },
-  'pgh-hot-metal':     { ports: [DIR.N, DIR.S], category: 'pgh-bridge' },
-  'pgh-glenwood':      { ports: [DIR.N, DIR.S], category: 'pgh-bridge' },
-  'pgh-highland-park': { ports: [DIR.N, DIR.S], category: 'pgh-bridge' },
-  'pgh-homestead':     { ports: [DIR.N, DIR.S], category: 'pgh-bridge' },
+  // ── Pittsburgh-themed bridges (elevated deck, layer 1) ──
+  'pgh-clemente':      { ports: [DIR.N, DIR.S], category: 'pgh-bridge', layer: 1, span: { x: 1, z: 2 } },
+  'pgh-warhol':        { ports: [DIR.N, DIR.S], category: 'pgh-bridge', layer: 1, span: { x: 1, z: 2 } },
+  'pgh-carson':        { ports: [DIR.N, DIR.S], category: 'pgh-bridge', layer: 1, span: { x: 1, z: 2 } },
+  'pgh-fort-pitt':     { ports: [DIR.N, DIR.S], category: 'pgh-bridge', layer: 1, span: { x: 1, z: 3 } },
+  'pgh-fort-duquesne': { ports: [DIR.N, DIR.S], category: 'pgh-bridge', layer: 1, span: { x: 1, z: 3 } },
+  'pgh-west-end':      { ports: [DIR.N, DIR.S], category: 'pgh-bridge', layer: 1, span: { x: 1, z: 2 } },
+  'pgh-veterans':      { ports: [DIR.N, DIR.S], category: 'pgh-bridge', layer: 1, span: { x: 1, z: 4 } },
+  'pgh-16th-st':       { ports: [DIR.N, DIR.S], category: 'pgh-bridge', layer: 1, span: { x: 1, z: 4 } },
+  'pgh-south-10th':    { ports: [DIR.N, DIR.S], category: 'pgh-bridge', layer: 1, span: { x: 1, z: 3 } },
+  'pgh-31st-st':       { ports: [DIR.N, DIR.S], category: 'pgh-bridge', layer: 1, span: { x: 1, z: 4 } },
+  'pgh-mckees-rocks':  { ports: [DIR.N, DIR.S], category: 'pgh-bridge', layer: 1, span: { x: 1, z: 5 } },
+  'pgh-smithfield':    { ports: [DIR.N, DIR.S], category: 'pgh-bridge', layer: 1, span: { x: 1, z: 3 } },
+  'pgh-liberty':       { ports: [DIR.N, DIR.S], category: 'pgh-bridge', layer: 1, span: { x: 1, z: 6 } },
+  'pgh-62nd-st':       { ports: [DIR.N, DIR.S], category: 'pgh-bridge', layer: 1 },
+  'pgh-birmingham':    { ports: [DIR.N, DIR.S], category: 'pgh-bridge', layer: 1, span: { x: 1, z: 5 } },
+  'pgh-40th-st':       { ports: [DIR.N, DIR.S], category: 'pgh-bridge', layer: 1, span: { x: 1, z: 4 } },
+  'pgh-hot-metal':     { ports: [DIR.N, DIR.S], category: 'pgh-bridge', layer: 1, span: { x: 1, z: 4 } },
+  'pgh-glenwood':      { ports: [DIR.N, DIR.S], category: 'pgh-bridge', layer: 1, span: { x: 1, z: 3 } },
+  'pgh-highland-park': { ports: [DIR.N, DIR.S], category: 'pgh-bridge', layer: 1, span: { x: 1, z: 3 } },
+  'pgh-homestead':     { ports: [DIR.N, DIR.S], category: 'pgh-bridge', layer: 1, span: { x: 1, z: 3 } },
+
+  // ── SKR decorations ──
+  'skr-deco-empty':    { ports: [], category: 'decoration' },
+  'skr-deco-forest':   { ports: [], category: 'decoration' },
+  'skr-deco-tents':    { ports: [], category: 'decoration' },
+  'skr-track-tents':   { ports: [], category: 'decoration' },
 };
-
-// ── Elevation layer helpers ───────────────────────────────────
-/**
- * Return the grid layer for a piece: 0 = ground, 1 = elevated (bridges).
- * Pieces on different layers can coexist at the same (gx, gz) cell.
- */
-export function getGridLayer(pieceKey) {
-  const def = PIECE_DEFS[pieceKey];
-  return def?.category === 'pgh-bridge' ? 1 : 0;
-}
-
-/** Internal key that includes the layer. */
-function layerKey(gx, gz, layer) { return cellKey(gx, gz) + ':' + layer; }
 
 /** Display categories in sidebar order. */
 export const CATEGORIES = [
-  { id: 'basic',     label: 'Road Basics',      icon: '━' },
-  { id: 'corner',    label: 'Corners & Curves',  icon: '╭' },
-  { id: 'hill',      label: 'Hills & Ramps',     icon: '⟋' },
-  { id: 'bend',      label: 'Bends & Offsets',   icon: '↝' },
-  { id: 'junction',  label: 'Junctions',          icon: '┬' },
-  { id: 'elevation', label: 'Elevation',           icon: '△' },
-  { id: 'advanced',  label: 'Advanced',            icon: '★' },
-  { id: 'pgh-bridge', label: 'Pittsburgh Bridges',  icon: '⌒' },
-  { id: 'cap',       label: 'End Pieces',         icon: '⊣' },
+  { id: 'basic',      label: 'Road Basics',       icon: '━' },
+  { id: 'corner',     label: 'Corners & Curves',   icon: '╭' },
+  { id: 'hill',       label: 'Hills & Ramps',      icon: '⟋' },
+  { id: 'bend',       label: 'Bends & Offsets',    icon: '↝' },
+  { id: 'bridge',     label: 'Bridges',             icon: '⌇' },
+  { id: 'pgh-bridge', label: 'Pittsburgh Bridges',   icon: '🌉' },
+  { id: 'decoration', label: 'Scenery',             icon: '🌲' },
 ];
+
+// ── Layer helpers ─────────────────────────────────────────────
+
+/** Get the layer(s) a piece occupies. */
+export function getPieceLayers(pieceKey) {
+  const def = PIECE_DEFS[pieceKey];
+  if (!def) return [0];
+  if (def.layers) return def.layers;
+  return [def.layer ?? 0];
+}
 
 // ── Port rotation helpers ─────────────────────────────────────
 
@@ -142,16 +149,81 @@ export function hasPort(pieceKey, rotDeg, dir) {
   return getPortsAtRotation(pieceKey, rotDeg).includes(dir);
 }
 
-// ── GridState — shared occupancy map ──────────────────────────
+// ── Multi-cell footprint helpers ──────────────────────────────
+
+/**
+ * Get all grid cells occupied by a piece at anchor (gx, gz) with given rotation.
+ * The anchor is the first cell; additional cells extend in the piece's local +Z
+ * direction, which rotates with the piece.
+ */
+export function getFootprintCells(pieceKey, gx, gz, rotDeg) {
+  const def = PIECE_DEFS[pieceKey];
+  if (!def) return [[gx, gz]];
+  const span = def.span || { x: 1, z: 1 };
+  if (span.z <= 1 && span.x <= 1) return [[gx, gz]];
+
+  const steps = Math.round(((rotDeg % 360) + 360) % 360 / 90);
+  // At rotation 0, local +Z → world +Z → S direction
+  const spanDir = (DIR.S + steps) % 4;
+  const dx = DIR_DX[spanDir] * GRID_SIZE;
+  const dz = DIR_DZ[spanDir] * GRID_SIZE;
+
+  const cells = [];
+  for (let i = 0; i < span.z; i++) {
+    cells.push([gx + dx * i, gz + dz * i]);
+  }
+  return cells;
+}
+
+/**
+ * For multi-cell pieces, determine which cell each port actually exits from.
+ * Returns [{dir, cx, cz, layer}] for each port.
+ */
+function getPortCells(pieceKey, gx, gz, rotDeg) {
+  const def = PIECE_DEFS[pieceKey];
+  if (!def) return [];
+  const ports = getPortsAtRotation(pieceKey, rotDeg);
+  const span = def.span || { x: 1, z: 1 };
+  const defaultLayer = def.layer ?? 0;
+  const portLayers = def.portLayers;
+
+  if (span.z <= 1) {
+    return ports.map((dir, idx) => ({
+      dir, cx: gx, cz: gz,
+      layer: portLayers ? portLayers[idx] : defaultLayer,
+    }));
+  }
+
+  const cells = getFootprintCells(pieceKey, gx, gz, rotDeg);
+  const steps = Math.round(((rotDeg % 360) + 360) % 360 / 90);
+  const spanDir = (DIR.S + steps) % 4;
+
+  return ports.map((dir, idx) => {
+    let cx = gx, cz = gz;
+    if (dir === spanDir) {
+      const last = cells[cells.length - 1];
+      cx = last[0]; cz = last[1];
+    }
+    return {
+      dir, cx, cz,
+      layer: portLayers ? portLayers[idx] : defaultLayer,
+    };
+  });
+}
+
+// ── GridState — shared occupancy map (multi-layer) ────────────
 
 export class GridState {
   constructor() {
     /**
+     * Keyed by layeredKey(gx, gz, layer).
      * @type {Map<string, {
      *   pieceKey: string,
      *   rotation: number,
      *   source: 'entity'|'road',
-     *   entityId?: number
+     *   entityId?: number,
+     *   anchor: {x:number, z:number},
+     *   layer: number
      * }>}
      */
     this.cells = new Map();
@@ -168,25 +240,76 @@ export class GridState {
 
   // ── cell CRUD ───────────────────────────────────────────────
 
-  isOccupied(gx, gz, layer = 0) { return this.cells.has(layerKey(gx, gz, layer)); }
+  isOccupied(gx, gz, layer = null) {
+    if (layer !== null) return this.cells.has(layeredKey(gx, gz, layer));
+    return this.cells.has(layeredKey(gx, gz, 0)) || this.cells.has(layeredKey(gx, gz, 1));
+  }
 
-  get(gx, gz, layer = 0) { return this.cells.get(layerKey(gx, gz, layer)) || null; }
-
-  /** Return occupant at any layer (for erase / pick operations). */
-  getAny(gx, gz) {
-    return this.cells.get(layerKey(gx, gz, 0))
-        || this.cells.get(layerKey(gx, gz, 1))
+  get(gx, gz, layer = null) {
+    if (layer !== null) return this.cells.get(layeredKey(gx, gz, layer)) || null;
+    return this.cells.get(layeredKey(gx, gz, 0))
+        || this.cells.get(layeredKey(gx, gz, 1))
         || null;
   }
 
-  set(gx, gz, pieceKey, rotation, source = 'entity', entityId = 0, elevation = 0, surface = 'asphalt') {
-    const layer = getGridLayer(pieceKey);
-    this.cells.set(layerKey(gx, gz, layer), { pieceKey, rotation, source, entityId, elevation, surface });
+  /**
+   * Register a piece at anchor (gx, gz).
+   * For multi-cell pieces, all footprint cells × all layers are marked.
+   */
+  set(gx, gz, pieceKey, rotation, source = 'entity', entityId = 0) {
+    const cells = getFootprintCells(pieceKey, gx, gz, rotation);
+    const layers = getPieceLayers(pieceKey);
+    const anchor = { x: gx, z: gz };
+    for (const [cx, cz] of cells) {
+      for (const layer of layers) {
+        this.cells.set(layeredKey(cx, cz, layer), {
+          pieceKey, rotation, source, entityId, anchor, layer,
+        });
+      }
+    }
   }
 
-  remove(gx, gz, layer = 0) { this.cells.delete(layerKey(gx, gz, layer)); }
+  /**
+   * Remove the piece at (gx, gz).
+   * Pass pieceKey for precision when ground + bridge coexist at same XZ.
+   * For multi-cell pieces, finds the anchor and removes ALL footprint cells.
+   */
+  remove(gx, gz, pieceKey = null) {
+    const searchLayers = pieceKey ? getPieceLayers(pieceKey) : [0, 1];
+    for (const layer of searchLayers) {
+      const cell = this.cells.get(layeredKey(gx, gz, layer));
+      if (!cell) continue;
+      const ax = cell.anchor ? cell.anchor.x : gx;
+      const az = cell.anchor ? cell.anchor.z : gz;
+      const footprint = getFootprintCells(cell.pieceKey, ax, az, cell.rotation);
+      const removeLayers = getPieceLayers(cell.pieceKey);
+      for (const [cx, cz] of footprint) {
+        for (const l of removeLayers) {
+          this.cells.delete(layeredKey(cx, cz, l));
+        }
+      }
+      return;
+    }
+  }
 
-  removeByPiece(gx, gz, pieceKey) { this.cells.delete(layerKey(gx, gz, getGridLayer(pieceKey))); }
+  /**
+   * Check whether placing `pieceKey` at anchor (gx, gz) with `rotDeg` is free.
+   * Only checks the layers that the piece actually occupies.
+   */
+  isFootprintClear(pieceKey, gx, gz, rotDeg, excludeEntityId = null) {
+    const cells = getFootprintCells(pieceKey, gx, gz, rotDeg);
+    const layers = getPieceLayers(pieceKey);
+    for (const [cx, cz] of cells) {
+      for (const layer of layers) {
+        const occ = this.cells.get(layeredKey(cx, cz, layer));
+        if (occ) {
+          if (excludeEntityId !== null && occ.entityId === excludeEntityId) continue;
+          return false;
+        }
+      }
+    }
+    return true;
+  }
 
   clearBySource(source) {
     for (const [key, cell] of this.cells) {
@@ -196,36 +319,43 @@ export class GridState {
 
   clear() { this.cells.clear(); this.hideIndicators(); }
 
-  // ── auto-connect ────────────────────────────────────────────
+  // ── auto-connect (layer-aware) ──────────────────────────────
 
   /**
    * Return the rotation (0/90/180/270) for `pieceKey` at grid (gx,gz)
    * that **maximises** port connections to existing neighbors.
+   * Checks full footprint clearance and evaluates ports at their
+   * correct exit cells and layers.
    */
   findBestRotation(pieceKey, gx, gz) {
     const def = PIECE_DEFS[pieceKey];
     if (!def) return 0;
-    const layer = getGridLayer(pieceKey);
 
     let bestRot = 0;
     let bestScore = -Infinity;
 
     for (let steps = 0; steps < 4; steps++) {
       const rotDeg = steps * 90;
-      const ports = getPortsAtRotation(pieceKey, rotDeg);
+
+      // Skip rotations where the footprint is blocked
+      if (!this.isFootprintClear(pieceKey, gx, gz, rotDeg)) continue;
+
+      const portCells = getPortCells(pieceKey, gx, gz, rotDeg);
       let score = 0;
 
-      for (const dir of ports) {
-        const nx = gx + DIR_DX[dir] * GRID_SIZE;
-        const nz = gz + DIR_DZ[dir] * GRID_SIZE;
-        const neighbor = this.get(nx, nz, layer);
+      for (const { dir, cx, cz, layer: portLayer } of portCells) {
+        const nx = cx + DIR_DX[dir] * GRID_SIZE;
+        const nz = cz + DIR_DZ[dir] * GRID_SIZE;
+        const neighbor = this.get(nx, nz, portLayer);
         if (neighbor) {
           const opp = oppositeDir(dir);
-          if (hasPort(neighbor.pieceKey, neighbor.rotation, opp)) {
-            score += 2;  // mutual connection
-          } else {
-            score -= 1;  // neighbor present but ports don't match
-          }
+          const nAnchorX = neighbor.anchor?.x ?? nx;
+          const nAnchorZ = neighbor.anchor?.z ?? nz;
+          const nPorts = getPortCells(neighbor.pieceKey, nAnchorX, nAnchorZ, neighbor.rotation);
+          const match = nPorts.some(p =>
+            p.dir === opp && p.layer === portLayer && p.cx === nx && p.cz === nz
+          );
+          score += match ? 2 : -1;
         }
       }
 
@@ -235,67 +365,33 @@ export class GridState {
       }
     }
 
-    // Proximity fallback: when no mutual connections are possible (best ≤ 0)
-    // but there ARE occupied neighbors, prefer the rotation that aims a port
-    // toward a neighbor. This orients the piece toward the existing track
-    // even when port types don't match up (e.g. straight next to another
-    // straight placed side-by-side).
-    if (bestScore <= 0) {
-      let hasAnyNeighbor = false;
-      for (const d of [0, 1, 2, 3]) {
-        if (this.get(gx + DIR_DX[d] * GRID_SIZE, gz + DIR_DZ[d] * GRID_SIZE, layer)) {
-          hasAnyNeighbor = true;
-          break;
-        }
-      }
-
-      if (hasAnyNeighbor) {
-        let fallbackBest = -Infinity;
-        for (let steps = 0; steps < 4; steps++) {
-          const rotDeg = steps * 90;
-          const ports = getPortsAtRotation(pieceKey, rotDeg);
-          let proximity = 0;
-          for (const dir of ports) {
-            const nx = gx + DIR_DX[dir] * GRID_SIZE;
-            const nz = gz + DIR_DZ[dir] * GRID_SIZE;
-            if (this.get(nx, nz, layer)) {
-              proximity += 1;
-            }
-          }
-          if (proximity > fallbackBest) {
-            fallbackBest = proximity;
-            bestRot = rotDeg;
-          }
-        }
-      }
-    }
-
     return bestRot;
   }
 
   /**
    * Return connection status for every PORT of the given piece / rotation.
-   * Status: 'connected' | 'open' | 'blocked'
-   *   connected — neighbor has matching port
-   *   open      — no neighbor on that side (can extend later)
-   *   blocked   — neighbor exists but has no matching port
+   * Layer-aware: only checks neighbors on the same layer as each port.
    */
   getConnections(gx, gz, pieceKey, rotDeg) {
-    const ports = getPortsAtRotation(pieceKey, rotDeg);
-    const layer = getGridLayer(pieceKey);
+    const portCells = getPortCells(pieceKey, gx, gz, rotDeg);
     const out = [];
 
-    for (const dir of ports) {
-      const nx = gx + DIR_DX[dir] * GRID_SIZE;
-      const nz = gz + DIR_DZ[dir] * GRID_SIZE;
-      const neighbor = this.get(nx, nz, layer);
+    for (const { dir, cx, cz, layer: portLayer } of portCells) {
+      const nx = cx + DIR_DX[dir] * GRID_SIZE;
+      const nz = cz + DIR_DZ[dir] * GRID_SIZE;
+      const neighbor = this.get(nx, nz, portLayer);
 
       if (!neighbor) {
-        out.push({ dir, status: 'open' });
+        out.push({ dir, status: 'open', cx, cz, layer: portLayer });
       } else {
         const opp = oppositeDir(dir);
-        const ok = hasPort(neighbor.pieceKey, neighbor.rotation, opp);
-        out.push({ dir, status: ok ? 'connected' : 'blocked' });
+        const nAnchorX = neighbor.anchor?.x ?? nx;
+        const nAnchorZ = neighbor.anchor?.z ?? nz;
+        const nPorts = getPortCells(neighbor.pieceKey, nAnchorX, nAnchorZ, neighbor.rotation);
+        const match = nPorts.some(p =>
+          p.dir === opp && p.layer === portLayer && p.cx === nx && p.cz === nz
+        );
+        out.push({ dir, status: match ? 'connected' : 'blocked', cx, cz, layer: portLayer });
       }
     }
     return out;
@@ -308,15 +404,19 @@ export class GridState {
     this.hideIndicators();
 
     for (const conn of connections) {
+      const pcx = conn.cx ?? gx;
+      const pcz = conn.cz ?? gz;
       const ox = DIR_DX[conn.dir] * (GRID_SIZE / 2);
       const oz = DIR_DZ[conn.dir] * (GRID_SIZE / 2);
+      // Raise indicators for bridge-layer ports
+      const dotY = 1.5 + (conn.layer || 0) * 5.0;
       const color = conn.status === 'connected' ? 0x44ff88
                   : conn.status === 'open'      ? 0xffaa22
                   : 0xff4444;
 
       const dot = this._getDot();
       dot.material.color.setHex(color);
-      dot.position.set(gx + ox, 1.5, gz + oz);
+      dot.position.set(pcx + ox, dotY, pcz + oz);
       dot.visible = true;
       this._dots.push(dot);
     }

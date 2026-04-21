@@ -4,6 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>GLO KARTS</title>
+  <style>html.gk-preload body{opacity:0;background:#05050a}</style>
+  <script>document.documentElement.classList.add('gk-preload');</script>
   <link rel="icon" type="image/png" href="/favicon.png" />
   <link rel="stylesheet" href="src/lobby-style.css">
   <script type="module" src="/src/lobby-car.js"></script>
@@ -436,6 +438,46 @@
     }
   </script>
 </body>
+  <button id="performance-settings-btn" class="floating-settings-btn" type="button" aria-haspopup="dialog" aria-controls="performance-settings-panel" aria-expanded="false">
+    <span class="floating-settings-icon"><i class="fas fa-sliders"></i></span>
+    <span class="floating-settings-copy">
+      <span class="floating-settings-label">Device Mode</span>
+      <span id="performance-settings-summary" class="floating-settings-summary">Auto Detect</span>
+    </span>
+  </button>
+
+  <div id="performance-settings-panel" class="performance-settings-panel hidden" aria-hidden="true">
+    <button id="performance-settings-backdrop" class="performance-settings-backdrop" type="button" aria-label="Close device settings"></button>
+    <section class="performance-settings-sheet" role="dialog" aria-modal="true" aria-labelledby="performance-settings-title">
+      <div class="performance-settings-head">
+        <div>
+          <p class="performance-settings-kicker">Performance</p>
+          <h2 id="performance-settings-title">Device Settings</h2>
+        </div>
+        <button id="performance-settings-close" class="performance-settings-close" type="button" aria-label="Close device settings">
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
+
+      <p class="performance-settings-copy-block">Choose how hard realtime battles push graphics. Ultra-Low is tuned for Chromebooks, older iPads, and weaker mobile GPUs.</p>
+
+      <div id="performance-mode-options" class="performance-mode-options" role="radiogroup" aria-label="Performance mode">
+        <button class="performance-mode-card" type="button" data-performance-mode="auto" role="radio" aria-checked="true">
+          <span class="performance-mode-eyebrow">Recommended</span>
+          <span class="performance-mode-title">Auto Detect</span>
+          <span class="performance-mode-desc">Uses the normal device check and only drops quality when the match gets busy.</span>
+        </button>
+        <button class="performance-mode-card" type="button" data-performance-mode="ultra_low" role="radio" aria-checked="false">
+          <span class="performance-mode-eyebrow">Weak Device</span>
+          <span class="performance-mode-title">Ultra-Low</span>
+          <span class="performance-mode-desc">Forces stripped-down visuals, aggressive resolution scaling, and minimal effects for mobile and Chromebook play.</span>
+        </button>
+      </div>
+
+      <p id="performance-mode-note" class="performance-mode-note">Auto Detect is active.</p>
+    </section>
+  </div>
+
 </html>
 
 

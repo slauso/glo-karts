@@ -4,6 +4,7 @@
  * Shows before the builder loads, letting players: continue an auto-saved
  * project, start fresh, open a saved arena, or import a share code.
  */
+import { navigateWithTransition } from '../ui/page-transition.js';
 
 /**
  * Display the landing overlay and return a Promise that resolves with the
@@ -141,7 +142,7 @@ export function showLanding(serializer) {
 
     // Back to lobby
     btnBack.addEventListener('click', () => {
-      window.location.href = '/';
+      void navigateWithTransition(new URL('index.html', window.location.href).href);
     });
   });
 }

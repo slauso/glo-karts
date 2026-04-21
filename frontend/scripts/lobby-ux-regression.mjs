@@ -10,10 +10,16 @@ async function safeFill(page, selector, value) {
   await page.fill(selector, value);
 }
 
+/**
+ * Navigate to the lobby page and wait for mode cards to render.
+ * Optionally set a player name.
+ */
 async function openLobby(page, playerName) {
   await page.goto(`${BASE_URL}/index.html`, { waitUntil: 'domcontentloaded' });
-  await page.waitForSelector('#create-party-btn', { timeout: 30000 });
-  await safeFill(page, '#player-name-input', playerName);
+  await page.waitForSelector('#mode-cards', { timeout: 30000 });
+  if (playerName) {
+    await safeFill(page, '#player-name-input', playerName);
+  }
 }
 
 async function chooseKart(page, clicks = 1) {
@@ -24,12 +30,6 @@ async function chooseKart(page, clicks = 1) {
   }
 }
 
-async function chooseColor(page, colorName) {
-  await page.evaluate((color) => {
-    sessionStorage.setItem('carColor', color);
-  }, colorName);
-}
-
 async function setGlo(page, effect = 'rainbow', color1 = '#11ff88', color2 = '#8844ff') {
   await page.evaluate(({ fx, c1, c2 }) => {
     sessionStorage.setItem('gloEffect', fx);
@@ -38,35 +38,61 @@ async function setGlo(page, effect = 'rainbow', color1 = '#11ff88', color2 = '#8
   }, { fx: effect, c1: color1, c2: color2 });
 }
 
-async function setMode(page, mode) {
-  await page.click(`.mode-btn[data-mode="${mode}"]`, { force: true });
+/**
+ * Select a mode by clicking the corresponding mode-card.
+ * The only visible mode is `battle_online`; hidden modes can be force-injected via evaluate.
+ */
+async function selectMode(page, modeId) {
+  const clicked = await page.evaluate((id) => {
+    const card = document.querySelector(`.mode-card[data-mode-id="${id}"]`);
+    if (card) { card.click(); return true; }
+    return false;
+  }, modeId);
+  if (!clicked) throw new Error(`Mode card [data-mode-id="${modeId}"] not found`);
+  await wait(200);
 }
 
-async function selectTrack(page, trackId) {
-  await page.click('.dropdown-button', { force: true });
-  await page.click(`.dropdown-option[data-map-id="${trackId}"]`, { force: true });
+/**
+ * Set battle-specific settings via hidden form fields + dispatching change events.
+ */
+async function setBattleSettings(page, { battleType, scoreLimit }) {
+  await page.evaluate(({ bt, sl }) => {
+    const btEl = document.getElementById('battle-type-select');
+    if (btEl && bt) { btEl.value = bt; btEl.dispatchEvent(new Event('change')); }
+    const slEl = document.getElementById('battle-score-limit');
+    if (slEl && sl != null) { slEl.value = String(sl); slEl.dispatchEvent(new Event('change')); }
+  }, { bt: battleType, sl: scoreLimit });
 }
 
-async function selectBattleSettings(page, { arenaId, battleType }) {
-  await page.selectOption('#battle-arena-select', arenaId);
-  await page.selectOption('#battle-type-select', battleType);
-}
+/**
+ * Click #play-btn to create a lobby (host flow).
+ * Waits until #host-info is visible and a lobby code is displayed.
+ * Returns the lobby code string.
+ */
+async function createLobbyViaPlayBtn(host) {
+  await host.waitForSelector('#play-btn:not([disabled])', { timeout: 10000 });
+  await host.click('#play-btn', { force: true });
 
-async function createPrivateLobby(host) {
-  await host.selectOption('#lobby-privacy-select', 'private');
-  await host.click('#create-party-btn', { force: true });
   await host.waitForFunction(() => {
     const code = (document.querySelector('#party-code')?.textContent || '').trim();
     const hostInfoVisible = !document.querySelector('#host-info')?.classList.contains('hidden');
-    return hostInfoVisible && code && code !== 'XXXXXX' && code !== '------';
+    return hostInfoVisible && code && code.length >= 3 && code !== 'XXXXXX' && code !== '------';
   }, { timeout: 30000 });
+
   return (await host.locator('#party-code').textContent())?.trim();
 }
 
+/**
+ * Join an existing lobby using a lobby code.
+ */
 async function joinLobbyByCode(guest, code) {
   await safeFill(guest, '#join-code-input', code);
   await guest.click('#join-party-btn', { force: true });
-  await guest.waitForFunction(() => document.querySelector('.join-section')?.classList.contains('hidden'), { timeout: 30000 });
+  // Wait until at least one player appears in the list (indicating successful join)
+  await guest.waitForFunction(() => {
+    const list = document.querySelectorAll('#player-list li');
+    return list.length >= 1;
+  }, { timeout: 30000 });
 }
 
 async function waitForTwoPlayers(page) {
@@ -91,55 +117,10 @@ function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
 
-async function runPrivateRaceFlow(browser) {
-  const hostCtx = await browser.newContext();
-  const guestCtx = await browser.newContext();
-  const host = await hostCtx.newPage();
-  const guest = await guestCtx.newPage();
-
-  try {
-    await openLobby(host, 'HostRaceUX');
-    await openLobby(guest, 'GuestRaceUX');
-
-    await chooseKart(host, 2);
-    await chooseColor(host, 'blue');
-    await setGlo(host, 'rainbow', '#00ffaa', '#6633ff');
-
-    await chooseKart(guest, 4);
-    await chooseColor(guest, 'green');
-    await setGlo(guest, 'pulse', '#ff8844', '#44bbff');
-
-    await setMode(host, 'race');
-    await selectTrack(host, 'hacienda');
-
-    const code = await createPrivateLobby(host);
-    await joinLobbyByCode(guest, code);
-
-    await Promise.all([waitForTwoPlayers(host), waitForTwoPlayers(guest)]);
-
-    await host.click('#play-btn', { force: true });
-
-    await Promise.all([waitForRealtime(host), waitForRealtime(guest)]);
-
-    const hostConfig = await readGameConfig(host);
-    const guestConfig = await readGameConfig(guest);
-
-    assert(hostConfig?.gameMode === 'race', 'Host race gameMode mismatch');
-    assert(hostConfig?.trackId === 'hacienda', 'Host race track mismatch');
-    assert(Array.isArray(hostConfig?.players) && hostConfig.players.length >= 2, 'Host race players missing');
-    assert(hostConfig?.multiplayerProvider === 'colyseus', 'Host race provider mismatch');
-
-    assert(guestConfig?.gameMode === 'race', 'Guest race gameMode mismatch');
-    assert(guestConfig?.trackId === 'hacienda', 'Guest race track mismatch');
-    assert(Array.isArray(guestConfig?.players) && guestConfig.players.length >= 2, 'Guest race players missing');
-
-    return { ok: true, code, hostUrl: host.url(), guestUrl: guest.url() };
-  } finally {
-    await hostCtx.close();
-    await guestCtx.close();
-  }
-}
-
+/**
+ * Scenario 1: Private battle lobby — host creates, guest joins, host starts.
+ * Verifies gameConfig fields including scoreLimit propagation.
+ */
 async function runPrivateBattleFlow(browser) {
   const hostCtx = await browser.newContext();
   const guestCtx = await browser.newContext();
@@ -151,30 +132,31 @@ async function runPrivateBattleFlow(browser) {
     await openLobby(guest, 'GuestBattleUX');
 
     await chooseKart(host, 3);
-    await chooseColor(host, 'purple');
     await setGlo(host, 'strobe', '#ff0088', '#22e5ff');
 
     await chooseKart(guest, 1);
-    await chooseColor(guest, 'yellow');
     await setGlo(guest, 'two-color', '#00ff55', '#0044ff');
 
-    await setMode(host, 'battle');
-    await selectBattleSettings(host, { arenaId: 'cave', battleType: 'ctf' });
+    // Select battle_online mode and configure settings
+    await selectMode(host, 'battle_online');
+    await setBattleSettings(host, { battleType: 'deathmatch', scoreLimit: 7 });
 
-    const code = await createPrivateLobby(host);
+    // Host creates lobby via Play button
+    const code = await createLobbyViaPlayBtn(host);
+    assert(code && code.length >= 3, 'Lobby code not generated');
+
+    // Guest joins
     await joinLobbyByCode(guest, code);
-
     await Promise.all([waitForTwoPlayers(host), waitForTwoPlayers(guest)]);
 
-    await host.click('#play-btn', { force: true });
-    await guest.click('#play-btn', { force: true });
+    // Guest readies up
+    await guest.waitForSelector('#ready-btn:not(.hidden)', { timeout: 10000 });
+    await guest.click('#ready-btn', { force: true });
+    await wait(500);
 
-    await host.waitForFunction(() => {
-      const btn = document.querySelector('#battle-start-btn');
-      return btn && !btn.classList.contains('hidden') && !btn.disabled;
-    }, { timeout: 30000 });
-
-    await host.click('#battle-start-btn', { force: true });
+    // Host starts match
+    await host.waitForSelector('#start-match-btn:not(.hidden)', { timeout: 10000 });
+    await host.click('#start-match-btn', { force: true });
 
     await Promise.all([waitForRealtime(host), waitForRealtime(guest)]);
 
@@ -182,13 +164,17 @@ async function runPrivateBattleFlow(browser) {
     const guestConfig = await readGameConfig(guest);
 
     assert(hostConfig?.gameMode === 'battle', 'Host battle gameMode mismatch');
-    assert(hostConfig?.arenaId === 'cave', 'Host battle arena mismatch');
-    assert(hostConfig?.battleType === 'ctf', 'Host battle type mismatch');
     assert(hostConfig?.multiplayerProvider === 'colyseus', 'Host battle provider mismatch');
+    assert(Array.isArray(hostConfig?.players) && hostConfig.players.length >= 2, 'Host battle players missing');
+    assert(hostConfig?.scoreLimit === 7, `Host scoreLimit expected 7, got ${hostConfig?.scoreLimit}`);
 
     assert(guestConfig?.gameMode === 'battle', 'Guest battle gameMode mismatch');
-    assert(guestConfig?.arenaId === 'cave', 'Guest battle arena mismatch');
-    assert(guestConfig?.battleType === 'ctf', 'Guest battle type mismatch');
+    assert(Array.isArray(guestConfig?.players) && guestConfig.players.length >= 2, 'Guest battle players missing');
+    assert(guestConfig?.scoreLimit === 7, `Guest scoreLimit expected 7, got ${guestConfig?.scoreLimit}`);
+
+    // Verify glo fields propagated in player objects
+    const hostPlayer = hostConfig.players.find((p) => p.name === 'HostBattleUX');
+    assert(hostPlayer?.gloEffect === 'strobe', `Host gloEffect expected strobe, got ${hostPlayer?.gloEffect}`);
 
     return { ok: true, code, hostUrl: host.url(), guestUrl: guest.url() };
   } finally {
@@ -197,44 +183,38 @@ async function runPrivateBattleFlow(browser) {
   }
 }
 
-async function runOpenQuickMatchFlow(browser) {
-  const ctxA = await browser.newContext();
-  const ctxB = await browser.newContext();
-  const pageA = await ctxA.newPage();
-  const pageB = await ctxB.newPage();
+/**
+ * Scenario 2: Solo host clicks play → creates lobby → alone in game.
+ * Ensures a single player can proceed without a guest.
+ */
+async function runSoloHostFlow(browser) {
+  const ctx = await browser.newContext();
+  const page = await ctx.newPage();
 
   try {
-    await openLobby(pageA, 'OpenAUX');
-    await openLobby(pageB, 'OpenBUX');
+    await openLobby(page, 'SoloHost');
+    await chooseKart(page, 1);
+    await setGlo(page, 'rainbow', '#00ffaa', '#6633ff');
 
-    await setMode(pageA, 'race');
-    await setMode(pageB, 'race');
+    await selectMode(page, 'battle_online');
 
-    await pageA.click('#quick-match-btn', { force: true });
-    await pageB.click('#quick-match-btn', { force: true });
+    const code = await createLobbyViaPlayBtn(page);
+    assert(code && code.length >= 3, 'Solo lobby code not generated');
 
-    await Promise.all([waitForTwoPlayers(pageA), waitForTwoPlayers(pageB)]);
+    // Host is alone — start match immediately (server auto-readies host)
+    await page.waitForSelector('#start-match-btn:not(.hidden)', { timeout: 10000 });
+    await page.click('#start-match-btn', { force: true });
 
-    const hostPage = await pageA.evaluate(() => {
-      return (document.querySelector('#play-btn')?.textContent || '').toUpperCase().includes('START RACE');
-    }) ? pageA : pageB;
+    await waitForRealtime(page);
 
-    await hostPage.click('#play-btn', { force: true });
+    const config = await readGameConfig(page);
+    assert(config?.gameMode === 'battle', 'Solo host gameMode mismatch');
+    assert(config?.multiplayerProvider === 'colyseus', 'Solo host provider mismatch');
+    assert(config?.lobbyCode === code, 'Solo host lobbyCode mismatch');
 
-    await Promise.all([waitForRealtime(pageA), waitForRealtime(pageB)]);
-
-    const configA = await readGameConfig(pageA);
-    const configB = await readGameConfig(pageB);
-
-    assert(configA?.gameMode === 'race', 'Open flow A mode mismatch');
-    assert(configB?.gameMode === 'race', 'Open flow B mode mismatch');
-    assert(Array.isArray(configA?.players) && configA.players.length >= 2, 'Open flow A players missing');
-    assert(Array.isArray(configB?.players) && configB.players.length >= 2, 'Open flow B players missing');
-
-    return { ok: true, urlA: pageA.url(), urlB: pageB.url(), lobbyCodeA: configA?.lobbyCode, lobbyCodeB: configB?.lobbyCode };
+    return { ok: true, code, url: page.url() };
   } finally {
-    await ctxA.close();
-    await ctxB.close();
+    await ctx.close();
   }
 }
 
@@ -243,9 +223,8 @@ async function run() {
   const summary = { ok: true, scenarios: [] };
 
   try {
-    summary.scenarios.push({ label: 'private_race', ...(await runPrivateRaceFlow(browser)) });
     summary.scenarios.push({ label: 'private_battle', ...(await runPrivateBattleFlow(browser)) });
-    summary.scenarios.push({ label: 'open_quick_match', ...(await runOpenQuickMatchFlow(browser)) });
+    summary.scenarios.push({ label: 'solo_host', ...(await runSoloHostFlow(browser)) });
 
     console.log('LOBBY_UX_REGRESSION', JSON.stringify(summary, null, 2));
   } catch (error) {

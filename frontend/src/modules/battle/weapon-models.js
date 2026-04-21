@@ -882,6 +882,38 @@ const _CAROUSEL_ITEMS = [
   'anchor', 'parachute',
 ];
 
+function _disposePreviewModelFX(node, scene) {
+  if (!node) return;
+
+  const meta = node.metadata && typeof node.metadata === 'object' ? node.metadata : null;
+  const disposableKeys = ['trailPS', 'debrisPS', 'sparksPS', 'mistPS', 'dripsPS'];
+  for (const key of disposableKeys) {
+    const resource = meta?.[key];
+    if (!resource) continue;
+    const items = Array.isArray(resource) ? resource : [resource];
+    for (const item of items) {
+      if (!item) continue;
+      try {
+        if (typeof item.stop === 'function') item.stop();
+        if (typeof item.dispose === 'function') item.dispose();
+      } catch (_) { /* already disposed */ }
+    }
+    meta[key] = null;
+  }
+
+  const observerKeys = ['spinObserver', 'updateObserver', 'flickerObserver', 'expandObserver', 'rotateObserver', 'pulseObserver', 'humObserver', 'swirlObserver'];
+  for (const key of observerKeys) {
+    if (!meta?.[key] || !scene?.onBeforeRenderObservable) continue;
+    try { scene.onBeforeRenderObservable.remove(meta[key]); } catch (_) { /* ignore */ }
+    meta[key] = null;
+  }
+
+  if (meta && typeof meta.cleanup === 'function') {
+    try { meta.cleanup(); } catch (_) { /* no-op */ }
+    meta.cleanup = null;
+  }
+}
+
 /**
  * Spawn a random mini weapon model inside the carousel node.
  * Disposes the previous child first. Models are scaled down and made
@@ -892,13 +924,17 @@ function _spawnCarouselItem(carouselNode, scene) {
   const kids = carouselNode.getChildMeshes(true);
   for (const k of kids) k.dispose(false, false);
   const oldKids = carouselNode.getChildren();
-  for (const k of oldKids) { try { k.dispose(); } catch (_) { /* ok */ } }
+  for (const k of oldKids) {
+    _disposePreviewModelFX(k, scene);
+    try { k.dispose(); } catch (_) { /* ok */ }
+  }
 
   const weaponId = _CAROUSEL_ITEMS[Math.floor(Math.random() * _CAROUSEL_ITEMS.length)];
   const factory = WEAPON_MODEL_FACTORIES[weaponId];
   if (!factory) return;
 
   const model = factory(scene);
+  _disposePreviewModelFX(model, scene);
   model.parent = carouselNode;
   model.scaling.setAll(0.85);
   model.position.setAll(0);
@@ -986,7 +1022,12 @@ function _createItemBoxFaceTexture(scene) {
  *   - Tilted-axis rotation for classic MK feel
  *   - Per-frame rainbow color cycling (handled by race-items.js)
  */
-export function createItemBoxModel(scene) {
+export function createItemBoxModel(scene, options = {}) {
+  const {
+    includeCarousel = true,
+    includeSparkles = true,
+    carouselSwapInterval = 0.75,
+  } = options;
   const root = new TransformNode('mdl_itembox', scene);
 
   // ── Outer translucent cube with tech-panel faces ──────────────────────
@@ -1040,39 +1081,45 @@ export function createItemBoxModel(scene) {
   core.parent = root;
 
   // ── Internal weapon carousel ──────────────────────────────────────────
-  const carouselNode = new TransformNode('itemBoxCarousel', scene);
-  carouselNode.parent = root;
-  _spawnCarouselItem(carouselNode, scene);
+  let carouselNode = null;
+  if (includeCarousel) {
+    carouselNode = new TransformNode('itemBoxCarousel', scene);
+    carouselNode.parent = root;
+    _spawnCarouselItem(carouselNode, scene);
+  }
 
   // ── Orbiting sparkle particle system ──────────────────────────────────
-  const sparklePS = new ParticleSystem('itemBoxSparkles', scaleParticles(20), scene);
-  sparklePS.particleTexture = new Texture(
-    'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==',
-    scene
-  );
-  sparklePS.emitter = root;
-  sparklePS.minEmitBox = new Vector3(-1.0, -1.0, -1.0);
-  sparklePS.maxEmitBox = new Vector3(1.0, 1.0, 1.0);
-  sparklePS.emitRate = scaleParticles(5);
-  sparklePS.minLifeTime = 0.8;
-  sparklePS.maxLifeTime = 1.4;
-  sparklePS.minSize = 0.05;
-  sparklePS.maxSize = 0.12;
-  sparklePS.color1 = new Color4(0.5, 0.8, 1.0, 0.85);
-  sparklePS.color2 = new Color4(0.3, 0.5, 1.0, 0.65);
-  sparklePS.colorDead = new Color4(0.1, 0.2, 0.8, 0);
-  sparklePS.blendMode = ParticleSystem.BLENDMODE_ADD;
-  sparklePS.gravity = new Vector3(0, 0.2, 0);
-  sparklePS.minEmitPower = 0.2;
-  sparklePS.maxEmitPower = 0.6;
-  sparklePS.direction1 = new Vector3(-0.4, 0.4, -0.4);
-  sparklePS.direction2 = new Vector3(0.4, 0.8, 0.4);
+  let sparklePS = null;
+  if (includeSparkles) {
+    sparklePS = new ParticleSystem('itemBoxSparkles', scaleParticles(20), scene);
+    sparklePS.particleTexture = new Texture(
+      'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==',
+      scene
+    );
+    sparklePS.emitter = root;
+    sparklePS.minEmitBox = new Vector3(-1.0, -1.0, -1.0);
+    sparklePS.maxEmitBox = new Vector3(1.0, 1.0, 1.0);
+    sparklePS.emitRate = scaleParticles(5);
+    sparklePS.minLifeTime = 0.8;
+    sparklePS.maxLifeTime = 1.4;
+    sparklePS.minSize = 0.05;
+    sparklePS.maxSize = 0.12;
+    sparklePS.color1 = new Color4(0.5, 0.8, 1.0, 0.85);
+    sparklePS.color2 = new Color4(0.3, 0.5, 1.0, 0.65);
+    sparklePS.colorDead = new Color4(0.1, 0.2, 0.8, 0);
+    sparklePS.blendMode = ParticleSystem.BLENDMODE_ADD;
+    sparklePS.gravity = new Vector3(0, 0.2, 0);
+    sparklePS.minEmitPower = 0.2;
+    sparklePS.maxEmitPower = 0.6;
+    sparklePS.direction1 = new Vector3(-0.4, 0.4, -0.4);
+    sparklePS.direction2 = new Vector3(0.4, 0.8, 0.4);
 
-  sparklePS.addVelocityGradient(0, new Vector3(0.6, 0.15, 0));
-  sparklePS.addVelocityGradient(0.5, new Vector3(-0.6, 0.2, 0.6));
-  sparklePS.addVelocityGradient(1.0, new Vector3(0, 0.1, -0.6));
+    sparklePS.addVelocityGradient(0, new Vector3(0.6, 0.15, 0));
+    sparklePS.addVelocityGradient(0.5, new Vector3(-0.6, 0.2, 0.6));
+    sparklePS.addVelocityGradient(1.0, new Vector3(0, 0.1, -0.6));
 
-  sparklePS.start();
+    sparklePS.start();
+  }
 
   // ── Metadata for per-frame animation in race-items.js ─────────────────
   root.metadata = {
@@ -1086,8 +1133,8 @@ export function createItemBoxModel(scene) {
     _glowBox: glowBox,
     _carouselNode: carouselNode,
     _carouselTimer: 0,
-    _carouselSwapInterval: 0.1,
-    _spawnCarouselItem: () => _spawnCarouselItem(carouselNode, scene),
+    _carouselSwapInterval: includeCarousel ? carouselSwapInterval : Number.POSITIVE_INFINITY,
+    _spawnCarouselItem: includeCarousel ? () => _spawnCarouselItem(carouselNode, scene) : null,
   };
   return root;
 }

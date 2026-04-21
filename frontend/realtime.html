@@ -4,6 +4,8 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>GLO KARTS - Online</title>
+    <style>html.gk-preload body{opacity:0;background:#05050a}</style>
+    <script>document.documentElement.classList.add('gk-preload');</script>
     <link rel="icon" type="image/png" href="/favicon.png" />
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -182,6 +184,8 @@
     <script type="module">
       import { ColyseusBabylonClient } from '/src/modules/realtime/colyseus-babylon-client.js';
       import { getColyseusEndpoint } from '/src/modules/realtime/feature-flag.js';
+      import { initPageTransitions } from '/src/ui/page-transition.js';
+      initPageTransitions();
 
       const BUILDER_PLAYTEST_META_KEY = 'gloBuilderPlaytestMeta';
       const params = new URLSearchParams(window.location.search);
@@ -208,12 +212,14 @@
         }
       };
 
-      const baseConfig = safeParse(sessionStorage.getItem('gameConfig'), {});
-      const builderPlaytestMeta = safeParse(sessionStorage.getItem(BUILDER_PLAYTEST_META_KEY), null);
+      const readStoredValue = (key) => sessionStorage.getItem(key) || localStorage.getItem(key) || '';
+
+      const baseConfig = safeParse(readStoredValue('gameConfig'), {});
+      const builderPlaytestMeta = safeParse(readStoredValue(BUILDER_PLAYTEST_META_KEY), null);
       const isBuilderPlaytest = params.get('builderPlaytest') === '1'
         || params.get('fromBuilder') === '1'
         || !!baseConfig.builderPlaytest;
-      const myId = isDevBattle ? ensureDevPlayerId() : (sessionStorage.getItem('myPlayerId') || localStorage.getItem('myPlayerId'));
+      const myId = isDevBattle ? ensureDevPlayerId() : readStoredValue('myPlayerId');
       const config = isDevBattle
         ? {
             gameMode: 'battle',
@@ -235,14 +241,14 @@
           }
         : baseConfig;
       const glo    = {
-        gloEffect: sessionStorage.getItem('gloEffect') || 'falling-petals',
-        gloColor:  sessionStorage.getItem('gloColor')  || '#ff0080',
-        gloColor2: sessionStorage.getItem('gloColor2') || '#00e5ff',
+        gloEffect: readStoredValue('gloEffect') || 'falling-petals',
+        gloColor:  readStoredValue('gloColor')  || '#ff0080',
+        gloColor2: readStoredValue('gloColor2') || '#00e5ff',
       };
-      const smokeMode = sessionStorage.getItem('realtimeSmokeMode') || '';
+      const smokeMode = readStoredValue('realtimeSmokeMode') || '';
 
       const isBattle = config.gameMode === 'battle';
-      const roomName = isBattle ? 'battle_room' : 'race_room';
+      const roomName = config.roomName || (isBattle ? 'battle_room' : 'race_room');
       const canvas   = document.getElementById('realtime-canvas');
       const loadingScreen = document.getElementById('loading-screen');
       const loadingTitle = document.querySelector('.loading-title');
@@ -312,6 +318,7 @@
         playerName: config.players?.find(p => p.id === myId)?.name || 'Player',
         maxPlayers: config.maxPlayers || 12,
         gameType:   config.battleType || 'deathmatch',
+        performanceMode: config.performanceMode || 'auto',
       });
 
       (async () => {
@@ -339,7 +346,7 @@
             playerName:  config.players?.find(p => p.id === myId)?.name || 'Player',
             kartId:      config.players?.find(p => p.id === myId)?.playerKart || config.selectedKart || sessionStorage.getItem('selectedKart') || localStorage.getItem('selectedKart') || 'tux',
             playerColor: config.players?.find(p => p.id === myId)?.playerColor || sessionStorage.getItem('carColor') || localStorage.getItem('carColor') || 'red',
-            customTrackData: config.customTrackData || sessionStorage.getItem('customTrackData') || '',
+            customTrackData: config.customTrackData || readStoredValue('customTrackData') || '',
             directPlaytest: isBuilderPlaytest || !!config.directPlaytest,
             smokeMode,
             ...glo,

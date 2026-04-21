@@ -33,6 +33,10 @@ gameServer.define("race_room", RaceRoom)
   .filterBy(["partyCode"]);
 gameServer.define("battle_room", BattleRoom)
   .filterBy(["partyCode"]);
+gameServer.define("builder_race_playtest", RaceRoom)
+  .filterBy(["partyCode"]);
+gameServer.define("builder_battle_playtest", BattleRoom)
+  .filterBy(["partyCode"]);
 gameServer.define("gloflux", GloFluxRoom)
   .filterBy(["partyCode"]);
 gameServer.define("fps_arena", FpsArenaRoom)

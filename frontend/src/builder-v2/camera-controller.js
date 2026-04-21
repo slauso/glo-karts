@@ -16,6 +16,7 @@ export class CameraController {
     this._canvas = canvas;
     this._renderer = renderer;
     this._isOrtho = false;
+    this._orthoZoom = 60; // frustum half-size in world units
 
     this.perspCam = new THREE.PerspectiveCamera(50, 1, 0.1, 1000);
     this.perspCam.position.copy(DEFAULT_POS);
@@ -38,6 +39,17 @@ export class CameraController {
       RIGHT: THREE.MOUSE.ROTATE,
     };
     this.controls.update();
+
+    // Ortho scroll-zoom handler
+    this._onWheel = (e) => {
+      if (!this._isOrtho) return;
+      e.preventDefault();
+      const zoomSpeed = 0.1;
+      const delta = e.deltaY > 0 ? 1 + zoomSpeed : 1 - zoomSpeed;
+      this._orthoZoom = Math.max(10, Math.min(300, this._orthoZoom * delta));
+      this._updateOrthoFrustum();
+    };
+    canvas.addEventListener('wheel', this._onWheel, { passive: false });
   }
 
   get isOrtho() {
@@ -48,12 +60,17 @@ export class CameraController {
     const aspect = w / h;
     this.perspCam.aspect = aspect;
     this.perspCam.updateProjectionMatrix();
+    this._updateOrthoFrustum(aspect);
+  }
 
-    const frustum = 60;
-    this.orthoCam.left = -frustum * aspect;
-    this.orthoCam.right = frustum * aspect;
-    this.orthoCam.top = frustum;
-    this.orthoCam.bottom = -frustum;
+  _updateOrthoFrustum(aspect) {
+    if (!aspect) {
+      aspect = this._canvas.clientWidth / (this._canvas.clientHeight || 1);
+    }
+    this.orthoCam.left = -this._orthoZoom * aspect;
+    this.orthoCam.right = this._orthoZoom * aspect;
+    this.orthoCam.top = this._orthoZoom;
+    this.orthoCam.bottom = -this._orthoZoom;
     this.orthoCam.updateProjectionMatrix();
   }
 

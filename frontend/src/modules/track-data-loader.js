@@ -116,11 +116,30 @@ function convertCustomTrackData(customTrack) {
   const items = Array.isArray(customTrack?.obstacles)
     ? customTrack.obstacles
         .filter((obstacle) => obstacle?.position)
-        .map((obstacle) => ({
-          type: obstacle.type === 'boost_pad' ? 'nitro' : 'item',
-          position: [obstacle.position.x, obstacle.position.y || 0.5, obstacle.position.z],
-          heading: 0,
-        }))
+        .flatMap((obstacle) => {
+          if (obstacle.type === 'item_box') {
+            return [{
+              type: 'item',
+              position: [obstacle.position.x, obstacle.position.y || 0.5, obstacle.position.z],
+              heading: 0,
+            }];
+          }
+          if (obstacle.type === 'boost_pad') {
+            return [{
+              type: 'small-nitro',
+              position: [obstacle.position.x, obstacle.position.y || 0.15, obstacle.position.z],
+              heading: 0,
+            }];
+          }
+          if (obstacle.type === 'banana') {
+            return [{
+              type: 'banana',
+              position: [obstacle.position.x, obstacle.position.y || 0.3, obstacle.position.z],
+              heading: 0,
+            }];
+          }
+          return [];
+        })
     : [];
 
   return {
@@ -321,7 +340,6 @@ function buildFallbackTrackData(mapId, type) {
  */
 export async function loadTrackData(mapId, type = 'track') {
   const cacheKey = `${type}:${mapId}`;
-  if (cache[cacheKey]) return cache[cacheKey];
 
   if (type === 'track' && mapId === CUSTOM_TRACK_ID) {
     const importedTrack = readImportedCustomTrack();
@@ -329,6 +347,8 @@ export async function loadTrackData(mapId, type = 'track') {
     cache[cacheKey] = data;
     return data;
   }
+
+  if (cache[cacheKey]) return cache[cacheKey];
 
   const basePath = type === 'arena'
     ? `/models/stk/arenas/${mapId}/track-data.json`

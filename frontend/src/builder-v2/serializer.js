@@ -13,149 +13,28 @@ import {
   OBSTACLE_TYPES,
 } from '../modules/track-editor.js';
 import { GRID_SIZE } from '../modules/track-placement.js';
+import {
+  TRACK_CELLS, exportCells, importCells, clearAllCells,
+  generateWallColliders, encodeCells, decodeCells,
+} from './track-data.js';
 
 const AUTOSAVE_KEY = 'builderV2_autosave';
 const SAVES_KEY = 'builderV2_saves';
 const VERSION = 1;
-const PLAYTEST_SEGMENT_TYPE_MAP = Object.freeze({
-  straight: 'straight',
-  bend: 'bend',
-  'bend-large': 'bend-large',
-  'bump-up': 'bump-up',
-  'bump-down': 'bump-down',
-  'hill-beginning': 'hill-beginning',
-  'hill-end': 'hill-end',
-  'hill-complete': 'hill-complete',
-  'hill-complete-half': 'hill-complete-half',
-  'skew-left': 'skew-left',
-  'skew-right': 'skew-right',
-  'skew-left-side': 'skew-left-side',
-  'skew-right-side': 'skew-right-side',
-  'corner-small': 'corner-small',
-  'corner-large': 'corner-large',
-  curve: 'curve',
-  'corner-small-ramp': 'corner-small-ramp',
-  'corner-large-ramp': 'corner-large-ramp',
-  wide: 'wide',
-  'cap-front': 'cap-front',
-  'cap-back': 'cap-back',
-  end: 'end',
-  // Phase 3 — new piece types
-  't-junction': 't-junction',
-  crossroads: 'crossroads',
-  'banked-turn': 'banked-turn',
-  jump: 'jump',
-  tunnel: 'tunnel',
-  bridge: 'bridge',
-  'bridge-onramp': 'bridge-onramp',
-  'bridge-offramp': 'bridge-offramp',
-  chicane: 'chicane',
-  'ramp-up': 'ramp-up',
-  'ramp-down': 'ramp-down',
-  // Pittsburgh Bridge Collection
-  'pgh-clemente': 'pgh-clemente',
-  'pgh-warhol': 'pgh-warhol',
-  'pgh-carson': 'pgh-carson',
-  'pgh-fort-pitt': 'pgh-fort-pitt',
-  'pgh-fort-duquesne': 'pgh-fort-duquesne',
-  'pgh-west-end': 'pgh-west-end',
-  'pgh-veterans': 'pgh-veterans',
-  'pgh-16th-st': 'pgh-16th-st',
-  'pgh-south-10th': 'pgh-south-10th',
-  'pgh-31st-st': 'pgh-31st-st',
-  'pgh-mckees-rocks': 'pgh-mckees-rocks',
-  'pgh-smithfield': 'pgh-smithfield',
-  'pgh-liberty': 'pgh-liberty',
-  'pgh-62nd-st': 'pgh-62nd-st',
-  'pgh-birmingham': 'pgh-birmingham',
-  'pgh-40th-st': 'pgh-40th-st',
-  'pgh-hot-metal': 'pgh-hot-metal',
-  'pgh-glenwood': 'pgh-glenwood',
-  'pgh-highland-park': 'pgh-highland-park',
-  'pgh-homestead': 'pgh-homestead',
-});
+const PLAYTEST_WORLD_SCALE = 3;
 
 function roadCellKey(position) {
   return `${position.x}:${position.z}`;
 }
 
-function classifyTrackRoadCell(north, east, south, west) {
-  const count = [north, east, south, west].filter(Boolean).length;
-
-  if (count === 0) {
-    return { type: 'wide', rotation: 0, connectionCount: 0 };
-  }
-
-  if (count === 1) {
-    return {
-      type: 'straight',
-      rotation: (east || west) ? 90 : 0,
-      connectionCount: 1,
-    };
-  }
-
-  if (count === 2) {
-    if ((north && south) || (east && west)) {
-      return {
-        type: 'straight',
-        rotation: (east && west) ? 90 : 0,
-        connectionCount: 2,
-      };
-    }
-
-    let rotation = 270;
-    if (north && east) rotation = 0;
-    else if (east && south) rotation = 90;
-    else if (south && west) rotation = 180;
-
-    return { type: 'corner-small', rotation, connectionCount: 2 };
-  }
-
-  return { type: 'wide', rotation: 0, connectionCount: count };
-}
-
-function classifyArenaRoadCell(north, east, south, west) {
-  const count = [north, east, south, west].filter(Boolean).length;
-
-  if (count === 1) {
-    return {
-      type: 'straight',
-      rotation: (east || west) ? 90 : 0,
-      connectionCount: 1,
-    };
-  }
-
-  if (count === 2) {
-    if ((north && south) || (east && west)) {
-      return {
-        type: 'straight',
-        rotation: (east && west) ? 90 : 0,
-        connectionCount: 2,
-      };
-    }
-
-    let rotation = 270;
-    if (north && east) rotation = 0;
-    else if (east && south) rotation = 90;
-    else if (south && west) rotation = 180;
-
-    return { type: 'corner-small', rotation, connectionCount: 2 };
-  }
-
-  return { type: 'wide', rotation: 0, connectionCount: count };
-}
-
-function deriveRoadSegments(roadCells = [], { preset = 'arena' } = {}) {
-  const roadMap = new Map(roadCells.map((roadCell) => [roadCellKey(roadCell.position), roadCell]));
+function deriveRoadSegments(roadCells = []) {
   return roadCells.map((roadCell) => {
     const x = roadCell.position.x;
     const z = roadCell.position.z;
-    const north = roadMap.has(`${x}:${z - GRID_SIZE}`);
-    const east = roadMap.has(`${x + GRID_SIZE}:${z}`);
-    const south = roadMap.has(`${x}:${z + GRID_SIZE}`);
-    const west = roadMap.has(`${x - GRID_SIZE}:${z}`);
-    const classifier = preset === 'track' ? classifyTrackRoadCell : classifyArenaRoadCell;
-    const { type, rotation, connectionCount } = classifier(north, east, south, west);
+    const tdKey = `${x}:${z}`;
+    const td = TRACK_CELLS.get(tdKey);
+    const type = td?.type || 'straight';
+    const rotation = td?.rotation || 0;
 
     return {
       id: roadCell.id,
@@ -164,7 +43,6 @@ function deriveRoadSegments(roadCells = [], { preset = 'arena' } = {}) {
       rotation,
       scale: 1,
       builderRole: 'road',
-      connectionCount,
     };
   });
 }
@@ -187,24 +65,60 @@ function deriveTrackSpawnPositions(playtestSegments = [], existingStartPositions
     id: 1,
     position: {
       x: Number(endpoint.position?.x || 0),
-      y: Math.max(2, Number(endpoint.position?.y || 0) + 2),
+      // Hint Y slightly above the authored segment so the runtime surface
+      // probe has enough travel to find the deck. The probe itself adds the
+      // required ground clearance; a large hardcoded offset here previously
+      // caused a visible hover above flat arena decks.
+      y: Number(endpoint.position?.y || 0) + 1,
       z: Number(endpoint.position?.z || 0),
     },
     heading: Number(endpoint.rotation || 0),
   }];
 }
 
+function degreesToRadians(value) {
+  return (Number(value || 0) * Math.PI) / 180;
+}
+
+function scalePosition(position, scale = PLAYTEST_WORLD_SCALE) {
+  return {
+    x: Number(position?.x || 0) * scale,
+    y: Number(position?.y || 0) * scale,
+    z: Number(position?.z || 0) * scale,
+  };
+}
+
+function scaleBounds(bounds, scale = PLAYTEST_WORLD_SCALE) {
+  if (!bounds?.min || !bounds?.max) return bounds;
+  return {
+    min: scalePosition(bounds.min, scale),
+    max: scalePosition(bounds.max, scale),
+  };
+}
+
 function toPlaytestSegment(segment) {
-  const type = PLAYTEST_SEGMENT_TYPE_MAP[segment.type] || segment.type || 'straight';
+  // Pass the builder type through as-is — the game engine's
+  // resolveCustomArenaSegmentSpec() already resolves all types including
+  // warped variants, bridges, and Pittsburgh bridges.  The old
+  // PLAYTEST_SEGMENT_TYPE_MAP collapsed every unknown type to 'straight'.
+  const type = String(segment.type || 'straight');
   return {
     id: segment.id,
     type,
     position: { ...segment.position, y: Number(segment.position?.y || 0) },
     rotation: Number(segment.rotation || 0),
     scale: Number(segment.scale || 1) || 1,
-    elevation: Number(segment.elevation || 0),
-    surface: segment.surface || 'asphalt',
     builderRole: 'placed',
+  };
+}
+
+function toCheckpointData(entity) {
+  return {
+    id: entity.id,
+    position: { ...entity.position },
+    width: Math.max(6, 12 * Number(entity.scale || 1)),
+    rotation: Number(entity.rotation || 0),
+    authored: true,
   };
 }
 
@@ -231,16 +145,16 @@ export class Serializer {
         position: { ...e.position },
         rotation: e.rotation || 0,
         scale: e.scale || 1,
-        elevation: e.elevation || 0,
-        surface: e.surface || 'asphalt',
       }));
 
     const obstacles = entities
-      .filter(e => e.category === 'obstacle')
+      .filter((e) => e.category === 'obstacle' && e.type !== 'checkpoint')
       .map(e => ({
         id: e.id,
         type: e.type,
         position: { ...e.position },
+        rotation: Number(e.rotation || 0),
+        scale: Number(e.scale || 1),
       }));
 
     const startPositions = entities
@@ -248,16 +162,22 @@ export class Serializer {
       .map(e => ({
         id: e.id,
         position: { ...e.position },
-        heading: e.heading || 0,
+        heading: Number(e.heading ?? e.rotation ?? 0),
       }));
 
     const roadCells = this._road.serialize();
+    const authoredCheckpoints = entities
+      .filter((e) => e.category === 'obstacle' && e.type === 'checkpoint')
+      .map(toCheckpointData);
 
-    // Auto-generate checkpoints along road 
-    const checkpoints = this._generateCheckpoints(roadCells);
+    // Preserve authored checkpoint gates when present, otherwise fall back
+    // to generated race progression markers.
+    const checkpoints = authoredCheckpoints.length
+      ? authoredCheckpoints
+      : this._generateCheckpoints(roadCells);
 
     // Compute bounds
-    const bounds = this._computeBounds(segments, roadCells, obstacles);
+    const bounds = this._computeBounds(checkpoints, segments, roadCells, obstacles);
 
     return {
       version: VERSION,
@@ -277,7 +197,7 @@ export class Serializer {
   buildPlaytestTrackData(name = 'Untitled Track', author = 'TinkerTracks', options = {}) {
     const preset = options?.preset === 'track' ? 'track' : 'arena';
     const data = this.buildTrackData(name, author, { preset });
-    const roadSegments = deriveRoadSegments(data.roadCells, { preset });
+    const roadSegments = deriveRoadSegments(data.roadCells);
     const translatedPlacedSegments = data.segments.map(toPlaytestSegment);
     const segmentMap = new Map();
 
@@ -300,33 +220,56 @@ export class Serializer {
     });
 
     const playtestSegments = Array.from(segmentMap.values());
-    const obstacleTypeMap = {
-      item_box: 'item_box',
-      boost_pad: 'boost_pad',
-      banana: 'banana',
-      spawn: 'barrier',
-      checkpoint: 'barrier',
-    };
+    const authoredCheckpoints = Array.isArray(data.checkpoints)
+      ? data.checkpoints.filter((checkpoint) => checkpoint?.position && checkpoint.authored)
+      : [];
     const startPositions = deriveTrackSpawnPositions(playtestSegments, data.startPositions);
+    const scaledSegments = playtestSegments.map((segment) => ({
+      ...segment,
+      position: scalePosition(segment.position),
+      scale: Number(segment.scale || 1) * PLAYTEST_WORLD_SCALE,
+    }));
+    const scaledCheckpoints = (authoredCheckpoints.length
+      ? authoredCheckpoints
+      : this._generateCheckpoints(
+          playtestSegments.map((segment, index) => ({
+            id: segment.id || index + 1,
+            position: { ...segment.position },
+          })),
+        )
+    ).map((checkpoint) => ({
+      ...checkpoint,
+      position: scalePosition(checkpoint.position),
+      width: Number(checkpoint.width || 0) * PLAYTEST_WORLD_SCALE,
+    }));
 
     return {
       ...data,
       builderPreset: preset,
-      segments: playtestSegments,
-      checkpoints: this._generateCheckpoints(
-        playtestSegments.map((segment, index) => ({
-          id: segment.id || index + 1,
-          position: { ...segment.position },
-        })),
-      ),
-      startPositions,
-      obstacles: data.obstacles
-        .filter((obstacle) => obstacle?.type !== 'spawn' && obstacle?.type !== 'checkpoint')
-        .map((obstacle) => ({
-        ...obstacle,
-        type: obstacleTypeMap[obstacle.type] || 'barrier',
+      roadCells: data.roadCells.map((roadCell) => ({
+        ...roadCell,
+        position: scalePosition(roadCell.position),
       })),
+      segments: scaledSegments,
+      checkpoints: scaledCheckpoints,
+      obstacles: data.obstacles.map((obstacle) => ({
+        ...obstacle,
+        type: String(obstacle?.type || 'barrier'),
+        position: scalePosition(obstacle.position),
+        scale: Number(obstacle?.scale || 1) * PLAYTEST_WORLD_SCALE,
+      })),
+      startPositions: startPositions.map((start) => ({
+        ...start,
+        position: scalePosition(start.position),
+        heading: degreesToRadians(start.heading),
+      })),
+      bounds: scaleBounds(data.bounds),
       playtestMode: preset === 'track' ? 'race' : 'battle',
+      wallColliders: generateWallColliders().map((w) => ({
+        position: scalePosition(w.position),
+        size: scalePosition(w.size),
+        rotation: w.rotation,
+      })),
     };
   }
 
@@ -356,6 +299,16 @@ export class Serializer {
     } catch { return null; }
   }
 
+  /** Export road cells as compact base64url string for URL sharing. */
+  exportCompact() {
+    return encodeCells();
+  }
+
+  /** Import road cells from compact base64url string. Returns cell array. */
+  importCompact(encoded) {
+    return decodeCells(encoded);
+  }
+
   /** Save to localStorage named slot. */
   saveToSlot(name, author, options = {}) {
     const saves = this._getSaves();
@@ -383,6 +336,33 @@ export class Serializer {
       name: val.data?.name || 'Untitled',
       author: val.data?.author || 'Unknown',
       savedAt: val.savedAt,
+      preset: val.data?.builderPreset === 'track' ? 'track' : 'arena',
+      preview: {
+        roadCells: (val.data?.roadCells || []).slice(0, 256).map((cell) => ({
+          position: {
+            x: Number(cell?.position?.x || 0),
+            z: Number(cell?.position?.z || 0),
+          },
+        })),
+        segments: (val.data?.segments || []).slice(0, 128).map((segment) => ({
+          position: {
+            x: Number(segment?.position?.x || 0),
+            z: Number(segment?.position?.z || 0),
+          },
+        })),
+        obstacles: (val.data?.obstacles || []).slice(0, 96).map((obstacle) => ({
+          position: {
+            x: Number(obstacle?.position?.x || 0),
+            z: Number(obstacle?.position?.z || 0),
+          },
+        })),
+        startPositions: (val.data?.startPositions || []).slice(0, 16).map((start) => ({
+          position: {
+            x: Number(start?.position?.x || 0),
+            z: Number(start?.position?.z || 0),
+          },
+        })),
+      },
     }));
   }
 
@@ -440,8 +420,9 @@ export class Serializer {
     } catch { return {}; }
   }
 
-  _computeBounds(segments, roadCells, obstacles) {
+  _computeBounds(checkpoints, segments, roadCells, obstacles) {
     const all = [
+      ...checkpoints.map(c => c.position),
       ...segments.map(s => s.position),
       ...roadCells.map(r => r.position),
       ...obstacles.map(o => o.position),
@@ -471,25 +452,5 @@ export class Serializer {
         position: { ...rc.position },
         width: 12,
       }));
-  }
-
-  /** Validate track data and return an array of warning strings. */
-  validate(options = {}) {
-    const data = this.buildTrackData('__validate__', '__validate__', options);
-    const warnings = [];
-    const hasRoad = data.roadCells?.length > 0;
-    const hasSegments = data.segments?.length > 0;
-    if (!hasRoad && !hasSegments) warnings.push('Track is empty — place road cells or segments.');
-    if (!data.startPositions?.length) {
-      const spawns = this._graph.getAll().filter(e => e.category === 'spawn');
-      if (!spawns.length) warnings.push('No spawn point — the kart will spawn at the first segment.');
-    }
-    if (hasRoad || hasSegments) {
-      const cells = new Set();
-      for (const rc of (data.roadCells || [])) cells.add(`${rc.position.x}:${rc.position.z}`);
-      for (const seg of (data.segments || [])) cells.add(`${seg.position.x}:${seg.position.z}`);
-      if (cells.size === 1) warnings.push('Only 1 cell placed — add more segments to form a track.');
-    }
-    return warnings;
   }
 }

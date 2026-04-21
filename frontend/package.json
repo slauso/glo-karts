@@ -13,11 +13,14 @@
     "preview": "vite preview",
     "test:lobby:regression": "node scripts/lobby-ux-regression.mjs",
     "test:e2e:install": "playwright install chromium",
+    "test:e2e:battle-4p-combat": "node scripts/battle-4p-combat-probe.mjs",
     "test:e2e:lobby": "node scripts/lobby-ux-regression.mjs",
     "test:e2e:hydra-lobby": "node scripts/hydra-lobby-smoke.mjs",
     "test:e2e:hydra-handoff": "node scripts/hydra-live-handoff.mjs",
     "test:e2e:postgame-host": "node scripts/postgame-host-settings-regression.mjs",
-    "test:e2e:builder-parity": "node scripts/builder-live-parity-audit.mjs"
+    "test:e2e:builder-parity": "node scripts/builder-live-parity-audit.mjs",
+    "test:e2e:builder-direct-playtest": "node scripts/builder-direct-playtest-smoke.mjs",
+    "test:e2e:builder-direct-playtest:ci": "node scripts/builder-direct-playtest-ci.mjs"
   },
   "devDependencies": {
     "@playwright/test": "^1.58.2",

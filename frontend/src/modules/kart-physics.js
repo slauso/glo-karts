@@ -460,10 +460,15 @@ export function raycastGround(havokPlugin, transform, drift, PhysicsRaycastResul
 export function applyKartDriving(body, transform, input, dt, drift, mults) {
   const spdMult = mults?.spdMult ?? 1.0;
   const strMult = mults?.strMult ?? 1.0;
+  const handling = mults?.handling || null;
+  const turnResponse = Number(handling?.turnResponse ?? 1);
+  const lateralGrip = Number(handling?.lateralGrip ?? LATERAL_GRIP);
+  const driftGripMul = Number(handling?.driftGripMul ?? DRIFT_GRIP_MUL);
+  const velocityAlign = Number(handling?.velocityAlign ?? 0);
 
   const effectiveMaxSpeed  = MAX_SPEED * spdMult;
   const effectiveAccel     = ACCEL_FORCE * spdMult;
-  const effectiveTurnBase  = TURN_BASE * strMult;
+  const effectiveTurnBase  = TURN_BASE * strMult * turnResponse;
 
   let currentVel    = body.getLinearVelocity();
   let currentAngVel = body.getAngularVelocity();
@@ -672,9 +677,20 @@ export function applyKartDriving(body, transform, input, dt, drift, mults) {
       rightDir = new Vector3(1, 0, 0);
     }
     const latSpeed = Vector3.Dot(nextVel, rightDir);
-    const grip = input.drift ? LATERAL_GRIP * DRIFT_GRIP_MUL : LATERAL_GRIP;
+    const grip = input.drift ? lateralGrip * driftGripMul : lateralGrip;
     nextVel.x -= rightDir.x * latSpeed * grip;
     nextVel.z -= rightDir.z * latSpeed * grip;
+  }
+
+  if (drift.isGrounded && velocityAlign > 0 && Math.abs(input.steer) > 0.01) {
+    const horizontalSpeed = Math.sqrt((nextVel.x ** 2) + (nextVel.z ** 2));
+    if (horizontalSpeed > 0.5) {
+      const desiredVelX = driveDir.x * horizontalSpeed;
+      const desiredVelZ = driveDir.z * horizontalSpeed;
+      const blend = Math.max(0, Math.min(1, velocityAlign * dt * 60));
+      nextVel.x += (desiredVelX - nextVel.x) * blend;
+      nextVel.z += (desiredVelZ - nextVel.z) * blend;
+    }
   }
 
   // ── 5. Downforce (grounded only) ─────────────────────────────────────

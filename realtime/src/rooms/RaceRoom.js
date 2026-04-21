@@ -28,14 +28,79 @@ const TRACK_SURFACE_Y = {
   test_box: 1.0,
   glo_circuit: 1.0,
 };
+const CUSTOM_TRACK_ID = "custom_import";
+const DEFAULT_RACE_TRACK = "test_box";
+const BUILDER_PLAYTEST_COUNTDOWN_MS = 2500;
+
+function parseCustomTrackData(raw) {
+  if (!raw) return null;
+  if (typeof raw === "object") return raw;
+  try {
+    return JSON.parse(String(raw));
+  } catch {
+    return null;
+  }
+}
+
+function normalizeCustomSpawn(spawn) {
+  if (!spawn) return null;
+  const position = spawn.position && typeof spawn.position === "object"
+    ? spawn.position
+    : spawn;
+  const x = Number(position.x);
+  const y = Number(position.y ?? 0);
+  const z = Number(position.z);
+  if (![x, y, z].every(Number.isFinite)) return null;
+  const heading = Number(spawn.heading);
+  return {
+    x,
+    y,
+    z,
+    heading: Number.isFinite(heading) ? heading : undefined,
+  };
+}
+
+function normalizeCustomObstacle(obstacle) {
+  if (!obstacle?.position || typeof obstacle.position !== "object") return null;
+  const x = Number(obstacle.position.x);
+  const y = Number(obstacle.position.y ?? 0);
+  const z = Number(obstacle.position.z);
+  if (![x, y, z].every(Number.isFinite)) return null;
+  return { x, y, z };
+}
 
 export class RaceRoom extends Room {
   onCreate(options = {}) {
+    const countdownOptions = {
+      ...options,
+      countdownMs: options.countdownMs ?? (this.roomName?.startsWith("builder_") ? BUILDER_PLAYTEST_COUNTDOWN_MS : undefined),
+    };
     const state = new RaceState();
-    state.trackId = options.trackId || "test_box";
+    state.trackId = options.trackId || DEFAULT_RACE_TRACK;
     state.totalLaps = Math.min(Math.max(Number(options.totalLaps) || 3, 1), 10);
     this.setState(state);
-    this._surfaceY = TRACK_SURFACE_Y[state.trackId] ?? 1.0;
+    this._customTrackData = state.trackId === CUSTOM_TRACK_ID
+      ? parseCustomTrackData(options.customTrackData)
+      : null;
+    this._customSpawnPoints = Array.isArray(this._customTrackData?.startPositions)
+      ? this._customTrackData.startPositions.map(normalizeCustomSpawn).filter(Boolean)
+      : [];
+    this._customItemBoxPositions = Array.isArray(this._customTrackData?.obstacles)
+      ? this._customTrackData.obstacles
+          .filter((obstacle) => String(obstacle?.type || "") === "item_box")
+          .map(normalizeCustomObstacle)
+          .filter(Boolean)
+      : [];
+    this._surfaceY = this._customSpawnPoints[0]?.y ?? TRACK_SURFACE_Y[state.trackId] ?? 1.0;
+    this._positionGuardHalf = 80;
+    if (this._customTrackData?.bounds?.min && this._customTrackData?.bounds?.max) {
+      const spanX = Math.abs(Number(this._customTrackData.bounds.max.x) - Number(this._customTrackData.bounds.min.x));
+      const spanZ = Math.abs(Number(this._customTrackData.bounds.max.z) - Number(this._customTrackData.bounds.min.z));
+      const customHalf = Math.max(spanX, spanZ) * 0.5 + 20;
+      if (Number.isFinite(customHalf)) {
+        this._positionGuardHalf = Math.max(this._positionGuardHalf, customHalf);
+      }
+    }
 
     const syncConfig = configureRealtimeRoom(this, options, { authoritative: true });
     // Minimum elapsed time (ms) before a new lap is accepted — prevents double-trigger
@@ -43,7 +108,7 @@ export class RaceRoom extends Room {
     this.inputBySession = new Map();
     this.countdownActive = false;
     this.staleInputMs = syncConfig.staleInputMs || REALTIME_SYNC_DEFAULTS.staleInputMs;
-    this.countdownDurationMs = getRealtimeCountdownMs(options);
+    this.countdownDurationMs = getRealtimeCountdownMs(countdownOptions);
     // Task 2.2: per-client rate limiter
     this._rateLimiter = new RateLimiter();
     this._kartCrashCooldownUntil = new Map();
@@ -56,12 +121,17 @@ export class RaceRoom extends Room {
       const serverNow = Date.now();
       const startAt = serverNow + durationMs;
       this._countdownStartAt = startAt;
+      this.state.countdownActive = true;
+      this.state.countdownDurationMs = durationMs;
+      this.state.countdownStartAt = startAt;
 
       this.broadcast("startSequence", { durationMs, startAt, serverNow });
 
       this.clock.setTimeout(() => {
         this.state.started = true;
         this.countdownActive = false;
+        this.state.countdownActive = false;
+        this.state.countdownStartAt = 0;
         this.broadcast("matchLive", { startedAt: Date.now() });
       }, durationMs);
     });
@@ -74,12 +144,17 @@ export class RaceRoom extends Room {
       const serverNow = Date.now();
       const startAt = serverNow + durationMs;
       this._countdownStartAt = startAt;
+      this.state.countdownActive = true;
+      this.state.countdownDurationMs = durationMs;
+      this.state.countdownStartAt = startAt;
 
       this.broadcast("startSequence", { durationMs, startAt, serverNow });
 
       this.clock.setTimeout(() => {
         this.state.started = true;
         this.countdownActive = false;
+        this.state.countdownActive = false;
+        this.state.countdownStartAt = 0;
         this.broadcast("matchLive", { startedAt: Date.now() });
       }, durationMs);
     });
@@ -329,6 +404,21 @@ export class RaceRoom extends Room {
   }
 
   spawnItemBoxes() {
+    if (this._customItemBoxPositions.length) {
+      this._customItemBoxPositions.forEach((pos, index) => {
+        const id = `box_${index}`;
+        const box = new EntityState();
+        box.id = id;
+        box.type = "item_box";
+        box.active = true;
+        box.x = pos.x;
+        box.y = Number.isFinite(pos.y) ? pos.y : this._surfaceY + 0.9;
+        box.z = pos.z;
+        this.state.entities.set(id, box);
+      });
+      return;
+    }
+
     // Spawn item boxes in rows at known positions relative to the track start.
     // Two rows of 4 boxes offset either side of the start-line so karts pass
     // through them naturally on each lap.
@@ -371,7 +461,12 @@ export class RaceRoom extends Room {
 
     const idx = this.state.players.size;
     const spawn = this.getSpawnPoint(this.maxClients, idx);
-    initializeAuthoritativeKart(p, { x: spawn.x, y: this._surfaceY, z: spawn.z });
+    initializeAuthoritativeKart(p, {
+      x: spawn.x,
+      y: Number.isFinite(spawn.y) ? spawn.y : this._surfaceY,
+      z: spawn.z,
+      heading: spawn.heading,
+    });
 
     this.state.players.set(client.sessionId, p);
     log('info', 'room_join', { room: 'race_room', roomId: this.roomId, sessionId: client.sessionId, name: p.name, players: this.state.players.size });
@@ -407,6 +502,16 @@ export class RaceRoom extends Room {
   }
 
   getSpawnPoint(maxPlayers, index) {
+    if (this._customSpawnPoints.length) {
+      const authoredSpawn = this._customSpawnPoints[index % this._customSpawnPoints.length];
+      return {
+        x: authoredSpawn.x,
+        y: authoredSpawn.y,
+        z: authoredSpawn.z,
+        heading: authoredSpawn.heading,
+      };
+    }
+
     const count = Math.max(2, Math.min(12, maxPlayers || 12));
     const angleStep = (Math.PI * 2) / count;
     const baseAngle = angleStep * (index % count);
@@ -445,6 +550,7 @@ export class RaceRoom extends Room {
     const now = Date.now();
     this.state.serverTime = now;
     noteRealtimeTick(this, deltaTime, now);
+    const sanitizeRacePosition = (prev, next) => sanitizePosition(prev, next, this._positionGuardHalf);
 
     this.state.players.forEach((p, id) => {
       const input = this.inputBySession.get(id);
@@ -456,11 +562,11 @@ export class RaceRoom extends Room {
 
       const authoritativeInput = getRealtimeControlInput(input, now, this.staleInputMs);
       p.steer = authoritativeInput.steer || 0;
-      applyAuthoritativeKartStep(p, authoritativeInput, deltaTime, sanitizePosition);
+      applyAuthoritativeKartStep(p, authoritativeInput, deltaTime, sanitizeRacePosition);
       if (inputFresh) noteProcessedInput(this, input, now);
     });
 
-    const kartCrashes = resolveAuthoritativeKartContacts(this.state.players, deltaTime, sanitizePosition);
+    const kartCrashes = resolveAuthoritativeKartContacts(this.state.players, deltaTime, sanitizeRacePosition);
     for (const crash of kartCrashes) {
       const pairKey = this._getKartCrashKey(crash.playerA.id, crash.playerB.id);
       if (now < (this._kartCrashCooldownUntil.get(pairKey) || 0)) continue;

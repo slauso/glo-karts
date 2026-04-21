@@ -14,6 +14,9 @@ import {
   ALL_TRACKS,
   CUSTOM_TRACK_ID,
 } from './modules/content-registry.js';
+import { initPageTransitions, navigateWithTransition } from './ui/page-transition.js';
+
+initPageTransitions();
 
 const DEFAULTS = {
   mode: 'battle',
@@ -27,6 +30,29 @@ const DEFAULTS = {
 };
 
 const BUILDER_LAUNCH_INTENT_KEY = 'gloBuilderLaunchIntent';
+const PERFORMANCE_MODE_STORAGE_KEY = 'gloPerformanceMode';
+const PERFORMANCE_MODE = Object.freeze({
+  AUTO: 'auto',
+  ULTRA_LOW: 'ultra_low',
+});
+
+function normalizePerformanceMode(value) {
+  return value === PERFORMANCE_MODE.ULTRA_LOW ? PERFORMANCE_MODE.ULTRA_LOW : PERFORMANCE_MODE.AUTO;
+}
+
+function getPerformanceModeMeta(mode) {
+  if (mode === PERFORMANCE_MODE.ULTRA_LOW) {
+    return {
+      summary: 'Ultra-Low',
+      note: 'Ultra-Low is active. Realtime battles will force the weakest-device graphics profile and aggressive resolution scaling.',
+    };
+  }
+
+  return {
+    summary: 'Auto Detect',
+    note: 'Auto Detect is active. GLO KARTS will choose the default device tier and adapt when the match gets heavy.',
+  };
+}
 
 const BATTLE_WEAPON_LIBRARY = [
   { id: 'bowling_ball', label: 'Bowling Ball', icon: '🎳' },
@@ -243,6 +269,7 @@ class RacingLobby {
     this.selectedCup = 'starter';
     this.selectedGlofluxTheme = 'nuclear_desert';
     this.splitScreenType = 'race';
+    this.performanceMode = normalizePerformanceMode(localStorage.getItem(PERFORMANCE_MODE_STORAGE_KEY) || sessionStorage.getItem(PERFORMANCE_MODE_STORAGE_KEY));
 
     this.currentLobbyCode = '';
     this.currentLobbyPrivacy = 'private';
@@ -290,6 +317,13 @@ class RacingLobby {
     this.joinSection = document.querySelector('.join-section');
     this.modeSelectorContainer = document.querySelector('.mode-selector-container');
     this.inlineSetup = document.getElementById('inline-setup');
+    this.performanceSettingsBtn = document.getElementById('performance-settings-btn');
+    this.performanceSettingsPanel = document.getElementById('performance-settings-panel');
+    this.performanceSettingsBackdrop = document.getElementById('performance-settings-backdrop');
+    this.performanceSettingsClose = document.getElementById('performance-settings-close');
+    this.performanceSettingsSummary = document.getElementById('performance-settings-summary');
+    this.performanceModeNote = document.getElementById('performance-mode-note');
+    this.performanceModeCards = Array.from(document.querySelectorAll('[data-performance-mode]'));
 
     this.playerList = document.getElementById('player-list');
     this.readyCountEl = document.getElementById('ready-count');
@@ -311,6 +345,8 @@ class RacingLobby {
         this.playerNameInput.classList.remove('ph-fade');
       }, 300);
     }, 2800);
+
+    this._syncPerformanceModeUI();
   }
 
   attachEventListeners() {
@@ -341,6 +377,18 @@ class RacingLobby {
     this.playBtn?.addEventListener('click', () => this.onPlayClicked());
     this.readyBtn?.addEventListener('click', () => this.toggleReady());
     this.startMatchBtn?.addEventListener('click', () => this.startMatch());
+    this.performanceSettingsBtn?.addEventListener('click', () => this._togglePerformanceSettings());
+    this.performanceSettingsBackdrop?.addEventListener('click', () => this._togglePerformanceSettings(false));
+    this.performanceSettingsClose?.addEventListener('click', () => this._togglePerformanceSettings(false));
+    this.performanceModeCards.forEach((card) => {
+      card.addEventListener('click', () => {
+        this._setPerformanceMode(card.getAttribute('data-performance-mode'));
+      });
+    });
+
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') this._togglePerformanceSettings(false);
+    });
 
     document.addEventListener('kartChanged', (event) => {
       if (!event.detail?.kartId) return;
@@ -419,7 +467,44 @@ class RacingLobby {
   }
 
   _openBuilder() {
-    window.location.href = 'builder.html';
+    void navigateWithTransition('builder.html');
+  }
+
+  _togglePerformanceSettings(forceOpen) {
+    if (!this.performanceSettingsPanel) return;
+    const shouldOpen = typeof forceOpen === 'boolean'
+      ? forceOpen
+      : this.performanceSettingsPanel.classList.contains('hidden');
+    this.performanceSettingsPanel.classList.toggle('hidden', !shouldOpen);
+    this.performanceSettingsPanel.setAttribute('aria-hidden', shouldOpen ? 'false' : 'true');
+    this.performanceSettingsBtn?.setAttribute('aria-expanded', shouldOpen ? 'true' : 'false');
+  }
+
+  _setPerformanceMode(nextMode, { persist = true, sync = true } = {}) {
+    const normalized = normalizePerformanceMode(nextMode);
+    this.performanceMode = normalized;
+
+    if (persist) {
+      localStorage.setItem(PERFORMANCE_MODE_STORAGE_KEY, normalized);
+      sessionStorage.setItem(PERFORMANCE_MODE_STORAGE_KEY, normalized);
+    }
+
+    this._syncPerformanceModeUI();
+
+    if (sync && this.room && this.isHost) {
+      this.sendSettingsUpdate();
+    }
+  }
+
+  _syncPerformanceModeUI() {
+    const meta = getPerformanceModeMeta(this.performanceMode);
+    if (this.performanceSettingsSummary) this.performanceSettingsSummary.textContent = meta.summary;
+    if (this.performanceModeNote) this.performanceModeNote.textContent = meta.note;
+    this.performanceModeCards.forEach((card) => {
+      const selected = normalizePerformanceMode(card.getAttribute('data-performance-mode')) === this.performanceMode;
+      card.classList.toggle('is-selected', selected);
+      card.setAttribute('aria-checked', selected ? 'true' : 'false');
+    });
   }
 
   _syncSelectedMapUI(mapId) {
@@ -471,6 +556,7 @@ class RacingLobby {
     this.selectedBattleType = intent.battleType || this.selectedBattleType;
     this.selectedMaxPlayers = Math.max(1, Math.min(12, Number(intent.maxPlayers || this.selectedMaxPlayers || DEFAULTS.maxPlayers)));
     this.selectedLoadout = intent.loadoutId || this.selectedLoadout;
+    this._setPerformanceMode(intent.performanceMode || this.performanceMode, { persist: true, sync: false });
 
     const battleTypeEl = document.getElementById('battle-type-select');
     if (battleTypeEl) battleTypeEl.value = this.selectedBattleType;
@@ -693,6 +779,7 @@ class RacingLobby {
       this.selectedBattleType = state.battleType || this.selectedBattleType;
       this.selectedMaxPlayers = Number(state.maxPlayers || this.selectedMaxPlayers || 12);
       this.selectedLoadout = state.loadoutId || this.selectedLoadout;
+      this.performanceMode = normalizePerformanceMode(state.performanceMode || this.performanceMode);
       if (this.selectedLoadout === 'custom') {
         this.selectedCustomWeapons = new Set(syncedWeaponPool);
       }
@@ -754,7 +841,7 @@ class RacingLobby {
         sessionStorage.setItem('customTrackData', gameConfig.customTrackData);
       }
       // Online modes always go to realtime.html
-      window.location.href = getPageForMode(this.selectedModeId) || 'realtime.html';
+      void navigateWithTransition(getPageForMode(this.selectedModeId) || 'realtime.html');
     });
 
     room.onLeave(() => {
@@ -942,6 +1029,7 @@ class RacingLobby {
       radarEnabled,
       autoAim,
       oneHitKills,
+      performanceMode: this.performanceMode,
       weaponPool,
       customTrackData,
     };
@@ -1256,6 +1344,8 @@ class RacingLobby {
       this._syncCustomWeaponPanel();
     }
 
+    this._setPerformanceMode(state.performanceMode || this.performanceMode, { persist: true, sync: false });
+
     this._updateBattleSummary();
 
     const glofluxMaxPlayersEl = document.getElementById('gloflux-player-cap');
@@ -1474,7 +1564,7 @@ class RacingLobby {
       `;
 
       if (mode.page && mode.category === 'tools') {
-        card.addEventListener('click', () => { window.location.href = mode.page; });
+        card.addEventListener('click', () => { void navigateWithTransition(mode.page); });
       } else {
         card.addEventListener('click', () => this._selectMode(mode.id));
       }

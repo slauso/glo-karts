@@ -12,6 +12,7 @@
  */
 
 import { FAMILY, FAMILY_META } from './glo-flux-powers.js';
+import { navigateWithTransition } from '../../ui/page-transition.js';
 
 // ── Menu State Machine ──────────────────────────────────────────────────────
 
@@ -178,7 +179,7 @@ function renderSplash(el, state, onStart) {
     renderScreen(state, onStart);
   });
   el.querySelector('#gf-back').addEventListener('click', () => {
-    window.location.href = 'index.html';
+    void navigateWithTransition('index.html');
   });
 }
 
