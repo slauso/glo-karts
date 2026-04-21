@@ -347,15 +347,20 @@ async function loadBaseGLB(fileUrl) {
   });
 
   // ── Auto-scale + center to fit one grid cell ──────────────
+  // Scale X and Z independently so every base template fills a full cell
+  // (prevents visible seams between neighbors when a GLB's native XZ
+  // aspect isn't exactly 1:1, e.g. skr-finish). Y uses the smaller of
+  // the two ratios so vertical proportions don't balloon.
   const bbox = new THREE.Box3().setFromObject(root);
   const size = bbox.getSize(new THREE.Vector3());
   const center = bbox.getCenter(new THREE.Vector3());
 
-  const rawXZ = Math.max(size.x, size.z) || 1;
-  const scale = GRID_SIZE / rawXZ;
+  const scaleX = GRID_SIZE / (size.x || 1);
+  const scaleZ = GRID_SIZE / (size.z || 1);
+  const scaleY = Math.min(scaleX, scaleZ);
 
-  if (Math.abs(scale - 1) > 0.05) {
-    root.scale.setScalar(scale);
+  if (Math.abs(scaleX - 1) > 0.01 || Math.abs(scaleZ - 1) > 0.01) {
+    root.scale.set(scaleX, scaleY, scaleZ);
     bbox.setFromObject(root);
     bbox.getCenter(center);
   }
@@ -419,9 +424,9 @@ function buildJunctionTemplate(key) {
   const barrierMat = new THREE.MeshStandardMaterial({ color: 0x444c58, roughness: 0.85 });
   const markMat = new THREE.MeshStandardMaterial({ color: 0xdddd44, roughness: 0.5 });
 
-  // Road platform
+  // Road platform — full-cell sized so adjacent pieces meet flush (no gaps).
   const deck = new THREE.Mesh(
-    new THREE.BoxGeometry(GRID_SIZE * 0.95, DECK_H, GRID_SIZE * 0.95), roadMat,
+    new THREE.BoxGeometry(GRID_SIZE, DECK_H, GRID_SIZE), roadMat,
   );
   deck.position.y = DECK_H / 2;
   deck.castShadow = true;
@@ -564,9 +569,9 @@ function buildPghBridgeTemplate(key) {
   const accentMat = new THREE.MeshStandardMaterial({ color: c.accent, roughness: 0.65, metalness: 0.2 });
   const cableMat = new THREE.MeshStandardMaterial({ color: c.cable, roughness: 0.6,  metalness: 0.4 });
 
-  // ─ Elevated road deck (spans full length) ─
+  // ─ Elevated road deck (spans full length; full-cell length so neighbors meet flush) ─
   const deck = new THREE.Mesh(
-    new THREE.BoxGeometry(DECK_W, DECK_T, LENGTH * 0.95),
+    new THREE.BoxGeometry(DECK_W, DECK_T, LENGTH),
     deckMat,
   );
   deck.position.y = PGH_ELEV;
@@ -582,10 +587,10 @@ function buildPghBridgeTemplate(key) {
   stripe.position.y = PGH_ELEV + DECK_T / 2 + 0.01;
   group.add(stripe);
 
-  // ─ Side rails (full length) ─
+  // ─ Side rails (full length so they flush-meet neighboring pieces) ─
   for (const side of [-1, 1]) {
     const rail = new THREE.Mesh(
-      new THREE.BoxGeometry(RAIL_W, RAIL_H, LENGTH * 0.95),
+      new THREE.BoxGeometry(RAIL_W, RAIL_H, LENGTH),
       steelMat,
     );
     rail.position.set(side * (DECK_W / 2 + RAIL_W / 2), PGH_ELEV + DECK_T / 2 + RAIL_H / 2, 0);
