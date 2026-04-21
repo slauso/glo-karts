@@ -33,6 +33,31 @@
       background: rgba(20,24,30,0.92); padding: 6px 14px; border-radius: 999px;
       font-size: 12px; color: #00e5ff; border: 1px solid #00e5ff33;
     }
+    .pause-overlay {
+      position: fixed; inset: 0;
+      background: rgba(10,13,18,0.82);
+      display: none; align-items: center; justify-content: center;
+      backdrop-filter: blur(4px);
+      z-index: 100;
+    }
+    .pause-overlay.open { display: flex; }
+    .pause-card {
+      background: #161b22; border: 1px solid #2a3340;
+      padding: 32px 40px; border-radius: 8px;
+      display: flex; flex-direction: column; gap: 14px; min-width: 260px;
+      text-align: center;
+    }
+    .pause-card h2 {
+      margin: 0 0 6px; font-size: 20px; letter-spacing: 0.1em;
+      color: #ff3aa1; text-transform: uppercase;
+    }
+    .pause-card button {
+      background: #1f2630; color: #e6edf3; border: 1px solid #2a3340;
+      padding: 10px 16px; border-radius: 4px; cursor: pointer; font-size: 14px;
+    }
+    .pause-card button:hover { border-color: #ff3aa1; background: #2a3340; }
+    .pause-card button.primary { background: #ff3aa1; border-color: #ff3aa1; color: #fff; font-weight: 600; }
+    .pause-card button.primary:hover { filter: brightness(1.1); }
   </style>
 </head>
 <body>
@@ -43,12 +68,20 @@
     <div>Lap: <b id="lap">—</b></div>
   </div>
   <div class="controls">
-    <div><b>W A S D</b> drive · <b>Space</b> brake · <b>R</b> respawn</div>
+    <div><b>W A S D</b> drive · <b>Space</b> brake · <b>R</b> respawn · <b>Esc</b> pause</div>
   </div>
   <div class="toolbar">
     <button id="backBtn">← Back to Editor</button>
   </div>
   <div class="room-banner" id="roomBanner" style="display:none;"></div>
+  <div class="pause-overlay" id="pauseOverlay">
+    <div class="pause-card">
+      <h2>Paused</h2>
+      <button class="primary" id="resumeBtn">Resume</button>
+      <button id="respawnBtn">Respawn Kart</button>
+      <button id="backBtn2">← Back to Editor</button>
+    </div>
+  </div>
   <script type="module" src="/src/editor3/play-main.js"></script>
 </body>
 </html>

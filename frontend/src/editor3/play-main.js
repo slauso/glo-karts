@@ -86,6 +86,9 @@ const track = loadTrack();
 
 // Build all segments: visual + collider
 const placedBodies = [];
+// Collect finish-line placements so we can detect lap completion.
+/** @type {{gx:number,gz:number,rot:number,forward:THREE.Vector3,center:THREE.Vector3}[]} */
+const finishLines = [];
 for (const p of track.all()) {
   const mesh = buildSegmentMesh(p.key);
   mesh.position.set(p.gx * TILE, 0, p.gz * TILE);
@@ -101,6 +104,17 @@ for (const p of track.all()) {
     body.material = groundMat;
     world.addBody(body);
     placedBodies.push(body);
+  }
+
+  if (SEGMENTS[p.key]?.isFinish) {
+    const rotY = -p.rot * Math.PI / 2;
+    // Segment-local forward is +Z; apply rotation to get world forward.
+    const forward = new THREE.Vector3(0, 0, 1).applyAxisAngle(new THREE.Vector3(0, 1, 0), rotY);
+    finishLines.push({
+      gx: p.gx, gz: p.gz, rot: p.rot,
+      forward,
+      center: new THREE.Vector3(p.gx * TILE, 0, p.gz * TILE),
+    });
   }
 }
 
@@ -228,6 +242,7 @@ const KEYMAP = {
 window.addEventListener('keydown', (e) => {
   if (KEYMAP[e.code]) { keys[KEYMAP[e.code]] = true; e.preventDefault(); }
   if (e.code === 'KeyR') respawn();
+  if (e.code === 'Escape') togglePause();
 });
 window.addEventListener('keyup', (e) => {
   if (KEYMAP[e.code]) { keys[KEYMAP[e.code]] = false; e.preventDefault(); }
@@ -284,14 +299,65 @@ function updateCamera() {
 // ── Render loop ───────────────────────────────────────────────
 let lastTime = performance.now();
 const speedEl = document.getElementById('speed');
+const lapEl = document.getElementById('lap');
+
+// Lap tracking: the kart must cross the finish line in the forward direction
+// after having left the "near-finish" region. Very forgiving, single-lap
+// tracks are the common case but we count up to 99 laps.
+/** @type {{lap:number, lastSide:number|null, lapStartedAt:number, bestLap:number|null}} */
+const lapState = { lap: 0, lastSide: null, lapStartedAt: performance.now(), bestLap: null };
+const LAP_NEAR_RADIUS = TILE * 1.4; // only sample when near the line
+
+function updateLapTracking() {
+  if (!finishLines.length) {
+    if (lapEl) lapEl.textContent = '—';
+    return;
+  }
+  const fl = finishLines[0];
+  const kart = chassisBody.position;
+  const dx = kart.x - fl.center.x;
+  const dz = kart.z - fl.center.z;
+  const planarDist = Math.sqrt(dx * dx + dz * dz);
+  if (planarDist > LAP_NEAR_RADIUS) {
+    // We've been clear of the line → arm the next crossing.
+    if (lapState.lastSide !== null) lapState.lastSide = lapState.lastSide; // no-op, keep sign
+    return;
+  }
+  // Signed distance along the forward axis (negative = behind, positive = past the line).
+  const side = Math.sign(dx * fl.forward.x + dz * fl.forward.z) || 0;
+  if (lapState.lastSide === null) {
+    lapState.lastSide = side;
+    return;
+  }
+  // Crossing from negative (before) to positive (past) counts as a lap.
+  if (lapState.lastSide < 0 && side > 0) {
+    const now = performance.now();
+    const elapsed = (now - lapState.lapStartedAt) / 1000;
+    // Ignore crossings within the first 2s (start-of-race double-count guard).
+    if (lapState.lap === 0 || elapsed > 2.0) {
+      lapState.lap += 1;
+      if (lapState.lap > 1 && (lapState.bestLap == null || elapsed < lapState.bestLap)) {
+        lapState.bestLap = elapsed;
+      }
+      lapState.lapStartedAt = now;
+    }
+  }
+  lapState.lastSide = side;
+  if (lapEl) {
+    const bestStr = lapState.bestLap ? ` · best ${lapState.bestLap.toFixed(2)}s` : '';
+    lapEl.textContent = `${lapState.lap}${bestStr}`;
+  }
+}
 
 function tick() {
   const now = performance.now();
   const dt = Math.min(0.05, (now - lastTime) / 1000);
   lastTime = now;
 
-  applyControls();
-  world.step(1 / 60, dt, 3);
+  if (!paused) {
+    applyControls();
+    world.step(1 / 60, dt, 3);
+  }
 
   // Sync chassis visual
   kartGroup.position.copy(chassisBody.position);
@@ -310,6 +376,7 @@ function tick() {
   // HUD
   const speed = Math.round(chassisBody.velocity.length() * 3.6);
   speedEl.textContent = speed;
+  if (!paused) updateLapTracking();
 
   // Auto-respawn if fallen off the world
   if (chassisBody.position.y < -20) respawn();
@@ -329,6 +396,24 @@ window.addEventListener('resize', resize);
 resize();
 
 document.getElementById('backBtn').addEventListener('click', () => {
+  window.location.href = '/editor.html';
+});
+
+// ── Pause overlay ─────────────────────────────────────────────
+let paused = false;
+const pauseOverlay = document.getElementById('pauseOverlay');
+function togglePause() {
+  paused = !paused;
+  if (pauseOverlay) pauseOverlay.classList.toggle('open', paused);
+  // Drop inputs so the kart doesn't coast with held keys after resume.
+  keys.w = keys.a = keys.s = keys.d = keys.space = false;
+}
+document.getElementById('resumeBtn')?.addEventListener('click', togglePause);
+document.getElementById('respawnBtn')?.addEventListener('click', () => {
+  respawn();
+  togglePause();
+});
+document.getElementById('backBtn2')?.addEventListener('click', () => {
   window.location.href = '/editor.html';
 });
 

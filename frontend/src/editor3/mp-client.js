@@ -20,7 +20,7 @@ const REALTIME_URL = (() => {
   return `${proto}//${window.location.hostname}:2567`;
 })();
 
-function makeGhost(scene, color, kartId = DEFAULT_KART_ID) {
+function makeGhost(scene, color, kartId = DEFAULT_KART_ID, name = 'Racer') {
   const group = new THREE.Group();
   // Immediate placeholder — a translucent box tinted to the peer color
   // so the ghost is visible at spawn even before the GLB arrives.
@@ -33,6 +33,12 @@ function makeGhost(scene, color, kartId = DEFAULT_KART_ID) {
   group.add(placeholder);
   scene.add(group);
 
+  // Name label (billboard sprite, always faces camera).
+  const label = makeNameLabel(name, color);
+  label.position.set(0, 2.0, 0);
+  group.add(label);
+  group.userData.label = label;
+
   // Swap in the real kart asynchronously.
   cloneKart(kartId, color).then((kart) => {
     group.remove(placeholder);
@@ -42,6 +48,42 @@ function makeGhost(scene, color, kartId = DEFAULT_KART_ID) {
   }).catch(() => { /* keep placeholder on failure */ });
 
   return group;
+}
+
+function makeNameLabel(text, accentColor) {
+  const canvas = document.createElement('canvas');
+  const W = 256, H = 64;
+  canvas.width = W; canvas.height = H;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = 'rgba(20,24,30,0.85)';
+  roundRect(ctx, 4, 4, W - 8, H - 8, 12);
+  ctx.fill();
+  ctx.strokeStyle = `#${new THREE.Color(accentColor).getHexString()}`;
+  ctx.lineWidth = 2;
+  roundRect(ctx, 4, 4, W - 8, H - 8, 12);
+  ctx.stroke();
+  ctx.fillStyle = '#ffffff';
+  ctx.font = 'bold 28px Inter, system-ui, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text || 'Racer', W / 2, H / 2 + 2);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.minFilter = THREE.LinearFilter;
+  const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false });
+  const sprite = new THREE.Sprite(mat);
+  sprite.scale.set(2.6, 0.65, 1);
+  sprite.renderOrder = 999;
+  return sprite;
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
 }
 
 function disposeGhost(scene, ghost) {
@@ -60,6 +102,9 @@ export async function joinRoom({ roomCode, track, chassisBody, scene, camera }) 
   // Pull the host's track payload off the URL (we already loaded it locally)
   const myName = sessionStorage.getItem('playerName') || 'Racer';
   const myColor = sessionStorage.getItem('playerColor') || '#ff3aa1';
+  const myKart = sessionStorage.getItem('studioSelectedKart')
+    || localStorage.getItem('studioSelectedKart')
+    || DEFAULT_KART_ID;
 
   let room;
   try {
@@ -67,6 +112,7 @@ export async function joinRoom({ roomCode, track, chassisBody, scene, camera }) 
       code: roomCode,
       name: myName,
       color: myColor,
+      kart: myKart,
       track: new URLSearchParams(window.location.search).get('track') || '',
     });
   } catch (err) {
@@ -88,10 +134,15 @@ export async function joinRoom({ roomCode, track, chassisBody, scene, camera }) 
     banner.textContent = `Room ${roomCode} · ${ghosts.size + 1} players`;
   }
 
-  room.onMessage('peerJoin', ({ id, color }) => {
+  room.onMessage('peerJoin', ({ id, color, kart, name }) => {
     if (id === room.sessionId) return;
     if (ghosts.has(id)) return;
-    const group = makeGhost(scene, new THREE.Color(color || '#00e5ff'));
+    const group = makeGhost(
+      scene,
+      new THREE.Color(color || '#00e5ff'),
+      kart || DEFAULT_KART_ID,
+      name || 'Racer',
+    );
     ghosts.set(id, {
       group,
       target: new THREE.Vector3(),

@@ -327,6 +327,7 @@ function refreshHud() {
   document.getElementById('infoSpawn').textContent = sp ? `(${sp.gx},${sp.gz})` : 'none';
   // Keep kart preview parented to the spawn tile.
   if (typeof positionKartPreview === 'function') positionKartPreview();
+  if (typeof refreshPlayButton === 'function') refreshPlayButton();
 }
 function refreshInspector() {
   const el = document.getElementById('inspector');
@@ -399,10 +400,40 @@ document.getElementById('shareBtn').addEventListener('click', async () => {
 });
 
 document.getElementById('playBtn').addEventListener('click', () => {
+  const issues = validateTrack(track);
+  if (issues.length) {
+    toast(issues[0]);
+    return;
+  }
   const code = encodeTrack(track);
   sessionStorage.setItem('gloKartsStudio.playtest', code);
   window.location.href = `/play.html?track=${code}&from=editor`;
 });
+
+/**
+ * Track validity check — returns a list of human-readable issues.
+ * Empty array = ready to playtest.
+ */
+function validateTrack(t) {
+  const out = [];
+  if (t.placements.size < 2) out.push('Add at least 2 pieces before playtesting');
+  if (!t.spawn?.()) out.push('Track needs a Spawn piece');
+  const hasFinish = Array.from(t.placements.values()).some(
+    (p) => SEGMENTS[p.key]?.isFinish,
+  );
+  if (!hasFinish) out.push('Track needs a Finish piece');
+  return out;
+}
+
+// Update play-button label to reflect readiness.
+function refreshPlayButton() {
+  const btn = document.getElementById('playBtn');
+  if (!btn) return;
+  const issues = validateTrack(track);
+  btn.disabled = false; // still allow clicks — we surface the error via toast
+  btn.title = issues.length ? issues.join(' · ') : 'Playtest this track';
+  btn.style.opacity = issues.length ? '0.65' : '1';
+}
 
 // ── Kart picker ───────────────────────────────────────────────
 const kartSelectEl = document.getElementById('kartSelect');

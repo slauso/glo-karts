@@ -64,8 +64,9 @@ export class StudioRoom extends Room {
     const peer = {
       sessionId: client.sessionId,
       id: client.sessionId,
-      name: String(options.name || "Racer"),
+      name: String(options.name || "Racer").slice(0, 24),
       color: String(options.color || "#ff3aa1"),
+      kart: String(options.kart || "mechatux").slice(0, 32),
       transform: null,
     };
     this.peers.set(client.sessionId, peer);
@@ -75,10 +76,10 @@ export class StudioRoom extends Room {
     // Tell the new joiner about everyone already here
     for (const other of this.peers.values()) {
       if (other.sessionId === client.sessionId) continue;
-      client.send("peerJoin", { id: other.id, name: other.name, color: other.color });
+      client.send("peerJoin", { id: other.id, name: other.name, color: other.color, kart: other.kart });
     }
     // And announce them to everyone
-    this.broadcast("peerJoin", { id: peer.id, name: peer.name, color: peer.color }, { except: client });
+    this.broadcast("peerJoin", { id: peer.id, name: peer.name, color: peer.color, kart: peer.kart }, { except: client });
   }
 
   onLeave(client) {
