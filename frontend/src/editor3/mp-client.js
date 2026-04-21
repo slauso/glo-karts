@@ -9,6 +9,8 @@
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
 import { Client } from 'colyseus.js';
+import { cloneKart } from './kart-loader.js';
+import { DEFAULT_KART_ID } from './kart-catalog.js';
 
 const SEND_HZ = 30;
 const REALTIME_URL = (() => {
@@ -18,30 +20,35 @@ const REALTIME_URL = (() => {
   return `${proto}//${window.location.hostname}:2567`;
 })();
 
-function makeGhost(scene, color) {
+function makeGhost(scene, color, kartId = DEFAULT_KART_ID) {
   const group = new THREE.Group();
-  const body = new THREE.Mesh(
+  // Immediate placeholder — a translucent box tinted to the peer color
+  // so the ghost is visible at spawn even before the GLB arrives.
+  const placeholder = new THREE.Mesh(
     new THREE.BoxGeometry(1.2, 0.6, 2.0),
-    new THREE.MeshStandardMaterial({ color, transparent: true, opacity: 0.85 }),
+    new THREE.MeshStandardMaterial({ color, transparent: true, opacity: 0.6 }),
   );
-  body.castShadow = true;
-  group.add(body);
-  const head = new THREE.Mesh(
-    new THREE.SphereGeometry(0.22, 12, 10),
-    new THREE.MeshStandardMaterial({ color: 0xffffff }),
-  );
-  head.position.set(0, 0.5, -0.1);
-  group.add(head);
+  placeholder.castShadow = true;
+  placeholder.position.y = 0.3;
+  group.add(placeholder);
   scene.add(group);
+
+  // Swap in the real kart asynchronously.
+  cloneKart(kartId, color).then((kart) => {
+    group.remove(placeholder);
+    placeholder.geometry.dispose();
+    placeholder.material.dispose();
+    group.add(kart);
+  }).catch(() => { /* keep placeholder on failure */ });
+
   return group;
 }
 
 function disposeGhost(scene, ghost) {
   scene.remove(ghost);
-  ghost.traverse((c) => {
-    if (c.geometry) c.geometry.dispose();
-    if (c.material) c.material.dispose();
-  });
+  // Note: we intentionally do NOT dispose geometries/materials — kart
+  // clones share them with the cached template, and disposing here
+  // would break subsequent clones.
 }
 
 export async function joinRoom({ roomCode, track, chassisBody, scene, camera }) {

@@ -1,0 +1,157 @@
+/**
+ * kart-loader.js — Shared kart GLB loader for editor3 / play3.
+ *
+ * Uses a singleton GLTFLoader + per-id promise cache. Auto-scales each
+ * loaded kart so its longest horizontal dimension matches a target length
+ * (so every STK model fits the same physics chassis regardless of its
+ * native scale). Returns a fresh cloneable group per call.
+ */
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js';
+import { getKart, KARTS } from './kart-catalog.js';
+
+const loader = new GLTFLoader();
+/** @type {Map<string, Promise<THREE.Group>>} */
+const cache = new Map();
+
+/** Target chassis length in world units (matches play-main chassis 2*HZ = 2.0). */
+export const KART_TARGET_LENGTH = 2.0;
+
+/**
+ * Load + prep a kart template. Resolves to a THREE.Group that has been
+ * normalized so the model sits on y=0 (wheels on ground), faces -Z
+ * (driving forward), and fits within KART_TARGET_LENGTH along its
+ * longest horizontal axis.
+ *
+ * Caller should clone (via cloneKart) before adding to scene — do NOT
+ * add the template itself to the scene graph.
+ * @param {string} kartId
+ * @returns {Promise<THREE.Group>}
+ */
+export function loadKartTemplate(kartId) {
+  const id = getKart(kartId).id;
+  if (cache.has(id)) return cache.get(id);
+
+  const promise = new Promise((resolve, reject) => {
+    const path = getKart(id).modelPath;
+    loader.load(
+      path,
+      (gltf) => resolve(prepareKartScene(gltf.scene, id)),
+      undefined,
+      (err) => {
+        console.warn(`[kart-loader] failed to load ${id} at ${path}:`, err);
+        reject(err);
+      },
+    );
+  });
+
+  cache.set(id, promise);
+  return promise;
+}
+
+/**
+ * Returns a fresh clone suitable for adding to the scene. Uses
+ * SkeletonUtils so skinned meshes (many STK karts have skeletons) clone
+ * correctly. Falls back to a placeholder box if the load failed.
+ * @param {string} kartId
+ * @param {THREE.ColorRepresentation} [accent]
+ * @returns {Promise<THREE.Group>}
+ */
+export async function cloneKart(kartId, accent = 0xff3aa1) {
+  try {
+    const template = await loadKartTemplate(kartId);
+    const clone = cloneSkinned(template);
+    clone.userData.kartId = kartId;
+    // Enable shadow casting on every mesh in the clone
+    clone.traverse((child) => {
+      if (child.isMesh) {
+        child.castShadow = true;
+        child.receiveShadow = true;
+      }
+    });
+    return clone;
+  } catch {
+    return makePlaceholderKart(accent);
+  }
+}
+
+function prepareKartScene(scene, id) {
+  const root = new THREE.Group();
+  root.name = `kart-${id}`;
+
+  // Lift every top-level child into our root so we own the hierarchy.
+  while (scene.children.length) {
+    root.add(scene.children[0]);
+  }
+
+  // Compute bbox and normalize: center horizontally on origin,
+  // drop to y=0, scale so longest horizontal dim = KART_TARGET_LENGTH.
+  root.updateMatrixWorld(true);
+  const bbox = new THREE.Box3().setFromObject(root);
+  const size = new THREE.Vector3();
+  const center = new THREE.Vector3();
+  bbox.getSize(size);
+  bbox.getCenter(center);
+
+  const longestXZ = Math.max(size.x, size.z) || 1;
+  const scale = KART_TARGET_LENGTH / longestXZ;
+
+  // Wrap in scaler + translator groups so downstream clones inherit transforms.
+  const scaler = new THREE.Group();
+  scaler.scale.setScalar(scale);
+
+  // Translate so horizontal center sits at origin and base sits on y=0.
+  root.position.set(
+    -center.x,
+    -bbox.min.y,
+    -center.z,
+  );
+
+  scaler.add(root);
+
+  // Many STK karts face +Z in their own GLB; the RaycastVehicle forward
+  // is -Z in our world. If a kart ends up backwards, override via
+  // userData.facing in a per-kart tweak map below.
+  const flipY = KART_FACING_OVERRIDES[id] === 'flip' ? Math.PI : 0;
+  scaler.rotation.y = flipY;
+
+  const template = new THREE.Group();
+  template.name = `kart-template-${id}`;
+  template.add(scaler);
+  return template;
+}
+
+/**
+ * Per-kart facing override. Most STK karts face -Z (forward) in their
+ * source GLB which matches our convention. If any kart spawns facing
+ * backward, add `<id>: 'flip'` here.
+ */
+const KART_FACING_OVERRIDES = {
+  // mechatux: 'flip',
+};
+
+function makePlaceholderKart(accent) {
+  const group = new THREE.Group();
+  const body = new THREE.Mesh(
+    new THREE.BoxGeometry(1.2, 0.6, 2.0),
+    new THREE.MeshStandardMaterial({ color: accent, roughness: 0.5, metalness: 0.2 }),
+  );
+  body.castShadow = true;
+  body.receiveShadow = true;
+  group.add(body);
+  const head = new THREE.Mesh(
+    new THREE.SphereGeometry(0.22, 12, 10),
+    new THREE.MeshStandardMaterial({ color: 0x00e5ff }),
+  );
+  head.position.set(0, 0.5, -0.2);
+  head.castShadow = true;
+  group.add(head);
+  return group;
+}
+
+/** Preload every kart listed in the catalog. Fire-and-forget. */
+export function preloadAllKarts(ids) {
+  const targets = Array.isArray(ids) ? ids : KARTS.map((k) => k.id);
+  for (const id of targets) loadKartTemplate(id).catch(() => {});
+}

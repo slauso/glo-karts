@@ -9,6 +9,8 @@ import * as CANNON from 'cannon-es';
 import { TILE, decodeTrack, Track } from './track-data.js';
 import { SEGMENTS } from './segments.js';
 import { buildSegmentMesh, buildSegmentBody, getDrivableTopY } from './segment-builder.js';
+import { cloneKart } from './kart-loader.js';
+import { resolveSelectedKartId, getKart } from './kart-catalog.js';
 
 // ── Scene ─────────────────────────────────────────────────────
 const canvas = document.getElementById('canvas');
@@ -81,7 +83,6 @@ function loadTrack() {
 }
 
 const track = loadTrack();
-document.getElementById('trackName').textContent = track.name;
 
 // Build all segments: visual + collider
 const placedBodies = [];
@@ -163,30 +164,55 @@ vehicle.addToWorld(world);
 
 // Wheel visuals + chassis visual
 const kartGroup = new THREE.Group();
-const chassisMesh = new THREE.Mesh(
+// Placeholder box + head — replaced in-place when the real GLB loads.
+const placeholderChassis = new THREE.Mesh(
   new THREE.BoxGeometry(CHASSIS_HX * 2, CHASSIS_HY * 2, CHASSIS_HZ * 2),
-  new THREE.MeshStandardMaterial({ color: 0xff3aa1, roughness: 0.5, metalness: 0.2 }),
+  new THREE.MeshStandardMaterial({ color: 0xff3aa1, roughness: 0.5, metalness: 0.2, transparent: true, opacity: 0.9 }),
 );
-chassisMesh.castShadow = true;
-kartGroup.add(chassisMesh);
-// Driver "head" decoration
-const head = new THREE.Mesh(
+placeholderChassis.castShadow = true;
+kartGroup.add(placeholderChassis);
+const placeholderHead = new THREE.Mesh(
   new THREE.SphereGeometry(0.22, 12, 10),
   new THREE.MeshStandardMaterial({ color: 0x00e5ff }),
 );
-head.position.set(0, CHASSIS_HY + 0.22, -0.1);
-head.castShadow = true;
-kartGroup.add(head);
+placeholderHead.position.set(0, CHASSIS_HY + 0.22, -0.1);
+placeholderHead.castShadow = true;
+kartGroup.add(placeholderHead);
 scene.add(kartGroup);
 
+// Swap in the real kart GLB once it loads.
+const SELECTED_KART_ID = resolveSelectedKartId();
+const selectedKart = getKart(SELECTED_KART_ID);
+document.getElementById('trackName').textContent = `${track.name} · ${selectedKart.label}`;
+let kartModel = null;
+cloneKart(SELECTED_KART_ID, 0xff3aa1).then((model) => {
+  // Raise so the chassis box center sits on the kart center of gravity:
+  // the kart template has y=0 at wheel contact, so shift down slightly
+  // so the RaycastVehicle rays (cast from chassis center downward) land
+  // near the visual wheels.
+  model.position.y = -CHASSIS_HY;
+  kartGroup.add(model);
+  kartModel = model;
+  // Hide placeholders but keep them in the tree for quick fallback.
+  placeholderChassis.visible = false;
+  placeholderHead.visible = false;
+  // Kart GLB includes its own wheels — hide the RaycastVehicle debug cylinders.
+  wheelsGroup.visible = false;
+}).catch((err) => {
+  console.warn('[play] kart load failed, keeping placeholder', err);
+});
+
 const wheelMeshes = [];
+const wheelsGroup = new THREE.Group();
+wheelsGroup.name = 'debug-wheels';
+scene.add(wheelsGroup);
 const wheelGeo = new THREE.CylinderGeometry(WHEEL_RADIUS, WHEEL_RADIUS, 0.25, 14);
 wheelGeo.rotateZ(Math.PI / 2);
 const wheelMatTHREE = new THREE.MeshStandardMaterial({ color: 0x111418, roughness: 0.9 });
 for (let i = 0; i < 4; i++) {
   const m = new THREE.Mesh(wheelGeo, wheelMatTHREE);
   m.castShadow = true;
-  scene.add(m);
+  wheelsGroup.add(m);
   wheelMeshes.push(m);
 }
 

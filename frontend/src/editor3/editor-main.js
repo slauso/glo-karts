@@ -9,6 +9,8 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { SEGMENTS, SEGMENT_KEYS, TILE } from './segments.js';
 import { buildSegmentMesh } from './segment-builder.js';
 import { Track, encodeTrack, decodeTrack } from './track-data.js';
+import { KARTS, resolveSelectedKartId } from './kart-catalog.js';
+import { preloadAllKarts, cloneKart } from './kart-loader.js';
 
 const STORAGE_KEY = 'gloKartsStudio.lastTrack';
 
@@ -323,6 +325,8 @@ function refreshHud() {
     ? `${b.maxX - b.minX + 1}×${b.maxZ - b.minZ + 1}` : '—';
   const sp = track.spawn();
   document.getElementById('infoSpawn').textContent = sp ? `(${sp.gx},${sp.gz})` : 'none';
+  // Keep kart preview parented to the spawn tile.
+  if (typeof positionKartPreview === 'function') positionKartPreview();
 }
 function refreshInspector() {
   const el = document.getElementById('inspector');
@@ -399,6 +403,58 @@ document.getElementById('playBtn').addEventListener('click', () => {
   sessionStorage.setItem('gloKartsStudio.playtest', code);
   window.location.href = `/play.html?track=${code}&from=editor`;
 });
+
+// ── Kart picker ───────────────────────────────────────────────
+const kartSelectEl = document.getElementById('kartSelect');
+let activeKartId = resolveSelectedKartId();
+if (kartSelectEl) {
+  for (const k of KARTS) {
+    const opt = document.createElement('option');
+    opt.value = k.id;
+    opt.textContent = k.label;
+    if (k.id === activeKartId) opt.selected = true;
+    kartSelectEl.appendChild(opt);
+  }
+  kartSelectEl.addEventListener('change', () => {
+    activeKartId = kartSelectEl.value;
+    try {
+      sessionStorage.setItem('studioSelectedKart', activeKartId);
+      localStorage.setItem('studioSelectedKart', activeKartId);
+    } catch {}
+    updateKartPreview(activeKartId);
+  });
+}
+
+// Preview kart on the spawn piece so users see their choice before playtesting.
+let kartPreviewMesh = null;
+const kartPreviewAnchor = new THREE.Group();
+scene.add(kartPreviewAnchor);
+async function updateKartPreview(id) {
+  const clone = await cloneKart(id);
+  if (kartPreviewMesh) {
+    kartPreviewAnchor.remove(kartPreviewMesh);
+    kartPreviewMesh.traverse((c) => {
+      if (c.geometry && c.geometry.dispose) c.geometry.dispose();
+      if (c.material && c.material.dispose) c.material.dispose();
+    });
+  }
+  kartPreviewMesh = clone;
+  kartPreviewAnchor.add(clone);
+  positionKartPreview();
+}
+function positionKartPreview() {
+  const spawn = track.spawn?.();
+  if (!spawn || !kartPreviewMesh) {
+    kartPreviewAnchor.visible = false;
+    return;
+  }
+  kartPreviewAnchor.visible = true;
+  kartPreviewAnchor.position.set(spawn.gx * TILE, 0.2, spawn.gz * TILE);
+  kartPreviewAnchor.rotation.y = -spawn.rot * Math.PI / 2;
+}
+// Kick off kart preload so the playtest swap is instant.
+preloadAllKarts([activeKartId]);
+updateKartPreview(activeKartId);
 
 // ── Resize + render loop ──────────────────────────────────────
 function resize() {
