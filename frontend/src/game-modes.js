@@ -78,10 +78,10 @@ export const MODE_REGISTRY = {
     id: 'race_online',
     category: 'online',
     label: 'Online Race',
-    desc: 'Legacy realtime race lobby kept hidden while battle remains the active shell.',
+    desc: 'Lap-based realtime race lobby. Pick a built track or one of the bundled circuits.',
     icon: 'fa-flag-checkered',
     page: 'realtime.html',
-    status: MODE_STATUS.HIDDEN,
+    status: MODE_STATUS.READY,
     selectors: { track: true, arena: false, battleSettings: false },
     requiresLobby: true,
     buildConfig(lobby) {
@@ -90,6 +90,8 @@ export const MODE_REGISTRY = {
         trackId: lobby.selectedMap,
         multiplayer: true,
         multiplayerProvider: 'colyseus',
+        maxPlayers: lobby.selectedMaxPlayers || 8,
+        totalLaps: parseInt(lobby?.selectedLaps || '3', 10) || 3,
       };
     },
   },
@@ -98,10 +100,10 @@ export const MODE_REGISTRY = {
     id: 'track_builder',
     category: 'tools',
     label: 'TinkerTracks',
-    desc: 'Build custom tracks without routing into the removed solo runtime.',
+    desc: 'Build custom tracks and arenas. Outputs playtest into either race or battle modes.',
     icon: 'fa-road',
     page: 'builder.html',
-    status: MODE_STATUS.HIDDEN,
+    status: MODE_STATUS.READY,
     selectors: { track: false, arena: false, battleSettings: false },
     requiresLobby: false,
     buildConfig() {
@@ -173,7 +175,7 @@ export const MODE_REGISTRY = {
   },
 };
 
-const VISIBLE_MODE_IDS = ['battle_online'];
+const VISIBLE_MODE_IDS = ['battle_online', 'race_online', 'track_builder'];
 
 export function getVisibleModes() {
   return VISIBLE_MODE_IDS.map((id) => MODE_REGISTRY[id]).filter(Boolean);
