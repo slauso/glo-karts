@@ -324,7 +324,9 @@ function updateLapTracking() {
     return;
   }
   // Signed distance along the forward axis (negative = behind, positive = past the line).
-  const side = Math.sign(dx * fl.forward.x + dz * fl.forward.z) || 0;
+  // Treat exact-zero as "past the line" so we never lose state when the kart is right on it.
+  const dot = dx * fl.forward.x + dz * fl.forward.z;
+  const side = dot >= 0 ? 1 : -1;
   if (lapState.lastSide === null) {
     lapState.lastSide = side;
     return;

@@ -117,4 +117,66 @@ test.describe('Track Studio (editor3) — Smoke', () => {
     expect(toastText.toLowerCase()).toMatch(/pieces|spawn|finish/);
     expect(page.url()).toContain('/editor.html');
   });
+
+  test('7 — lobby kart selection carries over to the editor', async ({ page }) => {
+    // Mimic what the lobby writes when the player picks a kart
+    await page.goto(`${BASE}/editor.html`, { waitUntil: 'networkidle' });
+    await page.evaluate(() => {
+      sessionStorage.setItem('selectedKart', 'konqi');
+      sessionStorage.setItem('studioSelectedKart', 'konqi');
+    });
+    await page.goto(`${BASE}/editor.html`, { waitUntil: 'networkidle' });
+    await waitForEditor(page);
+
+    const selected = await page.locator('#kartSelect').inputValue();
+    expect(selected).toBe('konqi');
+  });
+
+  test('8 — lap counter increments after two finish-line crossings', async ({ page }) => {
+    // Build a minimal track with a spawn and a finish two cells apart, then drive through.
+    await page.goto(`${BASE}/editor.html`, { waitUntil: 'networkidle' });
+    await waitForEditor(page);
+    await page.evaluate(() => {
+      const t = window.__studio.track;
+      t.clear();
+      t.place('spawn', 0, 0, 0);
+      t.place('straight', 0, 1, 0);
+      t.place('finish', 0, 2, 0);
+      window.__studio.rebuildAll();
+    });
+    await page.click('#playBtn');
+    await page.waitForURL(/play\.html/);
+    await waitForPlaytest(page);
+
+    // Initial lap HUD reads 0 once inside near-radius
+    // Teleport-cross the finish line twice with a > 2s gap (debounce guard)
+    await page.evaluate(() => {
+      const p = window.__play;
+      // Behind the line (spawn at z=0, finish at z=8 world; forward = +Z)
+      p.chassisBody.position.set(0, 1.2, 6);
+      p.chassisBody.velocity.set(0, 0, 0);
+    });
+    await page.waitForTimeout(200);
+    await page.evaluate(() => {
+      const p = window.__play;
+      p.chassisBody.position.set(0, 1.2, 9);
+    });
+    await page.waitForTimeout(300);
+    // Step 2: clear the radius then cross again
+    await page.evaluate(() => {
+      window.__play.chassisBody.position.set(100, 1.2, 100);
+    });
+    await page.waitForTimeout(300);
+    await page.evaluate(() => {
+      window.__play.chassisBody.position.set(0, 1.2, 6);
+    });
+    await page.waitForTimeout(300);
+    await page.evaluate(() => {
+      window.__play.chassisBody.position.set(0, 1.2, 9);
+    });
+    await page.waitForTimeout(2500); // > 2s debounce
+
+    const lapText = await page.locator('#lap').textContent();
+    expect(lapText).toMatch(/^1/);
+  });
 });

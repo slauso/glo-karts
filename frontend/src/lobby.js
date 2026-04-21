@@ -393,6 +393,11 @@ class RacingLobby {
     document.addEventListener('kartChanged', (event) => {
       if (!event.detail?.kartId) return;
       sessionStorage.setItem('selectedKart', event.detail.kartId);
+      // Mirror to editor3's storage so TinkerTracks picks up the lobby kart.
+      try {
+        sessionStorage.setItem('studioSelectedKart', event.detail.kartId);
+        localStorage.setItem('studioSelectedKart', event.detail.kartId);
+      } catch {}
       this.sendPlayerUpdate();
     });
 
@@ -467,7 +472,7 @@ class RacingLobby {
   }
 
   _openBuilder() {
-    void navigateWithTransition('builder.html');
+    void navigateWithTransition('editor.html');
   }
 
   _togglePerformanceSettings(forceOpen) {

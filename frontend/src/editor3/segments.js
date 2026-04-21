@@ -98,7 +98,9 @@ export const SEGMENTS = {
     label: 'Straight',
     category: 'road',
     span: { x: 1, z: 1 },
-    blocks: [deck(), ...curbStripes(), ...sideWalls()],
+    // No side walls: tracks tile cleanly when laid next to each other.
+    // Curbs are drawn so the road still visually frames the racing line.
+    blocks: [deck(), ...curbStripes()],
   },
 
   straight2: {
@@ -108,7 +110,6 @@ export const SEGMENTS = {
     blocks: [
       { ...deck(TILE * 2), pos: [0, ROAD_THICK / 2, TILE / 2] },
       ...curbStripes(TILE * 2).map(b => ({ ...b, pos: [b.pos[0], b.pos[1], b.pos[2] + TILE / 2] })),
-      ...sideWalls(TILE * 2).map(b => ({ ...b, pos: [b.pos[0], b.pos[1], b.pos[2] + TILE / 2] })),
     ],
   },
 
@@ -119,12 +120,12 @@ export const SEGMENTS = {
     blocks: [
       { ...deck(TILE * 4), pos: [0, ROAD_THICK / 2, TILE * 1.5] },
       ...curbStripes(TILE * 4).map(b => ({ ...b, pos: [b.pos[0], b.pos[1], b.pos[2] + TILE * 1.5] })),
-      ...sideWalls(TILE * 4).map(b => ({ ...b, pos: [b.pos[0], b.pos[1], b.pos[2] + TILE * 1.5] })),
     ],
   },
 
-  // Quarter-turn corner: travel enters at -Z edge, exits at -X edge
-  // Approximated by a quarter ring of small deck quads (8 segments).
+  // L-bend corner. Default (cornerL) enters at the -Z edge and exits at the -X edge.
+  // Built as a full-cell flat deck so it tiles seamlessly with neighbouring straights.
+  // The inside-edge curb is drawn to telegraph the turn direction.
   corner: {
     label: 'Corner L',
     category: 'road',
@@ -143,8 +144,6 @@ export const SEGMENTS = {
     label: 'Ramp Up',
     category: 'height',
     span: { x: 1, z: 2 },
-    // Two-cell ramp climbing from y=0 at -Z edge to y=TILE at +Z edge
-    // Implemented as a tilted box bridging the two cells.
     blocks: rampBlocks(0, TILE * 0.6, TILE * 2),
   },
 
@@ -162,12 +161,9 @@ export const SEGMENTS = {
     span: { x: 1, z: 1 },
     blocks: [
       { kind: 'box', size: [ROAD_WIDTH, ROAD_THICK, TILE], pos: [0, TILE * 0.6 + ROAD_THICK / 2, 0], color: ROAD_COLOR, drivable: true },
-      // support pillar
+      // support pillars (visual only)
       { kind: 'box', size: [ROAD_WIDTH * 0.8, TILE * 0.6, 0.3], pos: [0, TILE * 0.3, -TILE / 2 + 0.15], color: WALL_COLOR },
       { kind: 'box', size: [ROAD_WIDTH * 0.8, TILE * 0.6, 0.3], pos: [0, TILE * 0.3, TILE / 2 - 0.15], color: WALL_COLOR },
-      // side rails on top
-      { kind: 'box', size: [WALL_THICK, WALL_HEIGHT, TILE], pos: [(TILE / 2) - WALL_THICK / 2, TILE * 0.6 + ROAD_THICK + WALL_HEIGHT / 2, 0], color: WALL_COLOR },
-      { kind: 'box', size: [WALL_THICK, WALL_HEIGHT, TILE], pos: [-(TILE / 2) + WALL_THICK / 2, TILE * 0.6 + ROAD_THICK + WALL_HEIGHT / 2, 0], color: WALL_COLOR },
     ],
   },
 
@@ -179,12 +175,11 @@ export const SEGMENTS = {
       deck(),
       // Yellow checker line across the road
       { kind: 'box', size: [ROAD_WIDTH, 0.05, 0.5], pos: [0, ROAD_THICK + 0.03, 0], color: FINISH_COLOR, solid: false },
-      // Side gantry posts
-      { kind: 'box', size: [0.3, 2.5, 0.3], pos: [(TILE / 2) - 0.4, ROAD_THICK + 1.25, 0], color: FINISH_COLOR },
-      { kind: 'box', size: [0.3, 2.5, 0.3], pos: [-(TILE / 2) + 0.4, ROAD_THICK + 1.25, 0], color: FINISH_COLOR },
+      // Side gantry posts (decorative only — never block the kart)
+      { kind: 'box', size: [0.3, 2.5, 0.3], pos: [(TILE / 2) - 0.4, ROAD_THICK + 1.25, 0], color: FINISH_COLOR, solid: false },
+      { kind: 'box', size: [0.3, 2.5, 0.3], pos: [-(TILE / 2) + 0.4, ROAD_THICK + 1.25, 0], color: FINISH_COLOR, solid: false },
       // Top crossbar
-      { kind: 'box', size: [TILE, 0.3, 0.3], pos: [0, ROAD_THICK + 2.5, 0], color: FINISH_COLOR },
-      ...sideWalls(),
+      { kind: 'box', size: [TILE, 0.3, 0.3], pos: [0, ROAD_THICK + 2.5, 0], color: FINISH_COLOR, solid: false },
     ],
     isFinish: true,
   },
@@ -197,7 +192,6 @@ export const SEGMENTS = {
       deck(),
       // Glowing spawn marker
       { kind: 'box', size: [ROAD_WIDTH * 0.6, 0.05, ROAD_WIDTH * 0.6], pos: [0, ROAD_THICK + 0.03, 0], color: 0x00e5ff, solid: false },
-      ...sideWalls(),
     ],
     isSpawn: true,
   },
@@ -206,31 +200,50 @@ export const SEGMENTS = {
 // ── helpers for parametric pieces ──────────────────────────────
 
 function cornerBlocks(mirror) {
-  // Approximate quarter-turn road by 8 angled deck slabs
+  // Full-cell flat deck so corners tile seamlessly with straights, regardless
+  // of rotation. The "corner-ness" is telegraphed by a diagonal curb strip
+  // along the *inside* edge of the L-bend.
+  //
+  // Convention: corner L (mirror=false) connects the -Z edge (incoming) to
+  // the -X edge (outgoing). Corner R (mirror=true) connects -Z to +X.
+  // The inside corner is therefore at (-x_sign * TILE/2, 0, -TILE/2).
   const blocks = [];
-  const SEGMENTS = 8;
-  const radius = TILE / 2;
-  // Center of the turn: the inside corner. For "corner L" (default), turn from
-  // -Z entry to -X exit; arc center at (-TILE/2, 0, -TILE/2). For mirror it's +X exit.
-  const cx = mirror ? TILE / 2 : -TILE / 2;
-  const cz = -TILE / 2;
-  for (let i = 0; i < SEGMENTS; i++) {
-    const t = (i + 0.5) / SEGMENTS;
+  // Deck fills the whole cell
+  blocks.push({
+    kind: 'box',
+    size: [TILE, ROAD_THICK, TILE],
+    pos: [0, ROAD_THICK / 2, 0],
+    color: ROAD_COLOR,
+    drivable: true,
+  });
+  // Outside-edge curb: red/white stripes along the outside of the arc.
+  // For corner L (mirror=false) outside corner is at (+TILE/2, +TILE/2).
+  // For corner R (mirror=true) outside corner is at (-TILE/2, +TILE/2).
+  const outsideX = mirror ? -TILE / 2 : TILE / 2;
+  const outsideZ = TILE / 2;
+  const STRIPES = 5;
+  const stripeLen = 0.55;
+  for (let i = 0; i < STRIPES; i++) {
+    // Param from 0 → entry edge (-Z) to 1 → exit edge (±X)
+    const t = (i + 0.5) / STRIPES;
     const angle = mirror
-      ? Math.PI + Math.PI / 2 * t   // from +Z direction toward +X
-      : -Math.PI / 2 * t;            // from +Z direction toward -X (rotates clockwise looking down)
-    // Place slab tangent to arc. Use slab length = arc segment
-    const arcLen = (Math.PI / 2 * radius) / SEGMENTS;
-    const slabAngle = mirror ? -Math.PI / 2 * t : Math.PI / 2 * t;
-    const px = cx + Math.cos(mirror ? -Math.PI / 2 * t : Math.PI - Math.PI / 2 * t) * radius;
-    const pz = cz + Math.sin(mirror ? -Math.PI / 2 * t : Math.PI - Math.PI / 2 * t) * radius;
+      ? Math.PI + (Math.PI / 2) * t   // from -Z (pi) to +X (3pi/2)
+      : -(Math.PI / 2) * t + Math.PI; // from -Z (pi) to -X (pi/2)... adjust
+    // Compute stripe position along the outer arc of radius R = TILE (from inside corner)
+    const R = TILE * 0.85;
+    const insideX = -outsideX;
+    const insideZ = -outsideZ;
+    const px = insideX + Math.cos(angle) * R;
+    const pz = insideZ + Math.sin(angle) * R;
+    // Tangent angle for stripe orientation
+    const tan = angle + Math.PI / 2;
     blocks.push({
       kind: 'box',
-      size: [ROAD_WIDTH, ROAD_THICK, arcLen * 1.05],
-      pos: [px, ROAD_THICK / 2, pz],
-      rotY: slabAngle,
-      color: ROAD_COLOR,
-      drivable: true,
+      size: [0.18, 0.06, stripeLen],
+      pos: [px, ROAD_THICK + 0.03, pz],
+      rotY: tan,
+      color: i % 2 === 0 ? CURB_R : CURB_W,
+      solid: false,
     });
   }
   return blocks;

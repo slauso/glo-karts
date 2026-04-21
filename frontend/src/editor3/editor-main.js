@@ -521,4 +521,4 @@ refreshHud();
 updatePreview();
 
 // Expose for debugging
-window.__studio = { track, scene, camera, renderer };
+window.__studio = { track, scene, camera, renderer, rebuildAll, refreshHud, refreshPlayButton };
