@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GLO KARTS — Track Studio</title>
+  <link rel="icon" href="data:," />
+  <style>
+    :root {
+      --bg: #0e1116;
+      --panel: #161b22;
+      --panel-2: #1f2630;
+      --line: #2a3340;
+      --text: #e6edf3;
+      --muted: #8b96a3;
+      --accent: #ff3aa1;
+      --accent-2: #00e5ff;
+      --good: #3ddc84;
+      --warn: #f5a623;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font-family: 'Inter', system-ui, sans-serif; overflow: hidden; }
+    #app { display: grid; grid-template-columns: 260px 1fr 280px; grid-template-rows: 48px 1fr; height: 100vh; }
+    header {
+      grid-column: 1 / -1;
+      display: flex; align-items: center; gap: 12px;
+      padding: 0 16px;
+      background: var(--panel);
+      border-bottom: 1px solid var(--line);
+    }
+    header .brand { font-weight: 700; letter-spacing: 0.08em; color: var(--accent); }
+    header .brand .sub { color: var(--muted); margin-left: 8px; font-weight: 400; }
+    header input.name {
+      background: var(--panel-2); border: 1px solid var(--line); color: var(--text);
+      padding: 6px 10px; border-radius: 4px; min-width: 220px;
+    }
+    header .spacer { flex: 1; }
+    header button {
+      background: var(--panel-2); color: var(--text); border: 1px solid var(--line);
+      padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 13px;
+    }
+    header button:hover { background: var(--line); }
+    header button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+    header button.primary:hover { filter: brightness(1.1); }
+
+    aside.left, aside.right {
+      background: var(--panel);
+      overflow-y: auto;
+      border-right: 1px solid var(--line);
+    }
+    aside.right { border-right: none; border-left: 1px solid var(--line); }
+    aside .section { padding: 12px 14px; border-bottom: 1px solid var(--line); }
+    aside h3 { margin: 0 0 8px; font-size: 11px; letter-spacing: 0.12em; color: var(--muted); text-transform: uppercase; }
+    .palette { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+    .palette button {
+      background: var(--panel-2); color: var(--text); border: 1px solid var(--line);
+      padding: 8px 6px; border-radius: 4px; cursor: pointer; font-size: 12px;
+      display: flex; flex-direction: column; align-items: center; gap: 4px;
+    }
+    .palette button:hover { border-color: var(--accent); }
+    .palette button.active { border-color: var(--accent); background: rgba(255,58,161,0.12); }
+    .palette button .swatch {
+      width: 100%; height: 36px; border-radius: 3px;
+      background: linear-gradient(135deg, #2a3340, #3a4555);
+    }
+
+    main {
+      position: relative;
+      background: #0a0d12;
+    }
+    canvas { display: block; width: 100%; height: 100%; }
+    .hud {
+      position: absolute; top: 12px; left: 12px;
+      background: rgba(20,24,30,0.85); padding: 8px 12px; border-radius: 4px;
+      font-size: 12px; color: var(--muted); pointer-events: none;
+    }
+    .hud b { color: var(--text); }
+    .toast {
+      position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%);
+      background: var(--panel-2); border: 1px solid var(--accent);
+      padding: 8px 14px; border-radius: 4px; font-size: 13px;
+      opacity: 0; transition: opacity 0.2s; pointer-events: none;
+    }
+    .toast.show { opacity: 1; }
+
+    .inspector .row { display: flex; justify-content: space-between; padding: 4px 0; font-size: 12px; }
+    .inspector .row span:first-child { color: var(--muted); }
+    .inspector input[type=number] {
+      width: 64px; background: var(--panel-2); border: 1px solid var(--line); color: var(--text); padding: 2px 4px; border-radius: 3px;
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <header>
+      <span class="brand">GLO KARTS<span class="sub">TRACK STUDIO</span></span>
+      <input class="name" id="trackName" value="My Track" maxlength="40" />
+      <span class="spacer"></span>
+      <button id="undoBtn" title="Undo (Ctrl+Z)">↶ Undo</button>
+      <button id="clearBtn" title="Clear all">Clear</button>
+      <button id="saveBtn" title="Save to browser">Save</button>
+      <button id="loadBtn" title="Load from browser">Load</button>
+      <button id="shareBtn">🔗 Share</button>
+      <button class="primary" id="playBtn">▶ Playtest</button>
+    </header>
+    <aside class="left">
+      <div class="section">
+        <h3>Palette</h3>
+        <div class="palette" id="palette"></div>
+      </div>
+      <div class="section">
+        <h3>Tools</h3>
+        <div style="display:flex; flex-direction:column; gap:6px; font-size:12px; color:var(--muted);">
+          <div><b style="color:var(--text)">Click</b> empty cell to place</div>
+          <div><b style="color:var(--text)">Click</b> placed piece to select</div>
+          <div><b style="color:var(--text)">R</b> rotate selection</div>
+          <div><b style="color:var(--text)">Del</b> delete selection</div>
+          <div><b style="color:var(--text)">Esc</b> deselect</div>
+          <div><b style="color:var(--text)">Drag</b> right-mouse to orbit</div>
+          <div><b style="color:var(--text)">Wheel</b> zoom</div>
+        </div>
+      </div>
+    </aside>
+    <main>
+      <canvas id="canvas"></canvas>
+      <div class="hud" id="hud">Pieces: <b id="pieceCount">0</b></div>
+      <div class="toast" id="toast"></div>
+    </main>
+    <aside class="right">
+      <div class="section inspector">
+        <h3>Inspector</h3>
+        <div id="inspector"><div style="color:var(--muted); font-size:12px;">Nothing selected.</div></div>
+      </div>
+      <div class="section">
+        <h3>Track Info</h3>
+        <div class="inspector">
+          <div class="row"><span>Pieces</span><b id="infoPieces">0</b></div>
+          <div class="row"><span>Bounds</span><b id="infoBounds">—</b></div>
+          <div class="row"><span>Spawn</span><b id="infoSpawn">—</b></div>
+        </div>
+      </div>
+    </aside>
+  </div>
+  <script type="module" src="/src/editor3/editor-main.js"></script>
+</body>
+</html>

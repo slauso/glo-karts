@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GLO KARTS — Playtest</title>
+  <link rel="icon" href="data:," />
+  <style>
+    html, body { margin: 0; height: 100%; background: #0a0d12; color: #e6edf3; font-family: 'Inter', system-ui, sans-serif; overflow: hidden; }
+    canvas { display: block; width: 100%; height: 100%; }
+    .hud {
+      position: fixed; left: 16px; top: 16px;
+      background: rgba(20,24,30,0.85); padding: 10px 14px; border-radius: 6px;
+      font-size: 13px;
+    }
+    .hud b { color: #ff3aa1; }
+    .controls {
+      position: fixed; left: 16px; bottom: 16px;
+      background: rgba(20,24,30,0.85); padding: 10px 14px; border-radius: 6px;
+      font-size: 12px; color: #8b96a3;
+    }
+    .controls b { color: #e6edf3; }
+    .toolbar {
+      position: fixed; right: 16px; top: 16px; display: flex; gap: 8px;
+    }
+    .toolbar button {
+      background: #161b22; color: #e6edf3; border: 1px solid #2a3340;
+      padding: 8px 14px; border-radius: 4px; cursor: pointer; font-size: 13px;
+    }
+    .toolbar button:hover { border-color: #ff3aa1; }
+    .room-banner {
+      position: fixed; left: 50%; top: 16px; transform: translateX(-50%);
+      background: rgba(20,24,30,0.92); padding: 6px 14px; border-radius: 999px;
+      font-size: 12px; color: #00e5ff; border: 1px solid #00e5ff33;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="canvas"></canvas>
+  <div class="hud">
+    <div>Track: <b id="trackName">—</b></div>
+    <div>Speed: <b id="speed">0</b> km/h</div>
+    <div>Lap: <b id="lap">—</b></div>
+  </div>
+  <div class="controls">
+    <div><b>W A S D</b> drive · <b>Space</b> brake · <b>R</b> respawn</div>
+  </div>
+  <div class="toolbar">
+    <button id="backBtn">← Back to Editor</button>
+  </div>
+  <div class="room-banner" id="roomBanner" style="display:none;"></div>
+  <script type="module" src="/src/editor3/play-main.js"></script>
+</body>
+</html>

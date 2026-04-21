@@ -17,7 +17,9 @@ export default defineConfig({
         game: 'game.html',
         battle: 'battle.html',
         builder: 'builder.html',
-        realtime: 'realtime.html'
+        realtime: 'realtime.html',
+        editor: 'editor.html',
+        play: 'play.html'
       }
     }
   }
