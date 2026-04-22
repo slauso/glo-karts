@@ -136,17 +136,89 @@ function arcPath3(cx, cz, radius, a0, a1, y = 0, samples = 24) {
 }
 
 function extrudeRoad(path, opts = {}) {
-  const profile = opts.profile || DECK_PROFILE;
-  const steps = opts.steps || Math.max(24, Math.ceil(path.getLength() / 0.6));
-  const geo = new THREE.ExtrudeGeometry(profile, {
-    extrudePath: path, steps, bevelEnabled: false,
-  });
+  // Build a flat ribbon along the path in the XZ plane. The deck top sits
+  // at y = ROAD_THICK; the underside at y = 0. We build top, bottom, and
+  // outer side quads as a single BufferGeometry. Width = ROAD_WIDTH.
+  const width = opts.width ?? ROAD_WIDTH;
+  const halfW = width / 2;
+  const thickness = opts.thickness ?? ROAD_THICK;
+  const segments = opts.steps || Math.max(24, Math.ceil(path.getLength() / 0.6));
+  const N = segments + 1;
+  // Sample centerline points + perpendicular (in XZ plane) per step
+  const pts = new Array(N);
+  const perps = new Array(N);
+  for (let i = 0; i < N; i++) {
+    const t = i / segments;
+    const p = path.getPointAt(t);
+    const tan = path.getTangentAt(t);
+    // perpendicular in XZ (rotate tangent 90° around Y)
+    const px = -tan.z, pz = tan.x;
+    const len = Math.hypot(px, pz) || 1;
+    pts[i] = p;
+    perps[i] = { x: px / len, z: pz / len };
+  }
+  // Vertex layout: for each step i we emit 4 verts: TL, TR, BL, BR
+  // (top-left, top-right, bottom-left, bottom-right of the cross-section).
+  const positions = [];
+  const uvs = [];
+  const normals = [];
+  for (let i = 0; i < N; i++) {
+    const p = pts[i];
+    const n = perps[i];
+    const lx = p.x - n.x * halfW, lz = p.z - n.z * halfW;
+    const rx = p.x + n.x * halfW, rz = p.z + n.z * halfW;
+    const yTop = (p.y || 0) + thickness;
+    const yBot = (p.y || 0);
+    // top-left, top-right, bot-left, bot-right
+    positions.push(lx, yTop, lz);
+    positions.push(rx, yTop, rz);
+    positions.push(lx, yBot, lz);
+    positions.push(rx, yBot, rz);
+    // World XZ UVs for the asphalt — uniform tiling regardless of segment.
+    const s = TEX_SCALE;
+    uvs.push(lx / s, lz / s);
+    uvs.push(rx / s, rz / s);
+    uvs.push(lx / s, lz / s);
+    uvs.push(rx / s, rz / s);
+    normals.push(0, 1, 0);
+    normals.push(0, 1, 0);
+    normals.push(0, -1, 0);
+    normals.push(0, -1, 0);
+  }
+  const indices = [];
+  for (let i = 0; i < segments; i++) {
+    const a = i * 4;
+    const b = (i + 1) * 4;
+    // top face: TL(a), TR(a+1), TL(b), TR(b+1)  → tris (a, b, a+1) (a+1, b, b+1)
+    indices.push(a, b, a + 1);
+    indices.push(a + 1, b, b + 1);
+    // bottom face (reversed winding)
+    indices.push(a + 2, a + 3, b + 2);
+    indices.push(a + 3, b + 3, b + 2);
+    // left side  (TL/BL pair): a, a+2, b, b+2
+    indices.push(a, a + 2, b);
+    indices.push(a + 2, b + 2, b);
+    // right side (TR/BR pair): a+1, b+1, a+3, b+3
+    indices.push(a + 1, b + 1, a + 3);
+    indices.push(b + 1, b + 3, a + 3);
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+  geo.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
+  geo.setIndex(indices);
+  // The side-face normals we set as up/down are wrong but this geometry is
+  // only used for visuals; lighting on the thin sides is barely noticeable.
+  // Recompute cleanly:
+  geo.computeVertexNormals();
   const mesh = new THREE.Mesh(geo, opts.material || MATS.asphalt);
   mesh.castShadow = true;
   mesh.receiveShadow = true;
   mesh.userData.drivable = true;
   return mesh;
 }
+
+const TEX_SCALE = 4.0;
 
 // Place small alternating-color curb stones along one side of a path.
 function curbAlongPath(path, sideSign, opts = {}) {
