@@ -147,6 +147,8 @@ function removePlacementMesh(id) {
 
 // ── Palette UI (grouped by category) ──────────────────────────
 const paletteEl = document.getElementById('palette');
+const paletteSearchEl = document.getElementById('paletteSearch');
+let paletteFilter = '';
 const CATEGORY_ORDER = ['road', 'junction', 'height', 'special'];
 const CATEGORY_LABELS = {
   road: 'Road',
@@ -156,15 +158,16 @@ const CATEGORY_LABELS = {
 };
 function buildPalette() {
   paletteEl.innerHTML = '';
+  const filter = paletteFilter.trim().toLowerCase();
   // Group keys by category (preserving insertion order within a group).
   const groups = new Map();
   for (const key of SEGMENT_KEYS) {
-    const cat = SEGMENTS[key].category || 'special';
+    const def = SEGMENTS[key];
+    if (filter && !def.label.toLowerCase().includes(filter) && !key.toLowerCase().includes(filter)) continue;
+    const cat = def.category || 'special';
     if (!groups.has(cat)) groups.set(cat, []);
     groups.get(cat).push(key);
   }
-  // Render in declared order, then any extras alphabetical.
-  const seen = new Set();
   const renderGroup = (cat, keys) => {
     if (!keys?.length) return;
     const header = document.createElement('div');
@@ -184,7 +187,6 @@ function buildPalette() {
         updatePreview();
       });
       paletteEl.appendChild(btn);
-      seen.add(key);
     }
   };
   for (const cat of CATEGORY_ORDER) renderGroup(cat, groups.get(cat));
@@ -192,8 +194,20 @@ function buildPalette() {
     if (CATEGORY_ORDER.includes(cat)) continue;
     renderGroup(cat, keys);
   }
+  if (paletteEl.children.length === 0) {
+    const empty = document.createElement('div');
+    empty.style.cssText = 'grid-column:1/-1;color:var(--muted);font-size:11px;padding:8px;text-align:center;';
+    empty.textContent = 'No matching pieces';
+    paletteEl.appendChild(empty);
+  }
 }
 buildPalette();
+if (paletteSearchEl) {
+  paletteSearchEl.addEventListener('input', () => {
+    paletteFilter = paletteSearchEl.value;
+    buildPalette();
+  });
+}
 
 // ── Preview ghost ─────────────────────────────────────────────
 function updatePreview() {
@@ -742,6 +756,47 @@ function positionKartPreview() {
 // Kick off kart preload so the playtest swap is instant.
 preloadAllKarts([activeKartId]);
 updateKartPreview(activeKartId);
+
+// ── Terrain controls ──────────────────────────────────────────
+const TERRAIN_KEY = 'gloKartsStudio.terrain';
+const terrainState = {
+  ground: '#14181f',
+  sky: '#0a0d12',
+  grid: true,
+  fog: true,
+};
+function applyTerrain() {
+  groundMat.color.set(terrainState.ground);
+  scene.background = new THREE.Color(terrainState.sky);
+  scene.fog = terrainState.fog ? new THREE.Fog(terrainState.sky, 80, 300) : null;
+  grid.visible = terrainState.grid;
+  try { localStorage.setItem(TERRAIN_KEY, JSON.stringify(terrainState)); } catch {}
+}
+try {
+  const raw = localStorage.getItem(TERRAIN_KEY);
+  if (raw) Object.assign(terrainState, JSON.parse(raw));
+} catch {}
+const groundColorEl = document.getElementById('groundColor');
+const skyColorEl = document.getElementById('skyColor');
+const gridToggleEl = document.getElementById('gridToggle');
+const fogToggleEl = document.getElementById('fogToggle');
+if (groundColorEl) {
+  groundColorEl.value = terrainState.ground;
+  groundColorEl.addEventListener('input', () => { terrainState.ground = groundColorEl.value; applyTerrain(); });
+}
+if (skyColorEl) {
+  skyColorEl.value = terrainState.sky;
+  skyColorEl.addEventListener('input', () => { terrainState.sky = skyColorEl.value; applyTerrain(); });
+}
+if (gridToggleEl) {
+  gridToggleEl.checked = terrainState.grid;
+  gridToggleEl.addEventListener('change', () => { terrainState.grid = gridToggleEl.checked; applyTerrain(); });
+}
+if (fogToggleEl) {
+  fogToggleEl.checked = terrainState.fog;
+  fogToggleEl.addEventListener('change', () => { terrainState.fog = fogToggleEl.checked; applyTerrain(); });
+}
+applyTerrain();
 
 // ── Resize + render loop ──────────────────────────────────────
 function resize() {

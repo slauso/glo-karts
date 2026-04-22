@@ -71,6 +71,24 @@
       margin-top: 4px;
     }
     .palette-group:first-child { margin-top: 0; }
+    .palette-search {
+      width: 100%; box-sizing: border-box;
+      background: var(--panel-2); color: var(--text);
+      border: 1px solid var(--line); border-radius: 4px;
+      padding: 6px 8px; font-size: 12px; margin-bottom: 8px;
+    }
+    .palette-search:focus { outline: none; border-color: var(--accent); }
+    .terrain-grid {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px;
+      font-size: 12px; color: var(--muted);
+    }
+    .terrain-grid label { display: flex; align-items: center; gap: 6px; }
+    .terrain-grid label.full { grid-column: 1 / -1; }
+    .terrain-grid input[type="color"] {
+      width: 32px; height: 24px; border: 1px solid var(--line); border-radius: 3px;
+      background: transparent; padding: 0; cursor: pointer;
+    }
+    .terrain-grid input[type="checkbox"] { accent-color: var(--accent); }
 
     main {
       position: relative;
@@ -118,7 +136,25 @@
     <aside class="left">
       <div class="section">
         <h3>Palette</h3>
+        <input id="paletteSearch" type="text" placeholder="Filter pieces…" class="palette-search" />
         <div class="palette" id="palette"></div>
+      </div>
+      <div class="section">
+        <h3>Terrain</h3>
+        <div class="terrain-grid">
+          <label>Ground
+            <input type="color" id="groundColor" value="#14181f" />
+          </label>
+          <label>Sky
+            <input type="color" id="skyColor" value="#0a0d12" />
+          </label>
+          <label class="full">
+            <input type="checkbox" id="gridToggle" checked /> Show grid
+          </label>
+          <label class="full">
+            <input type="checkbox" id="fogToggle" checked /> Atmospheric fog
+          </label>
+        </div>
       </div>
       <div class="section">
         <h3>Tools</h3>
