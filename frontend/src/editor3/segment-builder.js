@@ -8,6 +8,7 @@
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
 import { SEGMENTS } from './segments.js';
+import { VISUAL_BUILDERS } from './road-geometry.js';
 
 const materialCache = new Map();
 function getMaterial(color) {
@@ -37,6 +38,20 @@ export function buildSegmentMesh(key) {
   if (!def) {
     console.warn(`[segment-builder] Unknown segment '${key}'`);
     return new THREE.Group();
+  }
+  // Polished visual via road-geometry.js (preferred). Falls back to the
+  // raw block list (cuboids) for any segment without a custom builder.
+  const visualFn = VISUAL_BUILDERS[key];
+  if (visualFn) {
+    const group = visualFn();
+    group.name = `seg:${key}`;
+    group.traverse((obj) => {
+      if (obj.isMesh) {
+        if (obj.castShadow === undefined) obj.castShadow = true;
+        if (obj.receiveShadow === undefined) obj.receiveShadow = true;
+      }
+    });
+    return group;
   }
   const group = new THREE.Group();
   group.name = `seg:${key}`;
