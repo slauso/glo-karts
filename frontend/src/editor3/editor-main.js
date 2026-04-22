@@ -25,15 +25,17 @@ const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x0a0d12);
 scene.fog = new THREE.Fog(0x0a0d12, 80, 300);
 
-const camera = new THREE.PerspectiveCamera(55, 1, 0.1, 1000);
-camera.position.set(40, 40, 40);
+const camera = new THREE.PerspectiveCamera(55, 1, 0.1, 2000);
+// Defaults scale with TILE so the editor frames the same number of cells
+// regardless of world units.
+camera.position.set(TILE * 10, TILE * 10, TILE * 10);
 
 const controls = new OrbitControls(camera, canvas);
 controls.target.set(0, 0, 0);
 controls.enableDamping = true;
 controls.dampingFactor = 0.08;
-controls.minDistance = 8;
-controls.maxDistance = 200;
+controls.minDistance = TILE * 2;
+controls.maxDistance = TILE * 50;
 controls.maxPolarAngle = Math.PI * 0.48;
 controls.mouseButtons = {
   LEFT: null,

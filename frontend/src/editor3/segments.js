@@ -15,11 +15,16 @@
  *   - rotation in editor is multiples of 90° around +Y (in radians)
  */
 
-export const TILE = 4;          // world units per grid cell (small = denser tracks)
+// Tile sized for Mario-Kart-like proportions. Reference targets:
+//   - kart length ~2.0m (chassis HZ=1.0)
+//   - kart width  ~1.2m (chassis HX=0.6, capped to 1.4 in kart-loader)
+//   - road width  ~10.8m → kart width is ~11% of road, MK8 ratio
+// TILE bumped from 7 → 12 so karts no longer dwarf the segments.
+export const TILE = 12;         // world units per grid cell
 export const ROAD_WIDTH = TILE * 0.9;
-export const ROAD_THICK = 0.4;
-export const WALL_HEIGHT = 1.2;
-export const WALL_THICK = 0.4;
+export const ROAD_THICK = 0.5;
+export const WALL_HEIGHT = 1.6;
+export const WALL_THICK = 0.5;
 
 /**
  * @typedef {Object} Block

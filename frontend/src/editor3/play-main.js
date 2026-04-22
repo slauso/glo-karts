@@ -21,9 +21,9 @@ renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x0a0d12);
-scene.fog = new THREE.Fog(0x0a0d12, 60, 220);
+scene.fog = new THREE.Fog(0x0a0d12, TILE * 15, TILE * 50);
 
-const camera = new THREE.PerspectiveCamera(70, 1, 0.1, 1000);
+const camera = new THREE.PerspectiveCamera(70, 1, 0.1, 2000);
 
 const sun = new THREE.DirectionalLight(0xffffff, 1.4);
 sun.position.set(60, 120, 40);
@@ -280,8 +280,10 @@ function applyControls() {
 }
 
 // ── Camera follow ─────────────────────────────────────────────
-const camOffset = new THREE.Vector3(0, 4, 8);
-const camLookAhead = new THREE.Vector3(0, 1, -3);
+// Tuned for the larger TILE=12 world; sits ~2 car-lengths back, eye-level
+// roughly twice the chassis height. Mirrors classic kart-game framing.
+const camOffset = new THREE.Vector3(0, 5.5, 11);
+const camLookAhead = new THREE.Vector3(0, 1.2, -4);
 const tmpV = new THREE.Vector3();
 const tmpQ = new THREE.Quaternion();
 

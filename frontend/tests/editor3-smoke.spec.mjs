@@ -148,32 +148,37 @@ test.describe('Track Studio (editor3) — Smoke', () => {
     await page.waitForURL(/play\.html/);
     await waitForPlaytest(page);
 
-    // Initial lap HUD reads 0 once inside near-radius
-    // Teleport-cross the finish line twice with a > 2s gap (debounce guard)
-    await page.evaluate(() => {
+    // Resolve TILE from the runtime so tests are scale-agnostic.
+    const TILE = await page.evaluate(async () => {
+      const m = await import('/src/editor3/track-data.js');
+      return m.TILE ?? 12;
+    });
+    const finishZ = 2 * TILE; // finish placed at gz=2
+
+    // Cross #1: behind the line then past
+    await page.evaluate((z) => {
       const p = window.__play;
-      // Behind the line (spawn at z=0, finish at z=8 world; forward = +Z)
-      p.chassisBody.position.set(0, 1.2, 6);
+      p.chassisBody.position.set(0, 1.2, z - 2);
       p.chassisBody.velocity.set(0, 0, 0);
-    });
+    }, finishZ);
     await page.waitForTimeout(200);
+    await page.evaluate((z) => {
+      window.__play.chassisBody.position.set(0, 1.2, z + 1);
+    }, finishZ);
+    await page.waitForTimeout(300);
+    // Clear the radius
     await page.evaluate(() => {
-      const p = window.__play;
-      p.chassisBody.position.set(0, 1.2, 9);
+      window.__play.chassisBody.position.set(500, 1.2, 500);
     });
     await page.waitForTimeout(300);
-    // Step 2: clear the radius then cross again
-    await page.evaluate(() => {
-      window.__play.chassisBody.position.set(100, 1.2, 100);
-    });
+    // Cross #2
+    await page.evaluate((z) => {
+      window.__play.chassisBody.position.set(0, 1.2, z - 2);
+    }, finishZ);
     await page.waitForTimeout(300);
-    await page.evaluate(() => {
-      window.__play.chassisBody.position.set(0, 1.2, 6);
-    });
-    await page.waitForTimeout(300);
-    await page.evaluate(() => {
-      window.__play.chassisBody.position.set(0, 1.2, 9);
-    });
+    await page.evaluate((z) => {
+      window.__play.chassisBody.position.set(0, 1.2, z + 1);
+    }, finishZ);
     await page.waitForTimeout(2500); // > 2s debounce
 
     const lapText = await page.locator('#lap').textContent();

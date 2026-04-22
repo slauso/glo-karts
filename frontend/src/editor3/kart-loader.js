@@ -15,8 +15,16 @@ const loader = new GLTFLoader();
 /** @type {Map<string, Promise<THREE.Group>>} */
 const cache = new Map();
 
-/** Target chassis length in world units (matches play-main chassis 2*HZ = 2.0). */
+/**
+ * Target kart proportions in world units. Matches the cannon-es chassis
+ * (HX=0.6, HZ=1.0 → 1.2 wide × 2.0 long) so the visible mesh sits inside
+ * the collider rather than dwarfing it.
+ *
+ * We bound BOTH length and width so wide kart models (cars, snowmobiles)
+ * don't end up wider than the chassis just because their natural Z is short.
+ */
 export const KART_TARGET_LENGTH = 2.0;
+export const KART_MAX_WIDTH = 1.4;
 
 /**
  * Load + prep a kart template. Resolves to a THREE.Group that has been
@@ -94,8 +102,13 @@ function prepareKartScene(scene, id) {
   bbox.getSize(size);
   bbox.getCenter(center);
 
-  const longestXZ = Math.max(size.x, size.z) || 1;
-  const scale = KART_TARGET_LENGTH / longestXZ;
+  // Scale so length fits KART_TARGET_LENGTH but width never exceeds
+  // KART_MAX_WIDTH. Whichever constraint is tighter wins.
+  const sizeZ = size.z || 1;
+  const sizeX = size.x || 1;
+  const lenScale = KART_TARGET_LENGTH / sizeZ;
+  const widthScale = KART_MAX_WIDTH / sizeX;
+  const scale = Math.min(lenScale, widthScale);
 
   // Wrap in scaler + translator groups so downstream clones inherit transforms.
   const scaler = new THREE.Group();
