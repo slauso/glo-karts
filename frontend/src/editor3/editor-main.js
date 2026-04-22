@@ -307,21 +307,26 @@ function pickGroundCell(event) {
   ndc.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
   ndc.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
   raycaster.setFromCamera(ndc, activeCamera);
-  // First try to hit existing placement meshes (for selection)
+  // Always compute the underlying ground cell first so it can be used as a
+  // fallback when an overlay segment (e.g. spawn) wants to be dropped on top
+  // of an existing placement.
+  const groundHits = raycaster.intersectObject(ground);
+  let cell = null;
+  if (groundHits.length) {
+    const point = groundHits[0].point;
+    cell = { gx: Math.round(point.x / TILE), gz: Math.round(point.z / TILE) };
+  }
+  // Then try to hit existing placement meshes (for selection)
   const placementHits = raycaster.intersectObjects(placementGroup.children, true);
   if (placementHits.length) {
     let obj = placementHits[0].object;
     while (obj && obj.userData.placementId == null) obj = obj.parent;
     if (obj && obj.userData.placementId != null) {
-      return { kind: 'placement', id: obj.userData.placementId };
+      return { kind: 'placement', id: obj.userData.placementId, gx: cell?.gx, gz: cell?.gz };
     }
   }
-  const hits = raycaster.intersectObject(ground);
-  if (!hits.length) return null;
-  const point = hits[0].point;
-  const gx = Math.round(point.x / TILE);
-  const gz = Math.round(point.z / TILE);
-  return { kind: 'cell', gx, gz };
+  if (!cell) return null;
+  return { kind: 'cell', gx: cell.gx, gz: cell.gz };
 }
 
 canvas.addEventListener('mousemove', (e) => {
@@ -331,7 +336,11 @@ canvas.addEventListener('mousemove', (e) => {
     if (previewMesh) previewMesh.visible = false;
     return;
   }
-  if (hit.kind === 'cell') {
+  // Overlay segments (spawn) are allowed to land on top of existing placements,
+  // so prefer the underlying cell coords whenever they are available.
+  const overlayActive = track.isOverlay(activeKey);
+  const showCell = hit.kind === 'cell' || (overlayActive && hit.gx != null);
+  if (showCell) {
     previewCell = { gx: hit.gx, gz: hit.gz };
     if (!previewMesh) updatePreview();
     previewMesh.visible = true;
@@ -378,7 +387,13 @@ canvas.addEventListener('mousedown', (e) => {
     snapshot: null, anchorId: null, anchorStart: null,
   };
   // If clicking on a placement, prepare a potential drag of the whole selection.
-  if (hit && hit.kind === 'placement') {
+  // (Skip when an overlay key is active — the click should drop the overlay
+  // on top of whatever's there instead of dragging the underlying piece.
+  // Also skip when the topmost hit is an overlay piece but the user is placing
+  // a non-overlay segment — in that case the click should drop the road
+  // underneath the spawn rather than drag the spawn.)
+  const _hitOverlay = hit && hit.kind === 'placement' && track.isOverlay(track.getById(hit.id)?.key);
+  if (hit && hit.kind === 'placement' && !track.isOverlay(activeKey) && !_hitOverlay) {
     // If the clicked piece isn't already selected, switch selection to it now
     // so the drag operates on what the user actually clicked.
     if (!selectedIds.has(hit.id) && !e.shiftKey && !(e.ctrlKey || e.metaKey)) {
@@ -479,11 +494,20 @@ canvas.addEventListener('click', (e) => {
   if (mouseDownStateConsumedDrag()) return;
   const hit = pickGroundCell(e);
   if (!hit) return;
-  if (hit.kind === 'placement') {
+  // Overlay segments (spawn) place on top of any cell — including ones already
+  // occupied by a road piece — so route placement-hits to the placement path
+  // when the active key is an overlay and we have cell coordinates.
+  // Conversely, when the user is placing a road and the only thing under the
+  // cursor is an overlay (e.g. an existing spawn), treat the click as a cell
+  // placement so the road can be dropped underneath the spawn.
+  const overlayActive = track.isOverlay(activeKey);
+  const hitOverlay = hit.kind === 'placement' && track.isOverlay(track.getById(hit.id)?.key);
+  if (hit.kind === 'placement' && !overlayActive && !hitOverlay) {
     const mode = e.shiftKey ? 'add' : (e.ctrlKey || e.metaKey) ? 'toggle' : 'replace';
     selectPlacement(hit.id, mode);
     return;
   }
+  if (hit.gx == null || hit.gz == null) return;
   // Click on empty cell with no modifier clears the selection.
   if (!e.shiftKey && !e.ctrlKey && !e.metaKey) clearSelection();
   // Place

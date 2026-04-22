@@ -37,7 +37,17 @@ export class Track {
     });
   }
 
+  /**
+   * Spawn (and any future overlay segments) sits on top of road pieces.
+   * It does not claim grid cells, so it is never blocked by — and does not
+   * block — other placements.
+   */
+  isOverlay(key) {
+    return !!SEGMENTS[key]?.isSpawn;
+  }
+
   isClear(key, gx, gz, rot, ignoreId = null) {
+    if (this.isOverlay(key)) return true;
     for (const [cx, cz] of this.occupiedCells(key, gx, gz, rot)) {
       const occ = this.cells.get(this.cellKey(cx, cz));
       if (occ != null && occ !== ignoreId) return false;
@@ -47,12 +57,21 @@ export class Track {
 
   place(key, gx, gz, rot) {
     if (!SEGMENTS[key]) return null;
-    if (!this.isClear(key, gx, gz, rot)) return null;
+    const overlay = this.isOverlay(key);
+    if (!overlay && !this.isClear(key, gx, gz, rot)) return null;
+    // Single-spawn rule: dropping a new spawn replaces the previous one.
+    if (SEGMENTS[key]?.isSpawn) {
+      for (const existing of Array.from(this.placements.values())) {
+        if (SEGMENTS[existing.key]?.isSpawn) this.remove(existing.id);
+      }
+    }
     const id = _nextId++;
     const placement = { id, key, gx, gz, rot: ((rot % 4) + 4) % 4 };
     this.placements.set(id, placement);
-    for (const [cx, cz] of this.occupiedCells(key, gx, gz, rot)) {
-      this.cells.set(this.cellKey(cx, cz), id);
+    if (!overlay) {
+      for (const [cx, cz] of this.occupiedCells(key, gx, gz, rot)) {
+        this.cells.set(this.cellKey(cx, cz), id);
+      }
     }
     return placement;
   }
@@ -60,8 +79,13 @@ export class Track {
   remove(id) {
     const p = this.placements.get(id);
     if (!p) return false;
-    for (const [cx, cz] of this.occupiedCells(p.key, p.gx, p.gz, p.rot)) {
-      this.cells.delete(this.cellKey(cx, cz));
+    if (!this.isOverlay(p.key)) {
+      for (const [cx, cz] of this.occupiedCells(p.key, p.gx, p.gz, p.rot)) {
+        // Defensive: only clear the cell if it still belongs to this id.
+        if (this.cells.get(this.cellKey(cx, cz)) === id) {
+          this.cells.delete(this.cellKey(cx, cz));
+        }
+      }
     }
     this.placements.delete(id);
     return true;
