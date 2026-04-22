@@ -123,9 +123,10 @@ function prepareKartScene(scene, id) {
 
   scaler.add(root);
 
-  // Many STK karts face +Z in their own GLB; the RaycastVehicle forward
-  // is -Z in our world. If a kart ends up backwards, override via
-  // userData.facing in a per-kart tweak map below.
+  // RaycastVehicle forward axis is +Z in our world (indexForwardAxis=2).
+  // STK kart GLBs typically face +Z in their own asset frame, so no flip
+  // is needed by default. Add an override below if a specific kart spawns
+  // facing backward.
   const flipY = KART_FACING_OVERRIDES[id] === 'flip' ? Math.PI : 0;
   scaler.rotation.y = flipY;
 
@@ -136,9 +137,9 @@ function prepareKartScene(scene, id) {
 }
 
 /**
- * Per-kart facing override. Most STK karts face -Z (forward) in their
- * source GLB which matches our convention. If any kart spawns facing
- * backward, add `<id>: 'flip'` here.
+ * Per-kart facing override. Most STK karts face +Z which matches our
+ * RaycastVehicle forward axis. If any kart spawns facing backward, add
+ * `<id>: 'flip'` here.
  */
 const KART_FACING_OVERRIDES = {
   // mechatux: 'flip',

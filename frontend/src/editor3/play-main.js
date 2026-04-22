@@ -260,8 +260,12 @@ const MAX_BRAKE = 50;
 const MAX_STEER = 0.55;
 
 function applyControls() {
-  const engine = (keys.w ? -1 : 0) + (keys.s ? 1 : 0);   // forward = -Z in vehicle local
-  const steer = (keys.a ? 1 : 0) + (keys.d ? -1 : 0);
+  // Forward axis is +Z (indexForwardAxis: 2). Positive engine force drives +Z,
+  // which matches the spawn-tile orientation (track extends along +gz).
+  const engine = (keys.w ? 1 : 0) + (keys.s ? -1 : 0);
+  // When reversing (s) the steering must flip so left/right feels correct.
+  const steerSign = engine < 0 ? -1 : 1;
+  const steer = ((keys.a ? 1 : 0) + (keys.d ? -1 : 0)) * steerSign;
   const braking = keys.space;
 
   // Front wheels steer (indices 2, 3)
@@ -280,10 +284,11 @@ function applyControls() {
 }
 
 // ── Camera follow ─────────────────────────────────────────────
-// Tuned for the larger TILE=12 world; sits ~2 car-lengths back, eye-level
-// roughly twice the chassis height. Mirrors classic kart-game framing.
-const camOffset = new THREE.Vector3(0, 5.5, 11);
-const camLookAhead = new THREE.Vector3(0, 1.2, -4);
+// Vehicle forward is +Z, so "behind the kart" = -Z relative to its facing.
+// Camera sits ~2 car-lengths back and slightly above; look-ahead points
+// forward (+Z) so the player sees where they're going.
+const camOffset = new THREE.Vector3(0, 5.5, -11);
+const camLookAhead = new THREE.Vector3(0, 1.2, 4);
 const tmpV = new THREE.Vector3();
 const tmpQ = new THREE.Quaternion();
 
