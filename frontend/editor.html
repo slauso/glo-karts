@@ -101,6 +101,20 @@
       font-size: 12px; color: var(--muted); pointer-events: none;
     }
     .hud b { color: var(--text); }
+    .view-cube {
+      position: absolute; top: 12px; right: 12px;
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px;
+      background: rgba(20,24,30,0.85); padding: 6px; border-radius: 4px;
+      border: 1px solid var(--line);
+    }
+    .view-cube button {
+      background: var(--panel-2); color: var(--muted);
+      border: 1px solid var(--line); border-radius: 3px;
+      font-size: 10px; letter-spacing: 0.08em; padding: 5px 8px;
+      cursor: pointer; min-width: 44px;
+    }
+    .view-cube button:hover { color: var(--text); border-color: var(--accent); }
+    .view-cube button.active { color: var(--accent); border-color: var(--accent); }
     .toast {
       position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%);
       background: var(--panel-2); border: 1px solid var(--accent);
@@ -172,6 +186,13 @@
     <main>
       <canvas id="canvas"></canvas>
       <div class="hud" id="hud">Pieces: <b id="pieceCount">0</b></div>
+      <div class="view-cube" id="viewCube" title="Snap camera">
+        <button data-view="top">TOP</button>
+        <button data-view="front">FRONT</button>
+        <button data-view="side">SIDE</button>
+        <button data-view="iso">ISO</button>
+        <button data-view="ortho" id="orthoToggle" title="Toggle orthographic">PERSP</button>
+      </div>
       <div class="toast" id="toast"></div>
     </main>
     <aside class="right">

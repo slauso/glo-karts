@@ -238,7 +238,7 @@ function pickGroundCell(event) {
   const rect = canvas.getBoundingClientRect();
   ndc.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
   ndc.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-  raycaster.setFromCamera(ndc, camera);
+  raycaster.setFromCamera(ndc, activeCamera);
   // First try to hit existing placement meshes (for selection)
   const placementHits = raycaster.intersectObjects(placementGroup.children, true);
   if (placementHits.length) {
@@ -798,6 +798,66 @@ if (fogToggleEl) {
 }
 applyTerrain();
 
+// ── View cube + camera ortho toggle ───────────────────────────
+let orthoCamera = null;
+let usingOrtho = false;
+function getOrtho() {
+  if (orthoCamera) return orthoCamera;
+  const aspect = canvas.clientWidth / Math.max(1, canvas.clientHeight);
+  const d = TILE * 12;
+  orthoCamera = new THREE.OrthographicCamera(-d * aspect, d * aspect, d, -d, 0.1, 2000);
+  orthoCamera.position.copy(camera.position);
+  orthoCamera.lookAt(controls.target);
+  return orthoCamera;
+}
+let activeCamera = camera;
+function setActiveCamera(next) {
+  activeCamera = next;
+  controls.object = next;
+  controls.update();
+}
+function toggleOrtho() {
+  usingOrtho = !usingOrtho;
+  const orthoBtn = document.getElementById('orthoToggle');
+  if (usingOrtho) {
+    const oc = getOrtho();
+    oc.position.copy(camera.position);
+    oc.lookAt(controls.target);
+    setActiveCamera(oc);
+    if (orthoBtn) { orthoBtn.textContent = 'ORTHO'; orthoBtn.classList.add('active'); }
+  } else {
+    camera.position.copy(activeCamera.position);
+    camera.lookAt(controls.target);
+    setActiveCamera(camera);
+    if (orthoBtn) { orthoBtn.textContent = 'PERSP'; orthoBtn.classList.remove('active'); }
+  }
+}
+function snapView(view) {
+  const dist = activeCamera.position.distanceTo(controls.target) || TILE * 15;
+  const target = controls.target.clone();
+  let pos;
+  switch (view) {
+    case 'top':   pos = target.clone().add(new THREE.Vector3(0, dist, 0.001)); break;
+    case 'front': pos = target.clone().add(new THREE.Vector3(0, dist * 0.3, dist)); break;
+    case 'side':  pos = target.clone().add(new THREE.Vector3(dist, dist * 0.3, 0)); break;
+    case 'iso':
+    default:      pos = target.clone().add(new THREE.Vector3(dist * 0.7, dist * 0.7, dist * 0.7)); break;
+  }
+  activeCamera.position.copy(pos);
+  activeCamera.lookAt(target);
+  controls.update();
+}
+const viewCubeEl = document.getElementById('viewCube');
+if (viewCubeEl) {
+  viewCubeEl.querySelectorAll('button[data-view]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const v = btn.dataset.view;
+      if (v === 'ortho') toggleOrtho();
+      else snapView(v);
+    });
+  });
+}
+
 // ── Resize + render loop ──────────────────────────────────────
 function resize() {
   const w = canvas.clientWidth;
@@ -805,13 +865,22 @@ function resize() {
   renderer.setSize(w, h, false);
   camera.aspect = w / h;
   camera.updateProjectionMatrix();
+  if (orthoCamera) {
+    const aspect = w / Math.max(1, h);
+    const d = TILE * 12;
+    orthoCamera.left = -d * aspect;
+    orthoCamera.right = d * aspect;
+    orthoCamera.top = d;
+    orthoCamera.bottom = -d;
+    orthoCamera.updateProjectionMatrix();
+  }
 }
 window.addEventListener('resize', resize);
 resize();
 
 renderer.setAnimationLoop(() => {
   controls.update();
-  renderer.render(scene, camera);
+  renderer.render(scene, activeCamera);
 });
 
 // ── Bootstrap: try restoring last track or seed with 1 spawn ─
