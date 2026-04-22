@@ -145,6 +145,67 @@ function removePlacementMesh(id) {
   }
 }
 
+// ── Segment thumbnail renderer (offscreen) ────────────────────
+// Renders each segment piece into a small data-URL once, cached by key,
+// so palette tiles show the actual road geometry instead of a blank swatch.
+const THUMB_SIZE = 96;
+const thumbCache = new Map();
+let _thumbRenderer = null;
+let _thumbScene = null;
+let _thumbCam = null;
+function getThumbRig() {
+  if (_thumbRenderer) return { renderer: _thumbRenderer, scene: _thumbScene, camera: _thumbCam };
+  const c = document.createElement('canvas');
+  c.width = THUMB_SIZE; c.height = THUMB_SIZE;
+  _thumbRenderer = new THREE.WebGLRenderer({ canvas: c, antialias: true, alpha: true, preserveDrawingBuffer: true });
+  _thumbRenderer.setPixelRatio(1);
+  _thumbRenderer.setSize(THUMB_SIZE, THUMB_SIZE, false);
+  _thumbRenderer.outputColorSpace = THREE.SRGBColorSpace;
+  _thumbRenderer.toneMapping = THREE.ACESFilmicToneMapping;
+  _thumbRenderer.toneMappingExposure = 1.4;
+  _thumbRenderer.setClearColor(0x1a2030, 1);
+  _thumbScene = new THREE.Scene();
+  const hemi = new THREE.HemisphereLight(0xffffff, 0x404858, 1.4);
+  const dir = new THREE.DirectionalLight(0xffffff, 1.6);
+  dir.position.set(8, 14, 6);
+  const fill = new THREE.DirectionalLight(0xa0b8ff, 0.5);
+  fill.position.set(-6, 8, -4);
+  _thumbScene.add(hemi, dir, fill);
+  _thumbCam = new THREE.PerspectiveCamera(35, 1, 0.1, 500);
+  return { renderer: _thumbRenderer, scene: _thumbScene, camera: _thumbCam };
+}
+function makeThumb(key) {
+  if (thumbCache.has(key)) return thumbCache.get(key);
+  let url = '';
+  try {
+    const { renderer: r, scene: s, camera: c } = getThumbRig();
+    const mesh = buildSegmentMesh(key);
+    if (!mesh) { thumbCache.set(key, ''); return ''; }
+    s.add(mesh);
+    // Frame the mesh.
+    const box = new THREE.Box3().setFromObject(mesh);
+    const size = new THREE.Vector3(); box.getSize(size);
+    const center = new THREE.Vector3(); box.getCenter(center);
+    const radius = Math.max(size.x, size.y, size.z, 1) * 0.62;
+    const dist = radius / Math.tan((c.fov * Math.PI / 180) / 2) * 1.15;
+    const dirVec = new THREE.Vector3(1, 0.85, 1).normalize();
+    c.position.copy(center).addScaledVector(dirVec, dist);
+    c.lookAt(center);
+    c.updateProjectionMatrix();
+    r.render(s, c);
+    url = r.domElement.toDataURL('image/png');
+    s.remove(mesh);
+    // Dispose to keep memory bounded.
+    mesh.traverse(o => {
+      if (o.geometry) o.geometry.dispose();
+    });
+  } catch (err) {
+    console.warn('[studio] thumbnail failed for', key, err);
+  }
+  thumbCache.set(key, url);
+  return url;
+}
+
 // ── Palette UI (grouped by category) ──────────────────────────
 const paletteEl = document.getElementById('palette');
 const paletteSearchEl = document.getElementById('paletteSearch');
@@ -179,6 +240,11 @@ function buildPalette() {
       const btn = document.createElement('button');
       btn.dataset.key = key;
       btn.innerHTML = `<div class="swatch"></div><div>${def.label}</div>`;
+      const swatch = btn.querySelector('.swatch');
+      const thumbUrl = makeThumb(key);
+      if (swatch && thumbUrl) {
+        swatch.style.background = `url("${thumbUrl}") center/contain no-repeat`;
+      }
       if (key === activeKey) btn.classList.add('active');
       btn.addEventListener('click', () => {
         activeKey = key;
