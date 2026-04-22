@@ -6,11 +6,16 @@
  */
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js';
 import { SEGMENTS, SEGMENT_KEYS, TILE } from './segments.js';
 import { buildSegmentMesh } from './segment-builder.js';
 import { Track, encodeTrack, decodeTrack } from './track-data.js';
 import { KARTS, resolveSelectedKartId } from './kart-catalog.js';
 import { preloadAllKarts, cloneKart } from './kart-loader.js';
+import {
+  DECOR, DECOR_KEYS, DECOR_CATEGORY_ORDER, DECOR_CATEGORY_LABELS,
+  isDecorKey, DecorStore, buildDecorMesh, syncDecorMesh, getDecorMaterial,
+} from './decor.js';
 
 const STORAGE_KEY = 'gloKartsStudio.lastTrack';
 
@@ -77,6 +82,16 @@ scene.add(grid);
 const track = new Track();
 const placementGroup = new THREE.Group();
 scene.add(placementGroup);
+
+// Decor (Tinkercad-style free 3D objects) lives in a parallel store.
+const decor = new DecorStore();
+const decorGroup = new THREE.Group();
+scene.add(decorGroup);
+const decorMeshById = new Map();
+const selectedDecorIds = new Set();
+let lastSelectedDecorId = null;
+let gizmoMode = 'translate';
+let gizmoSnap = false;
 
 let activeKey = SEGMENT_KEYS[0];
 let activeRot = 0;       // 0..3
@@ -147,6 +162,25 @@ function removePlacementMesh(id) {
   }
 }
 
+function addDecorMesh(d) {
+  const mesh = buildDecorMesh(d);
+  if (!mesh) return;
+  decorGroup.add(mesh);
+  decorMeshById.set(d.id, mesh);
+}
+function removeDecorMesh(id) {
+  const mesh = decorMeshById.get(id);
+  if (mesh) {
+    decorGroup.remove(mesh);
+    decorMeshById.delete(id);
+  }
+}
+function rebuildAllDecor() {
+  while (decorGroup.children.length) decorGroup.remove(decorGroup.children[0]);
+  decorMeshById.clear();
+  for (const d of decor.all()) addDecorMesh(d);
+}
+
 // ── Segment thumbnail renderer (offscreen) ────────────────────
 // Renders each segment piece into a small data-URL once, cached by key,
 // so palette tiles show the actual road geometry instead of a blank swatch.
@@ -181,7 +215,17 @@ function makeThumb(key) {
   let url = '';
   try {
     const { renderer: r, scene: s, camera: c } = getThumbRig();
-    const mesh = buildSegmentMesh(key);
+    let mesh;
+    if (isDecorKey(key)) {
+      const def = DECOR[key];
+      const dr = def.defaultRot || [0, 0, 0];
+      const ds = def.defaultScale || [1, 1, 1];
+      mesh = new THREE.Mesh(def.build(), getDecorMaterial(def.color, false).clone());
+      mesh.rotation.set(dr[0], dr[1], dr[2]);
+      mesh.scale.set(ds[0], ds[1], ds[2]);
+    } else {
+      mesh = buildSegmentMesh(key);
+    }
     if (!mesh) { thumbCache.set(key, ''); return ''; }
     s.add(mesh);
     // Frame the mesh.
@@ -197,10 +241,13 @@ function makeThumb(key) {
     r.render(s, c);
     url = r.domElement.toDataURL('image/png');
     s.remove(mesh);
-    // Dispose to keep memory bounded.
-    mesh.traverse(o => {
-      if (o.geometry) o.geometry.dispose();
-    });
+    if (!isDecorKey(key)) {
+      mesh.traverse(o => {
+        if (o.geometry) o.geometry.dispose();
+      });
+    } else if (mesh.material && mesh.material.dispose) {
+      mesh.material.dispose();
+    }
   } catch (err) {
     console.warn('[studio] thumbnail failed for', key, err);
   }
@@ -212,25 +259,27 @@ function makeThumb(key) {
 const paletteEl = document.getElementById('palette');
 const paletteSearchEl = document.getElementById('paletteSearch');
 let paletteFilter = '';
-const CATEGORY_ORDER = ['road', 'junction', 'height', 'special'];
+const CATEGORY_ORDER = ['road', 'junction', 'height', 'special', ...DECOR_CATEGORY_ORDER];
 const CATEGORY_LABELS = {
   road: 'Road',
   junction: 'Junctions',
   height: 'Vertical',
   special: 'Special',
+  ...DECOR_CATEGORY_LABELS,
 };
 function buildPalette() {
   paletteEl.innerHTML = '';
   const filter = paletteFilter.trim().toLowerCase();
   // Group keys by category (preserving insertion order within a group).
   const groups = new Map();
-  for (const key of SEGMENT_KEYS) {
-    const def = SEGMENTS[key];
-    if (filter && !def.label.toLowerCase().includes(filter) && !key.toLowerCase().includes(filter)) continue;
+  const addKey = (key, def) => {
+    if (filter && !def.label.toLowerCase().includes(filter) && !key.toLowerCase().includes(filter)) return;
     const cat = def.category || 'special';
     if (!groups.has(cat)) groups.set(cat, []);
     groups.get(cat).push(key);
-  }
+  };
+  for (const key of SEGMENT_KEYS) addKey(key, SEGMENTS[key]);
+  for (const key of DECOR_KEYS) addKey(key, DECOR[key]);
   const renderGroup = (cat, keys) => {
     if (!keys?.length) return;
     const header = document.createElement('div');
@@ -238,7 +287,7 @@ function buildPalette() {
     header.textContent = CATEGORY_LABELS[cat] || cat;
     paletteEl.appendChild(header);
     for (const key of keys) {
-      const def = SEGMENTS[key];
+      const def = SEGMENTS[key] || DECOR[key];
       const btn = document.createElement('button');
       btn.dataset.key = key;
       btn.innerHTML = `<div class="swatch"></div><div>${def.label}</div>`;
@@ -280,6 +329,26 @@ if (paletteSearchEl) {
 // ── Preview ghost ─────────────────────────────────────────────
 function updatePreview() {
   while (previewGroup.children.length) previewGroup.remove(previewGroup.children[0]);
+  if (isDecorKey(activeKey)) {
+    const def = DECOR[activeKey];
+    const dr = def.defaultRot || [0, 0, 0];
+    const ds = def.defaultScale || [1, 1, 1];
+    const m = new THREE.MeshStandardMaterial({
+      color: def.color, roughness: 0.65, metalness: 0.05,
+      transparent: true, opacity: 0.55, depthWrite: false,
+    });
+    previewMesh = new THREE.Mesh(def.build(), m);
+    previewMesh.rotation.set(dr[0], dr[1], dr[2]);
+    previewMesh.scale.set(ds[0], ds[1], ds[2]);
+    previewGroup.add(previewMesh);
+    if (previewCell) {
+      const y = def.defaultY || 0;
+      previewMesh.position.set(previewCell.gx * TILE, y, previewCell.gz * TILE);
+    } else {
+      previewMesh.visible = false;
+    }
+    return;
+  }
   previewMesh = buildSegmentMesh(activeKey);
   previewMesh.traverse((c) => {
     if (c.isMesh) {
@@ -312,21 +381,32 @@ function pickGroundCell(event) {
   // of an existing placement.
   const groundHits = raycaster.intersectObject(ground);
   let cell = null;
+  let worldPoint = null;
   if (groundHits.length) {
     const point = groundHits[0].point;
+    worldPoint = { x: point.x, y: 0, z: point.z };
     cell = { gx: Math.round(point.x / TILE), gz: Math.round(point.z / TILE) };
   }
-  // Then try to hit existing placement meshes (for selection)
+  // Decor meshes are checked before placement meshes so a decor object
+  // sitting on top of a road segment can still be picked.
+  const decorHits = raycaster.intersectObjects(decorGroup.children, true);
+  if (decorHits.length) {
+    let obj = decorHits[0].object;
+    while (obj && obj.userData.decorId == null) obj = obj.parent;
+    if (obj && obj.userData.decorId != null) {
+      return { kind: 'decor', id: obj.userData.decorId, gx: cell?.gx, gz: cell?.gz, worldPoint };
+    }
+  }
   const placementHits = raycaster.intersectObjects(placementGroup.children, true);
   if (placementHits.length) {
     let obj = placementHits[0].object;
     while (obj && obj.userData.placementId == null) obj = obj.parent;
     if (obj && obj.userData.placementId != null) {
-      return { kind: 'placement', id: obj.userData.placementId, gx: cell?.gx, gz: cell?.gz };
+      return { kind: 'placement', id: obj.userData.placementId, gx: cell?.gx, gz: cell?.gz, worldPoint };
     }
   }
   if (!cell) return null;
-  return { kind: 'cell', gx: cell.gx, gz: cell.gz };
+  return { kind: 'cell', gx: cell.gx, gz: cell.gz, worldPoint };
 }
 
 canvas.addEventListener('mousemove', (e) => {
@@ -393,7 +473,8 @@ canvas.addEventListener('mousedown', (e) => {
   // a non-overlay segment — in that case the click should drop the road
   // underneath the spawn rather than drag the spawn.)
   const _hitOverlay = hit && hit.kind === 'placement' && track.isOverlay(track.getById(hit.id)?.key);
-  if (hit && hit.kind === 'placement' && !track.isOverlay(activeKey) && !_hitOverlay) {
+  const _activeDecor = isDecorKey(activeKey);
+  if (hit && hit.kind === 'placement' && !track.isOverlay(activeKey) && !_hitOverlay && !_activeDecor) {
     // If the clicked piece isn't already selected, switch selection to it now
     // so the drag operates on what the user actually clicked.
     if (!selectedIds.has(hit.id) && !e.shiftKey && !(e.ctrlKey || e.metaKey)) {
@@ -494,6 +575,12 @@ canvas.addEventListener('click', (e) => {
   if (mouseDownStateConsumedDrag()) return;
   const hit = pickGroundCell(e);
   if (!hit) return;
+  // Decor selection: clicking a decor mesh always selects it.
+  if (hit.kind === 'decor') {
+    const mode = e.shiftKey ? 'add' : (e.ctrlKey || e.metaKey) ? 'toggle' : 'replace';
+    selectDecor(hit.id, mode);
+    return;
+  }
   // Overlay segments (spawn) place on top of any cell — including ones already
   // occupied by a road piece — so route placement-hits to the placement path
   // when the active key is an overlay and we have cell coordinates.
@@ -501,10 +588,26 @@ canvas.addEventListener('click', (e) => {
   // cursor is an overlay (e.g. an existing spawn), treat the click as a cell
   // placement so the road can be dropped underneath the spawn.
   const overlayActive = track.isOverlay(activeKey);
+  const decorActive = isDecorKey(activeKey);
   const hitOverlay = hit.kind === 'placement' && track.isOverlay(track.getById(hit.id)?.key);
-  if (hit.kind === 'placement' && !overlayActive && !hitOverlay) {
+  if (hit.kind === 'placement' && !overlayActive && !hitOverlay && !decorActive) {
     const mode = e.shiftKey ? 'add' : (e.ctrlKey || e.metaKey) ? 'toggle' : 'replace';
     selectPlacement(hit.id, mode);
+    return;
+  }
+  // Decor placement: drop a free-positioned 3D shape at the cursor world point.
+  if (decorActive) {
+    const wp = hit.worldPoint || (hit.gx != null ? { x: hit.gx * TILE, y: 0, z: hit.gz * TILE } : null);
+    if (!wp) return;
+    let { x, z } = wp;
+    if (gizmoSnap) { x = Math.round(x); z = Math.round(z); }
+    const inst = decor.add({ type: activeKey, x, y: DECOR[activeKey].defaultY || 0, z });
+    if (inst) {
+      addDecorMesh(inst);
+      selectDecor(inst.id, 'replace');
+      pushUndo();
+      refreshHud();
+    }
     return;
   }
   if (hit.gx == null || hit.gz == null) return;
@@ -550,6 +653,11 @@ function selectPlacement(id, mode = 'replace') {
 function clearSelection() {
   selectedIds.clear();
   lastSelectedId = null;
+  selectedDecorIds.clear();
+  lastSelectedDecorId = null;
+  if (transformControls) transformControls.detach();
+  const gb = document.getElementById('gizmoBar');
+  if (gb) gb.hidden = true;
   refreshSelectionBoxes();
   refreshInspector();
 }
@@ -560,6 +668,134 @@ function selectAll() {
   lastSelectedId = selectedIds.size ? [...selectedIds].pop() : null;
   refreshSelectionBoxes();
   refreshInspector();
+}
+
+// --- Decor selection + TransformControls gizmo ---
+function selectDecor(id, mode = 'replace') {
+  if (!decor.getById(id)) return;
+  if (mode === 'add') {
+    selectedDecorIds.add(id);
+    lastSelectedDecorId = id;
+  } else if (mode === 'toggle') {
+    if (selectedDecorIds.has(id)) {
+      selectedDecorIds.delete(id);
+      if (lastSelectedDecorId === id) lastSelectedDecorId = selectedDecorIds.size ? [...selectedDecorIds].pop() : null;
+    } else {
+      selectedDecorIds.add(id);
+      lastSelectedDecorId = id;
+    }
+  } else {
+    selectedDecorIds.clear();
+    selectedDecorIds.add(id);
+    lastSelectedDecorId = id;
+  }
+  selectedIds.clear();
+  lastSelectedId = null;
+  refreshSelectionBoxes();
+  refreshDecorGizmo();
+  refreshInspector();
+}
+function deleteDecorSelection() {
+  if (selectedDecorIds.size === 0) return;
+  for (const id of selectedDecorIds) {
+    removeDecorMesh(id);
+    decor.remove(id);
+  }
+  selectedDecorIds.clear();
+  lastSelectedDecorId = null;
+  refreshDecorGizmo();
+  pushUndo();
+  refreshHud();
+  refreshInspector();
+}
+function duplicateDecorSelection() {
+  if (selectedDecorIds.size === 0) return;
+  const newIds = [];
+  for (const id of selectedDecorIds) {
+    const d = decor.getById(id);
+    if (!d) continue;
+    const copy = decor.add({
+      type: d.type,
+      x: d.x + 2, y: d.y, z: d.z + 2,
+      rx: d.rx, ry: d.ry, rz: d.rz,
+      sx: d.sx, sy: d.sy, sz: d.sz,
+      color: d.color, isHole: d.isHole,
+    });
+    if (copy) { addDecorMesh(copy); newIds.push(copy.id); }
+  }
+  if (newIds.length) {
+    selectedDecorIds.clear();
+    for (const id of newIds) selectedDecorIds.add(id);
+    lastSelectedDecorId = newIds[newIds.length - 1];
+    refreshDecorGizmo();
+    refreshInspector();
+    pushUndo();
+    refreshHud();
+  }
+}
+let transformControls = null;
+function ensureTransformControls() {
+  if (transformControls) return transformControls;
+  transformControls = new TransformControls(activeCamera, renderer.domElement);
+  transformControls.setSize(0.85);
+  transformControls.addEventListener('dragging-changed', (e) => {
+    controls.enabled = !e.value;
+    if (!e.value) {
+      syncSelectedDecorFromMesh();
+      pushUndo();
+      refreshInspector();
+    }
+  });
+  transformControls.addEventListener('objectChange', () => {
+    syncSelectedDecorFromMesh();
+    refreshInspector();
+  });
+  const helper = transformControls.getHelper ? transformControls.getHelper() : transformControls;
+  scene.add(helper);
+  return transformControls;
+}
+function syncSelectedDecorFromMesh() {
+  if (lastSelectedDecorId == null) return;
+  const mesh = decorMeshById.get(lastSelectedDecorId);
+  const inst = decor.getById(lastSelectedDecorId);
+  if (!mesh || !inst) return;
+  inst.x = mesh.position.x; inst.y = mesh.position.y; inst.z = mesh.position.z;
+  inst.rx = mesh.rotation.x; inst.ry = mesh.rotation.y; inst.rz = mesh.rotation.z;
+  inst.sx = mesh.scale.x; inst.sy = mesh.scale.y; inst.sz = mesh.scale.z;
+}
+function refreshDecorGizmo() {
+  ensureTransformControls();
+  const gizmoBar = document.getElementById('gizmoBar');
+  if (selectedDecorIds.size === 0 || lastSelectedDecorId == null) {
+    transformControls.detach();
+    if (gizmoBar) gizmoBar.hidden = true;
+    return;
+  }
+  const mesh = decorMeshById.get(lastSelectedDecorId);
+  if (!mesh) { transformControls.detach(); if (gizmoBar) gizmoBar.hidden = true; return; }
+  transformControls.attach(mesh);
+  transformControls.setMode(gizmoMode);
+  transformControls.translationSnap = gizmoSnap ? 1 : null;
+  transformControls.rotationSnap = gizmoSnap ? Math.PI / 12 : null;
+  transformControls.scaleSnap = gizmoSnap ? 0.1 : null;
+  if (gizmoBar) gizmoBar.hidden = false;
+}
+function setGizmoMode(mode) {
+  if (!['translate', 'rotate', 'scale'].includes(mode)) return;
+  gizmoMode = mode;
+  if (transformControls) transformControls.setMode(mode);
+  document.querySelectorAll('#gizmoBar [data-mode]').forEach(b => {
+    b.classList.toggle('active', b.dataset.mode === mode);
+  });
+}
+function setGizmoSnap(on) {
+  gizmoSnap = !!on;
+  if (transformControls) {
+    transformControls.translationSnap = gizmoSnap ? 1 : null;
+    transformControls.rotationSnap = gizmoSnap ? Math.PI / 12 : null;
+    transformControls.scaleSnap = gizmoSnap ? 0.1 : null;
+  }
+  document.getElementById('gizmoSnap')?.classList.toggle('active', gizmoSnap);
 }
 
 // ── Keyboard ───────────────────────────────────────────────────
@@ -604,6 +840,10 @@ window.addEventListener('keydown', (e) => {
 
   // ── Rotate (R) ──
   if (e.key === 'r' || e.key === 'R') {
+    if (selectedDecorIds.size > 0) {
+      rotateSelection(e.shiftKey ? -1 : 1);
+      return;
+    }
     if (selectedIds.size > 0) {
       rotateSelection(e.shiftKey ? -1 : 1);
     } else {
@@ -612,9 +852,14 @@ window.addEventListener('keydown', (e) => {
     }
     return;
   }
+  // Gizmo mode keys (Tinkercad/Blender-style): G translate, T rotate, Y scale.
+  if (e.key === 'g' || e.key === 'G') { setGizmoMode('translate'); return; }
+  if (e.key === 't' || e.key === 'T') { setGizmoMode('rotate'); return; }
+  if (e.key === 'y' || e.key === 'Y') { setGizmoMode('scale'); return; }
 
   // ── Delete ──
   if (e.key === 'Delete' || e.key === 'Backspace') {
+    if (selectedDecorIds.size > 0) { deleteDecorSelection(); return; }
     if (selectedIds.size > 0) {
       deleteSelection();
     }
@@ -691,6 +936,7 @@ function pasteClipboard(anchorGx, anchorGz) {
 }
 
 function duplicateSelection() {
+  if (selectedDecorIds.size > 0) { duplicateDecorSelection(); return; }
   if (selectedIds.size === 0) {
     toast('Nothing to duplicate');
     return;
@@ -742,6 +988,19 @@ function nudgeSelection(dx, dz) {
  * Each piece rotates in place; blocked pieces are skipped.
  */
 function rotateSelection(dir = 1) {
+  if (selectedDecorIds.size > 0) {
+    for (const id of selectedDecorIds) {
+      const inst = decor.getById(id);
+      const mesh = decorMeshById.get(id);
+      if (!inst || !mesh) continue;
+      inst.ry += dir * Math.PI / 2;
+      mesh.rotation.y = inst.ry;
+    }
+    refreshDecorGizmo();
+    refreshInspector();
+    pushUndo();
+    return;
+  }
   if (selectedIds.size === 0) return;
   const snap = [...selectedIds].map(id => track.getById(id)).filter(Boolean);
   const rotated = [];
@@ -786,7 +1045,7 @@ let undoIndex = -1;
 function pushUndo() {
   // Truncate forward history when a new edit happens.
   undoStack.length = undoIndex + 1;
-  undoStack.push(JSON.stringify(track.toJSON()));
+  undoStack.push(JSON.stringify(saveJSON()));
   undoIndex = undoStack.length - 1;
   if (undoStack.length > 50) {
     undoStack.shift();
@@ -817,8 +1076,80 @@ function refreshHud() {
   if (typeof positionKartPreview === 'function') positionKartPreview();
   if (typeof refreshPlayButton === 'function') refreshPlayButton();
 }
+function round2(v) { return Math.round(v * 100) / 100; }
+function bindDecorInspector(d) {
+  const apply = () => {
+    const mesh = decorMeshById.get(d.id);
+    if (mesh) syncDecorMesh(mesh, d);
+  };
+  const num = (id, fn) => {
+    const ele = document.getElementById(id);
+    if (!ele) return;
+    ele.addEventListener('change', () => {
+      fn(parseFloat(ele.value) || 0);
+      apply();
+      pushUndo();
+    });
+  };
+  num('decorX', v => d.x = v);
+  num('decorY', v => d.y = v);
+  num('decorZ', v => d.z = v);
+  num('decorRX', v => d.rx = v * Math.PI / 180);
+  num('decorRY', v => d.ry = v * Math.PI / 180);
+  num('decorRZ', v => d.rz = v * Math.PI / 180);
+  num('decorSX', v => d.sx = Math.max(0.05, v));
+  num('decorSY', v => d.sy = Math.max(0.05, v));
+  num('decorSZ', v => d.sz = Math.max(0.05, v));
+  const colorEl = document.getElementById('decorColor');
+  colorEl?.addEventListener('input', () => {
+    d.color = parseInt(colorEl.value.replace('#', ''), 16);
+    apply();
+  });
+  colorEl?.addEventListener('change', () => pushUndo());
+  const holeEl = document.getElementById('decorHole');
+  holeEl?.addEventListener('change', () => {
+    d.isHole = holeEl.checked;
+    apply();
+    pushUndo();
+  });
+}
 function refreshInspector() {
   const el = document.getElementById('inspector');
+  if (selectedDecorIds.size > 0) {
+    if (selectedDecorIds.size > 1) {
+      el.innerHTML = '<div class="row"><span>Selected</span><b>' + selectedDecorIds.size + ' objects</b></div>'
+        + '<div style="margin-top:8px; font-size:11px; color:var(--muted);">G move | T rotate | Y scale | Del remove</div>';
+      return;
+    }
+    const d = decor.getById(lastSelectedDecorId);
+    if (!d) return;
+    const def = DECOR[d.type];
+    const hex = '#' + (d.color & 0xffffff).toString(16).padStart(6, '0');
+    el.innerHTML = ''
+      + '<div class="decor-inspector">'
+      +   '<div class="ins-row"><b>' + def.label + '</b>'
+      +     '<label class="hole-toggle"><input type="checkbox" id="decorHole"' + (d.isHole ? ' checked' : '') + '/> hole</label>'
+      +     '<input type="color" id="decorColor" value="' + hex + '"/>'
+      +   '</div>'
+      +   '<div class="ins-grid">'
+      +     '<label>Pos</label>'
+      +     '<input type="number" id="decorX" step="0.1" value="' + round2(d.x) + '"/>'
+      +     '<input type="number" id="decorY" step="0.1" value="' + round2(d.y) + '"/>'
+      +     '<input type="number" id="decorZ" step="0.1" value="' + round2(d.z) + '"/>'
+      +     '<label>Rot</label>'
+      +     '<input type="number" id="decorRX" step="5" value="' + round2(d.rx * 180 / Math.PI) + '"/>'
+      +     '<input type="number" id="decorRY" step="5" value="' + round2(d.ry * 180 / Math.PI) + '"/>'
+      +     '<input type="number" id="decorRZ" step="5" value="' + round2(d.rz * 180 / Math.PI) + '"/>'
+      +     '<label>Size</label>'
+      +     '<input type="number" id="decorSX" step="0.1" min="0.05" value="' + round2(d.sx) + '"/>'
+      +     '<input type="number" id="decorSY" step="0.1" min="0.05" value="' + round2(d.sy) + '"/>'
+      +     '<input type="number" id="decorSZ" step="0.1" min="0.05" value="' + round2(d.sz) + '"/>'
+      +   '</div>'
+      +   '<div style="margin-top:8px; font-size:11px; color:var(--muted);">G move | T rotate | Y scale | drag the gizmo handles</div>'
+      + '</div>';
+    bindDecorInspector(d);
+    return;
+  }
   if (selectedIds.size === 0) {
     el.innerHTML = `<div style="color:var(--muted); font-size:12px;">Nothing selected.<br><span style="font-size:10px;opacity:0.7;">Click a piece · Shift-click to add · Ctrl+A to select all</span></div>`;
     return;
@@ -849,23 +1180,36 @@ function toast(msg) {
 }
 
 // ── Save / load / share / play ────────────────────────────────
+function saveJSON() {
+  return { track: track.toJSON(), decor: decor.toJSON() };
+}
 const trackNameEl = document.getElementById('trackName');
 trackNameEl.addEventListener('change', () => { track.name = trackNameEl.value || 'Untitled Track'; });
 
 function loadFromJSON(json, snapshot = true) {
-  const t = Track.fromJSON(json);
+  let trackJson = json;
+  let decorJson = null;
+  if (json && !Array.isArray(json) && (json.track || json.decor)) {
+    trackJson = json.track;
+    decorJson = json.decor;
+  }
+  const t = Track.fromJSON(trackJson);
   track.clear();
   track.name = t.name;
   trackNameEl.value = track.name;
   for (const p of t.all()) {
     track.place(p.key, p.gx, p.gz, p.rot);
   }
+  decor.clear();
+  if (decorJson) decor.fromJSON(decorJson);
   rebuildAll();
+  rebuildAllDecor();
+  clearSelection();
   if (snapshot) pushUndo();
 }
 
 document.getElementById('saveBtn').addEventListener('click', () => {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(track.toJSON()));
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(saveJSON()));
   toast('Saved to browser');
 });
 document.getElementById('loadBtn').addEventListener('click', () => {
@@ -877,7 +1221,9 @@ document.getElementById('loadBtn').addEventListener('click', () => {
 document.getElementById('clearBtn').addEventListener('click', () => {
   if (!confirm('Clear all pieces?')) return;
   track.clear();
+  decor.clear();
   rebuildAll();
+  rebuildAllDecor();
   clearSelection();
   pushUndo();
 });
@@ -1039,6 +1385,7 @@ let activeCamera = camera;
 function setActiveCamera(next) {
   activeCamera = next;
   controls.object = next;
+  if (transformControls) transformControls.camera = next;
   controls.update();
 }
 function toggleOrtho() {
@@ -1217,5 +1564,12 @@ pushUndo();
 refreshHud();
 updatePreview();
 
+// Gizmo toolbar wiring
+ensureTransformControls();
+document.querySelectorAll('#gizmoBar [data-mode]').forEach(btn => {
+  btn.addEventListener('click', () => setGizmoMode(btn.dataset.mode));
+});
+document.getElementById('gizmoSnap')?.addEventListener('click', () => setGizmoSnap(!gizmoSnap));
+
 // Expose for debugging
-window.__studio = { track, scene, camera, renderer, rebuildAll, refreshHud, refreshPlayButton };
+window.__studio = { track, decor, scene, camera, renderer, rebuildAll, rebuildAllDecor, refreshHud, refreshPlayButton, selectDecor };

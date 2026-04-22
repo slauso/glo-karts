@@ -175,6 +175,50 @@
     .ctx-item--danger { color: #fc8181; }
     .ctx-item--danger:hover { background: rgba(229,62,62,0.18); }
     .ctx-divider { height: 1px; margin: 4px 6px; background: var(--line); }
+
+    /* ── Gizmo mode toolbar (top-left of viewport) ─────────────── */
+    .gizmo-bar {
+      position: absolute; top: 12px; left: 12px; z-index: 20;
+      display: flex; gap: 4px; padding: 4px;
+      background: rgba(20,24,30,0.92);
+      border: 1px solid var(--line); border-radius: 8px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+    }
+    .gizmo-bar button {
+      width: 32px; height: 32px;
+      display: flex; align-items: center; justify-content: center;
+      background: transparent; border: 1px solid transparent;
+      color: var(--text); border-radius: 5px; cursor: pointer; padding: 0;
+      font-size: 11px; font-weight: 600;
+    }
+    .gizmo-bar button svg { width: 16px; height: 16px; fill: currentColor; pointer-events: none; }
+    .gizmo-bar button:hover { background: rgba(255,255,255,0.08); }
+    .gizmo-bar button.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+    .gizmo-bar .sep { width: 1px; background: var(--line); margin: 4px 2px; }
+
+    /* ── Decor inspector controls ──────────────────────────────── */
+    .decor-inspector .ins-grid {
+      display: grid; grid-template-columns: auto 1fr 1fr 1fr; gap: 4px 6px;
+      align-items: center; font-size: 11px;
+    }
+    .decor-inspector .ins-grid label { color: var(--muted); }
+    .decor-inspector .ins-grid input[type=number] {
+      width: 100%; box-sizing: border-box;
+      background: var(--panel-2); border: 1px solid var(--line);
+      color: var(--text); padding: 3px 4px; border-radius: 3px; font-size: 11px;
+    }
+    .decor-inspector .ins-row {
+      display: flex; align-items: center; gap: 8px; padding: 6px 0;
+      border-top: 1px solid var(--line); margin-top: 6px; font-size: 12px;
+    }
+    .decor-inspector .ins-row:first-child { border-top: none; margin-top: 0; }
+    .decor-inspector input[type=color] {
+      width: 40px; height: 24px; padding: 0; border: 1px solid var(--line);
+      background: transparent; cursor: pointer;
+    }
+    .decor-inspector .hole-toggle {
+      display: flex; align-items: center; gap: 4px; font-size: 11px; color: var(--muted);
+    }
   </style>
 </head>
 <body>
@@ -233,6 +277,22 @@
     <main>
       <canvas id="canvas"></canvas>
       <div class="hud" id="hud">Pieces: <b id="pieceCount">0</b></div>
+      <!-- Gizmo mode toolbar (shown when a decor object is selected) -->
+      <div class="gizmo-bar" id="gizmoBar" hidden>
+        <button data-mode="translate" class="active" title="Move (G)">
+          <svg viewBox="0 0 24 24"><path d="M13 6v5h5V7.75L22.25 12 18 16.25V13h-5v5h3.25L12 22.25 7.75 18H11v-5H6v3.25L1.75 12 6 7.75V11h5V6H7.75L12 1.75 16.25 6H13z"/></svg>
+        </button>
+        <button data-mode="rotate" title="Rotate (R)">
+          <svg viewBox="0 0 24 24"><path d="M12 6V3L8 7l4 4V8c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 17.03 20 15.57 20 14c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 9.74C4.46 10.97 4 12.43 4 14c0 4.42 3.58 8 8 8v3l4-4-4-4v3z"/></svg>
+        </button>
+        <button data-mode="scale" title="Scale (S)">
+          <svg viewBox="0 0 24 24"><path d="M3 17v4h4v-2H5v-2H3zm0-10h2V5h2V3H3v4zm14-4v2h2v2h2V3h-4zm2 14h-2v2h-2v2h4v-4zM5 11h14v2H5z"/></svg>
+        </button>
+        <div class="sep"></div>
+        <button data-toggle="snap" id="gizmoSnap" title="Toggle 1-unit snap">
+          <svg viewBox="0 0 24 24"><path d="M3 3h2v2H3zm4 0h2v2H7zm4 0h2v2h-2zm4 0h2v2h-2zm4 0h2v2h-2zM3 7h2v2H3zm16 0h2v2h-2zM3 11h2v2H3zm16 0h2v2h-2zM3 15h2v2H3zm16 0h2v2h-2zM3 19h2v2H3zm4 0h2v2H7zm4 0h2v2h-2zm4 0h2v2h-2zm4 0h2v2h-2z"/></svg>
+        </button>
+      </div>
       <div class="view-cube" id="viewCube" title="Snap camera">
         <button data-view="top">TOP</button>
         <button data-view="front">FRONT</button>
