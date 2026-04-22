@@ -45,6 +45,7 @@ export function buildSegmentMesh(key) {
     mesh.position.set(...block.pos);
     if (block.rotX) mesh.rotation.x = block.rotX;
     if (block.rotY) mesh.rotation.y = block.rotY;
+    if (block.rotZ) mesh.rotation.z = block.rotZ;
     mesh.castShadow = true;
     mesh.receiveShadow = true;
     mesh.userData.drivable = !!block.drivable;
@@ -73,14 +74,18 @@ export function buildSegmentBody(key, worldPos, worldRotY) {
     );
     const shape = new CANNON.Box(halfExtents);
     const offset = new CANNON.Vec3(...block.pos);
-    // Compose local rotation (rotX then rotY)
+    // Compose local rotation (rotX then rotY then rotZ)
     const localQuat = new CANNON.Quaternion();
-    if (block.rotX || block.rotY) {
+    if (block.rotX || block.rotY || block.rotZ) {
       const qx = new CANNON.Quaternion();
       qx.setFromAxisAngle(new CANNON.Vec3(1, 0, 0), block.rotX || 0);
       const qy = new CANNON.Quaternion();
       qy.setFromAxisAngle(new CANNON.Vec3(0, 1, 0), block.rotY || 0);
-      qy.mult(qx, localQuat);
+      const qz = new CANNON.Quaternion();
+      qz.setFromAxisAngle(new CANNON.Vec3(0, 0, 1), block.rotZ || 0);
+      const tmp = new CANNON.Quaternion();
+      qy.mult(qx, tmp);
+      tmp.mult(qz, localQuat);
     }
     body.addShape(shape, offset, localQuat);
   }

@@ -200,6 +200,151 @@ export const SEGMENTS = {
     ],
     isSpawn: true,
   },
+
+  // ── Junctions & wide road ─────────────────────────────────────
+  wide: {
+    label: 'Wide Plaza',
+    category: 'junction',
+    span: { x: 2, z: 2 },
+    // 2x2 deck centered between the four cells. Anchor cell is the -X/-Z corner,
+    // so the deck centre sits at (+TILE/2, _, +TILE/2).
+    blocks: wideDeckBlocks(),
+  },
+
+  t_junction: {
+    label: 'T-Junction',
+    category: 'junction',
+    span: { x: 1, z: 1 },
+    blocks: tJunctionBlocks(),
+  },
+
+  crossroads: {
+    label: 'Crossroads',
+    category: 'junction',
+    span: { x: 1, z: 1 },
+    blocks: crossroadsBlocks(),
+  },
+
+  // ── Corner sweeps ─────────────────────────────────────────────
+  corner_large: {
+    label: 'Sweep L',
+    category: 'road',
+    span: { x: 2, z: 2 },
+    blocks: cornerSweepBlocks(false),
+  },
+
+  corner_largeR: {
+    label: 'Sweep R',
+    category: 'road',
+    span: { x: 2, z: 2 },
+    blocks: cornerSweepBlocks(true),
+  },
+
+  // ── Bends & chicane ──────────────────────────────────────────
+  // A bend slips the racing line one cell sideways over a 2-cell length.
+  bend_left: {
+    label: 'Bend L',
+    category: 'road',
+    span: { x: 1, z: 2 },
+    blocks: bendBlocks(false),
+  },
+  bend_right: {
+    label: 'Bend R',
+    category: 'road',
+    span: { x: 1, z: 2 },
+    blocks: bendBlocks(true),
+  },
+  // Chicane = bend left then back right over 4 cells along Z (1×4 footprint).
+  chicane: {
+    label: 'Chicane',
+    category: 'road',
+    span: { x: 1, z: 4 },
+    blocks: chicaneBlocks(),
+  },
+
+  // ── Banked turn ──────────────────────────────────────────────
+  // Same footprint as a sweep but with the deck tilted toward the inside,
+  // so karts can corner at higher speed.
+  banked_turn: {
+    label: 'Banked L',
+    category: 'road',
+    span: { x: 2, z: 2 },
+    blocks: bankedTurnBlocks(false),
+  },
+  banked_turnR: {
+    label: 'Banked R',
+    category: 'road',
+    span: { x: 2, z: 2 },
+    blocks: bankedTurnBlocks(true),
+  },
+
+  // ── Bumps & hills ────────────────────────────────────────────
+  bump_up: {
+    label: 'Bump',
+    category: 'height',
+    span: { x: 1, z: 1 },
+    // Single cell with a small (~0.4u) raised bump in the middle. Drivable.
+    blocks: bumpBlocks(0.4, 1),
+  },
+  hill_complete: {
+    label: 'Rolling Hill',
+    category: 'height',
+    span: { x: 1, z: 2 },
+    // Up-and-over hill in 2 cells. Gentle parabola approximated by 4 short ramps.
+    blocks: rollingHillBlocks(TILE * 0.5, TILE * 2),
+  },
+  jump_ramp: {
+    label: 'Jump Ramp',
+    category: 'height',
+    span: { x: 1, z: 1 },
+    // Short kicker ramp that launches the kart. Rises ~1.2u over 1 cell.
+    blocks: rampBlocks(0, 1.2, TILE).map((b, i) => ({
+      ...b,
+      // shrink to 1-cell length
+      size: i === 0 ? [ROAD_WIDTH, ROAD_THICK, Math.sqrt(1.2 * 1.2 + TILE * TILE)] : b.size,
+    })),
+  },
+
+  // ── Bridge (deck spans 1×2 elevated) ─────────────────────────
+  bridge: {
+    label: 'Bridge',
+    category: 'height',
+    span: { x: 1, z: 2 },
+    blocks: bridgeBlocks(TILE * 0.6, TILE * 2),
+  },
+  bridge_onramp: {
+    label: 'Bridge On-Ramp',
+    category: 'height',
+    span: { x: 1, z: 2 },
+    blocks: rampBlocks(0, TILE * 0.6, TILE * 2),
+  },
+  bridge_offramp: {
+    label: 'Bridge Off-Ramp',
+    category: 'height',
+    span: { x: 1, z: 2 },
+    blocks: rampBlocks(TILE * 0.6, 0, TILE * 2),
+  },
+
+  // ── Tunnel (straight + arched roof) ──────────────────────────
+  tunnel: {
+    label: 'Tunnel',
+    category: 'special',
+    span: { x: 1, z: 2 },
+    blocks: tunnelBlocks(TILE * 2),
+  },
+
+  // ── End caps ─────────────────────────────────────────────────
+  cap_end: {
+    label: 'End Cap',
+    category: 'special',
+    span: { x: 1, z: 1 },
+    // Drivable straight + a wall on the +Z side closing off the dead end.
+    blocks: [
+      deck(),
+      ...curbStripes(),
+      { kind: 'box', size: [TILE, WALL_HEIGHT, WALL_THICK], pos: [0, ROAD_THICK + WALL_HEIGHT / 2, TILE / 2 - WALL_THICK / 2], color: WALL_COLOR },
+    ],
+  },
 };
 
 // ── helpers for parametric pieces ──────────────────────────────
@@ -287,6 +432,224 @@ function rampBlocks(yStart, yEnd, lengthZ) {
       rotX: -angle,
       color: WALL_COLOR,
     },
+  ];
+}
+
+// ── Phase 1A new helpers ──────────────────────────────────────
+
+function wideDeckBlocks() {
+  // 2x2 plaza. Anchor cell is the -X/-Z corner of the footprint, so the
+  // visible deck is centred at (TILE/2, _, TILE/2).
+  const cx = TILE / 2;
+  const cz = TILE / 2;
+  const W = TILE * 2;
+  return [
+    { kind: 'box', size: [W, ROAD_THICK, W], pos: [cx, ROAD_THICK / 2, cz], color: ROAD_COLOR, drivable: true },
+    // Faint inner ring stripe to mark the plaza centre
+    { kind: 'box', size: [W * 0.7, 0.05, 0.18], pos: [cx, ROAD_THICK + 0.03, cz], color: CURB_W, solid: false },
+    { kind: 'box', size: [0.18, 0.05, W * 0.7], pos: [cx, ROAD_THICK + 0.03, cz], color: CURB_W, solid: false },
+  ];
+}
+
+function tJunctionBlocks() {
+  // Three open ports: -Z (in), -X, +X. Block the +Z edge with a curb.
+  // Implemented as a full-cell deck plus accent stripes on each open edge.
+  return [
+    { kind: 'box', size: [TILE, ROAD_THICK, TILE], pos: [0, ROAD_THICK / 2, 0], color: ROAD_COLOR, drivable: true },
+    // Closed (+Z) edge curb stripes
+    { kind: 'box', size: [TILE * 0.9, 0.06, 0.2], pos: [0, ROAD_THICK + 0.03, TILE / 2 - 0.15], color: CURB_R, solid: false },
+    { kind: 'box', size: [TILE * 0.45, 0.06, 0.2], pos: [-TILE * 0.225, ROAD_THICK + 0.03, TILE / 2 - 0.15], color: CURB_W, solid: false },
+    // Centre marker
+    { kind: 'box', size: [TILE * 0.5, 0.05, TILE * 0.5], pos: [0, ROAD_THICK + 0.03, 0], color: 0x4f5663, solid: false },
+  ];
+}
+
+function crossroadsBlocks() {
+  // All four edges open. Just a flat deck with a cross marker.
+  return [
+    { kind: 'box', size: [TILE, ROAD_THICK, TILE], pos: [0, ROAD_THICK / 2, 0], color: ROAD_COLOR, drivable: true },
+    { kind: 'box', size: [TILE * 0.85, 0.06, 0.2], pos: [0, ROAD_THICK + 0.03, 0], color: CURB_W, solid: false },
+    { kind: 'box', size: [0.2, 0.06, TILE * 0.85], pos: [0, ROAD_THICK + 0.03, 0], color: CURB_W, solid: false },
+  ];
+}
+
+function cornerSweepBlocks(mirror) {
+  // Long-radius sweep across a 2x2 footprint. We pave three cells in an
+  // L shape (anchor cell + adjacent cell along +Z + cell at the bend).
+  // For !mirror (left sweep) the path is (0,0) → (0,1) → (1,1).
+  // For  mirror (right sweep) the path is (0,0) → (0,1) → (-1,1)? No — we
+  // want both variants to fit in a 2x2 anchor-positive footprint, so the
+  // mirrored path uses cells (0,0) → (0,1) → (1,1) too but the curb is on
+  // the opposite side.
+  const blocks = [];
+  const cellPositions = [[0, 0], [0, 1], [1, 1]];
+  for (const [cx, cz] of cellPositions) {
+    blocks.push({
+      kind: 'box',
+      size: [TILE, ROAD_THICK, TILE],
+      pos: [cx * TILE, ROAD_THICK / 2, cz * TILE],
+      color: ROAD_COLOR,
+      drivable: true,
+    });
+  }
+  // Outside-arc curb stripes around the bend.
+  const STRIPES = 7;
+  // Inside corner of the bend in anchor-local coords.
+  const arcCx = mirror ? TILE : 0;
+  const arcCz = TILE;
+  const R = TILE * 1.35;
+  for (let i = 0; i < STRIPES; i++) {
+    const t = (i + 0.5) / STRIPES;
+    // Sweep angle along the arc.
+    const a = mirror
+      ? -Math.PI / 2 - (Math.PI / 2) * t   // start south, sweep east (right turn)
+      : Math.PI + (Math.PI / 2) * t;       // start west, sweep south (left turn)
+    const px = arcCx + Math.cos(a) * R;
+    const pz = arcCz + Math.sin(a) * R;
+    blocks.push({
+      kind: 'box',
+      size: [0.2, 0.06, 0.7],
+      pos: [px, ROAD_THICK + 0.03, pz],
+      rotY: a + Math.PI / 2,
+      color: i % 2 === 0 ? CURB_R : CURB_W,
+      solid: false,
+    });
+  }
+  return blocks;
+}
+
+function bendBlocks(mirror) {
+  // 1x2 piece that slides the racing line one cell sideways. Entry on -Z
+  // edge of anchor cell (centred), exit on +Z edge of second cell shifted
+  // by ±half a cell. We model it as two skewed deck slabs.
+  const dirX = mirror ? 1 : -1;
+  return [
+    // anchor cell: deck biased toward -dirX side
+    {
+      kind: 'box',
+      size: [ROAD_WIDTH, ROAD_THICK, TILE],
+      pos: [-dirX * TILE * 0.18, ROAD_THICK / 2, 0],
+      color: ROAD_COLOR,
+      drivable: true,
+    },
+    // second cell: deck biased toward +dirX side
+    {
+      kind: 'box',
+      size: [ROAD_WIDTH, ROAD_THICK, TILE],
+      pos: [dirX * TILE * 0.18, ROAD_THICK / 2, TILE],
+      color: ROAD_COLOR,
+      drivable: true,
+    },
+    // bridging slab covering the seam
+    {
+      kind: 'box',
+      size: [ROAD_WIDTH * 1.2, ROAD_THICK, TILE * 0.7],
+      pos: [0, ROAD_THICK / 2, TILE / 2],
+      color: ROAD_COLOR,
+      drivable: true,
+    },
+  ];
+}
+
+function chicaneBlocks() {
+  // Bend left then right along 4 cells. Reuse bendBlocks logic for each half.
+  const left = bendBlocks(false).map(b => ({ ...b, pos: [b.pos[0], b.pos[1], b.pos[2]] }));
+  const right = bendBlocks(true).map(b => ({ ...b, pos: [b.pos[0], b.pos[1], b.pos[2] + TILE * 2] }));
+  return [...left, ...right];
+}
+
+function bankedTurnBlocks(mirror) {
+  // Sweep deck plus a banked tilt so the outside is higher than the inside.
+  const base = cornerSweepBlocks(mirror);
+  const TILT = Math.PI / 12; // ~15° bank
+  const dirX = mirror ? -1 : 1;
+  return base.map((b) => {
+    if (!b.drivable) return b;
+    return {
+      ...b,
+      // rotate around Z so outside (positive dirX) lifts up
+      rotZ: dirX * TILT,
+      pos: [b.pos[0], b.pos[1] + Math.abs(b.pos[0] - (mirror ? 0 : TILE)) * Math.tan(TILT) * 0.2, b.pos[2]],
+    };
+  });
+}
+
+function bumpBlocks(height, lengthZcells) {
+  // Drivable deck with a low rounded bump made of 3 stacked slabs.
+  const lz = TILE * lengthZcells;
+  return [
+    { kind: 'box', size: [ROAD_WIDTH, ROAD_THICK, lz], pos: [0, ROAD_THICK / 2, 0], color: ROAD_COLOR, drivable: true },
+    { kind: 'box', size: [ROAD_WIDTH, height * 0.4, lz * 0.7], pos: [0, ROAD_THICK + height * 0.2, 0], color: ROAD_COLOR, drivable: true },
+    { kind: 'box', size: [ROAD_WIDTH, height * 0.4, lz * 0.45], pos: [0, ROAD_THICK + height * 0.5, 0], color: ROAD_COLOR, drivable: true },
+    { kind: 'box', size: [ROAD_WIDTH, height * 0.3, lz * 0.25], pos: [0, ROAD_THICK + height * 0.75, 0], color: ROAD_COLOR, drivable: true },
+  ];
+}
+
+function rollingHillBlocks(peakHeight, lengthZ) {
+  // Up-and-over hill modelled as two opposing ramps meeting at the peak.
+  const halfL = lengthZ / 2;
+  const dy = peakHeight;
+  const len = Math.sqrt(dy * dy + halfL * halfL);
+  const angle = Math.atan2(dy, halfL);
+  const cy = (peakHeight / 2) + ROAD_THICK / 2;
+  return [
+    // up-slope (anchor cell, centred at -TILE/2 along ramp axis)
+    {
+      kind: 'box',
+      size: [ROAD_WIDTH, ROAD_THICK, len],
+      pos: [0, cy, -halfL / 2],
+      rotX: -angle,
+      color: ROAD_COLOR,
+      drivable: true,
+    },
+    // down-slope (centred at +TILE/2)
+    {
+      kind: 'box',
+      size: [ROAD_WIDTH, ROAD_THICK, len],
+      pos: [0, cy, halfL / 2 + halfL],
+      rotX: angle,
+      color: ROAD_COLOR,
+      drivable: true,
+    },
+    // peak filler so the meeting line isn't a sharp seam
+    {
+      kind: 'box',
+      size: [ROAD_WIDTH, ROAD_THICK * 1.5, TILE * 0.4],
+      pos: [0, peakHeight + ROAD_THICK / 2, halfL],
+      color: ROAD_COLOR,
+      drivable: true,
+    },
+  ];
+}
+
+function bridgeBlocks(deckHeight, lengthZ) {
+  // Elevated drivable deck plus simple support pillars at each end.
+  const cz = lengthZ / 2 - TILE / 2;
+  return [
+    // deck
+    { kind: 'box', size: [ROAD_WIDTH, ROAD_THICK, lengthZ], pos: [0, deckHeight + ROAD_THICK / 2, cz], color: ROAD_COLOR, drivable: true },
+    // side rails
+    { kind: 'box', size: [WALL_THICK, WALL_HEIGHT, lengthZ], pos: [(TILE / 2) - WALL_THICK / 2, deckHeight + ROAD_THICK + WALL_HEIGHT / 2, cz], color: WALL_COLOR },
+    { kind: 'box', size: [WALL_THICK, WALL_HEIGHT, lengthZ], pos: [-(TILE / 2) + WALL_THICK / 2, deckHeight + ROAD_THICK + WALL_HEIGHT / 2, cz], color: WALL_COLOR },
+    // pillars (visual only, non-solid)
+    { kind: 'box', size: [ROAD_WIDTH * 0.7, deckHeight, 0.4], pos: [0, deckHeight / 2, -TILE / 2 + 0.2], color: WALL_COLOR, solid: false },
+    { kind: 'box', size: [ROAD_WIDTH * 0.7, deckHeight, 0.4], pos: [0, deckHeight / 2, lengthZ - TILE / 2 - 0.2], color: WALL_COLOR, solid: false },
+  ];
+}
+
+function tunnelBlocks(lengthZ) {
+  // Drivable straight + walls + a slab roof. Open ends at -Z and +Z.
+  const cz = lengthZ / 2 - TILE / 2;
+  const ROOF_Y = ROAD_THICK + WALL_HEIGHT + 0.3;
+  return [
+    { kind: 'box', size: [ROAD_WIDTH, ROAD_THICK, lengthZ], pos: [0, ROAD_THICK / 2, cz], color: ROAD_COLOR, drivable: true },
+    // walls (full height)
+    { kind: 'box', size: [WALL_THICK, WALL_HEIGHT, lengthZ], pos: [(TILE / 2) - WALL_THICK / 2, ROAD_THICK + WALL_HEIGHT / 2, cz], color: WALL_COLOR },
+    { kind: 'box', size: [WALL_THICK, WALL_HEIGHT, lengthZ], pos: [-(TILE / 2) + WALL_THICK / 2, ROAD_THICK + WALL_HEIGHT / 2, cz], color: WALL_COLOR },
+    // roof slab
+    { kind: 'box', size: [TILE, 0.4, lengthZ], pos: [0, ROOF_Y, cz], color: 0x2a2f38 },
+    // accent strip down the middle (decoration)
+    { kind: 'box', size: [0.2, 0.05, lengthZ * 0.95], pos: [0, ROAD_THICK + 0.03, cz], color: 0xfbbf24, solid: false },
   ];
 }
 
