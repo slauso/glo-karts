@@ -99,7 +99,7 @@ export const MODE_REGISTRY = {
   track_builder: {
     id: 'track_builder',
     category: 'tools',
-    label: 'TinkerTracks',
+    label: 'Track Studio',
     desc: 'Build custom tracks and playtest them instantly.',
     icon: 'fa-road',
     page: 'editor.html',

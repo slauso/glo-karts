@@ -1582,7 +1582,7 @@ class RacingLobby {
         const builderButton = document.createElement('button');
         builderButton.className = 'mode-card-builder-link mode-card-builder-separate';
         builderButton.type = 'button';
-        builderButton.textContent = 'TinkerTracks';
+        builderButton.textContent = 'Track Studio';
         builderButton.addEventListener('click', () => this._openBuilder());
         cardStack.appendChild(card);
         builderWrap.appendChild(builderButton);
