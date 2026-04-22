@@ -80,19 +80,40 @@ scene.add(placementGroup);
 
 let activeKey = SEGMENT_KEYS[0];
 let activeRot = 0;       // 0..3
-let selectedId = null;
+/** @type {Set<number>} */
+const selectedIds = new Set();
+/** Last clicked id — anchor for inspector + R/arrow operations. */
+let lastSelectedId = null;
 const previewGroup = new THREE.Group();
 scene.add(previewGroup);
 let previewMesh = null;
 let previewCell = null;
 
-// Selection highlight box
-const selectBox = new THREE.LineSegments(
-  new THREE.EdgesGeometry(new THREE.BoxGeometry(TILE, 1, TILE)),
-  new THREE.LineBasicMaterial({ color: 0xff3aa1, linewidth: 2 }),
-);
-selectBox.visible = false;
-scene.add(selectBox);
+// Selection highlight boxes (one per selected placement, pooled).
+const selectionGroup = new THREE.Group();
+scene.add(selectionGroup);
+const selectBoxPool = [];
+function getSelectBox() {
+  for (const b of selectBoxPool) if (!b.visible) return b;
+  const b = new THREE.LineSegments(
+    new THREE.EdgesGeometry(new THREE.BoxGeometry(TILE, 1, TILE)),
+    new THREE.LineBasicMaterial({ color: 0xff3aa1, linewidth: 2 }),
+  );
+  selectBoxPool.push(b);
+  selectionGroup.add(b);
+  return b;
+}
+function refreshSelectionBoxes() {
+  for (const b of selectBoxPool) b.visible = false;
+  for (const id of selectedIds) {
+    const p = track.getById(id);
+    if (!p) continue;
+    const b = getSelectBox();
+    b.position.set(p.gx * TILE, 1, p.gz * TILE);
+    b.material.color.setHex(id === lastSelectedId ? 0xff3aa1 : 0x6b7280);
+    b.visible = true;
+  }
+}
 
 // Maps placement id → THREE.Group instance for fast lookup
 const meshById = new Map();
@@ -124,23 +145,52 @@ function removePlacementMesh(id) {
   }
 }
 
-// ── Palette UI ────────────────────────────────────────────────
+// ── Palette UI (grouped by category) ──────────────────────────
 const paletteEl = document.getElementById('palette');
+const CATEGORY_ORDER = ['road', 'junction', 'height', 'special'];
+const CATEGORY_LABELS = {
+  road: 'Road',
+  junction: 'Junctions',
+  height: 'Vertical',
+  special: 'Special',
+};
 function buildPalette() {
   paletteEl.innerHTML = '';
+  // Group keys by category (preserving insertion order within a group).
+  const groups = new Map();
   for (const key of SEGMENT_KEYS) {
-    const def = SEGMENTS[key];
-    const btn = document.createElement('button');
-    btn.dataset.key = key;
-    btn.innerHTML = `<div class="swatch"></div><div>${def.label}</div>`;
-    if (key === activeKey) btn.classList.add('active');
-    btn.addEventListener('click', () => {
-      activeKey = key;
-      activeRot = 0;
-      paletteEl.querySelectorAll('button').forEach(b => b.classList.toggle('active', b.dataset.key === key));
-      updatePreview();
-    });
-    paletteEl.appendChild(btn);
+    const cat = SEGMENTS[key].category || 'special';
+    if (!groups.has(cat)) groups.set(cat, []);
+    groups.get(cat).push(key);
+  }
+  // Render in declared order, then any extras alphabetical.
+  const seen = new Set();
+  const renderGroup = (cat, keys) => {
+    if (!keys?.length) return;
+    const header = document.createElement('div');
+    header.className = 'palette-group';
+    header.textContent = CATEGORY_LABELS[cat] || cat;
+    paletteEl.appendChild(header);
+    for (const key of keys) {
+      const def = SEGMENTS[key];
+      const btn = document.createElement('button');
+      btn.dataset.key = key;
+      btn.innerHTML = `<div class="swatch"></div><div>${def.label}</div>`;
+      if (key === activeKey) btn.classList.add('active');
+      btn.addEventListener('click', () => {
+        activeKey = key;
+        activeRot = 0;
+        paletteEl.querySelectorAll('button').forEach(b => b.classList.toggle('active', b.dataset.key === key));
+        updatePreview();
+      });
+      paletteEl.appendChild(btn);
+      seen.add(key);
+    }
+  };
+  for (const cat of CATEGORY_ORDER) renderGroup(cat, groups.get(cat));
+  for (const [cat, keys] of groups) {
+    if (CATEGORY_ORDER.includes(cat)) continue;
+    renderGroup(cat, keys);
   }
 }
 buildPalette();
@@ -226,9 +276,12 @@ canvas.addEventListener('click', (e) => {
   const hit = pickGroundCell(e);
   if (!hit) return;
   if (hit.kind === 'placement') {
-    selectPlacement(hit.id);
+    const mode = e.shiftKey ? 'add' : (e.ctrlKey || e.metaKey) ? 'toggle' : 'replace';
+    selectPlacement(hit.id, mode);
     return;
   }
+  // Click on empty cell with no modifier clears the selection.
+  if (!e.shiftKey && !e.ctrlKey && !e.metaKey) clearSelection();
   // Place
   const placement = track.place(activeKey, hit.gx, hit.gz, activeRot);
   if (placement) {
@@ -243,67 +296,256 @@ canvas.addEventListener('click', (e) => {
 canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 
 // ── Selection ──────────────────────────────────────────────────
-function selectPlacement(id) {
-  selectedId = id;
-  const p = track.getById(id);
-  if (!p) { selectBox.visible = false; return; }
-  selectBox.position.set(p.gx * TILE, 1, p.gz * TILE);
-  selectBox.visible = true;
+function selectPlacement(id, mode = 'replace') {
+  if (!track.getById(id)) return;
+  if (mode === 'add') {
+    selectedIds.add(id);
+    lastSelectedId = id;
+  } else if (mode === 'toggle') {
+    if (selectedIds.has(id)) {
+      selectedIds.delete(id);
+      if (lastSelectedId === id) lastSelectedId = selectedIds.size ? [...selectedIds].pop() : null;
+    } else {
+      selectedIds.add(id);
+      lastSelectedId = id;
+    }
+  } else {
+    selectedIds.clear();
+    selectedIds.add(id);
+    lastSelectedId = id;
+  }
+  refreshSelectionBoxes();
   refreshInspector();
 }
 
 function clearSelection() {
-  selectedId = null;
-  selectBox.visible = false;
+  selectedIds.clear();
+  lastSelectedId = null;
+  refreshSelectionBoxes();
+  refreshInspector();
+}
+
+function selectAll() {
+  selectedIds.clear();
+  for (const p of track.all()) selectedIds.add(p.id);
+  lastSelectedId = selectedIds.size ? [...selectedIds].pop() : null;
+  refreshSelectionBoxes();
   refreshInspector();
 }
 
 // ── Keyboard ───────────────────────────────────────────────────
+/** In-memory clipboard: array of placement specs relative to anchor. */
+let clipboard = null;
+
 window.addEventListener('keydown', (e) => {
   if (e.target.tagName === 'INPUT') return;
+  const ctrl = e.ctrlKey || e.metaKey;
+
+  // ── Edit shortcuts (ctrl-modified) ──
+  if (ctrl && e.key.toLowerCase() === 'a') {
+    e.preventDefault();
+    selectAll();
+    return;
+  }
+  if (ctrl && e.key.toLowerCase() === 'c') {
+    e.preventDefault();
+    copySelection();
+    return;
+  }
+  if (ctrl && e.key.toLowerCase() === 'v') {
+    e.preventDefault();
+    pasteClipboard();
+    return;
+  }
+  if (ctrl && e.key.toLowerCase() === 'd') {
+    e.preventDefault();
+    duplicateSelection();
+    return;
+  }
+  if (ctrl && e.key.toLowerCase() === 'z') {
+    e.preventDefault();
+    if (e.shiftKey) doRedo(); else doUndo();
+    return;
+  }
+  if (ctrl && e.key.toLowerCase() === 'y') {
+    e.preventDefault();
+    doRedo();
+    return;
+  }
+
+  // ── Rotate (R) ──
   if (e.key === 'r' || e.key === 'R') {
-    if (selectedId != null) {
-      const p = track.getById(selectedId);
-      if (p) {
+    if (selectedIds.size > 0) {
+      // Rotate each selected piece in place. If any rotation is blocked we skip that piece.
+      const rotated = [];
+      // Snapshot first since rotating mutates occupancy.
+      const snap = [...selectedIds].map(id => track.getById(id)).filter(Boolean);
+      for (const p of snap) {
         const newRot = (p.rot + 1) % 4;
-        if (track.isClear(p.key, p.gx, p.gz, newRot, p.id)) {
-          // Re-register at new rotation
-          track.remove(p.id);
-          const np = track.place(p.key, p.gx, p.gz, newRot);
-          if (np) {
-            removePlacementMesh(p.id);
-            addPlacementMesh(np);
-            selectPlacement(np.id);
-            pushUndo();
-          }
-        } else {
-          toast('Rotation blocked');
+        // Test ignoring this piece's current footprint.
+        if (!track.isClear(p.key, p.gx, p.gz, newRot, p.id)) continue;
+        track.remove(p.id);
+        const np = track.place(p.key, p.gx, p.gz, newRot);
+        if (np) {
+          removePlacementMesh(p.id);
+          addPlacementMesh(np);
+          rotated.push({ oldId: p.id, newId: np.id });
         }
+      }
+      if (rotated.length) {
+        // Re-bind selection ids to the new placement ids.
+        selectedIds.clear();
+        for (const r of rotated) selectedIds.add(r.newId);
+        const last = rotated.find(r => r.oldId === lastSelectedId);
+        lastSelectedId = last ? last.newId : (rotated[0]?.newId ?? null);
+        refreshSelectionBoxes();
+        refreshInspector();
+        pushUndo();
+      } else {
+        toast('Rotation blocked');
       }
     } else {
       activeRot = (activeRot + 1) % 4;
       if (previewMesh) previewMesh.rotation.y = -activeRot * Math.PI / 2;
     }
-  } else if (e.key === 'Delete' || e.key === 'Backspace') {
-    if (selectedId != null) {
-      removePlacementMesh(selectedId);
-      track.remove(selectedId);
+    return;
+  }
+
+  // ── Delete ──
+  if (e.key === 'Delete' || e.key === 'Backspace') {
+    if (selectedIds.size > 0) {
+      for (const id of selectedIds) {
+        removePlacementMesh(id);
+        track.remove(id);
+      }
       clearSelection();
       pushUndo();
       refreshHud();
     }
-  } else if (e.key === 'Escape') {
+    return;
+  }
+
+  // ── Escape ──
+  if (e.key === 'Escape') {
     clearSelection();
-  } else if (e.key === 'z' && (e.ctrlKey || e.metaKey)) {
+    return;
+  }
+
+  // ── Arrow-key nudge (group move by 1 cell) ──
+  const arrow = { ArrowUp: [0, -1], ArrowDown: [0, 1], ArrowLeft: [-1, 0], ArrowRight: [1, 0] }[e.key];
+  if (arrow && selectedIds.size > 0) {
     e.preventDefault();
-    doUndo();
+    const [dx, dz] = arrow;
+    nudgeSelection(dx, dz);
+    return;
   }
 });
 
-// ── Undo stack (whole-track snapshots, simple but reliable) ────
+function copySelection() {
+  if (selectedIds.size === 0) {
+    toast('Nothing to copy');
+    return;
+  }
+  const list = [...selectedIds].map(id => track.getById(id)).filter(Boolean);
+  // Anchor = top-left bounds of selection so paste is positionally meaningful.
+  let minX = Infinity, minZ = Infinity;
+  for (const p of list) { if (p.gx < minX) minX = p.gx; if (p.gz < minZ) minZ = p.gz; }
+  clipboard = list.map(p => ({ key: p.key, dx: p.gx - minX, dz: p.gz - minZ, rot: p.rot }));
+  toast(`Copied ${list.length} piece${list.length === 1 ? '' : 's'}`);
+}
+
+function pasteClipboard(anchorGx, anchorGz) {
+  if (!clipboard || clipboard.length === 0) {
+    toast('Clipboard empty');
+    return;
+  }
+  // Default anchor: cursor cell if inside grid, else offset from current bounds.
+  let ax, az;
+  if (anchorGx != null && anchorGz != null) {
+    ax = anchorGx; az = anchorGz;
+  } else if (previewCell) {
+    ax = previewCell.gx; az = previewCell.gz;
+  } else {
+    ax = 1; az = 1;
+  }
+  // Test all-clear before placing any.
+  for (const item of clipboard) {
+    if (!track.isClear(item.key, ax + item.dx, az + item.dz, item.rot)) {
+      toast('Paste blocked (cells occupied)');
+      return;
+    }
+  }
+  const newIds = [];
+  for (const item of clipboard) {
+    const p = track.place(item.key, ax + item.dx, az + item.dz, item.rot);
+    if (p) {
+      addPlacementMesh(p);
+      newIds.push(p.id);
+    }
+  }
+  if (newIds.length) {
+    selectedIds.clear();
+    for (const id of newIds) selectedIds.add(id);
+    lastSelectedId = newIds[newIds.length - 1];
+    refreshSelectionBoxes();
+    refreshInspector();
+    pushUndo();
+    refreshHud();
+  }
+}
+
+function duplicateSelection() {
+  if (selectedIds.size === 0) {
+    toast('Nothing to duplicate');
+    return;
+  }
+  copySelection();
+  // Paste with a +1/+1 offset so the copy is visible.
+  const list = [...selectedIds].map(id => track.getById(id)).filter(Boolean);
+  let minX = Infinity, minZ = Infinity;
+  for (const p of list) { if (p.gx < minX) minX = p.gx; if (p.gz < minZ) minZ = p.gz; }
+  pasteClipboard(minX + 1, minZ + 1);
+}
+
+function nudgeSelection(dx, dz) {
+  if (selectedIds.size === 0) return;
+  const list = [...selectedIds].map(id => track.getById(id)).filter(Boolean);
+  // Validate the move as a group: temporarily remove all selected then test.
+  const snap = list.map(p => ({ id: p.id, key: p.key, gx: p.gx, gz: p.gz, rot: p.rot }));
+  for (const p of snap) track.remove(p.id);
+  for (const p of snap) {
+    if (!track.isClear(p.key, p.gx + dx, p.gz + dz, p.rot)) {
+      // Roll back.
+      for (const q of snap) track.place(q.key, q.gx, q.gz, q.rot);
+      toast('Nudge blocked');
+      return;
+    }
+  }
+  // All clear — re-place at offset.
+  const newIds = [];
+  for (const p of snap) {
+    removePlacementMesh(p.id);
+    const np = track.place(p.key, p.gx + dx, p.gz + dz, p.rot);
+    if (np) {
+      addPlacementMesh(np);
+      newIds.push({ oldId: p.id, newId: np.id });
+    }
+  }
+  selectedIds.clear();
+  for (const r of newIds) selectedIds.add(r.newId);
+  const last = newIds.find(r => r.oldId === lastSelectedId);
+  lastSelectedId = last ? last.newId : (newIds[0]?.newId ?? null);
+  refreshSelectionBoxes();
+  refreshInspector();
+  pushUndo();
+  refreshHud();
+}
+
+// ── Undo / redo (whole-track snapshots) ───────────────────────
 const undoStack = [];
 let undoIndex = -1;
 function pushUndo() {
+  // Truncate forward history when a new edit happens.
   undoStack.length = undoIndex + 1;
   undoStack.push(JSON.stringify(track.toJSON()));
   undoIndex = undoStack.length - 1;
@@ -315,6 +557,11 @@ function pushUndo() {
 function doUndo() {
   if (undoIndex <= 0) return;
   undoIndex--;
+  loadFromJSON(JSON.parse(undoStack[undoIndex]), false);
+}
+function doRedo() {
+  if (undoIndex >= undoStack.length - 1) return;
+  undoIndex++;
   loadFromJSON(JSON.parse(undoStack[undoIndex]), false);
 }
 
@@ -333,18 +580,25 @@ function refreshHud() {
 }
 function refreshInspector() {
   const el = document.getElementById('inspector');
-  if (selectedId == null) {
-    el.innerHTML = `<div style="color:var(--muted); font-size:12px;">Nothing selected.</div>`;
+  if (selectedIds.size === 0) {
+    el.innerHTML = `<div style="color:var(--muted); font-size:12px;">Nothing selected.<br><span style="font-size:10px;opacity:0.7;">Click a piece · Shift-click to add · Ctrl+A to select all</span></div>`;
     return;
   }
-  const p = track.getById(selectedId);
+  if (selectedIds.size > 1) {
+    el.innerHTML = `
+      <div class="row"><span>Selected</span><b>${selectedIds.size} pieces</b></div>
+      <div style="margin-top:8px; font-size:11px; color:var(--muted);">R rotate · ←↑→↓ nudge · Del · Ctrl+C/V/D</div>
+    `;
+    return;
+  }
+  const p = track.getById(lastSelectedId);
   if (!p) return;
   const def = SEGMENTS[p.key];
   el.innerHTML = `
     <div class="row"><span>Type</span><b>${def.label}</b></div>
     <div class="row"><span>Cell</span><b>${p.gx}, ${p.gz}</b></div>
     <div class="row"><span>Rotation</span><b>${p.rot * 90}°</b></div>
-    <div style="margin-top:8px; font-size:11px; color:var(--muted);">R to rotate · Del to remove</div>
+    <div style="margin-top:8px; font-size:11px; color:var(--muted);">R rotate · ←↑→↓ nudge · Del remove · Ctrl+D duplicate</div>
   `;
 }
 function toast(msg) {
