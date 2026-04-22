@@ -128,6 +128,53 @@
     .inspector input[type=number] {
       width: 64px; background: var(--panel-2); border: 1px solid var(--line); color: var(--text); padding: 2px 4px; border-radius: 3px;
     }
+
+    /* ── Floating action ring (follows the selected piece) ──────── */
+    .action-ring {
+      position: absolute; z-index: 30;
+      display: flex; gap: 6px; padding: 5px;
+      border-radius: 28px;
+      background: rgba(20, 24, 30, 0.92);
+      border: 1px solid var(--line);
+      box-shadow: 0 6px 18px rgba(0,0,0,0.45);
+      transform: translate(-50%, -50%);
+      pointer-events: auto;
+    }
+    .action-ring[hidden] { display: none; }
+    .ring-btn {
+      width: 34px; height: 34px;
+      display: flex; align-items: center; justify-content: center;
+      border: 1px solid var(--line); border-radius: 50%;
+      background: rgba(255,255,255,0.06); color: var(--text);
+      cursor: pointer; padding: 0;
+      transition: background 0.12s, transform 0.1s, border-color 0.12s;
+    }
+    .ring-btn svg { width: 18px; height: 18px; fill: currentColor; pointer-events: none; }
+    .ring-btn:hover { background: var(--accent); border-color: var(--accent); color: #fff; transform: scale(1.12); }
+    .ring-btn--danger:hover { background: #e53e3e; border-color: #e53e3e; }
+
+    /* ── Right-click context menu ──────────────────────────────── */
+    .context-menu {
+      position: absolute; z-index: 40;
+      display: flex; flex-direction: column;
+      min-width: 170px; padding: 6px;
+      border-radius: 10px;
+      background: rgba(20,24,30,0.96);
+      border: 1px solid var(--line);
+      box-shadow: 0 10px 24px rgba(0,0,0,0.5);
+    }
+    .context-menu[hidden] { display: none; }
+    .ctx-item {
+      display: flex; align-items: center; gap: 10px;
+      padding: 7px 10px; border: none; border-radius: 6px;
+      background: transparent; color: var(--text);
+      font-size: 12px; cursor: pointer; text-align: left;
+    }
+    .ctx-item svg { width: 14px; height: 14px; fill: currentColor; flex-shrink: 0; }
+    .ctx-item:hover { background: rgba(255,255,255,0.08); }
+    .ctx-item--danger { color: #fc8181; }
+    .ctx-item--danger:hover { background: rgba(229,62,62,0.18); }
+    .ctx-divider { height: 1px; margin: 4px 6px; background: var(--line); }
   </style>
 </head>
 <body>
@@ -194,6 +241,41 @@
         <button data-view="ortho" id="orthoToggle" title="Toggle orthographic">PERSP</button>
       </div>
       <div class="toast" id="toast"></div>
+      <!-- Floating action ring (follows the most-recently-selected piece) -->
+      <div id="actionRing" class="action-ring" hidden>
+        <button class="ring-btn" id="ringRotCcw" type="button" title="Rotate -90° (R)">
+          <svg viewBox="0 0 24 24"><path d="M7.11 8.53L5.7 7.11C4.8 8.27 4.24 9.61 4.07 11h2.02c.14-.87.49-1.72 1.02-2.47zM6.09 13H4.07c.17 1.39.72 2.73 1.62 3.89l1.41-1.42c-.52-.75-.87-1.59-1.01-2.47zm1.01 5.32c1.16.9 2.51 1.44 3.9 1.61V17.9c-.87-.15-1.71-.49-2.46-1.03L7.1 18.32zM13 4.07V1L8.45 5.55 13 10V6.09c2.84.48 5 2.94 5 5.91s-2.16 5.43-5 5.91v2.02c3.95-.49 7-3.85 7-7.93s-3.05-7.44-7-7.93z"/></svg>
+        </button>
+        <button class="ring-btn" id="ringRotCw" type="button" title="Rotate 90° (R)">
+          <svg viewBox="0 0 24 24"><path d="M15.55 5.55L11 1v3.07C7.06 4.56 4 7.92 4 12s3.05 7.44 7 7.93v-2.02c-2.84-.48-5-2.94-5-5.91s2.16-5.43 5-5.91V10l4.55-4.45zM19.93 11c-.17-1.39-.72-2.73-1.62-3.89l-1.42 1.42c.54.75.88 1.6 1.02 2.47h2.02zM13 17.9v2.02c1.39-.17 2.74-.71 3.9-1.61l-1.44-1.44c-.75.54-1.59.89-2.46 1.03zm3.89-2.42l1.42 1.41c.9-1.16 1.45-2.5 1.62-3.89h-2.02c-.14.87-.48 1.72-1.02 2.48z"/></svg>
+        </button>
+        <button class="ring-btn" id="ringDuplicate" type="button" title="Duplicate (Ctrl+D)">
+          <svg viewBox="0 0 24 24"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>
+        </button>
+        <button class="ring-btn ring-btn--danger" id="ringDelete" type="button" title="Delete (Del)">
+          <svg viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+        </button>
+      </div>
+      <!-- Right-click context menu -->
+      <div id="contextMenu" class="context-menu" hidden>
+        <button class="ctx-item" data-action="rotate-cw">
+          <svg viewBox="0 0 24 24"><path d="M15.55 5.55L11 1v3.07C7.06 4.56 4 7.92 4 12s3.05 7.44 7 7.93v-2.02c-2.84-.48-5-2.94-5-5.91s2.16-5.43 5-5.91V10l4.55-4.45zM19.93 11c-.17-1.39-.72-2.73-1.62-3.89l-1.42 1.42c.54.75.88 1.6 1.02 2.47h2.02zM13 17.9v2.02c1.39-.17 2.74-.71 3.9-1.61l-1.44-1.44c-.75.54-1.59.89-2.46 1.03zm3.89-2.42l1.42 1.41c.9-1.16 1.45-2.5 1.62-3.89h-2.02c-.14.87-.48 1.72-1.02 2.48z"/></svg>
+          Rotate 90°
+        </button>
+        <button class="ctx-item" data-action="rotate-ccw">
+          <svg viewBox="0 0 24 24"><path d="M7.11 8.53L5.7 7.11C4.8 8.27 4.24 9.61 4.07 11h2.02c.14-.87.49-1.72 1.02-2.47zM6.09 13H4.07c.17 1.39.72 2.73 1.62 3.89l1.41-1.42c-.52-.75-.87-1.59-1.01-2.47zm1.01 5.32c1.16.9 2.51 1.44 3.9 1.61V17.9c-.87-.15-1.71-.49-2.46-1.03L7.1 18.32zM13 4.07V1L8.45 5.55 13 10V6.09c2.84.48 5 2.94 5 5.91s-2.16 5.43-5 5.91v2.02c3.95-.49 7-3.85 7-7.93s-3.05-7.44-7-7.93z"/></svg>
+          Rotate -90°
+        </button>
+        <div class="ctx-divider"></div>
+        <button class="ctx-item" data-action="duplicate">
+          <svg viewBox="0 0 24 24"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>
+          Duplicate
+        </button>
+        <button class="ctx-item ctx-item--danger" data-action="delete">
+          <svg viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+          Delete
+        </button>
+      </div>
     </main>
     <aside class="right">
       <div class="section inspector">

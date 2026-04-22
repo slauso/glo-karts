@@ -113,6 +113,8 @@ function refreshSelectionBoxes() {
     b.material.color.setHex(id === lastSelectedId ? 0xff3aa1 : 0x6b7280);
     b.visible = true;
   }
+  // Reposition the floating action ring so it tracks the selection.
+  if (typeof updateActionRing === 'function') updateActionRing();
 }
 
 // Maps placement id → THREE.Group instance for fast lookup
@@ -351,8 +353,130 @@ canvas.addEventListener('mouseleave', () => {
   if (previewMesh) previewMesh.visible = false;
 });
 
+// ── Mouse: drag-to-move + click-to-select / click-to-place ─────
+// Mousedown on a placement begins a potential drag; if the cursor moves
+// to a different cell before mouseup, we move the selection. Otherwise
+// the mouseup is treated as a normal click (selection or placement).
+const DRAG_PIXEL_THRESHOLD = 5;
+let mouseDownState = null;
+// Tracks the timestamp when the most recent mouseup ended a drag, so we
+// can suppress the follow-up `click` event from re-placing/re-selecting.
+let _lastDragConsumedAt = 0;
+function mouseDownStateConsumedDrag() {
+  return performance.now() - _lastDragConsumedAt < 100;
+}
+
+canvas.addEventListener('mousedown', (e) => {
+  if (e.button !== 0) return;
+  hideContextMenu();
+  const hit = pickGroundCell(e);
+  mouseDownState = {
+    startX: e.clientX, startY: e.clientY,
+    hit, dragging: false, lastCell: null,
+    movedSinceStart: false,
+    // Snapshot selection at the time of drag-start so we can move it as a group.
+    snapshot: null, anchorId: null, anchorStart: null,
+  };
+  // If clicking on a placement, prepare a potential drag of the whole selection.
+  if (hit && hit.kind === 'placement') {
+    // If the clicked piece isn't already selected, switch selection to it now
+    // so the drag operates on what the user actually clicked.
+    if (!selectedIds.has(hit.id) && !e.shiftKey && !(e.ctrlKey || e.metaKey)) {
+      selectPlacement(hit.id, 'replace');
+    }
+    const list = [...selectedIds].map(id => track.getById(id)).filter(Boolean);
+    const anchor = track.getById(hit.id) || list[0];
+    if (anchor) {
+      mouseDownState.snapshot = list.map(p => ({ id: p.id, key: p.key, gx: p.gx, gz: p.gz, rot: p.rot }));
+      mouseDownState.anchorId = anchor.id;
+      mouseDownState.anchorStart = { gx: anchor.gx, gz: anchor.gz };
+      mouseDownState.lastCell = { gx: anchor.gx, gz: anchor.gz };
+    }
+  }
+});
+
+canvas.addEventListener('mousemove', (e) => {
+  if (!mouseDownState || !mouseDownState.snapshot) return;
+  const dx = e.clientX - mouseDownState.startX;
+  const dy = e.clientY - mouseDownState.startY;
+  if (!mouseDownState.dragging && Math.hypot(dx, dy) < DRAG_PIXEL_THRESHOLD) return;
+  mouseDownState.dragging = true;
+  // Find the cell currently under the cursor (against the ground only).
+  const rect = canvas.getBoundingClientRect();
+  ndc.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+  ndc.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+  raycaster.setFromCamera(ndc, activeCamera);
+  const hits = raycaster.intersectObject(ground);
+  if (!hits.length) return;
+  const point = hits[0].point;
+  const gx = Math.round(point.x / TILE);
+  const gz = Math.round(point.z / TILE);
+  if (mouseDownState.lastCell && mouseDownState.lastCell.gx === gx && mouseDownState.lastCell.gz === gz) return;
+  // Try to move the whole selection so the anchor lands at (gx, gz).
+  const offDx = gx - mouseDownState.anchorStart.gx;
+  const offDz = gz - mouseDownState.anchorStart.gz;
+  if (tryMoveSelectionTo(mouseDownState.snapshot, offDx, offDz)) {
+    mouseDownState.lastCell = { gx, gz };
+    mouseDownState.movedSinceStart = true;
+    // Refresh the snapshot ids after move (they have new ids now).
+    mouseDownState.snapshot = [...selectedIds].map(id => track.getById(id)).filter(Boolean)
+      .map(p => ({ id: p.id, key: p.key, gx: p.gx, gz: p.gz, rot: p.rot }));
+    const anchorNow = mouseDownState.snapshot.find(p => p.id === lastSelectedId) || mouseDownState.snapshot[0];
+    if (anchorNow) {
+      mouseDownState.anchorId = anchorNow.id;
+      mouseDownState.anchorStart = { gx: anchorNow.gx - offDx, gz: anchorNow.gz - offDz };
+    }
+  }
+});
+
+window.addEventListener('mouseup', (e) => {
+  if (e.button !== 0 || !mouseDownState) { mouseDownState = null; return; }
+  const wasDragging = mouseDownState.dragging && mouseDownState.movedSinceStart;
+  mouseDownState = null;
+  if (wasDragging) {
+    _lastDragConsumedAt = performance.now();
+    pushUndo();
+    refreshHud();
+  }
+});
+
+/**
+ * Try to translate every piece in `snap` by (dx, dz) cells. Returns true on
+ * success. Atomically rolls back on collision.
+ */
+function tryMoveSelectionTo(snap, dx, dz) {
+  if (dx === 0 && dz === 0) return false;
+  // Temporarily remove all then test free.
+  for (const p of snap) track.remove(p.id);
+  for (const p of snap) {
+    if (!track.isClear(p.key, p.gx + dx, p.gz + dz, p.rot)) {
+      // Roll back.
+      for (const q of snap) track.place(q.key, q.gx, q.gz, q.rot);
+      return false;
+    }
+  }
+  const newIds = [];
+  for (const p of snap) {
+    removePlacementMesh(p.id);
+    const np = track.place(p.key, p.gx + dx, p.gz + dz, p.rot);
+    if (np) {
+      addPlacementMesh(np);
+      newIds.push({ oldId: p.id, newId: np.id });
+    }
+  }
+  selectedIds.clear();
+  for (const r of newIds) selectedIds.add(r.newId);
+  const last = newIds.find(r => r.oldId === lastSelectedId);
+  lastSelectedId = last ? last.newId : (newIds[0]?.newId ?? null);
+  refreshSelectionBoxes();
+  refreshInspector();
+  return true;
+}
+
 canvas.addEventListener('click', (e) => {
   if (e.button !== 0) return;
+  // If a drag just happened, swallow this click — the move was already committed.
+  if (mouseDownStateConsumedDrag()) return;
   const hit = pickGroundCell(e);
   if (!hit) return;
   if (hit.kind === 'placement') {
@@ -373,7 +497,8 @@ canvas.addEventListener('click', (e) => {
   }
 });
 
-canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+// (Right-click context menu handler is wired further below where
+//  showContextMenu / pickGroundCell are both available.)
 
 // ── Selection ──────────────────────────────────────────────────
 function selectPlacement(id, mode = 'replace') {
@@ -456,34 +581,7 @@ window.addEventListener('keydown', (e) => {
   // ── Rotate (R) ──
   if (e.key === 'r' || e.key === 'R') {
     if (selectedIds.size > 0) {
-      // Rotate each selected piece in place. If any rotation is blocked we skip that piece.
-      const rotated = [];
-      // Snapshot first since rotating mutates occupancy.
-      const snap = [...selectedIds].map(id => track.getById(id)).filter(Boolean);
-      for (const p of snap) {
-        const newRot = (p.rot + 1) % 4;
-        // Test ignoring this piece's current footprint.
-        if (!track.isClear(p.key, p.gx, p.gz, newRot, p.id)) continue;
-        track.remove(p.id);
-        const np = track.place(p.key, p.gx, p.gz, newRot);
-        if (np) {
-          removePlacementMesh(p.id);
-          addPlacementMesh(np);
-          rotated.push({ oldId: p.id, newId: np.id });
-        }
-      }
-      if (rotated.length) {
-        // Re-bind selection ids to the new placement ids.
-        selectedIds.clear();
-        for (const r of rotated) selectedIds.add(r.newId);
-        const last = rotated.find(r => r.oldId === lastSelectedId);
-        lastSelectedId = last ? last.newId : (rotated[0]?.newId ?? null);
-        refreshSelectionBoxes();
-        refreshInspector();
-        pushUndo();
-      } else {
-        toast('Rotation blocked');
-      }
+      rotateSelection(e.shiftKey ? -1 : 1);
     } else {
       activeRot = (activeRot + 1) % 4;
       if (previewMesh) previewMesh.rotation.y = -activeRot * Math.PI / 2;
@@ -494,13 +592,7 @@ window.addEventListener('keydown', (e) => {
   // ── Delete ──
   if (e.key === 'Delete' || e.key === 'Backspace') {
     if (selectedIds.size > 0) {
-      for (const id of selectedIds) {
-        removePlacementMesh(id);
-        track.remove(id);
-      }
-      clearSelection();
-      pushUndo();
-      refreshHud();
+      deleteSelection();
     }
     return;
   }
@@ -617,6 +709,49 @@ function nudgeSelection(dx, dz) {
   lastSelectedId = last ? last.newId : (newIds[0]?.newId ?? null);
   refreshSelectionBoxes();
   refreshInspector();
+  pushUndo();
+  refreshHud();
+}
+
+/**
+ * Rotate every selected piece by `dir` quarter-turns (+1 = CW, -1 = CCW).
+ * Each piece rotates in place; blocked pieces are skipped.
+ */
+function rotateSelection(dir = 1) {
+  if (selectedIds.size === 0) return;
+  const snap = [...selectedIds].map(id => track.getById(id)).filter(Boolean);
+  const rotated = [];
+  for (const p of snap) {
+    const newRot = (p.rot + dir + 4) % 4;
+    if (!track.isClear(p.key, p.gx, p.gz, newRot, p.id)) continue;
+    track.remove(p.id);
+    const np = track.place(p.key, p.gx, p.gz, newRot);
+    if (np) {
+      removePlacementMesh(p.id);
+      addPlacementMesh(np);
+      rotated.push({ oldId: p.id, newId: np.id });
+    }
+  }
+  if (rotated.length === 0) {
+    toast('Rotation blocked');
+    return;
+  }
+  selectedIds.clear();
+  for (const r of rotated) selectedIds.add(r.newId);
+  const last = rotated.find(r => r.oldId === lastSelectedId);
+  lastSelectedId = last ? last.newId : (rotated[0]?.newId ?? null);
+  refreshSelectionBoxes();
+  refreshInspector();
+  pushUndo();
+}
+
+function deleteSelection() {
+  if (selectedIds.size === 0) return;
+  for (const id of selectedIds) {
+    removePlacementMesh(id);
+    track.remove(id);
+  }
+  clearSelection();
   pushUndo();
   refreshHud();
 }
@@ -947,6 +1082,98 @@ resize();
 renderer.setAnimationLoop(() => {
   controls.update();
   renderer.render(scene, activeCamera);
+  // Keep the floating action ring pinned over the selected piece even while
+  // the camera moves.
+  if (typeof updateActionRing === 'function') updateActionRing();
+});
+
+// ── Floating action ring + right-click context menu ───────────
+const actionRingEl = document.getElementById('actionRing');
+const contextMenuEl = document.getElementById('contextMenu');
+const _ringWorld = new THREE.Vector3();
+const _ringNdc = new THREE.Vector3();
+
+function updateActionRing() {
+  if (!actionRingEl) return;
+  if (selectedIds.size === 0 || lastSelectedId == null) {
+    actionRingEl.hidden = true;
+    return;
+  }
+  const p = track.getById(lastSelectedId);
+  if (!p) { actionRingEl.hidden = true; return; }
+  // Project the piece's world position to NDC then to canvas pixels.
+  _ringWorld.set(p.gx * TILE, 6, p.gz * TILE);
+  _ringNdc.copy(_ringWorld).project(activeCamera);
+  // Skip rendering if the point is behind the camera.
+  if (_ringNdc.z > 1) { actionRingEl.hidden = true; return; }
+  const rect = canvas.getBoundingClientRect();
+  const px = (_ringNdc.x * 0.5 + 0.5) * rect.width;
+  const py = (-_ringNdc.y * 0.5 + 0.5) * rect.height;
+  // Offset the ring above the piece, then clamp to viewport.
+  const offsetY = 48;
+  const x = Math.max(80, Math.min(rect.width - 80, px));
+  const y = Math.max(40, Math.min(rect.height - 40, py - offsetY));
+  actionRingEl.style.left = `${x}px`;
+  actionRingEl.style.top = `${y}px`;
+  actionRingEl.hidden = false;
+}
+
+document.getElementById('ringRotCw')?.addEventListener('click', () => rotateSelection(1));
+document.getElementById('ringRotCcw')?.addEventListener('click', () => rotateSelection(-1));
+document.getElementById('ringDuplicate')?.addEventListener('click', () => duplicateSelection());
+document.getElementById('ringDelete')?.addEventListener('click', () => deleteSelection());
+
+function showContextMenu(clientX, clientY) {
+  if (!contextMenuEl) return;
+  if (selectedIds.size === 0) return;
+  contextMenuEl.hidden = false;
+  // Position relative to <main> (the contextMenu is inside <main>).
+  const main = canvas.parentElement;
+  const rect = main.getBoundingClientRect();
+  const localX = clientX - rect.left;
+  const localY = clientY - rect.top;
+  // Clamp inside the main area so the menu stays visible.
+  const cx = Math.max(8, Math.min(rect.width - 180, localX));
+  const cy = Math.max(8, Math.min(rect.height - 180, localY));
+  contextMenuEl.style.left = `${cx}px`;
+  contextMenuEl.style.top = `${cy}px`;
+}
+function hideContextMenu() {
+  if (contextMenuEl) contextMenuEl.hidden = true;
+}
+
+contextMenuEl?.addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-action]');
+  if (!btn) return;
+  const action = btn.dataset.action;
+  hideContextMenu();
+  if (action === 'rotate-cw') rotateSelection(1);
+  else if (action === 'rotate-ccw') rotateSelection(-1);
+  else if (action === 'duplicate') duplicateSelection();
+  else if (action === 'delete') deleteSelection();
+});
+
+canvas.addEventListener('contextmenu', (e) => {
+  e.preventDefault();
+  // OrbitControls already uses right-mouse for rotate; only show the menu
+  // if the right-click landed on a placement (so dragging-to-orbit on empty
+  // ground keeps working without a menu popping up).
+  const hit = pickGroundCell(e);
+  if (!hit || hit.kind !== 'placement') {
+    hideContextMenu();
+    return;
+  }
+  // Auto-select the right-clicked piece if not already in the selection.
+  if (!selectedIds.has(hit.id)) selectPlacement(hit.id, 'replace');
+  showContextMenu(e.clientX, e.clientY);
+});
+
+window.addEventListener('mousedown', (e) => {
+  if (!contextMenuEl || contextMenuEl.hidden) return;
+  if (!contextMenuEl.contains(e.target)) hideContextMenu();
+}, true);
+window.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') hideContextMenu();
 });
 
 // ── Bootstrap: try restoring last track or seed with 1 spawn ─
