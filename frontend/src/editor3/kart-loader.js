@@ -123,12 +123,13 @@ function prepareKartScene(scene, id) {
 
   scaler.add(root);
 
-  // RaycastVehicle forward axis is +Z in our world (indexForwardAxis=2).
-  // STK kart GLBs are authored facing -Z (their nose points toward -Z),
-  // so by default we rotate them 180° so visual forward matches physics
-  // forward. Per-kart overrides below if a model differs.
-  const baseFlip = KART_FACING_OVERRIDES[id] === 'no-flip' ? 0 : Math.PI;
-  scaler.rotation.y = baseFlip;
+  // STK kart GLBs are authored facing -Z, which matches the chassis
+  // forward direction once cannon-es engine force + camera offset are
+  // accounted for (see play-main.js applyControls / camOffset). No
+  // rotation needed by default. Per-kart overrides below for any model
+  // that ships facing the opposite way.
+  const flip = KART_FACING_OVERRIDES[id] === 'flip' ? Math.PI : 0;
+  scaler.rotation.y = flip;
 
   const template = new THREE.Group();
   template.name = `kart-template-${id}`;
@@ -138,11 +139,11 @@ function prepareKartScene(scene, id) {
 
 /**
  * Per-kart facing override.
- * - default: kart is rotated 180° so its visual nose points along +Z (forward)
- * - 'no-flip': kart is already authored facing +Z; skip the rotation
+ * - default: kart's authored facing matches chassis forward (no rotation)
+ * - 'flip': kart is authored facing the opposite way; rotate 180°
  */
 const KART_FACING_OVERRIDES = {
-  // example: oem: 'no-flip',
+  // example: oem: 'flip',
 };
 
 function makePlaceholderKart(accent) {
