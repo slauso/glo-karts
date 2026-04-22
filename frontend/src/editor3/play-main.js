@@ -260,11 +260,15 @@ const MAX_BRAKE = 50;
 const MAX_STEER = 0.55;
 
 function applyControls() {
-  // Forward axis is +Z (indexForwardAxis: 2). Positive engine force drives +Z,
-  // which matches the spawn-tile orientation (track extends along +gz).
-  const engine = (keys.w ? 1 : 0) + (keys.s ? -1 : 0);
-  // When reversing (s) the steering must flip so left/right feels correct.
-  const steerSign = engine < 0 ? -1 : 1;
+  // intent: +1 = drive forward (along chassis +Z, where the visible kart
+  // nose and camera trail are aligned), -1 = reverse.
+  const accel = (keys.w ? 1 : 0) + (keys.s ? -1 : 0);
+  // cannon-es RaycastVehicle convention: applyEngineForce(+v) drives the
+  // chassis in the −forward-axis direction. Negate so positive intent
+  // (W) actually pushes the chassis along +Z toward the track.
+  const force = -accel * MAX_ENGINE;
+  // Steering inverts on reverse so left/right feels natural backing up.
+  const steerSign = accel < 0 ? -1 : 1;
   const steer = ((keys.a ? 1 : 0) + (keys.d ? -1 : 0)) * steerSign;
   const braking = keys.space;
 
@@ -273,7 +277,6 @@ function applyControls() {
   vehicle.setSteeringValue(steer * MAX_STEER, 3);
 
   // All wheels drive
-  const force = engine * MAX_ENGINE;
   vehicle.applyEngineForce(force, 0);
   vehicle.applyEngineForce(force, 1);
   vehicle.applyEngineForce(force, 2);
