@@ -329,15 +329,29 @@
          next to the selected object — Tinkercad-style ──────────── */
     .inspector-popup {
       position: absolute; z-index: 25;
-      min-width: 220px;
+      top: 12px; right: 12px;
+      width: 240px;
       background: var(--panel-2);
       border: 1px solid var(--line);
       border-radius: 6px;
       box-shadow: var(--shadow-md);
       pointer-events: auto;
-      transform: translate(0, 0);
+      max-height: calc(100% - 24px);
+      display: flex; flex-direction: column;
+      overflow: hidden;
     }
     .inspector-popup[hidden] { display: none; }
+    .inspector-popup .ip-body {
+      overflow-y: auto;
+      transition: max-height 0.18s ease;
+    }
+    .inspector-popup.collapsed .ip-body { display: none; }
+    .inspector-popup .collapse-btn {
+      background: transparent; border: none; cursor: pointer;
+      color: var(--muted); padding: 2px 4px; border-radius: 3px; font-size: 14px;
+    }
+    .inspector-popup .collapse-btn:hover { background: var(--line); color: var(--text); }
+    .inspector-popup.collapsed .collapse-btn { transform: rotate(-90deg); }
     .inspector-popup .ip-header {
       display: flex; align-items: center; gap: 8px;
       padding: 6px 10px; border-bottom: 1px solid var(--line);
@@ -715,9 +729,11 @@
       <!-- Floating Tinkercad-style shape inspector popup (Solid/Hole + colour swatches + dimension grid) -->
       <div id="inspectorPopup" class="inspector-popup" hidden>
         <div class="ip-header">
+          <button class="collapse-btn" id="ipCollapse" title="Collapse">▾</button>
           <span class="title" id="ipTitle">Shape</span>
           <button class="close-btn" id="ipClose" title="Close">×</button>
         </div>
+        <div class="ip-body" id="ipBody">
         <div class="ip-tabs">
           <button class="ip-tab active" data-mode="solid">
             <span class="dot" id="ipSolidDot"></span>Solid
@@ -771,6 +787,7 @@
             <input type="range" id="decorSY_r" min="0.05" max="20" step="0.05" />
             <input type="number" id="decorSY" step="0.1" min="0.05" />
           </div>
+        </div>
         </div>
       </div>
 

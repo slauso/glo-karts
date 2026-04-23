@@ -95,6 +95,19 @@ let gizmoSnap = true;
 let snapStep = 1.0;
 
 let activeKey = SEGMENT_KEYS[0];
+// Tinkercad-parity behaviour: after placing a shape, tool reverts to the pointer (null activeKey).
+function setActiveTool(key) {
+  activeKey = key;
+  activeRot = 0;
+  // Sync palette active state.
+  try {
+    document.querySelectorAll('#palette button').forEach(b => b.classList.toggle('active', key != null && b.dataset.key === key));
+  } catch {}
+  // Canvas cursor feedback: pointer vs crosshair.
+  const c = document.getElementById('canvas');
+  if (c) c.style.cursor = (key == null) ? 'default' : 'crosshair';
+  updatePreview();
+}
 let activeRot = 0;       // 0..3
 /** @type {Set<number>} */
 const selectedIds = new Set();
@@ -302,10 +315,8 @@ function buildPalette() {
       }
       if (key === activeKey) btn.classList.add('active');
       btn.addEventListener('click', () => {
-        activeKey = key;
-        activeRot = 0;
-        paletteEl.querySelectorAll('button').forEach(b => b.classList.toggle('active', b.dataset.key === key));
-        updatePreview();
+        // Toggle off if the same tool was clicked again.
+        setActiveTool(activeKey === key ? null : key);
       });
       paletteEl.appendChild(btn);
     }
@@ -323,6 +334,8 @@ function buildPalette() {
   }
 }
 buildPalette();
+// Start in pointer mode so nothing is stamped on the first click.
+setActiveTool(null);
 if (paletteSearchEl) {
   paletteSearchEl.addEventListener('input', () => {
     paletteFilter = paletteSearchEl.value;
@@ -333,6 +346,7 @@ if (paletteSearchEl) {
 // ── Preview ghost ─────────────────────────────────────────────
 function updatePreview() {
   while (previewGroup.children.length) previewGroup.remove(previewGroup.children[0]);
+  if (activeKey == null) { previewMesh = null; return; }
   if (isDecorKey(activeKey)) {
     const def = DECOR[activeKey];
     const dr = def.defaultRot || [0, 0, 0];
@@ -614,6 +628,8 @@ canvas.addEventListener('click', (e) => {
       selectDecor(inst.id, 'replace');
       pushUndo();
       refreshHud();
+      // Tinkercad parity: after dropping a shape, revert to pointer mode.
+      setActiveTool(null);
     }
     return;
   }
@@ -626,6 +642,7 @@ canvas.addEventListener('click', (e) => {
     addPlacementMesh(placement);
     pushUndo();
     refreshHud();
+    setActiveTool(null);
   } else {
     toast('Cell occupied');
   }
@@ -1218,6 +1235,10 @@ function bindInspectorPopupOnce() {
     });
   });
   document.getElementById('ipClose')?.addEventListener('click', () => clearSelection());
+  document.getElementById('ipCollapse')?.addEventListener('click', () => {
+    const pop = document.getElementById('inspectorPopup');
+    if (pop) pop.classList.toggle('collapsed');
+  });
 }
 function showInspectorPopup() {
   const pop = document.getElementById('inspectorPopup');
@@ -1252,23 +1273,7 @@ function hideInspectorPopup() {
   if (pop) pop.hidden = true;
 }
 function positionInspectorPopup() {
-  const pop = document.getElementById('inspectorPopup');
-  if (!pop || pop.hidden) return;
-  if (lastSelectedDecorId == null) return;
-  const mesh = decorMeshById.get(lastSelectedDecorId);
-  if (!mesh) return;
-  const v = new THREE.Vector3();
-  mesh.getWorldPosition(v);
-  v.y += 2;
-  v.project(activeCamera);
-  if (v.z > 1) { pop.hidden = true; return; }
-  const rect = canvas.getBoundingClientRect();
-  const px = (v.x * 0.5 + 0.5) * rect.width + 60;
-  const py = (-v.y * 0.5 + 0.5) * rect.height - 40;
-  const x = Math.max(8, Math.min(rect.width - 240, px));
-  const y = Math.max(8, Math.min(rect.height - 380, py));
-  pop.style.left = x + 'px';
-  pop.style.top = y + 'px';
+  // No-op: popup is CSS-pinned to the viewport corner.
 }
 function refreshInspector() {
   const el = document.getElementById('inspector');
@@ -1769,10 +1774,8 @@ document.getElementById('searchBtn')?.addEventListener('click', () => {
   }
 });
 
-// Reposition inspector popup on every frame (cheap, runs from render loop)
-const _origAnimLoop = renderer.animation?.loop;
-const _ipTick = () => { positionInspectorPopup(); requestAnimationFrame(_ipTick); };
-requestAnimationFrame(_ipTick);
+// Inspector popup is now pinned to the top-right corner of the viewport (CSS),
+// so no per-frame repositioning is needed.
 
 // Expose for debugging
 window.__studio = { track, decor, scene, camera, renderer, rebuildAll, rebuildAllDecor, refreshHud, refreshPlayButton, selectDecor };
