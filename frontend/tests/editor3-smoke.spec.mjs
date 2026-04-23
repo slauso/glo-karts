@@ -155,30 +155,31 @@ test.describe('Track Studio (editor3) — Smoke', () => {
     });
     const finishZ = 2 * TILE; // finish placed at gz=2
 
-    // Cross #1: behind the line then past
-    await page.evaluate((z) => {
+    // Cross #1: behind the line then past (offsets scale with TILE)
+    const back = TILE * 0.4, fwd = TILE * 0.4, yAbove = TILE * 0.12;
+    await page.evaluate(({ z, back, yAbove }) => {
       const p = window.__play;
-      p.chassisBody.position.set(0, 1.2, z - 2);
+      p.chassisBody.position.set(0, yAbove, z - back);
       p.chassisBody.velocity.set(0, 0, 0);
-    }, finishZ);
+    }, { z: finishZ, back, yAbove });
     await page.waitForTimeout(200);
-    await page.evaluate((z) => {
-      window.__play.chassisBody.position.set(0, 1.2, z + 1);
-    }, finishZ);
+    await page.evaluate(({ z, fwd, yAbove }) => {
+      window.__play.chassisBody.position.set(0, yAbove, z + fwd);
+    }, { z: finishZ, fwd, yAbove });
     await page.waitForTimeout(300);
     // Clear the radius
-    await page.evaluate(() => {
-      window.__play.chassisBody.position.set(500, 1.2, 500);
-    });
+    await page.evaluate(({ far, yAbove }) => {
+      window.__play.chassisBody.position.set(far, yAbove, far);
+    }, { far: TILE * 40, yAbove });
     await page.waitForTimeout(300);
     // Cross #2
-    await page.evaluate((z) => {
-      window.__play.chassisBody.position.set(0, 1.2, z - 2);
-    }, finishZ);
+    await page.evaluate(({ z, back, yAbove }) => {
+      window.__play.chassisBody.position.set(0, yAbove, z - back);
+    }, { z: finishZ, back, yAbove });
     await page.waitForTimeout(300);
-    await page.evaluate((z) => {
-      window.__play.chassisBody.position.set(0, 1.2, z + 1);
-    }, finishZ);
+    await page.evaluate(({ z, fwd, yAbove }) => {
+      window.__play.chassisBody.position.set(0, yAbove, z + fwd);
+    }, { z: finishZ, fwd, yAbove });
     await page.waitForTimeout(2500); // > 2s debounce
 
     const lapText = await page.locator('#lap').textContent();

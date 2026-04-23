@@ -12,6 +12,10 @@ import { buildSegmentMesh, buildSegmentBody, getDrivableTopY } from './segment-b
 import { cloneKart } from './kart-loader.js';
 import { resolveSelectedKartId, getKart } from './kart-catalog.js';
 import { DecorStore, buildDecorMesh } from './decor.js';
+import { WORLD_UNITS_PER_M, m as M, mm as MM } from './units.js';
+
+// Playtest runs in world units where 1 unit = 1 mm.
+// (TILE arrives from track-data already in world units.)
 
 // ── Scene ─────────────────────────────────────────────────────
 const canvas = document.getElementById('canvas');
@@ -24,22 +28,22 @@ const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x0a0d12);
 scene.fog = new THREE.Fog(0x0a0d12, TILE * 15, TILE * 50);
 
-const camera = new THREE.PerspectiveCamera(70, 1, 0.1, 2000);
+const camera = new THREE.PerspectiveCamera(70, 1, M(0.1), M(2000));
 
 const sun = new THREE.DirectionalLight(0xffffff, 1.4);
-sun.position.set(60, 120, 40);
+sun.position.set(M(60), M(120), M(40));
 sun.castShadow = true;
 sun.shadow.mapSize.set(2048, 2048);
-sun.shadow.camera.left = -120; sun.shadow.camera.right = 120;
-sun.shadow.camera.top = 120; sun.shadow.camera.bottom = -120;
-sun.shadow.camera.near = 1; sun.shadow.camera.far = 400;
+sun.shadow.camera.left = -M(120); sun.shadow.camera.right = M(120);
+sun.shadow.camera.top = M(120); sun.shadow.camera.bottom = -M(120);
+sun.shadow.camera.near = M(1); sun.shadow.camera.far = M(400);
 scene.add(sun);
 scene.add(new THREE.AmbientLight(0x6b7a92, 0.55));
 scene.add(new THREE.HemisphereLight(0x88aaff, 0x222530, 0.4));
 
 // Ground (visual + physics)
 const ground = new THREE.Mesh(
-  new THREE.PlaneGeometry(2000, 2000),
+  new THREE.PlaneGeometry(M(2000), M(2000)),
   new THREE.MeshStandardMaterial({ color: 0x14181f, roughness: 1 }),
 );
 ground.rotation.x = -Math.PI / 2;
@@ -47,7 +51,7 @@ ground.receiveShadow = true;
 scene.add(ground);
 
 // ── Physics world ─────────────────────────────────────────────
-const world = new CANNON.World({ gravity: new CANNON.Vec3(0, -25, 0) });
+const world = new CANNON.World({ gravity: new CANNON.Vec3(0, -M(25), 0) });
 world.broadphase = new CANNON.SAPBroadphase(world);
 world.allowSleep = true;
 world.defaultContactMaterial.friction = 0.4;
@@ -151,8 +155,8 @@ for (const p of track.all()) {
 
 // ── Kart (RaycastVehicle) ─────────────────────────────────────
 const KART_MASS = 150;
-const CHASSIS_HX = 0.6, CHASSIS_HY = 0.3, CHASSIS_HZ = 1.0;
-const WHEEL_RADIUS = 0.4;
+const CHASSIS_HX = M(0.6), CHASSIS_HY = M(0.3), CHASSIS_HZ = M(1.0);
+const WHEEL_RADIUS = M(0.4);
 
 const chassisShape = new CANNON.Box(new CANNON.Vec3(CHASSIS_HX, CHASSIS_HY, CHASSIS_HZ));
 const chassisBody = new CANNON.Body({ mass: KART_MASS });
@@ -161,8 +165,8 @@ chassisBody.addShape(chassisShape);
 // Spawn position: center of spawn cell, slightly above
 const spawnPlacement = track.spawn();
 const spawnPos = spawnPlacement
-  ? { x: spawnPlacement.gx * TILE, y: getDrivableTopY(spawnPlacement.key) + 1.0, z: spawnPlacement.gz * TILE }
-  : { x: 0, y: 1.5, z: 0 };
+  ? { x: spawnPlacement.gx * TILE, y: getDrivableTopY(spawnPlacement.key) + M(1.0), z: spawnPlacement.gz * TILE }
+  : { x: 0, y: M(1.5), z: 0 };
 const spawnRot = spawnPlacement ? -spawnPlacement.rot * Math.PI / 2 : 0;
 
 chassisBody.position.set(spawnPos.x, spawnPos.y, spawnPos.z);
@@ -180,20 +184,20 @@ const wheelOptions = {
   radius: WHEEL_RADIUS,
   directionLocal: new CANNON.Vec3(0, -1, 0),
   suspensionStiffness: 30,
-  suspensionRestLength: 0.35,
+  suspensionRestLength: M(0.35),
   frictionSlip: 2.5,
   dampingRelaxation: 2.3,
   dampingCompression: 4.5,
-  maxSuspensionForce: 100000,
+  maxSuspensionForce: M(100000),
   rollInfluence: 0.01,
   axleLocal: new CANNON.Vec3(-1, 0, 0),
   chassisConnectionPointLocal: new CANNON.Vec3(),
-  maxSuspensionTravel: 0.3,
+  maxSuspensionTravel: M(0.3),
   customSlidingRotationalSpeed: -30,
   useCustomSlidingRotationalSpeed: true,
 };
 
-const WHEEL_X = CHASSIS_HX + 0.05;
+const WHEEL_X = CHASSIS_HX + M(0.05);
 const WHEEL_Z = CHASSIS_HZ * 0.75;
 const WHEEL_Y = -CHASSIS_HY * 0.5;
 [
@@ -217,10 +221,10 @@ const placeholderChassis = new THREE.Mesh(
 placeholderChassis.castShadow = true;
 kartGroup.add(placeholderChassis);
 const placeholderHead = new THREE.Mesh(
-  new THREE.SphereGeometry(0.22, 12, 10),
+  new THREE.SphereGeometry(M(0.22), 12, 10),
   new THREE.MeshStandardMaterial({ color: 0x00e5ff }),
 );
-placeholderHead.position.set(0, CHASSIS_HY + 0.22, -0.1);
+placeholderHead.position.set(0, CHASSIS_HY + M(0.22), -M(0.1));
 placeholderHead.castShadow = true;
 kartGroup.add(placeholderHead);
 scene.add(kartGroup);
@@ -251,7 +255,7 @@ const wheelMeshes = [];
 const wheelsGroup = new THREE.Group();
 wheelsGroup.name = 'debug-wheels';
 scene.add(wheelsGroup);
-const wheelGeo = new THREE.CylinderGeometry(WHEEL_RADIUS, WHEEL_RADIUS, 0.25, 14);
+const wheelGeo = new THREE.CylinderGeometry(WHEEL_RADIUS, WHEEL_RADIUS, M(0.25), 14);
 wheelGeo.rotateZ(Math.PI / 2);
 const wheelMatTHREE = new THREE.MeshStandardMaterial({ color: 0x111418, roughness: 0.9 });
 for (let i = 0; i < 4; i++) {
@@ -286,8 +290,8 @@ function respawn() {
   chassisBody.quaternion.setFromAxisAngle(new CANNON.Vec3(0, 1, 0), spawnRot);
 }
 
-const MAX_ENGINE = 1500;
-const MAX_BRAKE = 50;
+const MAX_ENGINE = M(1500);
+const MAX_BRAKE = M(50);
 const MAX_STEER = 0.55;
 
 function applyControls() {
@@ -321,8 +325,8 @@ function applyControls() {
 // Vehicle forward is +Z, so "behind the kart" = -Z relative to its facing.
 // Camera sits ~2 car-lengths back and slightly above; look-ahead points
 // forward (+Z) so the player sees where they're going.
-const camOffset = new THREE.Vector3(0, 5.5, -11);
-const camLookAhead = new THREE.Vector3(0, 1.2, 4);
+const camOffset = new THREE.Vector3(0, M(5.5), -M(11));
+const camLookAhead = new THREE.Vector3(0, M(1.2), M(4));
 const tmpV = new THREE.Vector3();
 const tmpQ = new THREE.Quaternion();
 
@@ -417,12 +421,13 @@ function tick() {
   updateCamera();
 
   // HUD
-  const speed = Math.round(chassisBody.velocity.length() * 3.6);
+  // velocity is in world units (mm) per second; convert mm/s → km/h.
+  const speed = Math.round(chassisBody.velocity.length() * 3.6 / WORLD_UNITS_PER_M);
   speedEl.textContent = speed;
   if (!paused) updateLapTracking();
 
   // Auto-respawn if fallen off the world
-  if (chassisBody.position.y < -20) respawn();
+  if (chassisBody.position.y < -M(20)) respawn();
 
   renderer.render(scene, camera);
   requestAnimationFrame(tick);

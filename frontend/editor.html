@@ -732,6 +732,8 @@
           <option value="1" selected>1 mm</option>
           <option value="10">10 mm (1 cm)</option>
           <option value="100">100 mm (1 dm)</option>
+          <option value="1000">1000 mm (1 m)</option>
+        </select>
         </select>
         <button id="gizmoSnap" class="active" title="Toggle grid snap">SNAP</button>
       </div>
@@ -794,18 +796,18 @@
         </div>
         <div class="ip-color" id="ipColors"></div>
         <div class="ip-section">
-          <h4>Position</h4>
+          <h4>Position (mm)</h4>
           <div class="row"><label>X</label>
-            <input type="range" id="decorX_r" min="-100" max="100" step="0.1" />
-            <input type="number" id="decorX" step="0.1" />
+            <input type="range" id="decorX_r" min="-50000" max="50000" step="1" />
+            <input type="number" id="decorX" step="1" />
           </div>
           <div class="row"><label>Y</label>
-            <input type="range" id="decorY_r" min="0" max="50" step="0.1" />
-            <input type="number" id="decorY" step="0.1" />
+            <input type="range" id="decorY_r" min="0" max="20000" step="1" />
+            <input type="number" id="decorY" step="1" />
           </div>
           <div class="row"><label>Z</label>
-            <input type="range" id="decorZ_r" min="-100" max="100" step="0.1" />
-            <input type="number" id="decorZ" step="0.1" />
+            <input type="range" id="decorZ_r" min="-50000" max="50000" step="1" />
+            <input type="number" id="decorZ" step="1" />
           </div>
         </div>
         <div class="ip-section">
@@ -824,18 +826,18 @@
           </div>
         </div>
         <div class="ip-section">
-          <h4>Size</h4>
+          <h4>Size (mm)</h4>
           <div class="row"><label>L</label>
-            <input type="range" id="decorSX_r" min="0.05" max="20" step="0.05" />
-            <input type="number" id="decorSX" step="0.1" min="0.05" />
+            <input type="range" id="decorSX_r" min="1" max="10000" step="1" />
+            <input type="number" id="decorSX" step="1" min="1" />
           </div>
           <div class="row"><label>W</label>
-            <input type="range" id="decorSZ_r" min="0.05" max="20" step="0.05" />
-            <input type="number" id="decorSZ" step="0.1" min="0.05" />
+            <input type="range" id="decorSZ_r" min="1" max="10000" step="1" />
+            <input type="number" id="decorSZ" step="1" min="1" />
           </div>
           <div class="row"><label>H</label>
-            <input type="range" id="decorSY_r" min="0.05" max="20" step="0.05" />
-            <input type="number" id="decorSY" step="0.1" min="0.05" />
+            <input type="range" id="decorSY_r" min="1" max="10000" step="1" />
+            <input type="number" id="decorSY" step="1" min="1" />
           </div>
         </div>
         </div>

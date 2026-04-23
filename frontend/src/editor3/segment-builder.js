@@ -9,6 +9,11 @@ import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
 import { SEGMENTS } from './segments.js';
 import { VISUAL_BUILDERS } from './road-geometry.js';
+import { WORLD_UNITS_PER_M } from './units.js';
+
+// Segments are authored in metres; the rest of the pipeline runs in mm.
+// `S` converts authored metres → world units (mm) at the build boundary.
+const S = WORLD_UNITS_PER_M;
 
 const materialCache = new Map();
 function getMaterial(color) {
@@ -43,8 +48,11 @@ export function buildSegmentMesh(key) {
   // raw block list (cuboids) for any segment without a custom builder.
   const visualFn = VISUAL_BUILDERS[key];
   if (visualFn) {
-    const group = visualFn();
+    const inner = visualFn();
+    inner.scale.setScalar(S);
+    const group = new THREE.Group();
     group.name = `seg:${key}`;
+    group.add(inner);
     group.traverse((obj) => {
       if (obj.isMesh) {
         if (obj.castShadow === undefined) obj.castShadow = true;
@@ -56,8 +64,10 @@ export function buildSegmentMesh(key) {
   const group = new THREE.Group();
   group.name = `seg:${key}`;
   for (const block of def.blocks) {
-    const mesh = new THREE.Mesh(getBoxGeo(...block.size), getMaterial(block.color));
-    mesh.position.set(...block.pos);
+    const sx = block.size[0] * S, sy = block.size[1] * S, sz = block.size[2] * S;
+    const px = block.pos[0] * S,  py = block.pos[1] * S,  pz = block.pos[2] * S;
+    const mesh = new THREE.Mesh(getBoxGeo(sx, sy, sz), getMaterial(block.color));
+    mesh.position.set(px, py, pz);
     if (block.rotX) mesh.rotation.x = block.rotX;
     if (block.rotY) mesh.rotation.y = block.rotY;
     if (block.rotZ) mesh.rotation.z = block.rotZ;
@@ -85,10 +95,10 @@ export function buildSegmentBody(key, worldPos, worldRotY) {
   for (const block of def.blocks) {
     if (block.solid === false) continue;
     const halfExtents = new CANNON.Vec3(
-      block.size[0] / 2, block.size[1] / 2, block.size[2] / 2,
+      (block.size[0] * S) / 2, (block.size[1] * S) / 2, (block.size[2] * S) / 2,
     );
     const shape = new CANNON.Box(halfExtents);
-    const offset = new CANNON.Vec3(...block.pos);
+    const offset = new CANNON.Vec3(block.pos[0] * S, block.pos[1] * S, block.pos[2] * S);
     // Compose local rotation (rotX then rotY then rotZ)
     const localQuat = new CANNON.Quaternion();
     if (block.rotX || block.rotY || block.rotZ) {
@@ -110,12 +120,12 @@ export function buildSegmentBody(key, worldPos, worldRotY) {
 /** True if a segment block is marked as the "drivable" road surface. */
 export function getDrivableTopY(key) {
   const def = SEGMENTS[key];
-  if (!def) return 0.4;
+  if (!def) return 0.4 * S;
   let maxY = 0;
   for (const b of def.blocks) {
     if (!b.drivable) continue;
     const top = b.pos[1] + b.size[1] / 2;
     if (top > maxY) maxY = top;
   }
-  return maxY || 0.4;
+  return (maxY || 0.4) * S;
 }

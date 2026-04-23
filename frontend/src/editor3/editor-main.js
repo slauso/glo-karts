@@ -7,7 +7,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js';
-import { SEGMENTS, SEGMENT_KEYS, TILE } from './segments.js';
+import { SEGMENTS, SEGMENT_KEYS, TILE as TILE_M } from './segments.js';
 import { buildSegmentMesh } from './segment-builder.js';
 import { Track, encodeTrack, decodeTrack } from './track-data.js';
 import { KARTS, resolveSelectedKartId } from './kart-catalog.js';
@@ -16,6 +16,11 @@ import {
   DECOR, DECOR_KEYS, DECOR_CATEGORY_ORDER, DECOR_CATEGORY_LABELS,
   isDecorKey, DecorStore, buildDecorMesh, syncDecorMesh, getDecorMaterial,
 } from './decor.js';
+import { WORLD_UNITS_PER_M, m, mm } from './units.js';
+
+// Editor runs in world units where 1 unit = 1 mm. Segments are authored in
+// metres, so convert TILE here for placement math (TILE = 12 m → 12000 mm).
+const TILE = TILE_M * WORLD_UNITS_PER_M;
 
 const STORAGE_KEY = 'gloKartsStudio.lastTrack';
 
@@ -28,9 +33,9 @@ renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0xeaf6f8);
-scene.fog = new THREE.Fog(0xeaf6f8, 120, 600);
+scene.fog = new THREE.Fog(0xeaf6f8, m(120), m(600));
 
-const camera = new THREE.PerspectiveCamera(55, 1, 0.1, 2000);
+const camera = new THREE.PerspectiveCamera(55, 1, m(0.1), m(2000));
 // Defaults scale with TILE so the editor frames the same number of cells
 // regardless of world units.
 camera.position.set(TILE * 10, TILE * 10, TILE * 10);
@@ -54,18 +59,18 @@ controls.touches = {
 
 // Lights
 const sun = new THREE.DirectionalLight(0xffffff, 1.4);
-sun.position.set(60, 120, 40);
+sun.position.set(m(60), m(120), m(40));
 sun.castShadow = true;
 sun.shadow.mapSize.set(2048, 2048);
-sun.shadow.camera.left = -80; sun.shadow.camera.right = 80;
-sun.shadow.camera.top = 80; sun.shadow.camera.bottom = -80;
-sun.shadow.camera.near = 1; sun.shadow.camera.far = 300;
+sun.shadow.camera.left = -m(80); sun.shadow.camera.right = m(80);
+sun.shadow.camera.top = m(80); sun.shadow.camera.bottom = -m(80);
+sun.shadow.camera.near = m(1); sun.shadow.camera.far = m(300);
 scene.add(sun);
 scene.add(new THREE.AmbientLight(0x6b7a92, 0.55));
 scene.add(new THREE.HemisphereLight(0x88aaff, 0x222530, 0.4));
 
 // Ground plane (raycast target for placement)
-const groundGeo = new THREE.PlaneGeometry(2000, 2000);
+const groundGeo = new THREE.PlaneGeometry(m(2000), m(2000));
 const groundMat = new THREE.MeshStandardMaterial({ color: 0xcfe7f0, roughness: 1, metalness: 0.0 });
 const ground = new THREE.Mesh(groundGeo, groundMat);
 ground.rotation.x = -Math.PI / 2;
@@ -73,17 +78,17 @@ ground.receiveShadow = true;
 ground.name = 'ground';
 scene.add(ground);
 
-// Dual-density base-10 grid: fine 1-unit lines (light blue, ≈mm) under
-// major 10-unit lines (darker blue, ≈cm). Both span 40 tiles wide so the
-// editor matches Tinkercad's mm/cm workplane look.
+// Dual-density base-10 grid in world units (1 unit = 1 mm). Fine lines
+// every 1 m (1000 mm), major every 10 m (10000 mm). Span = 40 tiles.
 const _gridSpan = 40 * TILE;
-const _gridFine = new THREE.GridHelper(_gridSpan, _gridSpan, 0xd6eaf2, 0xd6eaf2);
+const _gridFineDivs = Math.max(2, Math.round(_gridSpan / m(1)));
+const _gridFine = new THREE.GridHelper(_gridSpan, _gridFineDivs, 0xd6eaf2, 0xd6eaf2);
 _gridFine.material.opacity = 0.45;
 _gridFine.material.transparent = true;
-_gridFine.position.y = 0.005;
+_gridFine.position.y = mm(5);
 scene.add(_gridFine);
-const grid = new THREE.GridHelper(_gridSpan, _gridSpan / 10, 0x6ba8c0, 0x9ec9d6);
-grid.position.y = 0.012;
+const grid = new THREE.GridHelper(_gridSpan, Math.max(2, Math.round(_gridFineDivs / 10)), 0x6ba8c0, 0x9ec9d6);
+grid.position.y = mm(12);
 scene.add(grid);
 
 // ── Editor state ──────────────────────────────────────────────
@@ -133,7 +138,7 @@ const selectBoxPool = [];
 function getSelectBox() {
   for (const b of selectBoxPool) if (!b.visible) return b;
   const b = new THREE.LineSegments(
-    new THREE.EdgesGeometry(new THREE.BoxGeometry(TILE, 1, TILE)),
+    new THREE.EdgesGeometry(new THREE.BoxGeometry(TILE, m(1), TILE)),
     new THREE.LineBasicMaterial({ color: 0xff3aa1, linewidth: 2 }),
   );
   selectBoxPool.push(b);
@@ -146,7 +151,7 @@ function refreshSelectionBoxes() {
     const p = track.getById(id);
     if (!p) continue;
     const b = getSelectBox();
-    b.position.set(p.gx * TILE, 1, p.gz * TILE);
+    b.position.set(p.gx * TILE, m(1), p.gz * TILE);
     b.material.color.setHex(id === lastSelectedId ? 0xff3aa1 : 0x6b7280);
     b.visible = true;
   }
@@ -229,7 +234,7 @@ function getThumbRig() {
   const fill = new THREE.DirectionalLight(0xa0b8ff, 0.5);
   fill.position.set(-6, 8, -4);
   _thumbScene.add(hemi, dir, fill);
-  _thumbCam = new THREE.PerspectiveCamera(35, 1, 0.1, 500);
+  _thumbCam = new THREE.PerspectiveCamera(35, 1, m(0.1), m(500));
   return { renderer: _thumbRenderer, scene: _thumbScene, camera: _thumbCam };
 }
 function makeThumb(key) {
@@ -241,7 +246,8 @@ function makeThumb(key) {
     if (isDecorKey(key)) {
       const def = DECOR[key];
       const dr = def.defaultRot || [0, 0, 0];
-      const ds = def.defaultScale || [1, 1, 1];
+      const dsRaw = def.defaultScale || [1, 1, 1];
+      const ds = [m(dsRaw[0]), m(dsRaw[1]), m(dsRaw[2])];
       mesh = new THREE.Mesh(def.build(), getDecorMaterial(def.color, false).clone());
       mesh.rotation.set(dr[0], dr[1], dr[2]);
       mesh.scale.set(ds[0], ds[1], ds[2]);
@@ -358,17 +364,18 @@ function updatePreview() {
   if (isDecorKey(activeKey)) {
     const def = DECOR[activeKey];
     const dr = def.defaultRot || [0, 0, 0];
-    const ds = def.defaultScale || [1, 1, 1];
-    const m = new THREE.MeshStandardMaterial({
+    const dsRaw = def.defaultScale || [1, 1, 1];
+    const ds = [m(dsRaw[0]), m(dsRaw[1]), m(dsRaw[2])];
+    const matPreview = new THREE.MeshStandardMaterial({
       color: def.color, roughness: 0.65, metalness: 0.05,
       transparent: true, opacity: 0.55, depthWrite: false,
     });
-    previewMesh = new THREE.Mesh(def.build(), m);
+    previewMesh = new THREE.Mesh(def.build(), matPreview);
     previewMesh.rotation.set(dr[0], dr[1], dr[2]);
     previewMesh.scale.set(ds[0], ds[1], ds[2]);
     previewGroup.add(previewMesh);
     if (previewCell) {
-      const y = def.defaultY || 0;
+      const y = (def.defaultY || 0) * 1000;
       previewMesh.position.set(previewCell.gx * TILE, y, previewCell.gz * TILE);
     } else {
       previewMesh.visible = false;
@@ -1467,7 +1474,7 @@ function positionKartPreview() {
     return;
   }
   kartPreviewAnchor.visible = true;
-  kartPreviewAnchor.position.set(spawn.gx * TILE, 0.2, spawn.gz * TILE);
+  kartPreviewAnchor.position.set(spawn.gx * TILE, m(0.2), spawn.gz * TILE);
   kartPreviewAnchor.rotation.y = -spawn.rot * Math.PI / 2;
 }
 // Kick off kart preload so the playtest swap is instant.
@@ -1485,7 +1492,7 @@ const terrainState = {
 function applyTerrain() {
   groundMat.color.set(terrainState.ground);
   scene.background = new THREE.Color(terrainState.sky);
-  scene.fog = terrainState.fog ? new THREE.Fog(terrainState.sky, 120, 600) : null;
+  scene.fog = terrainState.fog ? new THREE.Fog(terrainState.sky, m(120), m(600)) : null;
   grid.visible = terrainState.grid;
   try { localStorage.setItem(TERRAIN_KEY, JSON.stringify(terrainState)); } catch {}
 }
@@ -1522,7 +1529,7 @@ function getOrtho() {
   if (orthoCamera) return orthoCamera;
   const aspect = canvas.clientWidth / Math.max(1, canvas.clientHeight);
   const d = TILE * 12;
-  orthoCamera = new THREE.OrthographicCamera(-d * aspect, d * aspect, d, -d, 0.1, 2000);
+  orthoCamera = new THREE.OrthographicCamera(-d * aspect, d * aspect, d, -d, m(0.1), m(2000));
   orthoCamera.position.copy(camera.position);
   orthoCamera.lookAt(controls.target);
   return orthoCamera;
@@ -1619,7 +1626,7 @@ function updateActionRing() {
   const p = track.getById(lastSelectedId);
   if (!p) { actionRingEl.hidden = true; return; }
   // Project the piece's world position to NDC then to canvas pixels.
-  _ringWorld.set(p.gx * TILE, 6, p.gz * TILE);
+  _ringWorld.set(p.gx * TILE, m(6), p.gz * TILE);
   _ringNdc.copy(_ringWorld).project(activeCamera);
   // Skip rendering if the point is behind the camera.
   if (_ringNdc.z > 1) { actionRingEl.hidden = true; return; }

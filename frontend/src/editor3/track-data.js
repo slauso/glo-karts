@@ -7,7 +7,12 @@
  * Serialized to compact JSON, then base64url-encoded for URL sharing.
  */
 
-import { TILE, SEGMENTS, getFootprint } from './segments.js';
+import { TILE as TILE_M, SEGMENTS, getFootprint } from './segments.js';
+import { WORLD_UNITS_PER_M } from './units.js';
+
+// Re-export TILE in WORLD units so any consumer (playtest, tests) gets the
+// same value used by the rendering / physics pipeline.
+const TILE = TILE_M * WORLD_UNITS_PER_M;
 
 let _nextId = 1;
 

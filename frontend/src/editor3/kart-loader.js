@@ -23,8 +23,8 @@ const cache = new Map();
  * We bound BOTH length and width so wide kart models (cars, snowmobiles)
  * don't end up wider than the chassis just because their natural Z is short.
  */
-export const KART_TARGET_LENGTH = 2.0;
-export const KART_MAX_WIDTH = 1.4;
+export const KART_TARGET_LENGTH = 2.0 * 1000; // mm
+export const KART_MAX_WIDTH = 1.4 * 1000;     // mm
 
 /**
  * Load + prep a kart template. Resolves to a THREE.Group that has been
@@ -149,7 +149,7 @@ const KART_FACING_OVERRIDES = {
 function makePlaceholderKart(accent) {
   const group = new THREE.Group();
   const body = new THREE.Mesh(
-    new THREE.BoxGeometry(1.2, 0.6, 2.0),
+    new THREE.BoxGeometry(1.2 * 1000, 0.6 * 1000, 2.0 * 1000),
     new THREE.MeshStandardMaterial({ color: accent, roughness: 0.5, metalness: 0.2 }),
   );
   body.castShadow = true;
