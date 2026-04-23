@@ -252,8 +252,9 @@ function makeThumb(key) {
     if (isDecorKey(key)) {
       const def = DECOR[key];
       const dr = def.defaultRot || [0, 0, 0];
-      const dsRaw = def.defaultScale || [1, 1, 1];
-      const ds = [m(dsRaw[0]), m(dsRaw[1]), m(dsRaw[2])];
+      // Thumbnails frame the geometry, so the literal scale doesn't matter
+      // — use the 20 mm default to match what the user actually drops.
+      const ds = [20, 20, 20];
       mesh = new THREE.Mesh(def.build(), getDecorMaterial(def.color, false).clone());
       mesh.rotation.set(dr[0], dr[1], dr[2]);
       mesh.scale.set(ds[0], ds[1], ds[2]);
@@ -370,8 +371,8 @@ function updatePreview() {
   if (isDecorKey(activeKey)) {
     const def = DECOR[activeKey];
     const dr = def.defaultRot || [0, 0, 0];
-    const dsRaw = def.defaultScale || [1, 1, 1];
-    const ds = [m(dsRaw[0]), m(dsRaw[1]), m(dsRaw[2])];
+    // Match the DecorStore.add() default: every fresh placement is 20 mm.
+    const ds = [20, 20, 20];
     const matPreview = new THREE.MeshStandardMaterial({
       color: def.color, roughness: 0.65, metalness: 0.05,
       transparent: true, opacity: 0.55, depthWrite: false,
@@ -381,7 +382,7 @@ function updatePreview() {
     previewMesh.scale.set(ds[0], ds[1], ds[2]);
     previewGroup.add(previewMesh);
     if (previewCell) {
-      const y = (def.defaultY || 0) * 1000;
+      const y = def.centered ? ds[1] / 2 : 0;
       previewMesh.position.set(previewCell.gx * TILE, y, previewCell.gz * TILE);
     } else {
       previewMesh.visible = false;

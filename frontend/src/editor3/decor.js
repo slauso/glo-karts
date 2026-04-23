@@ -192,17 +192,15 @@ export class DecorStore {
     if (!DECOR[type]) return null;
     const def = DECOR[type];
     const dr = def.defaultRot || [0, 0, 0];
-    // Registry default scales/Y are authored in metres so the entries stay
-    // readable; convert to world units (1 unit = 1 mm). Fallback default is
-    // a Tinkercad-style 20 mm cube — already in world units, no scale.
-    const M_TO_WORLD = 1000;
-    const ds = def.defaultScale
-      ? [def.defaultScale[0] * M_TO_WORLD, def.defaultScale[1] * M_TO_WORLD, def.defaultScale[2] * M_TO_WORLD]
-      : [20, 20, 20];
-    const dY = def.defaultY != null ? def.defaultY * M_TO_WORLD : null;
+    // Tinkercad parity: every freshly placed shape starts at a 20×20×20 mm
+    // cube on the workplane. The registry's `defaultScale` (themed sizes
+    // for nature / urban presets) is preserved as `def.preferredScale` for
+    // any future "use natural size" affordance, but new drops always begin
+    // at 20 mm so users can grow them with the on-shape gizmo.
+    const ds = [20, 20, 20];
     const _sx = sx ?? ds[0], _sy = sy ?? ds[1], _sz = sz ?? ds[2];
     // Geometry-aware default Y: centered primitives lift so their base sits on the workplane.
-    const _y = (y !== undefined) ? y : (dY ?? (def.centered ? _sy / 2 : 0));
+    const _y = (y !== undefined) ? y : (def.centered ? _sy / 2 : 0);
     const inst = {
       id: _nextId++,
       type,
