@@ -27,8 +27,8 @@ renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x0a0d12);
-scene.fog = new THREE.Fog(0x0a0d12, 80, 300);
+scene.background = new THREE.Color(0xeaf6f8);
+scene.fog = new THREE.Fog(0xeaf6f8, 120, 600);
 
 const camera = new THREE.PerspectiveCamera(55, 1, 0.1, 2000);
 // Defaults scale with TILE so the editor frames the same number of cells
@@ -66,7 +66,7 @@ scene.add(new THREE.HemisphereLight(0x88aaff, 0x222530, 0.4));
 
 // Ground plane (raycast target for placement)
 const groundGeo = new THREE.PlaneGeometry(2000, 2000);
-const groundMat = new THREE.MeshStandardMaterial({ color: 0x14181f, roughness: 1 });
+const groundMat = new THREE.MeshStandardMaterial({ color: 0xcfe7f0, roughness: 1, metalness: 0.0 });
 const ground = new THREE.Mesh(groundGeo, groundMat);
 ground.rotation.x = -Math.PI / 2;
 ground.receiveShadow = true;
@@ -74,7 +74,7 @@ ground.name = 'ground';
 scene.add(ground);
 
 // Grid helper
-const grid = new THREE.GridHelper(40 * TILE, 40, 0x2a3340, 0x1c222b);
+const grid = new THREE.GridHelper(40 * TILE, 40, 0x9ec9d6, 0xc5dde6);
 grid.position.y = 0.01;
 scene.add(grid);
 
@@ -91,7 +91,8 @@ const decorMeshById = new Map();
 const selectedDecorIds = new Set();
 let lastSelectedDecorId = null;
 let gizmoMode = 'translate';
-let gizmoSnap = false;
+let gizmoSnap = true;
+let snapStep = 1.0;
 
 let activeKey = SEGMENT_KEYS[0];
 let activeRot = 0;       // 0..3
@@ -199,7 +200,7 @@ function getThumbRig() {
   _thumbRenderer.outputColorSpace = THREE.SRGBColorSpace;
   _thumbRenderer.toneMapping = THREE.ACESFilmicToneMapping;
   _thumbRenderer.toneMappingExposure = 1.4;
-  _thumbRenderer.setClearColor(0x1a2030, 1);
+  _thumbRenderer.setClearColor(0xeaf6f8, 1);
   _thumbScene = new THREE.Scene();
   const hemi = new THREE.HemisphereLight(0xffffff, 0x404858, 1.4);
   const dir = new THREE.DirectionalLight(0xffffff, 1.6);
@@ -270,10 +271,13 @@ const CATEGORY_LABELS = {
 function buildPalette() {
   paletteEl.innerHTML = '';
   const filter = paletteFilter.trim().toLowerCase();
+  const catFilter = filter.startsWith('__cat:') ? filter.slice(6) : null;
+  const textFilter = catFilter ? '' : filter;
   // Group keys by category (preserving insertion order within a group).
   const groups = new Map();
   const addKey = (key, def) => {
-    if (filter && !def.label.toLowerCase().includes(filter) && !key.toLowerCase().includes(filter)) return;
+    if (catFilter && (def.category || 'special') !== catFilter && !(catFilter === 'road' && ['road','junction','height','special'].includes(def.category))) return;
+    if (textFilter && !def.label.toLowerCase().includes(textFilter) && !key.toLowerCase().includes(textFilter)) return;
     const cat = def.category || 'special';
     if (!groups.has(cat)) groups.set(cat, []);
     groups.get(cat).push(key);
@@ -290,7 +294,7 @@ function buildPalette() {
       const def = SEGMENTS[key] || DECOR[key];
       const btn = document.createElement('button');
       btn.dataset.key = key;
-      btn.innerHTML = `<div class="swatch"></div><div>${def.label}</div>`;
+      btn.innerHTML = '<div class="swatch"></div><div class="label">' + def.label + '</div>';
       const swatch = btn.querySelector('.swatch');
       const thumbUrl = makeThumb(key);
       if (swatch && thumbUrl) {
@@ -600,7 +604,10 @@ canvas.addEventListener('click', (e) => {
     const wp = hit.worldPoint || (hit.gx != null ? { x: hit.gx * TILE, y: 0, z: hit.gz * TILE } : null);
     if (!wp) return;
     let { x, z } = wp;
-    if (gizmoSnap) { x = Math.round(x); z = Math.round(z); }
+    if (gizmoSnap && snapStep > 0) {
+      x = Math.round(x / snapStep) * snapStep;
+      z = Math.round(z / snapStep) * snapStep;
+    }
     const inst = decor.add({ type: activeKey, x, y: DECOR[activeKey].defaultY || 0, z });
     if (inst) {
       addDecorMesh(inst);
@@ -748,7 +755,7 @@ function ensureTransformControls() {
   });
   transformControls.addEventListener('objectChange', () => {
     syncSelectedDecorFromMesh();
-    refreshInspector();
+    if (selectedDecorIds.size > 0) showInspectorPopup();
   });
   const helper = transformControls.getHelper ? transformControls.getHelper() : transformControls;
   scene.add(helper);
@@ -775,7 +782,7 @@ function refreshDecorGizmo() {
   if (!mesh) { transformControls.detach(); if (gizmoBar) gizmoBar.hidden = true; return; }
   transformControls.attach(mesh);
   transformControls.setMode(gizmoMode);
-  transformControls.translationSnap = gizmoSnap ? 1 : null;
+  transformControls.translationSnap = gizmoSnap && snapStep > 0 ? snapStep : null;
   transformControls.rotationSnap = gizmoSnap ? Math.PI / 12 : null;
   transformControls.scaleSnap = gizmoSnap ? 0.1 : null;
   if (gizmoBar) gizmoBar.hidden = false;
@@ -791,11 +798,18 @@ function setGizmoMode(mode) {
 function setGizmoSnap(on) {
   gizmoSnap = !!on;
   if (transformControls) {
-    transformControls.translationSnap = gizmoSnap ? 1 : null;
+    transformControls.translationSnap = gizmoSnap && snapStep > 0 ? snapStep : null;
     transformControls.rotationSnap = gizmoSnap ? Math.PI / 12 : null;
     transformControls.scaleSnap = gizmoSnap ? 0.1 : null;
   }
   document.getElementById('gizmoSnap')?.classList.toggle('active', gizmoSnap);
+}
+function setSnapStep(v) {
+  snapStep = parseFloat(v) || 0;
+  if (snapStep === 0) { setGizmoSnap(false); return; }
+  if (transformControls) {
+    transformControls.translationSnap = gizmoSnap ? snapStep : null;
+  }
 }
 
 // ── Keyboard ───────────────────────────────────────────────────
@@ -1113,43 +1127,146 @@ function bindDecorInspector(d) {
     pushUndo();
   });
 }
+
+// ── Tinkercad-style floating shape inspector ────────────────
+const TINKER_PALETTE = [
+  0xe6453a, 0xee8b1a, 0xead33a, 0x4ab84a, 0x2e9bd6,
+  0x9b6dc6, 0xf06ec6, 0x6e7378, 0xb0b6bf, 0x2a2f36,
+  0xffffff, 0xff7a3a, 0xc4a06b, 0x4ec0a3, 0xff5c8a,
+];
+function _setRange(idR, idN, val, fmt = (v) => v) {
+  const r = document.getElementById(idR);
+  const n = document.getElementById(idN);
+  if (r) r.value = val;
+  if (n) n.value = fmt(val);
+}
+function _bindPair(idR, idN, fn) {
+  const r = document.getElementById(idR);
+  const n = document.getElementById(idN);
+  const apply = () => fn(parseFloat(n.value) || 0);
+  if (r) r.addEventListener('input', () => { n.value = r.value; apply(); applySelectedDecor(); });
+  if (r) r.addEventListener('change', () => { pushUndo(); });
+  if (n) n.addEventListener('change', () => { if (r) r.value = n.value; apply(); applySelectedDecor(); pushUndo(); });
+}
+function applySelectedDecor() {
+  if (lastSelectedDecorId == null) return;
+  const d = decor.getById(lastSelectedDecorId);
+  const m = decorMeshById.get(lastSelectedDecorId);
+  if (d && m) syncDecorMesh(m, d);
+}
+function buildColorSwatches(activeColor) {
+  const c = document.getElementById('ipColors');
+  if (!c) return;
+  c.innerHTML = '';
+  for (const col of TINKER_PALETTE) {
+    const s = document.createElement('button');
+    s.className = 'swatch-pick';
+    s.style.background = '#' + (col & 0xffffff).toString(16).padStart(6, '0');
+    if (col === activeColor) s.classList.add('active');
+    s.addEventListener('click', () => {
+      const d = decor.getById(lastSelectedDecorId);
+      if (!d) return;
+      d.color = col;
+      applySelectedDecor();
+      buildColorSwatches(col);
+      pushUndo();
+    });
+    c.appendChild(s);
+  }
+}
+let _ipBound = false;
+function bindInspectorPopupOnce() {
+  if (_ipBound) return; _ipBound = true;
+  const upd = (key) => (v) => {
+    const d = decor.getById(lastSelectedDecorId);
+    if (!d) return;
+    d[key] = v;
+  };
+  const updRad = (key) => (v) => {
+    const d = decor.getById(lastSelectedDecorId);
+    if (!d) return;
+    d[key] = v * Math.PI / 180;
+  };
+  _bindPair('decorX_r', 'decorX', upd('x'));
+  _bindPair('decorY_r', 'decorY', upd('y'));
+  _bindPair('decorZ_r', 'decorZ', upd('z'));
+  _bindPair('decorRX_r', 'decorRX', updRad('rx'));
+  _bindPair('decorRY_r', 'decorRY', updRad('ry'));
+  _bindPair('decorRZ_r', 'decorRZ', updRad('rz'));
+  _bindPair('decorSX_r', 'decorSX', (v) => upd('sx')(Math.max(0.05, v)));
+  _bindPair('decorSY_r', 'decorSY', (v) => upd('sy')(Math.max(0.05, v)));
+  _bindPair('decorSZ_r', 'decorSZ', (v) => upd('sz')(Math.max(0.05, v)));
+  document.querySelectorAll('#inspectorPopup .ip-tab').forEach(b => {
+    b.addEventListener('click', () => {
+      const mode = b.dataset.mode;
+      document.querySelectorAll('#inspectorPopup .ip-tab').forEach(t => t.classList.toggle('active', t === b));
+      const d = decor.getById(lastSelectedDecorId);
+      if (!d) return;
+      d.isHole = (mode === 'hole');
+      applySelectedDecor();
+      pushUndo();
+    });
+  });
+  document.getElementById('ipClose')?.addEventListener('click', () => clearSelection());
+}
+function showInspectorPopup() {
+  const pop = document.getElementById('inspectorPopup');
+  if (!pop) return;
+  bindInspectorPopupOnce();
+  if (selectedDecorIds.size > 1) {
+    document.getElementById('ipTitle').textContent = selectedDecorIds.size + ' objects';
+  } else {
+    const d = decor.getById(lastSelectedDecorId);
+    if (!d) { pop.hidden = true; return; }
+    const def = DECOR[d.type];
+    document.getElementById('ipTitle').textContent = def.label;
+    _setRange('decorX_r', 'decorX', round2(d.x));
+    _setRange('decorY_r', 'decorY', round2(d.y));
+    _setRange('decorZ_r', 'decorZ', round2(d.z));
+    _setRange('decorRX_r', 'decorRX', Math.round(d.rx * 180 / Math.PI));
+    _setRange('decorRY_r', 'decorRY', Math.round(d.ry * 180 / Math.PI));
+    _setRange('decorRZ_r', 'decorRZ', Math.round(d.rz * 180 / Math.PI));
+    _setRange('decorSX_r', 'decorSX', round2(d.sx));
+    _setRange('decorSY_r', 'decorSY', round2(d.sy));
+    _setRange('decorSZ_r', 'decorSZ', round2(d.sz));
+    buildColorSwatches(d.color);
+    document.querySelectorAll('#inspectorPopup .ip-tab').forEach(b => {
+      b.classList.toggle('active', b.dataset.mode === (d.isHole ? 'hole' : 'solid'));
+    });
+  }
+  pop.hidden = false;
+  positionInspectorPopup();
+}
+function hideInspectorPopup() {
+  const pop = document.getElementById('inspectorPopup');
+  if (pop) pop.hidden = true;
+}
+function positionInspectorPopup() {
+  const pop = document.getElementById('inspectorPopup');
+  if (!pop || pop.hidden) return;
+  if (lastSelectedDecorId == null) return;
+  const mesh = decorMeshById.get(lastSelectedDecorId);
+  if (!mesh) return;
+  const v = new THREE.Vector3();
+  mesh.getWorldPosition(v);
+  v.y += 2;
+  v.project(activeCamera);
+  if (v.z > 1) { pop.hidden = true; return; }
+  const rect = canvas.getBoundingClientRect();
+  const px = (v.x * 0.5 + 0.5) * rect.width + 60;
+  const py = (-v.y * 0.5 + 0.5) * rect.height - 40;
+  const x = Math.max(8, Math.min(rect.width - 240, px));
+  const y = Math.max(8, Math.min(rect.height - 380, py));
+  pop.style.left = x + 'px';
+  pop.style.top = y + 'px';
+}
 function refreshInspector() {
   const el = document.getElementById('inspector');
   if (selectedDecorIds.size > 0) {
-    if (selectedDecorIds.size > 1) {
-      el.innerHTML = '<div class="row"><span>Selected</span><b>' + selectedDecorIds.size + ' objects</b></div>'
-        + '<div style="margin-top:8px; font-size:11px; color:var(--muted);">G move | T rotate | Y scale | Del remove</div>';
-      return;
-    }
-    const d = decor.getById(lastSelectedDecorId);
-    if (!d) return;
-    const def = DECOR[d.type];
-    const hex = '#' + (d.color & 0xffffff).toString(16).padStart(6, '0');
-    el.innerHTML = ''
-      + '<div class="decor-inspector">'
-      +   '<div class="ins-row"><b>' + def.label + '</b>'
-      +     '<label class="hole-toggle"><input type="checkbox" id="decorHole"' + (d.isHole ? ' checked' : '') + '/> hole</label>'
-      +     '<input type="color" id="decorColor" value="' + hex + '"/>'
-      +   '</div>'
-      +   '<div class="ins-grid">'
-      +     '<label>Pos</label>'
-      +     '<input type="number" id="decorX" step="0.1" value="' + round2(d.x) + '"/>'
-      +     '<input type="number" id="decorY" step="0.1" value="' + round2(d.y) + '"/>'
-      +     '<input type="number" id="decorZ" step="0.1" value="' + round2(d.z) + '"/>'
-      +     '<label>Rot</label>'
-      +     '<input type="number" id="decorRX" step="5" value="' + round2(d.rx * 180 / Math.PI) + '"/>'
-      +     '<input type="number" id="decorRY" step="5" value="' + round2(d.ry * 180 / Math.PI) + '"/>'
-      +     '<input type="number" id="decorRZ" step="5" value="' + round2(d.rz * 180 / Math.PI) + '"/>'
-      +     '<label>Size</label>'
-      +     '<input type="number" id="decorSX" step="0.1" min="0.05" value="' + round2(d.sx) + '"/>'
-      +     '<input type="number" id="decorSY" step="0.1" min="0.05" value="' + round2(d.sy) + '"/>'
-      +     '<input type="number" id="decorSZ" step="0.1" min="0.05" value="' + round2(d.sz) + '"/>'
-      +   '</div>'
-      +   '<div style="margin-top:8px; font-size:11px; color:var(--muted);">G move | T rotate | Y scale | drag the gizmo handles</div>'
-      + '</div>';
-    bindDecorInspector(d);
+    showInspectorPopup();
     return;
   }
+  hideInspectorPopup();
   if (selectedIds.size === 0) {
     el.innerHTML = `<div style="color:var(--muted); font-size:12px;">Nothing selected.<br><span style="font-size:10px;opacity:0.7;">Click a piece · Shift-click to add · Ctrl+A to select all</span></div>`;
     return;
@@ -1331,15 +1448,15 @@ updateKartPreview(activeKartId);
 // ── Terrain controls ──────────────────────────────────────────
 const TERRAIN_KEY = 'gloKartsStudio.terrain';
 const terrainState = {
-  ground: '#14181f',
-  sky: '#0a0d12',
+  ground: '#cfe7f0',
+  sky: '#eaf6f8',
   grid: true,
   fog: true,
 };
 function applyTerrain() {
   groundMat.color.set(terrainState.ground);
   scene.background = new THREE.Color(terrainState.sky);
-  scene.fog = terrainState.fog ? new THREE.Fog(terrainState.sky, 80, 300) : null;
+  scene.fog = terrainState.fog ? new THREE.Fog(terrainState.sky, 120, 600) : null;
   grid.visible = terrainState.grid;
   try { localStorage.setItem(TERRAIN_KEY, JSON.stringify(terrainState)); } catch {}
 }
@@ -1570,6 +1687,82 @@ document.querySelectorAll('#gizmoBar [data-mode]').forEach(btn => {
   btn.addEventListener('click', () => setGizmoMode(btn.dataset.mode));
 });
 document.getElementById('gizmoSnap')?.addEventListener('click', () => setGizmoSnap(!gizmoSnap));
+
+// Snap-grid size dropdown
+document.getElementById('snapGridSize')?.addEventListener('change', (e) => {
+  setSnapStep(e.target.value);
+});
+
+// Toolbar buttons (Tinkercad transform strip)
+document.getElementById('copyToolBtn')?.addEventListener('click', () => copySelection());
+document.getElementById('pasteToolBtn')?.addEventListener('click', () => pasteClipboard());
+document.getElementById('duplicateToolBtn')?.addEventListener('click', () => duplicateSelection());
+document.getElementById('deleteToolBtn')?.addEventListener('click', () => {
+  if (selectedDecorIds.size > 0) deleteDecorSelection();
+  else if (selectedIds.size > 0) deleteSelection();
+});
+document.getElementById('redoBtn')?.addEventListener('click', () => doRedo());
+document.getElementById('alignBtn')?.addEventListener('click', () => toast('Align: select multiple shapes'));
+document.getElementById('groupBtn')?.addEventListener('click', () => toast('Group: coming soon'));
+document.getElementById('ungroupBtn')?.addEventListener('click', () => toast('Ungroup: coming soon'));
+
+// Viewport stack buttons
+document.getElementById('vpHome')?.addEventListener('click', () => snapView('iso'));
+document.getElementById('vpFit')?.addEventListener('click', () => {
+  const b = track.bounds();
+  if (!b) { snapView('iso'); return; }
+  const cx = ((b.minX + b.maxX) / 2) * TILE;
+  const cz = ((b.minZ + b.maxZ) / 2) * TILE;
+  controls.target.set(cx, 0, cz);
+  const span = Math.max(b.maxX - b.minX, b.maxZ - b.minZ, 5) * TILE;
+  activeCamera.position.set(cx + span, span, cz + span);
+  activeCamera.lookAt(controls.target);
+  controls.update();
+});
+document.getElementById('vpZoomIn')?.addEventListener('click', () => {
+  controls.dollyIn?.(1.2); controls.update();
+  const dir = new THREE.Vector3().subVectors(activeCamera.position, controls.target).multiplyScalar(0.85);
+  activeCamera.position.copy(controls.target).add(dir);
+});
+document.getElementById('vpZoomOut')?.addEventListener('click', () => {
+  const dir = new THREE.Vector3().subVectors(activeCamera.position, controls.target).multiplyScalar(1.18);
+  activeCamera.position.copy(controls.target).add(dir);
+});
+document.getElementById('vpIso')?.addEventListener('click', () => snapView('iso'));
+
+// Settings (terrain) toggle
+document.getElementById('settingsBtn')?.addEventListener('click', () => {
+  const p = document.getElementById('terrainPopup');
+  if (p) p.classList.toggle('show');
+});
+
+// Top-right tab buttons (Shapes / Workplane / Notes) — basic UX
+document.querySelectorAll('.right-header button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.right-header button').forEach(b => b.classList.toggle('active', b === btn));
+  });
+});
+
+// Category dropdown filters palette
+document.getElementById('categorySelect')?.addEventListener('change', (e) => {
+  const v = e.target.value;
+  paletteFilter = (v === 'all') ? '' : '__cat:' + v;
+  buildPalette();
+});
+
+// Search button toggles search input visibility
+document.getElementById('searchBtn')?.addEventListener('click', () => {
+  const el = document.getElementById('paletteSearch');
+  if (el) {
+    el.classList.toggle('show');
+    if (el.classList.contains('show')) el.focus();
+  }
+});
+
+// Reposition inspector popup on every frame (cheap, runs from render loop)
+const _origAnimLoop = renderer.animation?.loop;
+const _ipTick = () => { positionInspectorPopup(); requestAnimationFrame(_ipTick); };
+requestAnimationFrame(_ipTick);
 
 // Expose for debugging
 window.__studio = { track, decor, scene, camera, renderer, rebuildAll, rebuildAllDecor, refreshHud, refreshPlayButton, selectDecor };

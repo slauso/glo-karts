@@ -104,17 +104,17 @@ function _torusKnot() {
 
 export const DECOR = {
   // ── Geometric primitives ────────────────────────────────────
-  box:        { label: 'Box',        category: 'shape', color: 0x6c7a89, build: () => geom('box', _box) },
-  cylinder:   { label: 'Cylinder',   category: 'shape', color: 0x6c7a89, build: () => geom('cyl', _cylinder) },
-  sphere:     { label: 'Sphere',     category: 'shape', color: 0x6c7a89, build: () => geom('sph', _sphere) },
-  hemisphere: { label: 'Hemisphere', category: 'shape', color: 0x6c7a89, build: () => geom('hem', _hemisphere) },
-  cone:       { label: 'Cone',       category: 'shape', color: 0x6c7a89, build: () => geom('con', _cone) },
-  pyramid:    { label: 'Pyramid',    category: 'shape', color: 0x6c7a89, build: () => geom('pyr', _pyramid) },
-  wedge:      { label: 'Wedge',      category: 'shape', color: 0x6c7a89, build: () => geom('wed', _wedge) },
-  plane:      { label: 'Slab',       category: 'shape', color: 0x6c7a89, build: () => geom('pln', _plane) },
-  capsule:    { label: 'Capsule',    category: 'shape', color: 0x6c7a89, build: () => geom('cap', _capsule) },
-  torus:      { label: 'Torus',      category: 'shape', color: 0x6c7a89, build: () => geom('tor', _torus) },
-  knot:       { label: 'Knot',       category: 'shape', color: 0x6c7a89, build: () => geom('knt', _torusKnot) },
+  box:        { label: 'Box',        category: 'shape', color: 0xe6453a, build: () => geom('box', _box) },
+  cylinder:   { label: 'Cylinder',   category: 'shape', color: 0xee8b1a, build: () => geom('cyl', _cylinder) },
+  sphere:     { label: 'Sphere',     category: 'shape', color: 0x2e9bd6, build: () => geom('sph', _sphere) },
+  hemisphere: { label: 'Hemisphere', category: 'shape', color: 0x9b6dc6, build: () => geom('hem', _hemisphere) },
+  cone:       { label: 'Cone',       category: 'shape', color: 0x9c4ec0, build: () => geom('con', _cone) },
+  pyramid:    { label: 'Pyramid',    category: 'shape', color: 0xead33a, build: () => geom('pyr', _pyramid) },
+  wedge:      { label: 'Wedge',      category: 'shape', color: 0x4ab84a, build: () => geom('wed', _wedge) },
+  plane:      { label: 'Slab',       category: 'shape', color: 0x4f9fd6, build: () => geom('pln', _plane) },
+  capsule:    { label: 'Capsule',    category: 'shape', color: 0x7ec0e0, build: () => geom('cap', _capsule) },
+  torus:      { label: 'Torus',      category: 'shape', color: 0xf06ec6, build: () => geom('tor', _torus) },
+  knot:       { label: 'Knot',       category: 'shape', color: 0xff7a3a, build: () => geom('knt', _torusKnot) },
 
   // ── Nature presets (primitive + themed default colour/scale) ─
   rock:       { label: 'Rock',       category: 'nature', color: 0x808a8f, build: () => geom('sph', _sphere),
@@ -167,8 +167,8 @@ export function getDecorMaterial(color, isHole = false) {
   if (!m) {
     m = new THREE.MeshStandardMaterial({
       color,
-      roughness: 0.65,
-      metalness: 0.05,
+      roughness: 0.55,
+      metalness: 0.02,
       transparent: isHole,
       opacity: isHole ? 0.35 : 1.0,
       depthWrite: !isHole,
