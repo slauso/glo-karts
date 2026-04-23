@@ -104,9 +104,9 @@ function _torusKnot() {
 
 export const DECOR = {
   // ── Geometric primitives ────────────────────────────────────
-  box:        { label: 'Box',        category: 'shape', color: 0xe6453a, build: () => geom('box', _box) },
+  box:        { label: 'Box',        category: 'shape', color: 0xe6453a, centered: true, build: () => geom('box', _box) },
   cylinder:   { label: 'Cylinder',   category: 'shape', color: 0xee8b1a, build: () => geom('cyl', _cylinder) },
-  sphere:     { label: 'Sphere',     category: 'shape', color: 0x2e9bd6, build: () => geom('sph', _sphere) },
+  sphere:     { label: 'Sphere',     category: 'shape', color: 0x2e9bd6, centered: true, build: () => geom('sph', _sphere) },
   hemisphere: { label: 'Hemisphere', category: 'shape', color: 0x9b6dc6, build: () => geom('hem', _hemisphere) },
   cone:       { label: 'Cone',       category: 'shape', color: 0x9c4ec0, build: () => geom('con', _cone) },
   pyramid:    { label: 'Pyramid',    category: 'shape', color: 0xead33a, build: () => geom('pyr', _pyramid) },
@@ -188,17 +188,20 @@ export class DecorStore {
   }
 
   /** Create a new instance. Caller passes a partial; defaults from registry are filled in. */
-  add({ type, x = 0, y = 0, z = 0, rx, ry, rz, sx, sy, sz, color, isHole = false } = {}) {
+  add({ type, x = 0, y, z = 0, rx, ry, rz, sx, sy, sz, color, isHole = false } = {}) {
     if (!DECOR[type]) return null;
     const def = DECOR[type];
     const dr = def.defaultRot || [0, 0, 0];
-    const ds = def.defaultScale || [1, 1, 1];
+    const ds = def.defaultScale || [20, 20, 20];
+    const _sx = sx ?? ds[0], _sy = sy ?? ds[1], _sz = sz ?? ds[2];
+    // Geometry-aware default Y: centered primitives lift so their base sits on the workplane.
+    const _y = (y !== undefined) ? y : (def.defaultY ?? (def.centered ? _sy / 2 : 0));
     const inst = {
       id: _nextId++,
       type,
-      x, y: y || def.defaultY || 0, z,
+      x, y: _y, z,
       rx: rx ?? dr[0], ry: ry ?? dr[1], rz: rz ?? dr[2],
-      sx: sx ?? ds[0], sy: sy ?? ds[1], sz: sz ?? ds[2],
+      sx: _sx, sy: _sy, sz: _sz,
       color: color ?? def.color,
       isHole: !!isHole,
     };

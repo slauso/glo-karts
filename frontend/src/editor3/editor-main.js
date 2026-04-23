@@ -608,7 +608,7 @@ canvas.addEventListener('click', (e) => {
       x = Math.round(x / snapStep) * snapStep;
       z = Math.round(z / snapStep) * snapStep;
     }
-    const inst = decor.add({ type: activeKey, x, y: DECOR[activeKey].defaultY || 0, z });
+    const inst = decor.add({ type: activeKey, x, z });
     if (inst) {
       addDecorMesh(inst);
       selectDecor(inst.id, 'replace');
@@ -783,8 +783,18 @@ function refreshDecorGizmo() {
   transformControls.attach(mesh);
   transformControls.setMode(gizmoMode);
   transformControls.translationSnap = gizmoSnap && snapStep > 0 ? snapStep : null;
-  transformControls.rotationSnap = gizmoSnap ? Math.PI / 12 : null;
+  transformControls.rotationSnap = gizmoSnap ? Math.PI / 8 : null;
   transformControls.scaleSnap = gizmoSnap ? 0.1 : null;
+  // Scale the gizmo so it stays usable for both 1mm props and 20mm+ shapes.
+  if (mesh.geometry) {
+    if (!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox();
+    const bb = mesh.geometry.boundingBox;
+    const sz = new THREE.Vector3();
+    bb.getSize(sz);
+    sz.multiply(mesh.scale);
+    const span = Math.max(sz.x, sz.y, sz.z, 1);
+    transformControls.size = THREE.MathUtils.clamp(span / 18, 0.6, 2.5);
+  }
   if (gizmoBar) gizmoBar.hidden = false;
 }
 function setGizmoMode(mode) {
@@ -799,7 +809,7 @@ function setGizmoSnap(on) {
   gizmoSnap = !!on;
   if (transformControls) {
     transformControls.translationSnap = gizmoSnap && snapStep > 0 ? snapStep : null;
-    transformControls.rotationSnap = gizmoSnap ? Math.PI / 12 : null;
+    transformControls.rotationSnap = gizmoSnap ? Math.PI / 8 : null;
     transformControls.scaleSnap = gizmoSnap ? 0.1 : null;
   }
   document.getElementById('gizmoSnap')?.classList.toggle('active', gizmoSnap);
