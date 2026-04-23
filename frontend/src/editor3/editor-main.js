@@ -1777,5 +1777,292 @@ document.getElementById('searchBtn')?.addEventListener('click', () => {
 // Inspector popup is now pinned to the top-right corner of the viewport (CSS),
 // so no per-frame repositioning is needed.
 
+// ── On-shape manipulation overlay (rotation rings, corner resize, numeric size) ──
+const decorManipEl = document.getElementById('decorManip');
+const _dmCorners = decorManipEl ? Array.from(decorManipEl.querySelectorAll('.dm-corner')) : [];
+const _dmRings = decorManipEl ? Array.from(decorManipEl.querySelectorAll('.dm-ring')) : [];
+const _dmSizes = decorManipEl ? Array.from(decorManipEl.querySelectorAll('.dm-size')) : [];
+const _dmTmpV = new THREE.Vector3();
+const _dmBox = new THREE.Box3();
+const _dmCornerWorld = new THREE.Vector3();
+const _dmCornersLocal = [
+  [-1,-1,-1],[ 1,-1,-1],[-1, 1,-1],[ 1, 1,-1],
+  [-1,-1, 1],[ 1,-1, 1],[-1, 1, 1],[ 1, 1, 1],
+];
+
+function _projectToScreen(world, rect) {
+  _dmTmpV.copy(world).project(activeCamera);
+  return {
+    x: (_dmTmpV.x * 0.5 + 0.5) * rect.width,
+    y: (-_dmTmpV.y * 0.5 + 0.5) * rect.height,
+    z: _dmTmpV.z,
+  };
+}
+
+function _selectedDecorMesh() {
+  if (lastSelectedDecorId == null) return null;
+  return decorMeshById.get(lastSelectedDecorId) || null;
+}
+
+function updateDecorManip() {
+  if (!decorManipEl) return;
+  const mesh = _selectedDecorMesh();
+  if (!mesh || _dmDragging) {
+    if (!_dmDragging) decorManipEl.hidden = true;
+    if (!_dmDragging) return;
+  }
+  if (!mesh) { decorManipEl.hidden = true; return; }
+  decorManipEl.hidden = false;
+  // World AABB
+  if (mesh.geometry) {
+    if (!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox();
+  }
+  _dmBox.setFromObject(mesh);
+  const rect = canvas.getBoundingClientRect();
+  // Local AABB corners → world (use bounding box of the geometry then apply mesh matrix).
+  const min = mesh.geometry?.boundingBox?.min;
+  const max = mesh.geometry?.boundingBox?.max;
+  if (!min || !max) { decorManipEl.hidden = true; return; }
+  const screenCorners = [];
+  for (let i = 0; i < 8; i++) {
+    const [sx, sy, sz] = _dmCornersLocal[i];
+    _dmCornerWorld.set(
+      sx > 0 ? max.x : min.x,
+      sy > 0 ? max.y : min.y,
+      sz > 0 ? max.z : min.z,
+    );
+    mesh.localToWorld(_dmCornerWorld);
+    const p = _projectToScreen(_dmCornerWorld, rect);
+    screenCorners.push(p);
+    if (_dmCorners[i]) {
+      _dmCorners[i].style.left = p.x + 'px';
+      _dmCorners[i].style.top = p.y + 'px';
+      _dmCorners[i].style.display = (p.z > 1) ? 'none' : '';
+    }
+  }
+  // Center of mesh in screen space (for rings + size labels positioning).
+  const center = new THREE.Vector3();
+  _dmBox.getCenter(center);
+  const sizeWorld = new THREE.Vector3();
+  _dmBox.getSize(sizeWorld);
+  const cs = _projectToScreen(center, rect);
+  // Position rings around the center; size them roughly to the bounding sphere on screen.
+  const span = Math.max(
+    Math.hypot(screenCorners[0].x - screenCorners[7].x, screenCorners[0].y - screenCorners[7].y),
+    60
+  );
+  const ringPx = Math.max(60, Math.min(220, span * 0.55));
+  _dmRings.forEach(r => {
+    r.style.left = cs.x + 'px';
+    r.style.top = cs.y + 'px';
+    const svg = r.querySelector('svg');
+    if (svg) {
+      svg.setAttribute('width', ringPx);
+      svg.setAttribute('height', ringPx);
+    }
+    // Tilt each ring so it visually represents its axis.
+    const axis = r.dataset.axis;
+    let rot = '';
+    if (axis === 'x') rot = 'rotate(90deg) skewX(-65deg)';
+    else if (axis === 'y') rot = 'skewX(-65deg)';
+    else rot = 'rotate(0deg)';
+    r.style.transform = 'translate(-50%, -50%) ' + rot;
+  });
+  // Numeric size readouts — pick edge midpoints in world space and project them.
+  const edges = {
+    x: [(min.x + max.x) / 2, max.y, max.z], // top-front edge midpoint (length along X)
+    z: [max.x, max.y, (min.z + max.z) / 2], // top-right edge midpoint (length along Z)
+    y: [max.x, (min.y + max.y) / 2, max.z], // front-right edge midpoint (length along Y)
+  };
+  const inst = decor.getById(lastSelectedDecorId);
+  for (const lab of _dmSizes) {
+    const axis = lab.dataset.axis;
+    const e = edges[axis];
+    _dmCornerWorld.set(e[0], e[1], e[2]);
+    mesh.localToWorld(_dmCornerWorld);
+    const p = _projectToScreen(_dmCornerWorld, rect);
+    lab.style.left = (p.x + 18) + 'px';
+    lab.style.top = (p.y - 14) + 'px';
+    lab.style.display = (p.z > 1) ? 'none' : '';
+    if (inst && !lab._editing) {
+      const span = lab.querySelector('[data-val]');
+      const baseSize = (axis === 'x') ? (max.x - min.x)
+                     : (axis === 'y') ? (max.y - min.y)
+                     : (max.z - min.z);
+      const scl = (axis === 'x') ? inst.sx : (axis === 'y') ? inst.sy : inst.sz;
+      const len = baseSize * scl;
+      if (span) span.textContent = (Math.round(len * 10) / 10).toFixed(1);
+    }
+  }
+}
+
+// ── Drag interactions ──
+let _dmDragging = false;
+
+function _attachManipDrag() {
+  if (!decorManipEl) return;
+  // Corner drag → uniform scale based on distance from opposite corner in screen space.
+  _dmCorners.forEach((el, idx) => {
+    el.addEventListener('pointerdown', (ev) => {
+      const mesh = _selectedDecorMesh();
+      const inst = decor.getById(lastSelectedDecorId);
+      if (!mesh || !inst) return;
+      ev.preventDefault(); ev.stopPropagation();
+      el.setPointerCapture(ev.pointerId);
+      _dmDragging = true;
+      decorManipEl.classList.add('dragging');
+      controls.enabled = false;
+      // Opposite corner index (XOR all 3 bits).
+      const oppIdx = idx ^ 7;
+      const rect = canvas.getBoundingClientRect();
+      const min = mesh.geometry.boundingBox.min;
+      const max = mesh.geometry.boundingBox.max;
+      const oppLocal = _dmCornersLocal[oppIdx];
+      _dmCornerWorld.set(
+        oppLocal[0] > 0 ? max.x : min.x,
+        oppLocal[1] > 0 ? max.y : min.y,
+        oppLocal[2] > 0 ? max.z : min.z,
+      );
+      mesh.localToWorld(_dmCornerWorld);
+      const oppScreen = _projectToScreen(_dmCornerWorld, rect);
+      const startMouse = { x: ev.clientX - rect.left, y: ev.clientY - rect.top };
+      const startDist = Math.hypot(startMouse.x - oppScreen.x, startMouse.y - oppScreen.y);
+      const startScale = { x: inst.sx, y: inst.sy, z: inst.sz };
+      const onMove = (e) => {
+        const mx = e.clientX - rect.left;
+        const my = e.clientY - rect.top;
+        const dist = Math.hypot(mx - oppScreen.x, my - oppScreen.y);
+        let f = startDist > 0 ? dist / startDist : 1;
+        f = Math.max(0.05, f);
+        let nx = startScale.x * f;
+        let ny = startScale.y * f;
+        let nz = startScale.z * f;
+        if (gizmoSnap) {
+          const step = 0.1;
+          nx = Math.max(step, Math.round(nx / step) * step);
+          ny = Math.max(step, Math.round(ny / step) * step);
+          nz = Math.max(step, Math.round(nz / step) * step);
+        }
+        inst.sx = nx; inst.sy = ny; inst.sz = nz;
+        mesh.scale.set(nx, ny, nz);
+        if (typeof showInspectorPopup === 'function') showInspectorPopup();
+      };
+      const onUp = (e) => {
+        try { el.releasePointerCapture(ev.pointerId); } catch {}
+        window.removeEventListener('pointermove', onMove);
+        window.removeEventListener('pointerup', onUp);
+        _dmDragging = false;
+        decorManipEl.classList.remove('dragging');
+        controls.enabled = true;
+        pushUndo();
+        refreshInspector();
+      };
+      window.addEventListener('pointermove', onMove);
+      window.addEventListener('pointerup', onUp);
+    });
+  });
+
+  // Ring drag → rotate around that axis based on angular delta around the mesh center.
+  _dmRings.forEach((ring) => {
+    const arc = ring.querySelector('.ring-arc');
+    const arrow = ring.querySelector('.ring-arrow');
+    const startDrag = (ev) => {
+      const mesh = _selectedDecorMesh();
+      const inst = decor.getById(lastSelectedDecorId);
+      if (!mesh || !inst) return;
+      ev.preventDefault(); ev.stopPropagation();
+      try { ev.target.setPointerCapture(ev.pointerId); } catch {}
+      _dmDragging = true;
+      decorManipEl.classList.add('dragging');
+      controls.enabled = false;
+      const axis = ring.dataset.axis;
+      const rect = canvas.getBoundingClientRect();
+      _dmBox.setFromObject(mesh);
+      const center = new THREE.Vector3();
+      _dmBox.getCenter(center);
+      const cs = _projectToScreen(center, rect);
+      const startAngle = Math.atan2((ev.clientY - rect.top) - cs.y, (ev.clientX - rect.left) - cs.x);
+      const startRot = { x: inst.rx, y: inst.ry, z: inst.rz };
+      const onMove = (e) => {
+        const a = Math.atan2((e.clientY - rect.top) - cs.y, (e.clientX - rect.left) - cs.x);
+        let delta = a - startAngle;
+        // Y-ring corresponds to looking down — invert sign so drag direction matches mouse.
+        if (axis === 'y') delta = -delta;
+        let next = startRot[axis] + delta;
+        if (gizmoSnap) {
+          const step = Math.PI / 8; // 22.5°, matches gizmo rotationSnap
+          next = Math.round(next / step) * step;
+        }
+        inst[`r${axis}`] = next;
+        mesh.rotation[axis] = next;
+        if (typeof showInspectorPopup === 'function') showInspectorPopup();
+      };
+      const onUp = (e) => {
+        window.removeEventListener('pointermove', onMove);
+        window.removeEventListener('pointerup', onUp);
+        _dmDragging = false;
+        decorManipEl.classList.remove('dragging');
+        controls.enabled = true;
+        pushUndo();
+        refreshInspector();
+      };
+      window.addEventListener('pointermove', onMove);
+      window.addEventListener('pointerup', onUp);
+    };
+    arc?.addEventListener('pointerdown', startDrag);
+    arrow?.addEventListener('pointerdown', startDrag);
+  });
+
+  // Numeric size readout → click to edit, type a new length, Enter/blur to commit.
+  _dmSizes.forEach((lab) => {
+    lab.addEventListener('click', (ev) => {
+      const mesh = _selectedDecorMesh();
+      const inst = decor.getById(lastSelectedDecorId);
+      if (!mesh || !inst || lab._editing) return;
+      ev.stopPropagation();
+      const axis = lab.dataset.axis;
+      const min = mesh.geometry.boundingBox.min;
+      const max = mesh.geometry.boundingBox.max;
+      const baseSize = (axis === 'x') ? (max.x - min.x)
+                     : (axis === 'y') ? (max.y - min.y)
+                     : (max.z - min.z);
+      const scl = (axis === 'x') ? inst.sx : (axis === 'y') ? inst.sy : inst.sz;
+      const cur = (Math.round(baseSize * scl * 10) / 10).toFixed(1);
+      lab._editing = true;
+      const letter = (axis === 'x') ? 'L' : (axis === 'y') ? 'H' : 'W';
+      lab.innerHTML = letter + ':<input type="number" step="0.1" min="0.1" value="' + cur + '" />';
+      const inp = lab.querySelector('input');
+      inp.focus(); inp.select();
+      const commit = () => {
+        const v = parseFloat(inp.value);
+        if (isFinite(v) && v > 0 && baseSize > 0) {
+          const newScale = v / baseSize;
+          if (axis === 'x') { inst.sx = newScale; mesh.scale.x = newScale; }
+          else if (axis === 'y') { inst.sy = newScale; mesh.scale.y = newScale; }
+          else { inst.sz = newScale; mesh.scale.z = newScale; }
+          pushUndo();
+          refreshInspector();
+        }
+        lab._editing = false;
+        lab.innerHTML = letter + ':<span data-val>' + cur + '</span>';
+      };
+      inp.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); commit(); }
+        else if (e.key === 'Escape') { lab._editing = false; lab.innerHTML = letter + ':<span data-val>' + cur + '</span>'; }
+      });
+      inp.addEventListener('blur', commit);
+    });
+  });
+}
+_attachManipDrag();
+
+// Hook into the existing render loop by appending to setAnimationLoop callback.
+// The original loop already calls updateActionRing() — we piggy-back via a separate
+// rAF tick to avoid re-wiring the loop.
+(function _dmTick() {
+  try { updateDecorManip(); } catch {}
+  requestAnimationFrame(_dmTick);
+})();
+
 // Expose for debugging
 window.__studio = { track, decor, scene, camera, renderer, rebuildAll, rebuildAllDecor, refreshHud, refreshPlayButton, selectDecor };

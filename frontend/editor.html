@@ -231,6 +231,57 @@
     }
     canvas { display: block; width: 100%; height: 100%; }
 
+    /* On-shape manipulation overlay (Tinkercad-style rotation rings + corner resize boxes + size readouts) */
+    .decor-manip { position: absolute; inset: 0; pointer-events: none; z-index: 12; }
+    .decor-manip.dragging { cursor: grabbing; }
+    .dm-corner {
+      position: absolute; width: 12px; height: 12px;
+      transform: translate(-50%, -50%);
+      background: #ffffff; border: 1.5px solid #1a8fb5;
+      border-radius: 2px; cursor: nwse-resize; pointer-events: auto;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.25);
+    }
+    .dm-corner:hover { background: #d6f1fb; border-color: #0f6f90; }
+    .dm-edge {
+      position: absolute; width: 10px; height: 10px;
+      transform: translate(-50%, -50%);
+      background: #ffffff; border: 1.5px solid #1a8fb5;
+      border-radius: 50%; cursor: ew-resize; pointer-events: auto;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.25);
+    }
+    .dm-ring {
+      position: absolute; transform: translate(-50%, -50%);
+      pointer-events: none;
+    }
+    .dm-ring svg { display: block; overflow: visible; }
+    .dm-ring .ring-arc {
+      fill: none; stroke-width: 3; pointer-events: stroke;
+      cursor: grab; opacity: 0.95;
+    }
+    .dm-ring .ring-arc:hover { stroke-width: 5; }
+    .dm-ring.axis-x .ring-arc { stroke: #ff5c5c; }
+    .dm-ring.axis-y .ring-arc { stroke: #4caf50; }
+    .dm-ring.axis-z .ring-arc { stroke: #3aa1ff; }
+    .dm-ring .ring-arrow { fill: currentColor; pointer-events: auto; cursor: grab; }
+    .dm-ring.axis-x { color: #ff5c5c; }
+    .dm-ring.axis-y { color: #4caf50; }
+    .dm-ring.axis-z { color: #3aa1ff; }
+    .dm-size {
+      position: absolute; transform: translate(-50%, -50%);
+      background: #ffffff; border: 1px solid #1a8fb5;
+      color: #0f6f90; font-size: 11px; font-weight: 600;
+      padding: 2px 6px; border-radius: 3px; pointer-events: auto;
+      cursor: text; box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+      min-width: 36px; text-align: center;
+      font-family: inherit;
+    }
+    .dm-size:hover { background: #eaf8fd; }
+    .dm-size input {
+      width: 50px; border: none; outline: none; background: transparent;
+      color: inherit; font: inherit; text-align: center; padding: 0;
+    }
+
+
     /* Top-left HUD pill */
     .hud {
       position: absolute; top: 12px; left: 124px;
@@ -789,6 +840,42 @@
           </div>
         </div>
         </div>
+      </div>
+
+      <!-- On-shape manipulation overlay (rotation rings + corner resize boxes + size readouts) -->
+      <div id="decorManip" class="decor-manip" hidden>
+        <!-- 8 corner resize handles -->
+        <div class="dm-corner" data-corner="0"></div>
+        <div class="dm-corner" data-corner="1"></div>
+        <div class="dm-corner" data-corner="2"></div>
+        <div class="dm-corner" data-corner="3"></div>
+        <div class="dm-corner" data-corner="4"></div>
+        <div class="dm-corner" data-corner="5"></div>
+        <div class="dm-corner" data-corner="6"></div>
+        <div class="dm-corner" data-corner="7"></div>
+        <!-- 3 axis rotation rings (X red, Y green, Z blue) -->
+        <div class="dm-ring axis-x" data-axis="x">
+          <svg width="120" height="120" viewBox="-60 -60 120 120">
+            <circle class="ring-arc" cx="0" cy="0" r="50"></circle>
+            <polygon class="ring-arrow" points="50,-6 60,0 50,6"></polygon>
+          </svg>
+        </div>
+        <div class="dm-ring axis-y" data-axis="y">
+          <svg width="120" height="120" viewBox="-60 -60 120 120">
+            <circle class="ring-arc" cx="0" cy="0" r="50"></circle>
+            <polygon class="ring-arrow" points="50,-6 60,0 50,6"></polygon>
+          </svg>
+        </div>
+        <div class="dm-ring axis-z" data-axis="z">
+          <svg width="120" height="120" viewBox="-60 -60 120 120">
+            <circle class="ring-arc" cx="0" cy="0" r="50"></circle>
+            <polygon class="ring-arrow" points="50,-6 60,0 50,6"></polygon>
+          </svg>
+        </div>
+        <!-- 3 numeric size readouts (L/W/H) -->
+        <div class="dm-size" data-axis="x">L:<span data-val>0</span></div>
+        <div class="dm-size" data-axis="z">W:<span data-val>0</span></div>
+        <div class="dm-size" data-axis="y">H:<span data-val>0</span></div>
       </div>
 
       <!-- Hidden gizmo bar (kept for backwards-compat with existing JS) -->
