@@ -80,14 +80,20 @@ scene.add(ground);
 
 // Dual-density base-10 grid in world units (1 unit = 1 mm). Fine lines
 // every 1 m (1000 mm), major every 10 m (10000 mm). Span = 40 tiles.
+// Opacities tuned to mimic Tinkercad's workplane: fine lines barely
+// visible, major lines a touch more present.
 const _gridSpan = 40 * TILE;
 const _gridFineDivs = Math.max(2, Math.round(_gridSpan / m(1)));
-const _gridFine = new THREE.GridHelper(_gridSpan, _gridFineDivs, 0xd6eaf2, 0xd6eaf2);
-_gridFine.material.opacity = 0.45;
+const _gridFine = new THREE.GridHelper(_gridSpan, _gridFineDivs, 0xb8d4e0, 0xb8d4e0);
+_gridFine.material.opacity = 0.10;
 _gridFine.material.transparent = true;
+_gridFine.material.depthWrite = false;
 _gridFine.position.y = mm(5);
 scene.add(_gridFine);
-const grid = new THREE.GridHelper(_gridSpan, Math.max(2, Math.round(_gridFineDivs / 10)), 0x6ba8c0, 0x9ec9d6);
+const grid = new THREE.GridHelper(_gridSpan, Math.max(2, Math.round(_gridFineDivs / 10)), 0x7aa6b8, 0x9ec0cf);
+grid.material.opacity = 0.22;
+grid.material.transparent = true;
+grid.material.depthWrite = false;
 grid.position.y = mm(12);
 scene.add(grid);
 
