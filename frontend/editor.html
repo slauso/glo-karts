@@ -726,13 +726,12 @@
       <!-- Bottom-right snap grid (matches Tinkercad's Snap Grid pill) -->
       <div class="snap-grid-bar">
         <span>Snap Grid</span>
-        <select id="snapGridSize">
+        <select id="snapGridSize" title="Snap grid (mm)">
           <option value="0">Off</option>
-          <option value="0.1">0.1</option>
-          <option value="0.5">0.5</option>
-          <option value="1" selected>1.0</option>
-          <option value="2">2.0</option>
-          <option value="5">5.0</option>
+          <option value="0.1">0.1 mm</option>
+          <option value="1" selected>1 mm</option>
+          <option value="10">10 mm (1 cm)</option>
+          <option value="100">100 mm (1 dm)</option>
         </select>
         <button id="gizmoSnap" class="active" title="Toggle grid snap">SNAP</button>
       </div>

@@ -73,9 +73,17 @@ ground.receiveShadow = true;
 ground.name = 'ground';
 scene.add(ground);
 
-// Grid helper
-const grid = new THREE.GridHelper(40 * TILE, 40, 0x9ec9d6, 0xc5dde6);
-grid.position.y = 0.01;
+// Dual-density base-10 grid: fine 1-unit lines (light blue, ≈mm) under
+// major 10-unit lines (darker blue, ≈cm). Both span 40 tiles wide so the
+// editor matches Tinkercad's mm/cm workplane look.
+const _gridSpan = 40 * TILE;
+const _gridFine = new THREE.GridHelper(_gridSpan, _gridSpan, 0xd6eaf2, 0xd6eaf2);
+_gridFine.material.opacity = 0.45;
+_gridFine.material.transparent = true;
+_gridFine.position.y = 0.005;
+scene.add(_gridFine);
+const grid = new THREE.GridHelper(_gridSpan, _gridSpan / 10, 0x6ba8c0, 0x9ec9d6);
+grid.position.y = 0.012;
 scene.add(grid);
 
 // ── Editor state ──────────────────────────────────────────────
@@ -1380,6 +1388,12 @@ document.getElementById('playBtn').addEventListener('click', () => {
   }
   const code = encodeTrack(track);
   sessionStorage.setItem('gloKartsStudio.playtest', code);
+  // Also stash decor so the playtest scene renders the user's design 1:1.
+  try {
+    sessionStorage.setItem('gloKartsStudio.playtest.decor', JSON.stringify(decor.toJSON()));
+  } catch (err) {
+    console.warn('[editor3] failed to stash decor for playtest', err);
+  }
   window.location.href = `/play.html?track=${code}&from=editor`;
 });
 
@@ -1934,14 +1948,17 @@ function _attachManipDrag() {
         const dist = Math.hypot(mx - oppScreen.x, my - oppScreen.y);
         let f = startDist > 0 ? dist / startDist : 1;
         f = Math.max(0.05, f);
+        // Shift = uniform 3-axis scale; default = horizontal scale only (X+Z),
+        // matching Tinkercad's corner-handle behaviour for the workplane.
+        const uniform = !!e.shiftKey;
         let nx = startScale.x * f;
-        let ny = startScale.y * f;
         let nz = startScale.z * f;
+        let ny = uniform ? (startScale.y * f) : startScale.y;
         if (gizmoSnap) {
           const step = 0.1;
           nx = Math.max(step, Math.round(nx / step) * step);
-          ny = Math.max(step, Math.round(ny / step) * step);
           nz = Math.max(step, Math.round(nz / step) * step);
+          if (uniform) ny = Math.max(step, Math.round(ny / step) * step);
         }
         inst.sx = nx; inst.sy = ny; inst.sz = nz;
         mesh.scale.set(nx, ny, nz);

@@ -11,6 +11,7 @@ import { SEGMENTS } from './segments.js';
 import { buildSegmentMesh, buildSegmentBody, getDrivableTopY } from './segment-builder.js';
 import { cloneKart } from './kart-loader.js';
 import { resolveSelectedKartId, getKart } from './kart-catalog.js';
+import { DecorStore, buildDecorMesh } from './decor.js';
 
 // ── Scene ─────────────────────────────────────────────────────
 const canvas = document.getElementById('canvas');
@@ -83,6 +84,36 @@ function loadTrack() {
 }
 
 const track = loadTrack();
+
+// Load decor (Tinkercad-style props placed in the editor) so the playtest
+// scene renders the user's full design 1:1. Decor is stored separately from
+// the track-share code because it can be much larger; we read it back from
+// sessionStorage when the player came from the editor.
+const decor = new DecorStore();
+try {
+  const raw = sessionStorage.getItem('gloKartsStudio.playtest.decor');
+  if (raw) decor.fromJSON(JSON.parse(raw));
+} catch (err) {
+  console.warn('[play] failed to load decor', err);
+}
+for (const inst of decor.all()) {
+  const mesh = buildDecorMesh(inst);
+  if (mesh) scene.add(mesh);
+  // Static collider so karts collide with placed shapes (uses the AABB of
+  // the rendered mesh — accurate enough for boxes/walls/pillars and
+  // conservative for round shapes).
+  if (mesh && typeof CANNON !== 'undefined') {
+    const bb = new THREE.Box3().setFromObject(mesh);
+    const sz = new THREE.Vector3(); bb.getSize(sz);
+    const ctr = new THREE.Vector3(); bb.getCenter(ctr);
+    if (sz.x > 0 && sz.y > 0 && sz.z > 0) {
+      const body = new CANNON.Body({ mass: 0, material: groundMat });
+      body.addShape(new CANNON.Box(new CANNON.Vec3(sz.x / 2, sz.y / 2, sz.z / 2)));
+      body.position.set(ctr.x, ctr.y, ctr.z);
+      world.addBody(body);
+    }
+  }
+}
 
 // Build all segments: visual + collider
 const placedBodies = [];
