@@ -49,7 +49,7 @@ controls.enableDamping = true;
 controls.dampingFactor = 0.08;
 controls.minDistance = TILE * 0.5;
 controls.maxDistance = TILE * 20;
-controls.maxPolarAngle = Math.PI * 0.48;
+controls.maxPolarAngle = Math.PI * 0.45;
 controls.mouseButtons = {
   LEFT: null,
   MIDDLE: THREE.MOUSE.DOLLY,
@@ -83,9 +83,11 @@ ground.receiveShadow = false;
 ground.name = 'ground';
 scene.add(ground);
 
-// Tinkercad-style bounded workplane plate: pale cyan tint with a thin
-// accent border so the work area is unambiguous.
-const _plateSize = m(60);
+// Tinkercad-style bounded workplane plate. Sized large enough that the
+// camera can tilt to its max polar angle without ever exposing the white
+// ground past the plate edge. The thin accent border still reads at the
+// outer perimeter when the user zooms out.
+const _plateSize = m(200);
 const _plate = new THREE.Mesh(
   new THREE.PlaneGeometry(_plateSize, _plateSize),
   new THREE.MeshBasicMaterial({ color: 0xdcecf2, transparent: true, opacity: 0.95 })
@@ -106,7 +108,7 @@ scene.add(_plateEdge);
 // every 1 m, major every 10 m. Bounded to the workplane plate so the area
 // outside reads as flat white (Tinkercad). Generous Y separation between
 // layers prevents z-fighting/flicker when the camera moves.
-const _gridSpan = m(60);
+const _gridSpan = m(200);
 const _gridFineDivs = Math.max(2, Math.round(_gridSpan / m(1)));
 const _gridFine = new THREE.GridHelper(_gridSpan, _gridFineDivs, 0x9fc8d8, 0x9fc8d8);
 _gridFine.material.opacity = 0.32;
