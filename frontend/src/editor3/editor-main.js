@@ -267,9 +267,9 @@ function makeThumb(key) {
     if (isDecorKey(key)) {
       const def = DECOR[key];
       const dr = def.defaultRot || [0, 0, 0];
-      // Thumbnails frame the geometry, so the literal scale doesn't matter
-      // — use the 20 mm default to match what the user actually drops.
-      const ds = [20, 20, 20];
+      // Frame the same 200 mm default the user actually drops, so the
+      // thumbnail represents what they'll get on the workplane.
+      const ds = [200, 200, 200];
       mesh = new THREE.Mesh(def.build(), getDecorMaterial(def.color, false).clone());
       mesh.rotation.set(dr[0], dr[1], dr[2]);
       mesh.scale.set(ds[0], ds[1], ds[2]);
@@ -397,11 +397,11 @@ function updatePreview() {
   if (isDecorKey(activeKey)) {
     const def = DECOR[activeKey];
     const dr = def.defaultRot || [0, 0, 0];
-    // Match the DecorStore.add() default: every fresh placement is 20 mm.
-    const ds = [20, 20, 20];
+    // Match the DecorStore.add() default: every fresh placement is 200 mm.
+    const ds = [200, 200, 200];
     const matPreview = new THREE.MeshStandardMaterial({
-      color: def.color, roughness: 0.65, metalness: 0.05,
-      transparent: true, opacity: 0.55, depthWrite: false,
+      color: def.color, roughness: 0.55, metalness: 0.05,
+      transparent: true, opacity: 0.45, depthWrite: false,
     });
     previewMesh = new THREE.Mesh(def.build(), matPreview);
     previewMesh.rotation.set(dr[0], dr[1], dr[2]);

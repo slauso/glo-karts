@@ -192,12 +192,14 @@ export class DecorStore {
     if (!DECOR[type]) return null;
     const def = DECOR[type];
     const dr = def.defaultRot || [0, 0, 0];
-    // Tinkercad parity: every freshly placed shape starts at a 20×20×20 mm
-    // cube on the workplane. The registry's `defaultScale` (themed sizes
-    // for nature / urban presets) is preserved as `def.preferredScale` for
-    // any future "use natural size" affordance, but new drops always begin
-    // at 20 mm so users can grow them with the on-shape gizmo.
-    const ds = [20, 20, 20];
+    // Tinkercad parity: every freshly placed shape starts at a
+    // 200×200×200 mm (20 cm) cube on the workplane — large enough to be
+    // immediately visible against the road-scale grid (1 m majors) while
+    // staying small relative to a track tile. Users grow it with the
+    // on-shape corner gizmo. The registry's themed `defaultScale` is kept
+    // available as `def.preferredScale` for any future "use natural size"
+    // affordance.
+    const ds = [200, 200, 200];
     const _sx = sx ?? ds[0], _sy = sy ?? ds[1], _sz = sz ?? ds[2];
     // Geometry-aware default Y: centered primitives lift so their base sits on the workplane.
     const _y = (y !== undefined) ? y : (def.centered ? _sy / 2 : 0);
