@@ -339,6 +339,17 @@ function buildPalette() {
         // Toggle off if the same tool was clicked again.
         setActiveTool(activeKey === key ? null : key);
       });
+      // Tinkercad parity: drag the tile straight onto the workplane to drop
+      // a shape at the cursor world point. Wires into the canvas drop event
+      // below; the dragged key travels through both `dataTransfer` (for
+      // browsers that respect it) and a module-level fallback variable.
+      btn.draggable = true;
+      btn.addEventListener('dragstart', (ev) => {
+        try { ev.dataTransfer?.setData('text/plain', key); } catch {}
+        if (ev.dataTransfer) ev.dataTransfer.effectAllowed = 'copy';
+        _paletteDragKey = key;
+      });
+      btn.addEventListener('dragend', () => { _paletteDragKey = null; });
       paletteEl.appendChild(btn);
     }
   };
@@ -411,6 +422,9 @@ function updatePreview() {
 const raycaster = new THREE.Raycaster();
 const ndc = new THREE.Vector2();
 
+// Module-level scratch for palette drag-drop (set by tile dragstart, read by canvas drop).
+let _paletteDragKey = null;
+
 function pickGroundCell(event) {
   const rect = canvas.getBoundingClientRect();
   ndc.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
@@ -480,6 +494,71 @@ canvas.addEventListener('mousemove', (e) => {
 canvas.addEventListener('mouseleave', () => {
   previewCell = null;
   if (previewMesh) previewMesh.visible = false;
+});
+
+// ── Drag-from-palette → drop on workplane (Tinkercad parity) ──
+// Show a translucent preview at the drop point while dragging, then place
+// the shape (decor or road) when the user releases the mouse over canvas.
+canvas.addEventListener('dragover', (e) => {
+  if (!_paletteDragKey) return;
+  e.preventDefault();
+  if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+  const hit = pickGroundCell(e);
+  if (!hit) return;
+  // Reuse the placement preview by temporarily aiming activeKey at the dragged
+  // shape; restore on dragend.
+  if (activeKey !== _paletteDragKey) {
+    activeKey = _paletteDragKey;
+    updatePreview();
+  }
+  if (isDecorKey(_paletteDragKey)) {
+    if (previewMesh && hit.worldPoint) {
+      previewCell = { gx: hit.gx, gz: hit.gz };
+      previewMesh.visible = true;
+      previewMesh.position.set(hit.worldPoint.x, 0, hit.worldPoint.z);
+    }
+  } else if (hit.gx != null) {
+    previewCell = { gx: hit.gx, gz: hit.gz };
+    if (previewMesh) {
+      previewMesh.visible = true;
+      previewMesh.position.set(hit.gx * TILE, 0, hit.gz * TILE);
+    }
+  }
+});
+canvas.addEventListener('drop', (e) => {
+  const key = _paletteDragKey || e.dataTransfer?.getData('text/plain');
+  _paletteDragKey = null;
+  if (!key) return;
+  e.preventDefault();
+  const hit = pickGroundCell(e);
+  if (!hit) return;
+  if (isDecorKey(key)) {
+    const wp = hit.worldPoint || (hit.gx != null ? { x: hit.gx * TILE, y: 0, z: hit.gz * TILE } : null);
+    if (!wp) return;
+    let { x, z } = wp;
+    if (gizmoSnap && snapStep > 0) {
+      x = Math.round(x / snapStep) * snapStep;
+      z = Math.round(z / snapStep) * snapStep;
+    }
+    const inst = decor.add({ type: key, x, z });
+    if (inst) {
+      addDecorMesh(inst);
+      selectDecor(inst.id, 'replace');
+      pushUndo();
+      refreshHud();
+    }
+  } else if (hit.gx != null) {
+    const placement = track.place(key, hit.gx, hit.gz, activeRot);
+    if (placement) {
+      addPlacementMesh(placement);
+      pushUndo();
+      refreshHud();
+    } else {
+      toast('Cell occupied');
+    }
+  }
+  // Drop always returns to pointer mode, like Tinkercad.
+  setActiveTool(null);
 });
 
 // ── Mouse: drag-to-move + click-to-select / click-to-place ─────
@@ -756,13 +835,19 @@ function deleteDecorSelection() {
 }
 function duplicateDecorSelection() {
   if (selectedDecorIds.size === 0) return;
+  // Tinkercad smart-duplicate: remember the offset between the most recent
+  // pre-duplicate anchor and the new anchor; subsequent Ctrl+D applies it.
+  // We track via a module-level `_lastDupDelta` updated in objectChange.
+  const dx = (_lastDupDelta?.x ?? mm(20));
+  const dy = (_lastDupDelta?.y ?? 0);
+  const dz = (_lastDupDelta?.z ?? mm(20));
   const newIds = [];
   for (const id of selectedDecorIds) {
     const d = decor.getById(id);
     if (!d) continue;
     const copy = decor.add({
       type: d.type,
-      x: d.x + 2, y: d.y, z: d.z + 2,
+      x: d.x + dx, y: d.y + dy, z: d.z + dz,
       rx: d.rx, ry: d.ry, rz: d.rz,
       sx: d.sx, sy: d.sy, sz: d.sz,
       color: d.color, isHole: d.isHole,
@@ -770,6 +855,12 @@ function duplicateDecorSelection() {
     if (copy) { addDecorMesh(copy); newIds.push(copy.id); }
   }
   if (newIds.length) {
+    // Snapshot the new anchor position so any subsequent move records the
+    // smart-duplicate delta in the gizmo's objectChange listener.
+    _dupAnchorBefore = (() => {
+      const inst = decor.getById(newIds[0]);
+      return inst ? { x: inst.x, y: inst.y, z: inst.z } : null;
+    })();
     selectedDecorIds.clear();
     for (const id of newIds) selectedDecorIds.add(id);
     lastSelectedDecorId = newIds[newIds.length - 1];
@@ -778,6 +869,22 @@ function duplicateDecorSelection() {
     pushUndo();
     refreshHud();
   }
+}
+// Smart-duplicate state: remembers the last (anchor-before → anchor-after)
+// delta so a chain of Ctrl+D, drag, Ctrl+D, drag... keeps the rhythm.
+let _lastDupDelta = null;
+let _dupAnchorBefore = null;
+function _maybeRecordDupDelta() {
+  if (!_dupAnchorBefore || lastSelectedDecorId == null) return;
+  const inst = decor.getById(lastSelectedDecorId);
+  if (!inst) { _dupAnchorBefore = null; return; }
+  const dx = inst.x - _dupAnchorBefore.x;
+  const dy = inst.y - _dupAnchorBefore.y;
+  const dz = inst.z - _dupAnchorBefore.z;
+  if (Math.hypot(dx, dy, dz) > 0.5) {
+    _lastDupDelta = { x: dx, y: dy, z: dz };
+  }
+  _dupAnchorBefore = null;
 }
 let transformControls = null;
 function ensureTransformControls() {
@@ -788,6 +895,7 @@ function ensureTransformControls() {
     controls.enabled = !e.value;
     if (!e.value) {
       syncSelectedDecorFromMesh();
+      _maybeRecordDupDelta();
       pushUndo();
       refreshInspector();
     }
@@ -935,7 +1043,39 @@ window.addEventListener('keydown', (e) => {
     return;
   }
 
-  // ── Arrow-key nudge (group move by 1 cell) ──
+  // ── Hole toggle (H) — Tinkercad parity for boolean subtraction prep ──
+  if ((e.key === 'h' || e.key === 'H') && !ctrl && selectedDecorIds.size > 0) {
+    e.preventDefault();
+    for (const id of selectedDecorIds) {
+      const d = decor.getById(id);
+      if (!d) continue;
+      d.isHole = !d.isHole;
+      const mesh = decorMeshById.get(id);
+      if (mesh) syncDecorMesh(mesh, d);
+    }
+    pushUndo();
+    refreshInspector();
+    return;
+  }
+
+  // ── Arrow-key nudge ──
+  // Plain arrows: 1-cell move for road placements.
+  // Ctrl+ArrowUp / ArrowDown: lift / lower decor along world-Y by snapStep.
+  if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && ctrl && selectedDecorIds.size > 0) {
+    e.preventDefault();
+    const step = (gizmoSnap && snapStep > 0) ? snapStep : 1;
+    const sign = e.key === 'ArrowUp' ? 1 : -1;
+    for (const id of selectedDecorIds) {
+      const d = decor.getById(id);
+      if (!d) continue;
+      d.y = Math.max(0, d.y + sign * step);
+      const mesh = decorMeshById.get(id);
+      if (mesh) mesh.position.y = d.y;
+    }
+    pushUndo();
+    refreshInspector();
+    return;
+  }
   const arrow = { ArrowUp: [0, -1], ArrowDown: [0, 1], ArrowLeft: [-1, 0], ArrowRight: [1, 0] }[e.key];
   if (arrow && selectedIds.size > 0) {
     e.preventDefault();
@@ -1922,6 +2062,28 @@ function updateDecorManip() {
       if (span) span.textContent = (Math.round(len * 10) / 10).toFixed(1);
     }
   }
+  // Raise handle: float a black cone above the top-center of the mesh AABB.
+  const raiseEl = document.getElementById('dmRaise');
+  if (raiseEl) {
+    const topCenter = new THREE.Vector3((min.x + max.x) / 2, max.y, (min.z + max.z) / 2);
+    mesh.localToWorld(topCenter);
+    // Lift the cone visually by ~32 px above the top face so it doesn't
+    // collide with the H size readout.
+    const top = _projectToScreen(topCenter, rect);
+    raiseEl.style.left = top.x + 'px';
+    raiseEl.style.top = (top.y - 24) + 'px';
+    raiseEl.style.display = (top.z > 1) ? 'none' : 'flex';
+    // Stem length scales with how high the shape currently sits above y=0.
+    const inst = decor.getById(lastSelectedDecorId);
+    const stem = raiseEl.querySelector('.raise-stem');
+    if (stem) {
+      const stemPx = Math.max(8, Math.min(60, (inst?.y ?? 0) * 0.05));
+      stem.style.height = stemPx + 'px';
+    }
+    // Live readout (also updates outside drag so user sees current Y).
+    const span = raiseEl.querySelector('.raise-readout [data-val]');
+    if (span && inst) span.textContent = Math.round(inst.y).toString();
+  }
 }
 
 // ── Drag interactions ──
@@ -2084,6 +2246,64 @@ function _attachManipDrag() {
       inp.addEventListener('blur', commit);
     });
   });
+
+  // ── Tinkercad-style raise handle (Y-axis translate) ──
+  // Drag the floating cone above the shape to lift/lower it. The cone reads
+  // out the current Y in mm. We screen-space project drag delta onto world-Y
+  // by computing the world-units-per-pixel at the mesh's depth, so the
+  // cursor stays glued to the cone regardless of camera zoom.
+  const raiseEl = document.getElementById('dmRaise');
+  if (raiseEl) {
+    const cone = raiseEl.querySelector('.raise-cone');
+    const stem = raiseEl.querySelector('.raise-stem');
+    const startRaiseDrag = (ev) => {
+      const mesh = _selectedDecorMesh();
+      const inst = decor.getById(lastSelectedDecorId);
+      if (!mesh || !inst) return;
+      ev.preventDefault(); ev.stopPropagation();
+      try { ev.target.setPointerCapture(ev.pointerId); } catch {}
+      _dmDragging = true;
+      decorManipEl.classList.add('dragging');
+      raiseEl.classList.add('dragging');
+      controls.enabled = false;
+      const startY = inst.y;
+      // Compute world-units-per-screen-pixel at the mesh depth so vertical
+      // pointer travel maps 1:1 to world-Y motion at the current zoom.
+      const meshWorld = new THREE.Vector3();
+      mesh.getWorldPosition(meshWorld);
+      const camDist = activeCamera.position.distanceTo(meshWorld);
+      const fovRad = (activeCamera.fov || 55) * Math.PI / 180;
+      const worldPerPx = (2 * Math.tan(fovRad / 2) * camDist) / canvas.clientHeight;
+      const startMouseY = ev.clientY;
+      const onMove = (e) => {
+        const dy = e.clientY - startMouseY;
+        // Screen-Y inverted vs. world-Y (drag up = lift).
+        let nextY = startY - dy * worldPerPx;
+        if (gizmoSnap && snapStep > 0) {
+          nextY = Math.round(nextY / snapStep) * snapStep;
+        }
+        inst.y = nextY;
+        mesh.position.y = nextY;
+        const span = raiseEl.querySelector('.raise-readout [data-val]');
+        if (span) span.textContent = Math.round(nextY).toString();
+        if (typeof showInspectorPopup === 'function') showInspectorPopup();
+      };
+      const onUp = () => {
+        window.removeEventListener('pointermove', onMove);
+        window.removeEventListener('pointerup', onUp);
+        _dmDragging = false;
+        decorManipEl.classList.remove('dragging');
+        raiseEl.classList.remove('dragging');
+        controls.enabled = true;
+        pushUndo();
+        refreshInspector();
+      };
+      window.addEventListener('pointermove', onMove);
+      window.addEventListener('pointerup', onUp);
+    };
+    cone?.addEventListener('pointerdown', startRaiseDrag);
+    stem?.addEventListener('pointerdown', startRaiseDrag);
+  }
 }
 _attachManipDrag();
 

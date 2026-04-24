@@ -280,6 +280,34 @@
       width: 50px; border: none; outline: none; background: transparent;
       color: inherit; font: inherit; text-align: center; padding: 0;
     }
+    /* Tinkercad-style RAISE handle: a black cone arrow that floats above the
+       selected shape with a thin connector down to its top face. Drag to
+       translate the shape along world-Y. The numeric mm readout sits next
+       to the cone while dragging. */
+    .dm-raise {
+      position: absolute; transform: translate(-50%, -100%);
+      pointer-events: none; display: flex; flex-direction: column;
+      align-items: center; gap: 0;
+    }
+    .dm-raise .raise-readout {
+      background: #1f2937; color: #fff; font-size: 11px; font-weight: 600;
+      padding: 2px 6px; border-radius: 3px; margin-bottom: 2px;
+      visibility: hidden; white-space: nowrap;
+    }
+    .dm-raise.dragging .raise-readout { visibility: visible; }
+    .dm-raise .raise-cone {
+      width: 0; height: 0;
+      border-left: 8px solid transparent;
+      border-right: 8px solid transparent;
+      border-top: 12px solid #1f2937;
+      pointer-events: auto; cursor: ns-resize;
+      filter: drop-shadow(0 1px 2px rgba(0,0,0,0.35));
+    }
+    .dm-raise .raise-cone:hover { border-top-color: #0f6f90; }
+    .dm-raise .raise-stem {
+      width: 2px; background: #1f2937;
+      pointer-events: auto; cursor: ns-resize;
+    }
 
 
     /* Top-left HUD pill */
@@ -877,6 +905,12 @@
         <div class="dm-size" data-axis="x">L:<span data-val>0</span></div>
         <div class="dm-size" data-axis="z">W:<span data-val>0</span></div>
         <div class="dm-size" data-axis="y">H:<span data-val>0</span></div>
+        <!-- Tinkercad-style raise handle (Y-axis translate) -->
+        <div class="dm-raise" id="dmRaise">
+          <div class="raise-readout"><span data-val>0</span> mm</div>
+          <div class="raise-cone"></div>
+          <div class="raise-stem"></div>
+        </div>
       </div>
 
       <!-- Hidden gizmo bar (kept for backwards-compat with existing JS) -->
