@@ -126,7 +126,22 @@ function setActiveTool(key) {
   const c = document.getElementById('canvas');
   if (c) c.style.cursor = (key == null) ? 'default' : 'crosshair';
   updatePreview();
+  // Tinkercad parity: as soon as a shape is selected, the ghost should
+  // already be tethered to the cursor — don't wait for the next mousemove.
+  if (key != null && _lastCursorEvent) {
+    try {
+      canvas.dispatchEvent(new MouseEvent('mousemove', {
+        clientX: _lastCursorEvent.clientX,
+        clientY: _lastCursorEvent.clientY,
+        bubbles: true,
+      }));
+    } catch {}
+  }
 }
+// Last pointer position over the document — used to seed the placement ghost
+// the instant a palette shape is clicked (without waiting for mousemove).
+let _lastCursorEvent = null;
+window.addEventListener('mousemove', (e) => { _lastCursorEvent = e; }, true);
 let activeRot = 0;       // 0..3
 /** @type {Set<number>} */
 const selectedIds = new Set();
