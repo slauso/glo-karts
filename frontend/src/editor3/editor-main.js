@@ -32,8 +32,9 @@ renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0xeaf6f8);
-scene.fog = new THREE.Fog(0xeaf6f8, m(120), m(600));
+// Tinkercad parity: near-white background, no atmospheric fog so the
+// workplane grid stays crisp at any zoom.
+scene.background = new THREE.Color(0xf5f7fa);
 
 const camera = new THREE.PerspectiveCamera(55, 1, m(0.1), m(2000));
 // Defaults scale with TILE so the editor frames the same number of cells
@@ -66,32 +67,52 @@ sun.shadow.camera.left = -m(80); sun.shadow.camera.right = m(80);
 sun.shadow.camera.top = m(80); sun.shadow.camera.bottom = -m(80);
 sun.shadow.camera.near = m(1); sun.shadow.camera.far = m(300);
 scene.add(sun);
-scene.add(new THREE.AmbientLight(0x6b7a92, 0.55));
-scene.add(new THREE.HemisphereLight(0x88aaff, 0x222530, 0.4));
+scene.add(new THREE.AmbientLight(0xffffff, 0.85));
+scene.add(new THREE.HemisphereLight(0xffffff, 0xe6ecf0, 0.35));
 
-// Ground plane (raycast target for placement)
+// Ground plane (raycast target for placement). Painted to match the
+// scene background so we don't get a visible horizon line beyond the
+// bounded workplane plate.
 const groundGeo = new THREE.PlaneGeometry(m(2000), m(2000));
-const groundMat = new THREE.MeshStandardMaterial({ color: 0xcfe7f0, roughness: 1, metalness: 0.0 });
+const groundMat = new THREE.MeshBasicMaterial({ color: 0xf5f7fa });
 const ground = new THREE.Mesh(groundGeo, groundMat);
 ground.rotation.x = -Math.PI / 2;
-ground.receiveShadow = true;
+ground.receiveShadow = false;
 ground.name = 'ground';
 scene.add(ground);
 
+// Tinkercad-style bounded workplane plate: pale cyan tint with a thin
+// accent border so the work area is unambiguous.
+const _plateSize = m(80);
+const _plate = new THREE.Mesh(
+  new THREE.PlaneGeometry(_plateSize, _plateSize),
+  new THREE.MeshBasicMaterial({ color: 0xdcecf2, transparent: true, opacity: 0.95 })
+);
+_plate.rotation.x = -Math.PI / 2;
+_plate.position.y = mm(2);
+_plate.name = 'workplane-plate';
+scene.add(_plate);
+const _plateEdge = new THREE.LineSegments(
+  new THREE.EdgesGeometry(new THREE.PlaneGeometry(_plateSize, _plateSize)),
+  new THREE.LineBasicMaterial({ color: 0x1faaf2, transparent: true, opacity: 0.7 })
+);
+_plateEdge.rotation.x = -Math.PI / 2;
+_plateEdge.position.y = mm(3);
+scene.add(_plateEdge);
+
 // Dual-density base-10 grid in world units (1 unit = 1 mm). Fine lines
-// every 1 m (1000 mm), major every 10 m (10000 mm). Span = 40 tiles.
-// Opacities tuned to mimic Tinkercad's workplane: fine lines barely
-// visible, major lines a touch more present.
-const _gridSpan = 40 * TILE;
+// every 1 m (1000 mm), major every 10 m (10000 mm). Bounded to the
+// workplane plate so the area outside reads as flat white (Tinkercad).
+const _gridSpan = m(80);
 const _gridFineDivs = Math.max(2, Math.round(_gridSpan / m(1)));
-const _gridFine = new THREE.GridHelper(_gridSpan, _gridFineDivs, 0xb8d4e0, 0xb8d4e0);
-_gridFine.material.opacity = 0.10;
+const _gridFine = new THREE.GridHelper(_gridSpan, _gridFineDivs, 0x9fc8d8, 0x9fc8d8);
+_gridFine.material.opacity = 0.28;
 _gridFine.material.transparent = true;
 _gridFine.material.depthWrite = false;
 _gridFine.position.y = mm(5);
 scene.add(_gridFine);
-const grid = new THREE.GridHelper(_gridSpan, Math.max(2, Math.round(_gridFineDivs / 10)), 0x7aa6b8, 0x9ec0cf);
-grid.material.opacity = 0.22;
+const grid = new THREE.GridHelper(_gridSpan, Math.max(2, Math.round(_gridFineDivs / 10)), 0x1faaf2, 0x4cb8e8);
+grid.material.opacity = 0.55;
 grid.material.transparent = true;
 grid.material.depthWrite = false;
 grid.position.y = mm(12);

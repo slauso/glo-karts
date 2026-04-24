@@ -756,10 +756,7 @@
       <!-- HUD piece counter -->
       <div class="hud" id="hud">Pieces: <b id="pieceCount">0</b></div>
 
-      <!-- Tinkercad-style help strip -->
-      <div class="help-strip">
-        <kbd>R</kbd> rotate · <kbd>G</kbd>/<kbd>T</kbd>/<kbd>Y</kbd> move/turn/scale · <kbd>Del</kbd> remove · drag handles
-      </div>
+      <!-- Help strip removed for Tinkercad parity (no in-canvas hints). -->
 
       <!-- Left-side stacked viewport controls -->
       <div class="vp-controls">
@@ -1027,7 +1024,8 @@
       </div>
       <input id="paletteSearch" type="text" placeholder="Search shapes…" class="palette-search" />
       <div class="palette" id="palette"></div>
-      <div class="right-summary">
+      <!-- Track Info panel hidden for Tinkercad parity. Compat shims below. -->
+      <div class="right-summary" style="display:none">
         <h3>Track Info</h3>
         <div class="row"><span>Pieces</span><b id="infoPieces">0</b></div>
         <div class="row"><span>Bounds</span><b id="infoBounds">—</b></div>
