@@ -1999,12 +1999,15 @@ preloadAllKarts([activeKartId]);
 updateKartPreview(activeKartId);
 
 // ── Terrain controls ──────────────────────────────────────────
-const TERRAIN_KEY = 'gloKartsStudio.terrain';
+// v2 key: previous v1 stored sky/ground colours that produced a coloured
+// horizon band when the camera tilted. TC-parity defaults are flat off-white
+// for both sky AND ground so the workplane plate floats on solid white.
+const TERRAIN_KEY = 'gloKartsStudio.terrain.v2';
 const terrainState = {
-  ground: '#cfe7f0',
-  sky: '#eaf6f8',
+  ground: '#f5f7fa',
+  sky: '#f5f7fa',
   grid: true,
-  fog: true,
+  fog: false,
 };
 function applyTerrain() {
   groundMat.color.set(terrainState.ground);
