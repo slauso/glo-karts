@@ -320,30 +320,45 @@
     }
     .hud b { color: var(--text); }
 
-    /* Tinkercad-style ViewCube top-left corner with TOP/FRONT labels */
-    .view-cube {
+    /* Tinkercad-style 3D orbit cube top-left corner. CSS-3D faces are
+       rotated to mirror the active camera; clicking a face snaps the
+       camera to that orthographic view, dragging orbits. */
+    .orbit-cube {
       position: absolute; top: 12px; left: 12px;
-      width: 96px;
-      display: grid; grid-template-columns: 1fr 1fr; gap: 4px;
-      padding: 6px;
-      border: 1px solid var(--line); background: var(--panel-2);
-      border-radius: 6px; box-shadow: var(--shadow-sm);
+      width: 110px; height: 110px;
+      perspective: 600px;
       z-index: 10;
+      cursor: grab;
+      user-select: none;
     }
-    .view-cube .face {
-      font-size: 10px; font-weight: 700; color: var(--muted);
-      letter-spacing: 0.06em; cursor: pointer; text-align: center;
-      padding: 6px 4px; border-radius: 4px;
-      background: var(--panel); border: 1px solid var(--line);
+    .orbit-cube.dragging { cursor: grabbing; }
+    .orbit-cube .cube {
+      position: absolute; inset: 12px;
+      transform-style: preserve-3d;
+      transform: rotateX(-25deg) rotateY(35deg);
+      transition: transform 0.08s linear;
     }
-    .view-cube .face:hover { color: var(--accent-2); background: var(--accent-soft); border-color: var(--accent); }
-    .view-cube #orthoToggle {
-      grid-column: span 2;
-      font-size: 10px; padding: 4px;
-      background: var(--panel); border: 1px solid var(--line);
-      border-radius: 4px; cursor: pointer; color: var(--muted);
+    .orbit-cube .face {
+      position: absolute; inset: 0;
+      display: flex; align-items: center; justify-content: center;
+      background: rgba(255, 255, 255, 0.92);
+      border: 1px solid #cfd6dc;
+      color: #4a5562;
+      font: 700 11px/1 'Inter', system-ui, sans-serif;
+      letter-spacing: 0.08em;
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,0.6);
+      backface-visibility: hidden;
     }
-    .view-cube #orthoToggle.active { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+    .orbit-cube .face:hover { background: var(--accent-soft); color: var(--accent-2); border-color: var(--accent); }
+    .orbit-cube .f-top    { transform: translateZ(43px); }
+    .orbit-cube .f-bottom { transform: rotateX(180deg) translateZ(43px); }
+    .orbit-cube .f-front  { transform: rotateY(0deg)   translateZ(43px); }
+    .orbit-cube .f-back   { transform: rotateY(180deg) translateZ(43px); }
+    .orbit-cube .f-right  { transform: rotateY(90deg)  translateZ(43px); }
+    .orbit-cube .f-left   { transform: rotateY(-90deg) translateZ(43px); }
+    .orbit-cube .f-top, .orbit-cube .f-bottom { width: 86px; height: 86px; }
+    .orbit-cube .f-top    { transform: rotateX(90deg) translateZ(43px); }
+    .orbit-cube .f-bottom { transform: rotateX(-90deg) translateZ(43px); }
 
     /* Left side viewport controls (home/orbit/+/-/cube) — Tinkercad-style stack */
     .vp-controls {
@@ -793,8 +808,19 @@
     <main>
       <canvas id="canvas"></canvas>
 
-      <!-- Tinkercad-corner ViewCube + ortho toggle -->
-      <div class="view-cube" id="viewCube" title="Snap camera">
+      <!-- Tinkercad-style 3D orbit cube. Click a face to snap to that view; drag to orbit. -->
+      <div class="orbit-cube" id="orbitCube" title="Drag to orbit · click face to snap">
+        <div class="cube" id="orbitCubeInner">
+          <div class="face f-top"    data-view="top">TOP</div>
+          <div class="face f-bottom" data-view="bottom">BOT</div>
+          <div class="face f-front"  data-view="front">FRONT</div>
+          <div class="face f-back"   data-view="back">BACK</div>
+          <div class="face f-right"  data-view="right">RIGHT</div>
+          <div class="face f-left"   data-view="left">LEFT</div>
+        </div>
+      </div>
+      <!-- Compat shims so existing handlers keep finding their IDs (hidden). -->
+      <div class="view-cube" id="viewCube" style="display:none">
         <div class="face top" data-view="top">TOP</div>
         <div class="face front" data-view="front">FRONT</div>
         <div class="face side" data-view="side">SIDE</div>

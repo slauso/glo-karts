@@ -2076,15 +2076,78 @@ function snapView(view) {
   const target = controls.target.clone();
   let pos;
   switch (view) {
-    case 'top':   pos = target.clone().add(new THREE.Vector3(0, dist, 0.001)); break;
-    case 'front': pos = target.clone().add(new THREE.Vector3(0, dist * 0.3, dist)); break;
-    case 'side':  pos = target.clone().add(new THREE.Vector3(dist, dist * 0.3, 0)); break;
+    case 'top':    pos = target.clone().add(new THREE.Vector3(0,  dist, 0.001)); break;
+    case 'bottom': pos = target.clone().add(new THREE.Vector3(0, -dist, 0.001)); break;
+    case 'front':  pos = target.clone().add(new THREE.Vector3(0,  dist * 0.05,  dist)); break;
+    case 'back':   pos = target.clone().add(new THREE.Vector3(0,  dist * 0.05, -dist)); break;
+    case 'right':  pos = target.clone().add(new THREE.Vector3( dist, dist * 0.05, 0)); break;
+    case 'left':   pos = target.clone().add(new THREE.Vector3(-dist, dist * 0.05, 0)); break;
+    case 'side':   pos = target.clone().add(new THREE.Vector3(dist, dist * 0.3, 0)); break;
     case 'iso':
-    default:      pos = target.clone().add(new THREE.Vector3(dist * 0.7, dist * 0.7, dist * 0.7)); break;
+    default:       pos = target.clone().add(new THREE.Vector3(dist * 0.7, dist * 0.7, dist * 0.7)); break;
   }
   activeCamera.position.copy(pos);
   activeCamera.lookAt(target);
   controls.update();
+}
+
+// ── Tinkercad-style orbit cube widget ─────────────────────────
+// CSS-3D cube top-left mirrors the active camera's orientation. Click a
+// face to snap orthographic; drag the cube to orbit the main camera.
+const orbitCubeEl = document.getElementById('orbitCube');
+const orbitCubeInner = document.getElementById('orbitCubeInner');
+if (orbitCubeEl && orbitCubeInner) {
+  // Click face -> snap.
+  orbitCubeEl.querySelectorAll('.face[data-view]').forEach((f) => {
+    f.addEventListener('click', (ev) => {
+      // Only treat as click if no drag occurred.
+      if (orbitCubeEl._dragMoved) { ev.preventDefault(); return; }
+      snapView(f.dataset.view);
+    });
+  });
+  // Drag -> orbit. We rotate the camera around controls.target.
+  let dragging = false, lastX = 0, lastY = 0;
+  orbitCubeEl.addEventListener('pointerdown', (e) => {
+    dragging = true; lastX = e.clientX; lastY = e.clientY;
+    orbitCubeEl._dragMoved = false;
+    orbitCubeEl.classList.add('dragging');
+    orbitCubeEl.setPointerCapture?.(e.pointerId);
+  });
+  orbitCubeEl.addEventListener('pointermove', (e) => {
+    if (!dragging) return;
+    const dx = e.clientX - lastX, dy = e.clientY - lastY;
+    if (Math.abs(dx) + Math.abs(dy) > 3) orbitCubeEl._dragMoved = true;
+    lastX = e.clientX; lastY = e.clientY;
+    // Rotate camera around target. dx -> azimuth, dy -> polar.
+    const offset = new THREE.Vector3().subVectors(activeCamera.position, controls.target);
+    const sph = new THREE.Spherical().setFromVector3(offset);
+    sph.theta -= dx * 0.01;
+    sph.phi   = Math.max(0.05, Math.min(Math.PI - 0.05, sph.phi + dy * 0.01));
+    offset.setFromSpherical(sph);
+    activeCamera.position.copy(controls.target).add(offset);
+    activeCamera.lookAt(controls.target);
+    controls.update();
+  });
+  const endDrag = (e) => {
+    if (!dragging) return;
+    dragging = false;
+    orbitCubeEl.classList.remove('dragging');
+    try { orbitCubeEl.releasePointerCapture?.(e.pointerId); } catch {}
+    // Reset _dragMoved on next tick so the click handler can read it.
+    setTimeout(() => { orbitCubeEl._dragMoved = false; }, 0);
+  };
+  orbitCubeEl.addEventListener('pointerup', endDrag);
+  orbitCubeEl.addEventListener('pointercancel', endDrag);
+}
+// Function used by the render loop to keep the cube oriented like the camera.
+function _updateOrbitCube() {
+  if (!orbitCubeInner) return;
+  // World-from-camera Euler in YXZ. We want the cube to show the face the
+  // camera is looking AT, so we apply the inverse rotation.
+  const e = new THREE.Euler().setFromQuaternion(activeCamera.quaternion.clone().invert(), 'YXZ');
+  const rx = THREE.MathUtils.radToDeg(e.x);
+  const ry = THREE.MathUtils.radToDeg(e.y);
+  orbitCubeInner.style.transform = `rotateX(${rx}deg) rotateY(${ry}deg)`;
 }
 const viewCubeEl = document.getElementById('viewCube');
 if (viewCubeEl) {
@@ -2120,6 +2183,7 @@ resize();
 renderer.setAnimationLoop(() => {
   controls.update();
   renderer.render(scene, activeCamera);
+  _updateOrbitCube();
   // Keep the floating action ring pinned over the selected piece even while
   // the camera moves.
   if (typeof updateActionRing === 'function') updateActionRing();
