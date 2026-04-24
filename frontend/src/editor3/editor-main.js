@@ -267,9 +267,9 @@ function makeThumb(key) {
     if (isDecorKey(key)) {
       const def = DECOR[key];
       const dr = def.defaultRot || [0, 0, 0];
-      // Frame the same 200 mm default the user actually drops, so the
+      // Frame the same 1000 mm default the user actually drops, so the
       // thumbnail represents what they'll get on the workplane.
-      const ds = [200, 200, 200];
+      const ds = [1000, 1000, 1000];
       mesh = new THREE.Mesh(def.build(), getDecorMaterial(def.color, false).clone());
       mesh.rotation.set(dr[0], dr[1], dr[2]);
       mesh.scale.set(ds[0], ds[1], ds[2]);
@@ -402,8 +402,8 @@ function updatePreview() {
   if (isDecorKey(activeKey)) {
     const def = DECOR[activeKey];
     const dr = def.defaultRot || [0, 0, 0];
-    // Match the DecorStore.add() default: every fresh placement is 200 mm.
-    const ds = [200, 200, 200];
+    // Match the DecorStore.add() default: every fresh placement is 1000 mm.
+    const ds = [1000, 1000, 1000];
     const matPreview = new THREE.MeshStandardMaterial({
       color: def.color, roughness: 0.55, metalness: 0.05,
       transparent: true, opacity: 0.45, depthWrite: false,
@@ -574,9 +574,10 @@ canvas.addEventListener('mousemove', (e) => {
   // so prefer the underlying cell coords whenever they are available.
   const overlayActive = track.isOverlay(activeKey);
   const showCell = hit.kind === 'cell' || (overlayActive && hit.gx != null);
-  if (showCell) {
+  if (showCell && activeKey != null) {
     previewCell = { gx: hit.gx, gz: hit.gz };
     if (!previewMesh) updatePreview();
+    if (!previewMesh) return;
     previewMesh.visible = true;
     previewMesh.position.set(hit.gx * TILE, 0, hit.gz * TILE);
     previewMesh.rotation.y = -activeRot * Math.PI / 2;
@@ -1250,29 +1251,13 @@ function syncSelectedDecorFromMesh() {
 function refreshDecorGizmo() {
   ensureTransformControls();
   const gizmoBar = document.getElementById('gizmoBar');
-  if (selectedDecorIds.size === 0 || lastSelectedDecorId == null) {
-    transformControls.detach();
-    if (gizmoBar) gizmoBar.hidden = true;
-    return;
-  }
-  const mesh = decorMeshById.get(lastSelectedDecorId);
-  if (!mesh) { transformControls.detach(); if (gizmoBar) gizmoBar.hidden = true; return; }
-  transformControls.attach(mesh);
-  transformControls.setMode(gizmoMode);
-  transformControls.translationSnap = gizmoSnap && snapStep > 0 ? snapStep : null;
-  transformControls.rotationSnap = gizmoSnap ? Math.PI / 8 : null;
-  transformControls.scaleSnap = gizmoSnap ? 0.1 : null;
-  // Scale the gizmo so it stays usable for both 1mm props and 20mm+ shapes.
-  if (mesh.geometry) {
-    if (!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox();
-    const bb = mesh.geometry.boundingBox;
-    const sz = new THREE.Vector3();
-    bb.getSize(sz);
-    sz.multiply(mesh.scale);
-    const span = Math.max(sz.x, sz.y, sz.z, 1);
-    transformControls.size = THREE.MathUtils.clamp(span / 18, 0.6, 2.5);
-  }
-  if (gizmoBar) gizmoBar.hidden = false;
+  // Tinkercad parity: NEVER attach the 3D TransformControls gizmo.
+  // All on-shape manipulation (translate, rotate, scale) is provided by the
+  // HTML manip overlay (.dm-corner / .dm-ring / .dm-size / raise cone) plus
+  // direct body-drag on the workplane. The 3D arrows would compete visually.
+  if (transformControls) transformControls.detach();
+  if (_tcHelper) _tcHelper.visible = false;
+  if (gizmoBar) gizmoBar.hidden = true;
 }
 function setGizmoMode(mode) {
   if (!['translate', 'rotate', 'scale'].includes(mode)) return;
