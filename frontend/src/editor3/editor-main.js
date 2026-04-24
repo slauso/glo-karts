@@ -36,17 +36,19 @@ const scene = new THREE.Scene();
 // workplane grid stays crisp at any zoom.
 scene.background = new THREE.Color(0xf5f7fa);
 
-const camera = new THREE.PerspectiveCamera(55, 1, m(0.1), m(2000));
-// Defaults scale with TILE so the editor frames the same number of cells
-// regardless of world units.
-camera.position.set(TILE * 10, TILE * 10, TILE * 10);
+// Tighter near/far range avoids z-fighting on the layered workplane and
+// shape rendering. Even with TILE=12,000 mm a near of 50 mm is plenty.
+const camera = new THREE.PerspectiveCamera(55, 1, m(50), m(800));
+// Frame the workplane tight (≈3.5× TILE) so the initial view feels like
+// Tinkercad's framed-on-workplane default.
+camera.position.set(TILE * 3.5, TILE * 3.5, TILE * 3.5);
 
 const controls = new OrbitControls(camera, canvas);
 controls.target.set(0, 0, 0);
 controls.enableDamping = true;
 controls.dampingFactor = 0.08;
-controls.minDistance = TILE * 2;
-controls.maxDistance = TILE * 50;
+controls.minDistance = TILE * 0.5;
+controls.maxDistance = TILE * 20;
 controls.maxPolarAngle = Math.PI * 0.48;
 controls.mouseButtons = {
   LEFT: null,
@@ -83,13 +85,13 @@ scene.add(ground);
 
 // Tinkercad-style bounded workplane plate: pale cyan tint with a thin
 // accent border so the work area is unambiguous.
-const _plateSize = m(80);
+const _plateSize = m(60);
 const _plate = new THREE.Mesh(
   new THREE.PlaneGeometry(_plateSize, _plateSize),
   new THREE.MeshBasicMaterial({ color: 0xdcecf2, transparent: true, opacity: 0.95 })
 );
 _plate.rotation.x = -Math.PI / 2;
-_plate.position.y = mm(2);
+_plate.position.y = mm(5);
 _plate.name = 'workplane-plate';
 scene.add(_plate);
 const _plateEdge = new THREE.LineSegments(
@@ -97,25 +99,26 @@ const _plateEdge = new THREE.LineSegments(
   new THREE.LineBasicMaterial({ color: 0x1faaf2, transparent: true, opacity: 0.7 })
 );
 _plateEdge.rotation.x = -Math.PI / 2;
-_plateEdge.position.y = mm(3);
+_plateEdge.position.y = mm(8);
 scene.add(_plateEdge);
 
 // Dual-density base-10 grid in world units (1 unit = 1 mm). Fine lines
-// every 1 m (1000 mm), major every 10 m (10000 mm). Bounded to the
-// workplane plate so the area outside reads as flat white (Tinkercad).
-const _gridSpan = m(80);
+// every 1 m, major every 10 m. Bounded to the workplane plate so the area
+// outside reads as flat white (Tinkercad). Generous Y separation between
+// layers prevents z-fighting/flicker when the camera moves.
+const _gridSpan = m(60);
 const _gridFineDivs = Math.max(2, Math.round(_gridSpan / m(1)));
 const _gridFine = new THREE.GridHelper(_gridSpan, _gridFineDivs, 0x9fc8d8, 0x9fc8d8);
-_gridFine.material.opacity = 0.28;
+_gridFine.material.opacity = 0.32;
 _gridFine.material.transparent = true;
 _gridFine.material.depthWrite = false;
-_gridFine.position.y = mm(5);
+_gridFine.position.y = mm(20);
 scene.add(_gridFine);
 const grid = new THREE.GridHelper(_gridSpan, Math.max(2, Math.round(_gridFineDivs / 10)), 0x1faaf2, 0x4cb8e8);
-grid.material.opacity = 0.55;
+grid.material.opacity = 0.6;
 grid.material.transparent = true;
 grid.material.depthWrite = false;
-grid.position.y = mm(12);
+grid.position.y = mm(40);
 scene.add(grid);
 
 // ── Editor state ──────────────────────────────────────────────

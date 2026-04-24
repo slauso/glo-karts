@@ -17,7 +17,8 @@ if (!page) {
   await page.goto('http://127.0.0.1:5173/editor.html');
 }
 await page.bringToFront();
-await page.waitForTimeout(800);
+await page.reload({ waitUntil: 'load' });
+await page.waitForTimeout(1500);
 
 // Place a Box decor near origin and select it.
 const placed = await page.evaluate(() => {
@@ -26,7 +27,7 @@ const placed = await page.evaluate(() => {
   // Try API: decor.add({type:'box', x,y,z,rx,ry,rz,sx,sy,sz})
   let inst = null;
   try {
-    inst = s.decor.add({ type: 'box', x: 0, y: 1500, z: 0, rx: 0, ry: 0, rz: 0, sx: 3000, sy: 3000, sz: 3000 });
+    inst = s.decor.add({ type: 'box', x: 0, y: 0, z: 0 });
   } catch (e) { return { error: 'add: ' + e.message }; }
   if (!inst) {
     // Fall back: click the Box thumbnail in the right panel.

@@ -104,6 +104,9 @@ function _torusKnot() {
 
 export const DECOR = {
   // ── Geometric primitives ────────────────────────────────────
+  // Geometry primitives are unit-1 (1 mm). The DecorStore.add() applies a
+  // 5 m default scale when no per-type defaultScale is provided, so primitives
+  // intentionally OMIT defaultScale to inherit that fallback.
   box:        { label: 'Box',        category: 'shape', color: 0xe6453a, centered: true, build: () => geom('box', _box) },
   cylinder:   { label: 'Cylinder',   category: 'shape', color: 0xee8b1a, build: () => geom('cyl', _cylinder) },
   sphere:     { label: 'Sphere',     category: 'shape', color: 0x2e9bd6, centered: true, build: () => geom('sph', _sphere) },
@@ -192,12 +195,15 @@ export class DecorStore {
     if (!DECOR[type]) return null;
     const def = DECOR[type];
     const dr = def.defaultRot || [0, 0, 0];
-    // Tinkercad parity (kart-scale): every freshly placed shape starts at
-    // 1000×1000×1000 mm (1 m) — large enough to be immediately visible
-    // against the road-scale grid (12 m tiles, 1 m majors) and roughly the
-    // size of a kart cockpit. Users grow or shrink it with the on-shape
-    // corner gizmo.
-    const ds = [1000, 1000, 1000];
+    // Tinkercad parity (kart-scale): every freshly placed primitive starts
+    // at 5000×5000×5000 mm (5 m) — immediately visible and grabbable on
+    // the road-scale grid. Per-type registry defaultScale is treated as a
+    // small unitless ratio in mm where present (nature/urban presets), so
+    // we scale those by 1000 to get a comparable starting size.
+    const presetDS = def.defaultScale;
+    const ds = presetDS
+      ? [ presetDS[0] * 1000, presetDS[1] * 1000, presetDS[2] * 1000 ]
+      : [ 5000, 5000, 5000 ];
     const _sx = sx ?? ds[0], _sy = sy ?? ds[1], _sz = sz ?? ds[2];
     // Geometry-aware default Y: centered primitives lift so their base sits on the workplane.
     const _y = (y !== undefined) ? y : (def.centered ? _sy / 2 : 0);
