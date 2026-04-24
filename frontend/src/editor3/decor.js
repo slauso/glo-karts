@@ -188,7 +188,7 @@ export class DecorStore {
   }
 
   /** Create a new instance. Caller passes a partial; defaults from registry are filled in. */
-  add({ type, x = 0, y, z = 0, rx, ry, rz, sx, sy, sz, color, isHole = false } = {}) {
+  add({ type, x = 0, y, z = 0, rx, ry, rz, sx, sy, sz, color, isHole = false, isLocked = false, isHidden = false, groupId = null } = {}) {
     if (!DECOR[type]) return null;
     const def = DECOR[type];
     const dr = def.defaultRot || [0, 0, 0];
@@ -211,6 +211,9 @@ export class DecorStore {
       sx: _sx, sy: _sy, sz: _sz,
       color: color ?? def.color,
       isHole: !!isHole,
+      isLocked: !!isLocked,
+      isHidden: !!isHidden,
+      groupId: groupId ?? null,
     };
     this.items.set(inst.id, inst);
     return inst;
@@ -229,6 +232,9 @@ export class DecorStore {
       s: [round3(d.sx), round3(d.sy), round3(d.sz)],
       c: d.color,
       h: d.isHole ? 1 : 0,
+      l: d.isLocked ? 1 : 0,
+      v: d.isHidden ? 1 : 0,
+      g: d.groupId ?? null,
     }));
   }
 
@@ -239,7 +245,7 @@ export class DecorStore {
       const [x, y, z] = d.p || [0, 0, 0];
       const [rx, ry, rz] = d.r || [0, 0, 0];
       const [sx, sy, sz] = d.s || [1, 1, 1];
-      this.add({ type: d.t, x, y, z, rx, ry, rz, sx, sy, sz, color: d.c, isHole: !!d.h });
+      this.add({ type: d.t, x, y, z, rx, ry, rz, sx, sy, sz, color: d.c, isHole: !!d.h, isLocked: !!d.l, isHidden: !!d.v, groupId: d.g ?? null });
     }
   }
 }
@@ -267,4 +273,5 @@ export function syncDecorMesh(mesh, inst) {
   mesh.rotation.set(inst.rx, inst.ry, inst.rz);
   mesh.scale.set(inst.sx, inst.sy, inst.sz);
   mesh.material = getDecorMaterial(inst.color, inst.isHole);
+  mesh.visible = !inst.isHidden;
 }

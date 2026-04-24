@@ -457,7 +457,8 @@ function pickGroundCell(event) {
     cell = { gx: Math.round(point.x / TILE), gz: Math.round(point.z / TILE) };
   }
   // Decor meshes are checked before placement meshes so a decor object
-  // sitting on top of a road segment can still be picked.
+  // sitting on top of a road segment can still be picked. Hidden decor
+  // (mesh.visible = false) is naturally excluded by the raycaster.
   const decorHits = raycaster.intersectObjects(decorGroup.children, true);
   if (decorHits.length) {
     let obj = decorHits[0].object;
@@ -647,22 +648,31 @@ canvas.addEventListener('mousedown', (e) => {
   }
   // Tinkercad-style on-body drag for decor: clicking the shape itself
   // begins a workplane translation. Don't interfere when a placement tool
-  // is active (those clicks should drop a new shape).
+  // is active (those clicks should drop a new shape). Locked shapes ignore
+  // body-drag.
   if (hit && hit.kind === 'decor' && !_activeDecor && !track.isOverlay(activeKey)) {
-    if (!selectedDecorIds.has(hit.id) && !e.shiftKey && !(e.ctrlKey || e.metaKey)) {
-      selectDecor(hit.id, 'replace');
-    }
-    const ids = [...selectedDecorIds];
-    const startWp = hit.worldPoint;
-    if (startWp) {
-      mouseDownState.decorDrag = {
-        ids,
-        startWp,
-        starts: ids.map(id => {
-          const d = decor.getById(id);
-          return { id, x: d?.x ?? 0, y: d?.y ?? 0, z: d?.z ?? 0 };
-        }),
-      };
+    const hitInst = decor.getById(hit.id);
+    if (hitInst?.isLocked) {
+      // Still allow selection of locked shapes (so the user can unlock them).
+      if (!selectedDecorIds.has(hit.id) && !e.shiftKey && !(e.ctrlKey || e.metaKey)) {
+        selectDecor(hit.id, 'replace');
+      }
+    } else {
+      if (!selectedDecorIds.has(hit.id) && !e.shiftKey && !(e.ctrlKey || e.metaKey)) {
+        selectDecor(hit.id, 'replace');
+      }
+      const ids = [...selectedDecorIds].filter(id => !decor.getById(id)?.isLocked);
+      const startWp = hit.worldPoint;
+      if (startWp && ids.length) {
+        mouseDownState.decorDrag = {
+          ids,
+          startWp,
+          starts: ids.map(id => {
+            const d = decor.getById(id);
+            return { id, x: d?.x ?? 0, y: d?.y ?? 0, z: d?.z ?? 0 };
+          }),
+        };
+      }
     }
   }
 });
@@ -699,6 +709,18 @@ canvas.addEventListener('mousemove', (e) => {
       mesh.position.z = inst.z;
     }
     mouseDownState.movedSinceStart = true;
+    // Tinkercad-style position tooltip near the cursor.
+    const tip = document.getElementById('dragTip');
+    if (tip && dd.starts[0]) {
+      const anchor = decor.getById(dd.starts[0].id);
+      if (anchor) {
+        tip.querySelector('[data-x]').textContent = Math.round(anchor.x).toString();
+        tip.querySelector('[data-z]').textContent = Math.round(anchor.z).toString();
+        tip.style.left = e.clientX + 'px';
+        tip.style.top = e.clientY + 'px';
+        tip.hidden = false;
+      }
+    }
     return;
   }
   if (!mouseDownState.snapshot) return;
@@ -737,6 +759,8 @@ window.addEventListener('mouseup', (e) => {
   const wasDragging = mouseDownState.dragging && mouseDownState.movedSinceStart;
   const wasDecorDrag = !!mouseDownState.decorDrag;
   mouseDownState = null;
+  const tip = document.getElementById('dragTip');
+  if (tip) tip.hidden = true;
   if (wasDragging) {
     _lastDragConsumedAt = performance.now();
     pushUndo();
@@ -888,26 +912,153 @@ function selectAll() {
 // --- Decor selection + TransformControls gizmo ---
 function selectDecor(id, mode = 'replace') {
   if (!decor.getById(id)) return;
+  // Tinkercad parity: clicking any member of a group selects the entire group.
+  const cascade = (anchorId) => {
+    const inst = decor.getById(anchorId);
+    const gid = inst?.groupId;
+    if (!gid) return [anchorId];
+    const ids = [];
+    for (const d of decor.all()) if (d.groupId === gid) ids.push(d.id);
+    return ids.length ? ids : [anchorId];
+  };
+  const ids = cascade(id);
   if (mode === 'add') {
-    selectedDecorIds.add(id);
+    for (const i of ids) selectedDecorIds.add(i);
     lastSelectedDecorId = id;
   } else if (mode === 'toggle') {
     if (selectedDecorIds.has(id)) {
-      selectedDecorIds.delete(id);
+      for (const i of ids) selectedDecorIds.delete(i);
       if (lastSelectedDecorId === id) lastSelectedDecorId = selectedDecorIds.size ? [...selectedDecorIds].pop() : null;
     } else {
-      selectedDecorIds.add(id);
+      for (const i of ids) selectedDecorIds.add(i);
       lastSelectedDecorId = id;
     }
   } else {
     selectedDecorIds.clear();
-    selectedDecorIds.add(id);
+    for (const i of ids) selectedDecorIds.add(i);
     lastSelectedDecorId = id;
   }
   selectedIds.clear();
   lastSelectedId = null;
   refreshSelectionBoxes();
   refreshDecorGizmo();
+  refreshInspector();
+}
+
+// ── Tinkercad parity helpers: mirror, lock, hide, group, align ──
+function _selectionBoxWorld() {
+  const box = new THREE.Box3();
+  let any = false;
+  for (const id of selectedDecorIds) {
+    const mesh = decorMeshById.get(id);
+    if (!mesh) continue;
+    box.expandByObject(mesh);
+    any = true;
+  }
+  return any ? box : null;
+}
+/** Mirror selected decor across the given world axis ('x' | 'y' | 'z') about the selection center. */
+function mirrorSelection(axis) {
+  if (selectedDecorIds.size === 0) return;
+  const box = _selectionBoxWorld();
+  if (!box) return;
+  const center = new THREE.Vector3();
+  box.getCenter(center);
+  for (const id of selectedDecorIds) {
+    const d = decor.getById(id);
+    const mesh = decorMeshById.get(id);
+    if (!d || !mesh) continue;
+    if (d.isLocked) continue;
+    if (axis === 'x') { d.x = 2 * center.x - d.x; d.sx *= -1; }
+    if (axis === 'y') { d.y = Math.max(0, 2 * center.y - d.y); d.sy *= -1; }
+    if (axis === 'z') { d.z = 2 * center.z - d.z; d.sz *= -1; }
+    syncDecorMesh(mesh, d);
+  }
+  pushUndo();
+  refreshInspector();
+}
+/** Toggle locked state on selected decor. */
+function toggleLockSelection() {
+  if (selectedDecorIds.size === 0) return;
+  const anyUnlocked = [...selectedDecorIds].some(id => !decor.getById(id)?.isLocked);
+  for (const id of selectedDecorIds) {
+    const d = decor.getById(id);
+    if (d) d.isLocked = anyUnlocked;
+  }
+  pushUndo();
+  refreshInspector();
+  toast(anyUnlocked ? 'Locked selection' : 'Unlocked selection');
+}
+/** Toggle hidden state. Hidden meshes stay in the file but become invisible/unselectable. */
+function toggleHideSelection() {
+  if (selectedDecorIds.size === 0) return;
+  const anyVisible = [...selectedDecorIds].some(id => !decor.getById(id)?.isHidden);
+  for (const id of selectedDecorIds) {
+    const d = decor.getById(id);
+    const mesh = decorMeshById.get(id);
+    if (!d) continue;
+    d.isHidden = anyVisible;
+    if (mesh) mesh.visible = !d.isHidden;
+  }
+  pushUndo();
+  refreshInspector();
+}
+let _nextGroupId = 1;
+function groupSelection() {
+  if (selectedDecorIds.size < 2) return;
+  // If everything in selection already shares a group, ungroup instead (Tinkercad toggles via Ctrl+G).
+  const gids = new Set([...selectedDecorIds].map(id => decor.getById(id)?.groupId).filter(Boolean));
+  if (gids.size === 1) { ungroupSelection(); return; }
+  const gid = `g${Date.now().toString(36)}-${_nextGroupId++}`;
+  for (const id of selectedDecorIds) {
+    const d = decor.getById(id);
+    if (d) d.groupId = gid;
+  }
+  pushUndo();
+  refreshInspector();
+  toast('Grouped (' + selectedDecorIds.size + ')');
+}
+function ungroupSelection() {
+  if (selectedDecorIds.size === 0) return;
+  for (const id of selectedDecorIds) {
+    const d = decor.getById(id);
+    if (d) d.groupId = null;
+  }
+  pushUndo();
+  refreshInspector();
+  toast('Ungrouped');
+}
+/** Align selection along an axis. mode: 'min' | 'center' | 'max'. */
+function alignSelection(axis, mode) {
+  if (selectedDecorIds.size < 2) return;
+  // Compute per-mesh AABB and pick a target value along the axis.
+  const items = [];
+  let target = null;
+  for (const id of selectedDecorIds) {
+    const mesh = decorMeshById.get(id);
+    const d = decor.getById(id);
+    if (!mesh || !d) continue;
+    const box = new THREE.Box3().setFromObject(mesh);
+    items.push({ id, d, mesh, box });
+    const v = mode === 'min' ? box.min[axis]
+            : mode === 'max' ? box.max[axis]
+            : (box.min[axis] + box.max[axis]) / 2;
+    if (target === null || (mode === 'min' && v < target) || (mode === 'max' && v > target)) target = v;
+    if (mode === 'center' && target === null) target = v;
+  }
+  if (target === null) return;
+  for (const it of items) {
+    if (it.d.isLocked) continue;
+    const v = mode === 'min' ? it.box.min[axis]
+            : mode === 'max' ? it.box.max[axis]
+            : (it.box.min[axis] + it.box.max[axis]) / 2;
+    const delta = target - v;
+    const key = axis === 'x' ? 'x' : axis === 'y' ? 'y' : 'z';
+    it.d[key] += delta;
+    if (axis === 'y') it.d.y = Math.max(0, it.d.y);
+    syncDecorMesh(it.mesh, it.d);
+  }
+  pushUndo();
   refreshInspector();
 }
 function deleteDecorSelection() {
@@ -1139,7 +1290,7 @@ window.addEventListener('keydown', (e) => {
   }
 
   // ── Hole toggle (H) — Tinkercad parity for boolean subtraction prep ──
-  if ((e.key === 'h' || e.key === 'H') && !ctrl && selectedDecorIds.size > 0) {
+  if ((e.key === 'h' || e.key === 'H') && !ctrl && !e.shiftKey && selectedDecorIds.size > 0) {
     e.preventDefault();
     for (const id of selectedDecorIds) {
       const d = decor.getById(id);
@@ -1150,6 +1301,37 @@ window.addEventListener('keydown', (e) => {
     }
     pushUndo();
     refreshInspector();
+    return;
+  }
+  // ── Hide toggle (Shift+H) ──
+  if ((e.key === 'H') && !ctrl && e.shiftKey && selectedDecorIds.size > 0) {
+    e.preventDefault();
+    toggleHideSelection();
+    return;
+  }
+  // ── Lock toggle (L) ──
+  if ((e.key === 'l' || e.key === 'L') && !ctrl && selectedDecorIds.size > 0) {
+    e.preventDefault();
+    toggleLockSelection();
+    return;
+  }
+  // ── Mirror (M = X axis, Shift+M = Y, Ctrl+M = Z) ──
+  if ((e.key === 'm' || e.key === 'M') && selectedDecorIds.size > 0) {
+    e.preventDefault();
+    mirrorSelection(ctrl ? 'z' : (e.shiftKey ? 'y' : 'x'));
+    return;
+  }
+  // ── Group / Ungroup (Ctrl+G / Ctrl+Shift+G) ──
+  if (ctrl && (e.key === 'g' || e.key === 'G')) {
+    e.preventDefault();
+    if (e.shiftKey) ungroupSelection(); else groupSelection();
+    return;
+  }
+  // ── Align panel toggle (A) ──
+  if ((e.key === 'a' || e.key === 'A') && !ctrl && selectedDecorIds.size > 1) {
+    e.preventDefault();
+    const ap = document.getElementById('alignPanel');
+    if (ap) ap.hidden = !ap.hidden;
     return;
   }
 
@@ -2445,11 +2627,33 @@ function _attachManipDrag() {
 }
 _attachManipDrag();
 
+// ── Align panel button wiring ──
+document.getElementById('alignPanel')?.addEventListener('click', (ev) => {
+  const btn = ev.target.closest('button[data-axis]');
+  if (!btn) return;
+  alignSelection(btn.dataset.axis, btn.dataset.mode);
+});
+
+// ── Workplane axis badge: shows current view (TOP / FRONT / SIDE / PERSP) ──
+const _axisBadgeEl = document.getElementById('axisBadge');
+function _updateAxisBadge() {
+  if (!_axisBadgeEl) return;
+  const v = camera.position.clone().normalize();
+  // Pure top-down → TOP; pure -Z → FRONT; pure +X → SIDE; otherwise PERSP.
+  const TH = 0.95;
+  let label = 'PERSP';
+  if (v.y > TH) label = 'TOP';
+  else if (Math.abs(v.z) > TH && v.y < 0.4) label = v.z < 0 ? 'BACK' : 'FRONT';
+  else if (Math.abs(v.x) > TH && v.y < 0.4) label = v.x < 0 ? 'LEFT' : 'SIDE';
+  if (_axisBadgeEl.textContent !== label) _axisBadgeEl.textContent = label;
+}
+
 // Hook into the existing render loop by appending to setAnimationLoop callback.
 // The original loop already calls updateActionRing() — we piggy-back via a separate
 // rAF tick to avoid re-wiring the loop.
 (function _dmTick() {
   try { updateDecorManip(); } catch {}
+  try { _updateAxisBadge(); } catch {}
   requestAnimationFrame(_dmTick);
 })();
 
