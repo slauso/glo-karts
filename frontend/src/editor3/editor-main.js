@@ -240,7 +240,7 @@ function getThumbRig() {
   const fill = new THREE.DirectionalLight(0xa0b8ff, 0.5);
   fill.position.set(-6, 8, -4);
   _thumbScene.add(hemi, dir, fill);
-  _thumbCam = new THREE.PerspectiveCamera(35, 1, m(0.1), m(500));
+  _thumbCam = new THREE.PerspectiveCamera(35, 1, 0.1, m(500));
   return { renderer: _thumbRenderer, scene: _thumbScene, camera: _thumbCam };
 }
 function makeThumb(key) {
@@ -468,6 +468,28 @@ canvas.addEventListener('mousemove', (e) => {
   if (!hit) {
     previewCell = null;
     if (previewMesh) previewMesh.visible = false;
+    return;
+  }
+  // Decor placement: ghost follows the cursor freely on the workplane,
+  // snapping to the grid step (Tinkercad-style tethered preview).
+  if (isDecorKey(activeKey)) {
+    const wp = hit.worldPoint || (hit.gx != null ? { x: hit.gx * TILE, z: hit.gz * TILE } : null);
+    if (!wp) {
+      if (previewMesh) previewMesh.visible = false;
+      return;
+    }
+    let { x, z } = wp;
+    if (gizmoSnap && snapStep > 0) {
+      x = Math.round(x / snapStep) * snapStep;
+      z = Math.round(z / snapStep) * snapStep;
+    }
+    if (!previewMesh) updatePreview();
+    if (previewMesh) {
+      const def = DECOR[activeKey];
+      const y = def?.centered ? (previewMesh.scale.y / 2) : 0;
+      previewMesh.visible = true;
+      previewMesh.position.set(x, y, z);
+    }
     return;
   }
   // Overlay segments (spawn) are allowed to land on top of existing placements,
