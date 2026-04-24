@@ -32,9 +32,11 @@ renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
 const scene = new THREE.Scene();
-// Tinkercad parity: near-white background, no atmospheric fog so the
-// workplane grid stays crisp at any zoom.
-scene.background = new THREE.Color(0xf5f7fa);
+// Tinkercad parity: scene background tinted to match the workplane plate
+// so the workplane reads as visually infinite at any zoom or tilt. The
+// plate adds the bright cyan border + grid; outside the plate it falls
+// through to this same color, so there is never a white void.
+scene.background = new THREE.Color(0xdcecf2);
 
 // Tighter near/far range avoids z-fighting on the layered workplane and
 // shape rendering. Even with TILE=12,000 mm a near of 50 mm is plenty.
@@ -73,10 +75,10 @@ scene.add(new THREE.AmbientLight(0xffffff, 0.85));
 scene.add(new THREE.HemisphereLight(0xffffff, 0xe6ecf0, 0.35));
 
 // Ground plane (raycast target for placement). Painted to match the
-// scene background so we don't get a visible horizon line beyond the
-// bounded workplane plate.
+// workplane plate color so beyond the bordered work area there's no
+// visible horizon — the cyan reads as infinite.
 const groundGeo = new THREE.PlaneGeometry(m(2000), m(2000));
-const groundMat = new THREE.MeshBasicMaterial({ color: 0xf5f7fa });
+const groundMat = new THREE.MeshBasicMaterial({ color: 0xdcecf2 });
 const ground = new THREE.Mesh(groundGeo, groundMat);
 ground.rotation.x = -Math.PI / 2;
 ground.receiveShadow = false;
@@ -2004,10 +2006,10 @@ updateKartPreview(activeKartId);
 // v2 key: previous v1 stored sky/ground colours that produced a coloured
 // horizon band when the camera tilted. TC-parity defaults are flat off-white
 // for both sky AND ground so the workplane plate floats on solid white.
-const TERRAIN_KEY = 'gloKartsStudio.terrain.v2';
+const TERRAIN_KEY = 'gloKartsStudio.terrain.v3';
 const terrainState = {
-  ground: '#f5f7fa',
-  sky: '#f5f7fa',
+  ground: '#dcecf2',
+  sky: '#dcecf2',
   grid: true,
   fog: false,
 };
