@@ -364,7 +364,12 @@ function buildPalette() {
         if (ev.dataTransfer) ev.dataTransfer.effectAllowed = 'copy';
         _paletteDragKey = key;
       });
-      btn.addEventListener('dragend', () => { _paletteDragKey = null; });
+      btn.addEventListener('dragend', () => {
+        _paletteDragKey = null;
+        // Tinkercad parity: if the drag was released off-canvas, cancel
+        // the placement tool and clear the ghost.
+        setActiveTool(null);
+      });
       paletteEl.appendChild(btn);
     }
   };
@@ -440,6 +445,38 @@ const ndc = new THREE.Vector2();
 // Module-level scratch for palette drag-drop (set by tile dragstart, read by canvas drop).
 let _paletteDragKey = null;
 
+// ── Hover outline (Tinkercad-style cyan edge highlight on unselected items) ──
+const hoverGroup = new THREE.Group();
+scene.add(hoverGroup);
+const _hoverOutline = new THREE.LineSegments(
+  new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1)),
+  new THREE.LineBasicMaterial({ color: 0x48d3ff, transparent: true, opacity: 0.9, depthTest: false }),
+);
+_hoverOutline.renderOrder = 999;
+_hoverOutline.visible = false;
+hoverGroup.add(_hoverOutline);
+let _hoverKey = null; // 'decor:<id>' | 'placement:<id>' | null
+function setHoverOutline(kind, id) {
+  const key = (kind && id != null) ? `${kind}:${id}` : null;
+  if (key === _hoverKey) return;
+  _hoverKey = key;
+  if (!key) { _hoverOutline.visible = false; return; }
+  let target = null;
+  if (kind === 'decor') target = decorMeshById.get(id);
+  else if (kind === 'placement') target = meshById.get(id);
+  if (!target) { _hoverOutline.visible = false; return; }
+  // Skip outline if this item is already selected (selection box covers it).
+  if (kind === 'decor' && selectedDecorIds.has(id)) { _hoverOutline.visible = false; return; }
+  if (kind === 'placement' && selectedIds.has(id)) { _hoverOutline.visible = false; return; }
+  const box = new THREE.Box3().setFromObject(target);
+  if (!isFinite(box.min.x)) { _hoverOutline.visible = false; return; }
+  const size = new THREE.Vector3(); box.getSize(size);
+  const center = new THREE.Vector3(); box.getCenter(center);
+  _hoverOutline.scale.set(Math.max(size.x, 1), Math.max(size.y, 1), Math.max(size.z, 1));
+  _hoverOutline.position.copy(center);
+  _hoverOutline.visible = true;
+}
+
 function pickGroundCell(event) {
   const rect = canvas.getBoundingClientRect();
   ndc.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
@@ -481,6 +518,22 @@ function pickGroundCell(event) {
 
 canvas.addEventListener('mousemove', (e) => {
   const hit = pickGroundCell(e);
+  // ── Hover outline + cursor feedback (no active placement tool) ──
+  if (activeKey == null) {
+    if (hit?.kind === 'decor') {
+      const inst = decor.getById(hit.id);
+      setHoverOutline('decor', hit.id);
+      canvas.style.cursor = inst?.isLocked ? 'not-allowed' : 'grab';
+    } else if (hit?.kind === 'placement') {
+      setHoverOutline('placement', hit.id);
+      canvas.style.cursor = 'grab';
+    } else {
+      setHoverOutline(null);
+      canvas.style.cursor = 'default';
+    }
+  } else {
+    setHoverOutline(null);
+  }
   if (!hit) {
     previewCell = null;
     if (previewMesh) previewMesh.visible = false;
@@ -488,12 +541,20 @@ canvas.addEventListener('mousemove', (e) => {
   }
   // Decor placement: ghost follows the cursor freely on the workplane,
   // snapping to the grid step (Tinkercad-style tethered preview).
+  // If the cursor is over an existing decor mesh, stack on top of it (raise Y
+  // to that mesh's bbox max).
   if (isDecorKey(activeKey)) {
-    const wp = hit.worldPoint || (hit.gx != null ? { x: hit.gx * TILE, z: hit.gz * TILE } : null);
-    if (!wp) {
-      if (previewMesh) previewMesh.visible = false;
-      return;
+    let baseY = 0;
+    let wp = hit.worldPoint;
+    if (hit.kind === 'decor') {
+      const target = decorMeshById.get(hit.id);
+      if (target) {
+        const box = new THREE.Box3().setFromObject(target);
+        if (isFinite(box.max.y)) baseY = box.max.y;
+      }
     }
+    if (!wp && hit.gx != null) wp = { x: hit.gx * TILE, z: hit.gz * TILE };
+    if (!wp) { if (previewMesh) previewMesh.visible = false; return; }
     let { x, z } = wp;
     if (gizmoSnap && snapStep > 0) {
       x = Math.round(x / snapStep) * snapStep;
@@ -502,9 +563,10 @@ canvas.addEventListener('mousemove', (e) => {
     if (!previewMesh) updatePreview();
     if (previewMesh) {
       const def = DECOR[activeKey];
-      const y = def?.centered ? (previewMesh.scale.y / 2) : 0;
+      const y = baseY + (def?.centered ? (previewMesh.scale.y / 2) : 0);
       previewMesh.visible = true;
       previewMesh.position.set(x, y, z);
+      previewMesh.userData._stackY = baseY;
     }
     return;
   }
@@ -532,6 +594,8 @@ canvas.addEventListener('mousemove', (e) => {
 canvas.addEventListener('mouseleave', () => {
   previewCell = null;
   if (previewMesh) previewMesh.visible = false;
+  setHoverOutline(null);
+  canvas.style.cursor = 'default';
 });
 
 // ── Drag-from-palette → drop on workplane (Tinkercad parity) ──
@@ -578,7 +642,16 @@ canvas.addEventListener('drop', (e) => {
       x = Math.round(x / snapStep) * snapStep;
       z = Math.round(z / snapStep) * snapStep;
     }
-    const inst = decor.add({ type: key, x, z });
+    // Stack on top of any decor under the cursor (Tinkercad parity).
+    let baseY = 0;
+    if (hit.kind === 'decor') {
+      const target = decorMeshById.get(hit.id);
+      if (target) {
+        const box = new THREE.Box3().setFromObject(target);
+        if (isFinite(box.max.y)) baseY = box.max.y;
+      }
+    }
+    const inst = decor.add({ type: key, x, y: baseY, z });
     if (inst) {
       addDecorMesh(inst);
       selectDecor(inst.id, 'replace');
@@ -709,6 +782,7 @@ canvas.addEventListener('mousemove', (e) => {
       mesh.position.z = inst.z;
     }
     mouseDownState.movedSinceStart = true;
+    canvas.style.cursor = 'grabbing';
     // Tinkercad-style position tooltip near the cursor.
     const tip = document.getElementById('dragTip');
     if (tip && dd.starts[0]) {
@@ -761,6 +835,7 @@ window.addEventListener('mouseup', (e) => {
   mouseDownState = null;
   const tip = document.getElementById('dragTip');
   if (tip) tip.hidden = true;
+  if (canvas.style.cursor === 'grabbing') canvas.style.cursor = 'grab';
   if (wasDragging) {
     _lastDragConsumedAt = performance.now();
     pushUndo();
@@ -837,7 +912,16 @@ canvas.addEventListener('click', (e) => {
       x = Math.round(x / snapStep) * snapStep;
       z = Math.round(z / snapStep) * snapStep;
     }
-    const inst = decor.add({ type: activeKey, x, z });
+    // Stack on top of any decor under the cursor (Tinkercad parity).
+    let baseY = 0;
+    if (hit.kind === 'decor') {
+      const target = decorMeshById.get(hit.id);
+      if (target) {
+        const box = new THREE.Box3().setFromObject(target);
+        if (isFinite(box.max.y)) baseY = box.max.y;
+      }
+    }
+    const inst = decor.add({ type: activeKey, x, y: baseY, z });
     if (inst) {
       addDecorMesh(inst);
       selectDecor(inst.id, 'replace');
