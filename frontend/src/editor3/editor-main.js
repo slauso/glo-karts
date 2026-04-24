@@ -645,12 +645,63 @@ canvas.addEventListener('mousedown', (e) => {
       mouseDownState.lastCell = { gx: anchor.gx, gz: anchor.gz };
     }
   }
+  // Tinkercad-style on-body drag for decor: clicking the shape itself
+  // begins a workplane translation. Don't interfere when a placement tool
+  // is active (those clicks should drop a new shape).
+  if (hit && hit.kind === 'decor' && !_activeDecor && !track.isOverlay(activeKey)) {
+    if (!selectedDecorIds.has(hit.id) && !e.shiftKey && !(e.ctrlKey || e.metaKey)) {
+      selectDecor(hit.id, 'replace');
+    }
+    const ids = [...selectedDecorIds];
+    const startWp = hit.worldPoint;
+    if (startWp) {
+      mouseDownState.decorDrag = {
+        ids,
+        startWp,
+        starts: ids.map(id => {
+          const d = decor.getById(id);
+          return { id, x: d?.x ?? 0, y: d?.y ?? 0, z: d?.z ?? 0 };
+        }),
+      };
+    }
+  }
 });
 
 canvas.addEventListener('mousemove', (e) => {
-  if (!mouseDownState || !mouseDownState.snapshot) return;
+  if (!mouseDownState) return;
   const dx = e.clientX - mouseDownState.startX;
   const dy = e.clientY - mouseDownState.startY;
+  // Decor body-drag: move all selected decor instances on the workplane.
+  if (mouseDownState.decorDrag) {
+    if (!mouseDownState.dragging && Math.hypot(dx, dy) < DRAG_PIXEL_THRESHOLD) return;
+    mouseDownState.dragging = true;
+    const rect = canvas.getBoundingClientRect();
+    ndc.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+    ndc.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+    raycaster.setFromCamera(ndc, activeCamera);
+    const hits = raycaster.intersectObject(ground);
+    if (!hits.length) return;
+    const wp = hits[0].point;
+    const dd = mouseDownState.decorDrag;
+    let dxw = wp.x - dd.startWp.x;
+    let dzw = wp.z - dd.startWp.z;
+    if (gizmoSnap && snapStep > 0) {
+      dxw = Math.round(dxw / snapStep) * snapStep;
+      dzw = Math.round(dzw / snapStep) * snapStep;
+    }
+    for (const s of dd.starts) {
+      const inst = decor.getById(s.id);
+      const mesh = decorMeshById.get(s.id);
+      if (!inst || !mesh) continue;
+      inst.x = s.x + dxw;
+      inst.z = s.z + dzw;
+      mesh.position.x = inst.x;
+      mesh.position.z = inst.z;
+    }
+    mouseDownState.movedSinceStart = true;
+    return;
+  }
+  if (!mouseDownState.snapshot) return;
   if (!mouseDownState.dragging && Math.hypot(dx, dy) < DRAG_PIXEL_THRESHOLD) return;
   mouseDownState.dragging = true;
   // Find the cell currently under the cursor (against the ground only).
@@ -684,10 +735,12 @@ canvas.addEventListener('mousemove', (e) => {
 window.addEventListener('mouseup', (e) => {
   if (e.button !== 0 || !mouseDownState) { mouseDownState = null; return; }
   const wasDragging = mouseDownState.dragging && mouseDownState.movedSinceStart;
+  const wasDecorDrag = !!mouseDownState.decorDrag;
   mouseDownState = null;
   if (wasDragging) {
     _lastDragConsumedAt = performance.now();
     pushUndo();
+    if (wasDecorDrag) refreshInspector();
     refreshHud();
   }
 });
@@ -924,6 +977,7 @@ function _maybeRecordDupDelta() {
   _dupAnchorBefore = null;
 }
 let transformControls = null;
+let _tcHelper = null;
 function ensureTransformControls() {
   if (transformControls) return transformControls;
   transformControls = new TransformControls(activeCamera, renderer.domElement);
@@ -941,8 +995,12 @@ function ensureTransformControls() {
     syncSelectedDecorFromMesh();
     if (selectedDecorIds.size > 0) showInspectorPopup();
   });
-  const helper = transformControls.getHelper ? transformControls.getHelper() : transformControls;
-  scene.add(helper);
+  _tcHelper = transformControls.getHelper ? transformControls.getHelper() : transformControls;
+  scene.add(_tcHelper);
+  // Tinkercad parity: hide the giant XYZ axis helper. Manipulation happens
+  // exclusively through the on-shape HTML overlay (corners, rotation rings,
+  // raise cone) and direct body-drag on the workplane.
+  _tcHelper.visible = false;
   return transformControls;
 }
 function syncSelectedDecorFromMesh() {
@@ -2009,14 +2067,56 @@ function _selectedDecorMesh() {
   return decorMeshById.get(lastSelectedDecorId) || null;
 }
 
+// Tinkercad-style workplane projection: a thin dashed rectangle drawn on
+// the ground beneath the selected shape so its footprint is visible.
+let _workplaneShadow = null;
+function _ensureWorkplaneShadow() {
+  if (_workplaneShadow) return _workplaneShadow;
+  const geo = new THREE.BufferGeometry();
+  // 5-vertex closed loop (rectangle).
+  geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(15), 3));
+  const mat = new THREE.LineDashedMaterial({
+    color: 0x1f6f9a, dashSize: 30, gapSize: 18,
+    depthTest: false, depthWrite: false, transparent: true, opacity: 0.85,
+  });
+  const line = new THREE.Line(geo, mat);
+  line.renderOrder = 999;
+  line.frustumCulled = false;
+  scene.add(line);
+  _workplaneShadow = line;
+  return line;
+}
+function _updateWorkplaneShadow(min, max, mesh) {
+  const line = _ensureWorkplaneShadow();
+  const a = new THREE.Vector3(min.x, min.y, min.z);
+  const b = new THREE.Vector3(max.x, min.y, min.z);
+  const c = new THREE.Vector3(max.x, min.y, max.z);
+  const d = new THREE.Vector3(min.x, min.y, max.z);
+  // Convert local-space AABB to world space, then snap Y to workplane.
+  for (const v of [a, b, c, d]) { mesh.localToWorld(v); v.y = 0.5; }
+  const pos = line.geometry.getAttribute('position');
+  pos.array.set([
+    a.x, a.y, a.z,  b.x, b.y, b.z,  c.x, c.y, c.z,  d.x, d.y, d.z,  a.x, a.y, a.z,
+  ]);
+  pos.needsUpdate = true;
+  line.geometry.computeBoundingSphere();
+  line.computeLineDistances();
+  line.visible = true;
+}
+
 function updateDecorManip() {
   if (!decorManipEl) return;
   const mesh = _selectedDecorMesh();
   if (!mesh || _dmDragging) {
     if (!_dmDragging) decorManipEl.hidden = true;
+    if (!_dmDragging && _workplaneShadow) _workplaneShadow.visible = false;
     if (!_dmDragging) return;
   }
-  if (!mesh) { decorManipEl.hidden = true; return; }
+  if (!mesh) {
+    decorManipEl.hidden = true;
+    if (_workplaneShadow) _workplaneShadow.visible = false;
+    return;
+  }
   decorManipEl.hidden = false;
   // World AABB
   if (mesh.geometry) {
@@ -2028,6 +2128,7 @@ function updateDecorManip() {
   const min = mesh.geometry?.boundingBox?.min;
   const max = mesh.geometry?.boundingBox?.max;
   if (!min || !max) { decorManipEl.hidden = true; return; }
+  _updateWorkplaneShadow(min, max, mesh);
   const screenCorners = [];
   for (let i = 0; i < 8; i++) {
     const [sx, sy, sz] = _dmCornersLocal[i];
