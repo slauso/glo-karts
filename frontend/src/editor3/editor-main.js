@@ -2441,10 +2441,13 @@ document.getElementById('searchBtn')?.addEventListener('click', () => {
 // Inspector popup is now pinned to the top-right corner of the viewport (CSS),
 // so no per-frame repositioning is needed.
 
-// ── On-shape manipulation overlay (rotation rings, corner resize, numeric size) ──
+// ── On-shape manipulation overlay (Tinkercad-style: bottom-plane scale
+//    handles + top height handle + curved-arrow rotation handles outside
+//    the bbox + raise cone above). ──
 const decorManipEl = document.getElementById('decorManip');
-const _dmCorners = decorManipEl ? Array.from(decorManipEl.querySelectorAll('.dm-corner')) : [];
-const _dmRings = decorManipEl ? Array.from(decorManipEl.querySelectorAll('.dm-ring')) : [];
+const _dmCorners = decorManipEl ? Array.from(decorManipEl.querySelectorAll('.dm-corner[data-corner]')) : [];
+const _dmEdges = decorManipEl ? Array.from(decorManipEl.querySelectorAll('.dm-corner[data-edge]')) : [];
+const _dmRots = decorManipEl ? Array.from(decorManipEl.querySelectorAll('.dm-rot')) : [];
 const _dmSizes = decorManipEl ? Array.from(decorManipEl.querySelectorAll('.dm-size')) : [];
 const _dmTmpV = new THREE.Vector3();
 const _dmBox = new THREE.Box3();
@@ -2547,49 +2550,92 @@ function updateDecorManip() {
       _dmCorners[i].style.display = (p.z > 1) ? 'none' : '';
     }
   }
-  // Center of mesh in screen space (for rings + size labels positioning).
+  // Center of mesh in screen space (used as the pivot for rotation arc placement).
   const center = new THREE.Vector3();
   _dmBox.getCenter(center);
   const sizeWorld = new THREE.Vector3();
   _dmBox.getSize(sizeWorld);
   const cs = _projectToScreen(center, rect);
-  // Position rings around the center; size them roughly to the bounding sphere on screen.
-  const span = Math.max(
-    Math.hypot(screenCorners[0].x - screenCorners[7].x, screenCorners[0].y - screenCorners[7].y),
-    60
-  );
-  const ringPx = Math.max(60, Math.min(220, span * 0.55));
-  _dmRings.forEach(r => {
-    r.style.left = cs.x + 'px';
-    r.style.top = cs.y + 'px';
-    const svg = r.querySelector('svg');
-    if (svg) {
-      svg.setAttribute('width', ringPx);
-      svg.setAttribute('height', ringPx);
-    }
-    // Tilt each ring so it visually represents its axis.
-    const axis = r.dataset.axis;
-    let rot = '';
-    if (axis === 'x') rot = 'rotate(90deg) skewX(-65deg)';
-    else if (axis === 'y') rot = 'skewX(-65deg)';
-    else rot = 'rotate(0deg)';
-    r.style.transform = 'translate(-50%, -50%) ' + rot;
+
+  // Bottom mid-edge handles (±X, ±Z) and top-Y height handle.
+  // Each lives at the midpoint of the corresponding face on the bottom plane,
+  // except +y which is the top-face center.
+  const edgePositions = {
+    '+x': [ max.x, min.y, (min.z + max.z) / 2 ],
+    '-x': [ min.x, min.y, (min.z + max.z) / 2 ],
+    '+z': [ (min.x + max.x) / 2, min.y, max.z ],
+    '-z': [ (min.x + max.x) / 2, min.y, min.z ],
+    '+y': [ (min.x + max.x) / 2, max.y, (min.z + max.z) / 2 ],
+  };
+  const edgeScreen = {};
+  _dmEdges.forEach((el) => {
+    const key = el.dataset.edge;
+    const w = edgePositions[key];
+    if (!w) return;
+    _dmCornerWorld.set(w[0], w[1], w[2]);
+    mesh.localToWorld(_dmCornerWorld);
+    const p = _projectToScreen(_dmCornerWorld, rect);
+    edgeScreen[key] = p;
+    el.style.left = p.x + 'px';
+    el.style.top = p.y + 'px';
+    el.style.display = (p.z > 1) ? 'none' : '';
   });
-  // Numeric size readouts — pick edge midpoints in world space and project them.
-  const edges = {
-    x: [(min.x + max.x) / 2, max.y, max.z], // top-front edge midpoint (length along X)
-    z: [max.x, max.y, (min.z + max.z) / 2], // top-right edge midpoint (length along Z)
-    y: [max.x, (min.y + max.y) / 2, max.z], // front-right edge midpoint (length along Y)
+
+  // Tinkercad-style curved-arrow rotation handles — placed OUTSIDE the bbox
+  // in screen space. We anchor each near the appropriate face midpoint and
+  // push it outward along the screen-space normal so it sits clear of the
+  // shape body.
+  // Y (yaw): above the top face midpoint.
+  // X (pitch): outside the +Z face midpoint at mid height.
+  // Z (roll): outside the +X face midpoint at mid height.
+  const rotAnchors = {
+    y: [ (min.x + max.x) / 2, max.y, (min.z + max.z) / 2 ],
+    x: [ (min.x + max.x) / 2, (min.y + max.y) / 2, max.z ],
+    z: [ max.x, (min.y + max.y) / 2, (min.z + max.z) / 2 ],
+  };
+  const rotOffsets = {
+    y: { x: 36, y: -36 },   // upper-right of top face
+    x: { x: 0,  y: 44 },    // below the +Z face midpoint
+    z: { x: 44, y: 0 },     // right of the +X face midpoint
+  };
+  _dmRots.forEach((r) => {
+    const axis = r.dataset.axis;
+    const w = rotAnchors[axis];
+    const off = rotOffsets[axis];
+    if (!w || !off) return;
+    _dmCornerWorld.set(w[0], w[1], w[2]);
+    mesh.localToWorld(_dmCornerWorld);
+    const p = _projectToScreen(_dmCornerWorld, rect);
+    r.style.left = (p.x + off.x) + 'px';
+    r.style.top = (p.y + off.y) + 'px';
+    r.style.display = (p.z > 1) ? 'none' : 'flex';
+    // Live readout in degrees while dragging.
+    if (r.classList.contains('dragging')) {
+      const inst = decor.getById(lastSelectedDecorId);
+      const rad = inst ? (inst[`r${axis}`] || 0) : 0;
+      const deg = Math.round(THREE.MathUtils.radToDeg(rad));
+      const span = r.querySelector('[data-rot-val]');
+      if (span) span.textContent = deg + '°';
+    }
+  });
+  // Numeric size readouts — anchor to the matching bottom-edge handle
+  // (or top-Y handle for height) so they sit visually next to what they
+  // control, exactly like Tinkercad.
+  const labelAnchors = {
+    x: edgeScreen['+x'] || edgeScreen['-x'],
+    z: edgeScreen['+z'] || edgeScreen['-z'],
+    y: edgeScreen['+y'],
   };
   const inst = decor.getById(lastSelectedDecorId);
   for (const lab of _dmSizes) {
     const axis = lab.dataset.axis;
-    const e = edges[axis];
-    _dmCornerWorld.set(e[0], e[1], e[2]);
-    mesh.localToWorld(_dmCornerWorld);
-    const p = _projectToScreen(_dmCornerWorld, rect);
-    lab.style.left = (p.x + 18) + 'px';
-    lab.style.top = (p.y - 14) + 'px';
+    const p = labelAnchors[axis];
+    if (!p) { lab.style.display = 'none'; continue; }
+    // Push the label slightly outward so it doesn't sit on top of the handle.
+    const dx = (axis === 'y') ? 22 : (axis === 'x') ? 22 : -22;
+    const dy = (axis === 'y') ? -18 : 18;
+    lab.style.left = (p.x + dx) + 'px';
+    lab.style.top = (p.y + dy) + 'px';
     lab.style.display = (p.z > 1) ? 'none' : '';
     if (inst && !lab._editing) {
       const span = lab.querySelector('[data-val]');
@@ -2694,20 +2740,21 @@ function _attachManipDrag() {
     });
   });
 
-  // Ring drag → rotate around that axis based on angular delta around the mesh center.
-  _dmRings.forEach((ring) => {
-    const arc = ring.querySelector('.ring-arc');
-    const arrow = ring.querySelector('.ring-arrow');
+  // Ring drag was replaced by curved-arrow rotation handles + edge handles below.
+  // Curved-arrow rotation drag — each .dm-rot rotates the shape around its axis
+  // based on angular delta around the mesh center in screen space.
+  _dmRots.forEach((rot) => {
     const startDrag = (ev) => {
       const mesh = _selectedDecorMesh();
       const inst = decor.getById(lastSelectedDecorId);
       if (!mesh || !inst) return;
       ev.preventDefault(); ev.stopPropagation();
-      try { ev.target.setPointerCapture(ev.pointerId); } catch {}
+      try { rot.setPointerCapture(ev.pointerId); } catch {}
       _dmDragging = true;
       decorManipEl.classList.add('dragging');
+      rot.classList.add('dragging');
       controls.enabled = false;
-      const axis = ring.dataset.axis;
+      const axis = rot.dataset.axis;
       const rect = canvas.getBoundingClientRect();
       _dmBox.setFromObject(mesh);
       const center = new THREE.Vector3();
@@ -2718,18 +2765,86 @@ function _attachManipDrag() {
       const onMove = (e) => {
         const a = Math.atan2((e.clientY - rect.top) - cs.y, (e.clientX - rect.left) - cs.x);
         let delta = a - startAngle;
-        // Y-ring corresponds to looking down — invert sign so drag direction matches mouse.
-        if (axis === 'y') delta = -delta;
+        if (axis === 'y') delta = -delta; // top-down view inverts.
         let next = startRot[axis] + delta;
         if (gizmoSnap) {
-          const step = Math.PI / 8; // 22.5°, matches gizmo rotationSnap
+          const step = Math.PI / 8; // 22.5°
           next = Math.round(next / step) * step;
         }
         inst[`r${axis}`] = next;
         mesh.rotation[axis] = next;
         if (typeof showInspectorPopup === 'function') showInspectorPopup();
       };
-      const onUp = (e) => {
+      const onUp = () => {
+        window.removeEventListener('pointermove', onMove);
+        window.removeEventListener('pointerup', onUp);
+        _dmDragging = false;
+        decorManipEl.classList.remove('dragging');
+        rot.classList.remove('dragging');
+        controls.enabled = true;
+        pushUndo();
+        refreshInspector();
+      };
+      window.addEventListener('pointermove', onMove);
+      window.addEventListener('pointerup', onUp);
+    };
+    rot.addEventListener('pointerdown', startDrag);
+  });
+
+  // Single-axis edge/top-y scale handles. Each one scales exactly one axis
+  // by tracking screen-space distance between the cursor and the OPPOSITE
+  // mid-face anchor (for ±X/±Z) or the bottom-center (for +Y).
+  _dmEdges.forEach((el) => {
+    el.addEventListener('pointerdown', (ev) => {
+      const mesh = _selectedDecorMesh();
+      const inst = decor.getById(lastSelectedDecorId);
+      if (!mesh || !inst) return;
+      ev.preventDefault(); ev.stopPropagation();
+      try { el.setPointerCapture(ev.pointerId); } catch {}
+      _dmDragging = true;
+      decorManipEl.classList.add('dragging');
+      controls.enabled = false;
+      const key = el.dataset.edge;
+      const axisLetter = key[1]; // 'x' | 'y' | 'z'
+      const rect = canvas.getBoundingClientRect();
+      const min = mesh.geometry.boundingBox.min;
+      const max = mesh.geometry.boundingBox.max;
+      // Opposite anchor in local space.
+      const oppLocal = (() => {
+        if (key === '+x') return [ min.x, min.y, (min.z + max.z) / 2 ];
+        if (key === '-x') return [ max.x, min.y, (min.z + max.z) / 2 ];
+        if (key === '+z') return [ (min.x + max.x) / 2, min.y, min.z ];
+        if (key === '-z') return [ (min.x + max.x) / 2, min.y, max.z ];
+        if (key === '+y') return [ (min.x + max.x) / 2, min.y, (min.z + max.z) / 2 ];
+        return [0,0,0];
+      })();
+      _dmCornerWorld.set(oppLocal[0], oppLocal[1], oppLocal[2]);
+      mesh.localToWorld(_dmCornerWorld);
+      const oppScreen = _projectToScreen(_dmCornerWorld, rect);
+      const startMouse = { x: ev.clientX - rect.left, y: ev.clientY - rect.top };
+      const startDist = Math.hypot(startMouse.x - oppScreen.x, startMouse.y - oppScreen.y);
+      const startScale = { x: inst.sx, y: inst.sy, z: inst.sz };
+      const onMove = (e) => {
+        const mx = e.clientX - rect.left;
+        const my = e.clientY - rect.top;
+        const dist = Math.hypot(mx - oppScreen.x, my - oppScreen.y);
+        let f = startDist > 0 ? dist / startDist : 1;
+        f = Math.max(0.05, f);
+        let nx = startScale.x, ny = startScale.y, nz = startScale.z;
+        if (axisLetter === 'x') nx = startScale.x * f;
+        else if (axisLetter === 'y') ny = startScale.y * f;
+        else if (axisLetter === 'z') nz = startScale.z * f;
+        if (gizmoSnap) {
+          const step = 0.1;
+          if (axisLetter === 'x') nx = Math.max(step, Math.round(nx / step) * step);
+          if (axisLetter === 'y') ny = Math.max(step, Math.round(ny / step) * step);
+          if (axisLetter === 'z') nz = Math.max(step, Math.round(nz / step) * step);
+        }
+        inst.sx = nx; inst.sy = ny; inst.sz = nz;
+        mesh.scale.set(nx, ny, nz);
+        if (typeof showInspectorPopup === 'function') showInspectorPopup();
+      };
+      const onUp = () => {
         window.removeEventListener('pointermove', onMove);
         window.removeEventListener('pointerup', onUp);
         _dmDragging = false;
@@ -2740,9 +2855,7 @@ function _attachManipDrag() {
       };
       window.addEventListener('pointermove', onMove);
       window.addEventListener('pointerup', onUp);
-    };
-    arc?.addEventListener('pointerdown', startDrag);
-    arrow?.addEventListener('pointerdown', startDrag);
+    });
   });
 
   // Numeric size readout → click to edit, type a new length, Enter/blur to commit.

@@ -232,51 +232,59 @@
     }
     canvas { display: block; width: 100%; height: 100%; }
 
-    /* On-shape manipulation overlay (Tinkercad-style rotation rings + corner resize boxes + size readouts) */
+    /* On-shape manipulation overlay (Tinkercad-style: bottom-plane scale
+       handles, single top height handle, white curved-arrow rotation
+       handles outside the bbox, raise cone above). */
     .decor-manip { position: absolute; inset: 0; pointer-events: none; z-index: 12; }
     .decor-manip.dragging { cursor: grabbing; }
+    /* Black square scale handles — 4 bottom corners (XZ) + 4 bottom mid-edges (single-axis) + 1 top center (Y). */
     .dm-corner {
-      position: absolute; width: 12px; height: 12px;
+      position: absolute; width: 11px; height: 11px;
       transform: translate(-50%, -50%);
-      background: #ffffff; border: 1.5px solid #1a8fb5;
-      border-radius: 2px; cursor: nwse-resize; pointer-events: auto;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.25);
+      background: #2a2f36; border: 1px solid #1a1d22;
+      border-radius: 1px; cursor: nwse-resize; pointer-events: auto;
+      box-shadow: 0 0 0 1px rgba(255,255,255,0.85), 0 1px 2px rgba(0,0,0,0.3);
     }
-    .dm-corner:hover { background: #d6f1fb; border-color: #0f6f90; }
-    .dm-edge {
-      position: absolute; width: 10px; height: 10px;
+    .dm-corner:hover { background: #1faaf2; border-color: #0f6f90; }
+    .dm-corner.dm-edge-x { cursor: ew-resize; }
+    .dm-corner.dm-edge-z { cursor: ns-resize; }
+    .dm-corner.dm-top-y { cursor: ns-resize; }
+    .dm-corner.hidden-handle { display: none !important; }
+    /* Tinkercad curved-arrow rotation handle: small SVG icon outside bbox.
+       White fill, dark stroke, hover cyan. One per axis, positioned at the
+       midpoint of the appropriate face edge. */
+    .dm-rot {
+      position: absolute; width: 36px; height: 36px;
       transform: translate(-50%, -50%);
-      background: #ffffff; border: 1.5px solid #1a8fb5;
-      border-radius: 50%; cursor: ew-resize; pointer-events: auto;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.25);
+      pointer-events: auto; cursor: grab;
+      display: flex; align-items: center; justify-content: center;
     }
-    .dm-ring {
-      position: absolute; transform: translate(-50%, -50%);
-      pointer-events: none;
+    .dm-rot svg { width: 100%; height: 100%; overflow: visible; display: block; }
+    .dm-rot .rot-arc {
+      fill: none; stroke: #2a2f36; stroke-width: 1.6;
+      stroke-linecap: round;
     }
-    .dm-ring svg { display: block; overflow: visible; }
-    .dm-ring .ring-arc {
-      fill: none; stroke-width: 3; pointer-events: stroke;
-      cursor: grab; opacity: 0.95;
+    .dm-rot .rot-arrow { fill: #2a2f36; stroke: none; }
+    .dm-rot:hover .rot-arc, .dm-rot.dragging .rot-arc { stroke: #1faaf2; }
+    .dm-rot:hover .rot-arrow, .dm-rot.dragging .rot-arrow { fill: #1faaf2; }
+    .dm-rot .rot-readout {
+      position: absolute; bottom: -22px; left: 50%; transform: translateX(-50%);
+      background: #1f2937; color: #fff; font-size: 11px; font-weight: 600;
+      padding: 2px 6px; border-radius: 3px; white-space: nowrap;
+      visibility: hidden; pointer-events: none;
     }
-    .dm-ring .ring-arc:hover { stroke-width: 5; }
-    .dm-ring.axis-x .ring-arc { stroke: #ff5c5c; }
-    .dm-ring.axis-y .ring-arc { stroke: #4caf50; }
-    .dm-ring.axis-z .ring-arc { stroke: #3aa1ff; }
-    .dm-ring .ring-arrow { fill: currentColor; pointer-events: auto; cursor: grab; }
-    .dm-ring.axis-x { color: #ff5c5c; }
-    .dm-ring.axis-y { color: #4caf50; }
-    .dm-ring.axis-z { color: #3aa1ff; }
+    .dm-rot.dragging .rot-readout { visibility: visible; }
+    /* Inline editable L/W/H readouts — sit beside the corresponding handle. */
     .dm-size {
       position: absolute; transform: translate(-50%, -50%);
-      background: #ffffff; border: 1px solid #1a8fb5;
-      color: #0f6f90; font-size: 11px; font-weight: 600;
+      background: #ffffff; border: 1px solid #cfd6dc;
+      color: #2a2f36; font-size: 11px; font-weight: 600;
       padding: 2px 6px; border-radius: 3px; pointer-events: auto;
-      cursor: text; box-shadow: 0 1px 3px rgba(0,0,0,0.2);
-      min-width: 36px; text-align: center;
+      cursor: text; box-shadow: 0 1px 3px rgba(0,0,0,0.18);
+      min-width: 38px; text-align: center;
       font-family: inherit;
     }
-    .dm-size:hover { background: #eaf8fd; }
+    .dm-size:hover { background: #eaf8fd; border-color: #1faaf2; color: #0f6f90; }
     .dm-size input {
       width: 50px; border: none; outline: none; background: transparent;
       color: inherit; font: inherit; text-align: center; padding: 0;
@@ -1026,41 +1034,50 @@
         </div>
       </div>
 
-      <!-- On-shape manipulation overlay (rotation rings + corner resize boxes + size readouts) -->
+      <!-- On-shape manipulation overlay (Tinkercad-style: bottom-plane scale handles + curved-arrow rotation handles + raise cone) -->
       <div id="decorManip" class="decor-manip" hidden>
-        <!-- 8 corner resize handles -->
+        <!-- 8 corner resize handles. _dmCornersLocal y=-1 indices = 0,1,4,5 (bottom, visible); y=+1 = 2,3,6,7 (top, hidden). -->
         <div class="dm-corner" data-corner="0"></div>
         <div class="dm-corner" data-corner="1"></div>
-        <div class="dm-corner" data-corner="2"></div>
-        <div class="dm-corner" data-corner="3"></div>
+        <div class="dm-corner hidden-handle" data-corner="2"></div>
+        <div class="dm-corner hidden-handle" data-corner="3"></div>
         <div class="dm-corner" data-corner="4"></div>
         <div class="dm-corner" data-corner="5"></div>
-        <div class="dm-corner" data-corner="6"></div>
-        <div class="dm-corner" data-corner="7"></div>
-        <!-- 3 axis rotation rings (X red, Y green, Z blue) -->
-        <div class="dm-ring axis-x" data-axis="x">
-          <svg width="120" height="120" viewBox="-60 -60 120 120">
-            <circle class="ring-arc" cx="0" cy="0" r="50"></circle>
-            <polygon class="ring-arrow" points="50,-6 60,0 50,6"></polygon>
+        <div class="dm-corner hidden-handle" data-corner="6"></div>
+        <div class="dm-corner hidden-handle" data-corner="7"></div>
+        <!-- 4 bottom mid-edge single-axis scale handles + 1 top-center height handle. -->
+        <div class="dm-corner dm-edge-x" data-edge="+x" title="Resize length"></div>
+        <div class="dm-corner dm-edge-x" data-edge="-x" title="Resize length"></div>
+        <div class="dm-corner dm-edge-z" data-edge="+z" title="Resize width"></div>
+        <div class="dm-corner dm-edge-z" data-edge="-z" title="Resize width"></div>
+        <div class="dm-corner dm-top-y" data-edge="+y" title="Resize height"></div>
+        <!-- 3 axis rotation handles — small white curved-arrow icons positioned outside the bbox. -->
+        <div class="dm-rot" data-axis="y" title="Rotate (yaw)">
+          <svg viewBox="-20 -20 40 40" aria-hidden="true">
+            <path class="rot-arc" d="M -14 0 A 14 14 0 1 1 14 0"/>
+            <polygon class="rot-arrow" points="14,-5 19,0 14,5"/>
           </svg>
+          <div class="rot-readout"><span data-rot-val>0°</span></div>
         </div>
-        <div class="dm-ring axis-y" data-axis="y">
-          <svg width="120" height="120" viewBox="-60 -60 120 120">
-            <circle class="ring-arc" cx="0" cy="0" r="50"></circle>
-            <polygon class="ring-arrow" points="50,-6 60,0 50,6"></polygon>
+        <div class="dm-rot" data-axis="x" title="Rotate (pitch)">
+          <svg viewBox="-20 -20 40 40" aria-hidden="true">
+            <path class="rot-arc" d="M -14 0 A 14 14 0 1 1 14 0"/>
+            <polygon class="rot-arrow" points="14,-5 19,0 14,5"/>
           </svg>
+          <div class="rot-readout"><span data-rot-val>0°</span></div>
         </div>
-        <div class="dm-ring axis-z" data-axis="z">
-          <svg width="120" height="120" viewBox="-60 -60 120 120">
-            <circle class="ring-arc" cx="0" cy="0" r="50"></circle>
-            <polygon class="ring-arrow" points="50,-6 60,0 50,6"></polygon>
+        <div class="dm-rot" data-axis="z" title="Rotate (roll)">
+          <svg viewBox="-20 -20 40 40" aria-hidden="true">
+            <path class="rot-arc" d="M -14 0 A 14 14 0 1 1 14 0"/>
+            <polygon class="rot-arrow" points="14,-5 19,0 14,5"/>
           </svg>
+          <div class="rot-readout"><span data-rot-val>0°</span></div>
         </div>
-        <!-- 3 numeric size readouts (L/W/H) -->
+        <!-- 3 numeric size readouts (L/W/H) — inline editable, snap to handle positions. -->
         <div class="dm-size" data-axis="x">L:<span data-val>0</span></div>
         <div class="dm-size" data-axis="z">W:<span data-val>0</span></div>
         <div class="dm-size" data-axis="y">H:<span data-val>0</span></div>
-        <!-- Tinkercad-style raise handle (Y-axis translate) -->
+        <!-- Tinkercad-style raise handle (Y-axis translate) — black cone above the shape. -->
         <div class="dm-raise" id="dmRaise">
           <div class="raise-readout"><span data-val>0</span> mm</div>
           <div class="raise-cone"></div>
