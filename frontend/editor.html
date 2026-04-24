@@ -97,12 +97,13 @@
       padding: 5px 8px; border-radius: 4px; font-size: 12px;
     }
 
-    /* Second toolbar row — Tinkercad's edit/transform tool strip */
+    /* Second toolbar row — Tinkercad's edit/transform tool strip.
+       Pure white background to match Tinkercad's chrome. */
     .toolbar {
       grid-area: toolbar;
       display: flex; align-items: center; gap: 4px;
       padding: 0 12px;
-      background: var(--panel);
+      background: var(--panel-2);
       border-bottom: 1px solid var(--line);
       z-index: 20;
     }
@@ -360,25 +361,42 @@
     .vp-controls button:hover { color: var(--accent-2); border-color: var(--accent); }
     .vp-controls button svg { width: 16px; height: 16px; fill: currentColor; }
 
-    /* Bottom-right snap-grid pill */
+    /* Bottom-right snap-grid pill (Tinkercad parity: Settings · Snap Grid · 1.0 mm · [snap toggle]) */
     .snap-grid-bar {
       position: absolute; bottom: 12px; right: 12px;
-      display: flex; align-items: center; gap: 8px;
-      background: var(--panel-2); padding: 6px 10px; border-radius: 4px;
-      border: 1px solid var(--line); box-shadow: var(--shadow-sm);
-      font-size: 11px; color: var(--muted);
+      display: flex; align-items: center; gap: 10px;
+      background: transparent; padding: 4px 0; border: 0; box-shadow: none;
+      font-size: 12px; color: var(--muted);
       z-index: 10;
     }
+    .snap-grid-bar .settings-link {
+      background: transparent; border: none; color: var(--muted);
+      cursor: pointer; padding: 4px 6px; font-size: 12px;
+    }
+    .snap-grid-bar .settings-link:hover { color: var(--accent-2); text-decoration: underline; }
+    .snap-grid-bar .snap-label { color: var(--muted); font-size: 12px; }
     .snap-grid-bar select {
       background: var(--panel-2); color: var(--text);
       border: 1px solid var(--line); border-radius: 3px;
-      padding: 2px 6px; font-size: 11px;
+      padding: 3px 8px; font-size: 12px; min-width: 90px;
     }
-    .snap-grid-bar button {
-      background: transparent; border: 1px solid var(--line); border-radius: 3px;
-      cursor: pointer; padding: 2px 6px; font-size: 10px; color: var(--muted);
+    .snap-grid-bar .snap-toggle {
+      background: var(--panel-2); border: 1px solid var(--line); border-radius: 3px;
+      cursor: pointer; padding: 4px 6px; color: var(--muted);
+      display: inline-flex; align-items: center; justify-content: center;
     }
-    .snap-grid-bar button.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+    .snap-grid-bar .snap-toggle.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+    /* Toolbar tweaks for Tinkercad-faithful chrome */
+    .toolbar .spacer-flex { flex: 1; }
+    .toolbar .with-caret { position: relative; padding: 0 4px; gap: 2px; }
+    .toolbar .with-caret .color-chip {
+      width: 16px; height: 16px; border-radius: 3px;
+      background: linear-gradient(135deg, #9eddff 0%, #1faaf2 100%);
+      border: 1px solid rgba(0,0,0,0.15);
+      display: inline-block;
+    }
+    .toolbar .with-caret .caret { width: 6px; height: 4px; fill: currentColor; }
 
     /* Bottom-left settings (terrain shortcut) */
     .vp-bottom-left {
@@ -687,57 +705,88 @@
         <button class="top-tab" title="Library">
           <svg viewBox="0 0 24 24"><path d="M4 4h16v4H4zm0 6h7v10H4zm9 0h7v10h-7z"/></svg>
         </button>
+        <button class="top-tab" title="Adjust">
+          <svg viewBox="0 0 24 24"><path d="M3 17v2h6v-2H3zm0-7v2h12v-2H3zm0-5v2h18V5H3zm14 14v-2h4v-2h-4v-2h-2v6h2zm-7-9v-2h-2v2H4v2h4v2h2v-2h12v-2H10z"/></svg>
+        </button>
+        <button class="top-tab" title="Brick view">
+          <svg viewBox="0 0 24 24"><path d="M3 3h8v8H3V3zm10 0h8v8h-8V3zM3 13h8v8H3v-8zm10 0h8v8h-8v-8z" fill-opacity=".6"/></svg>
+        </button>
       </div>
-      <label class="kart-pick">
-        Kart
-        <select id="kartSelect"></select>
+      <!-- Kart picker kept for compat, hidden in header for Tinkercad parity. -->
+      <label class="kart-pick" style="display:none">
+        Kart <select id="kartSelect"></select>
       </label>
-      <button class="action" id="shareBtn" title="Share">Import</button>
-      <button class="action" id="saveBtn" title="Save (browser)">Export</button>
+      <button class="action" id="shareBtn" title="Import" style="display:none">Import</button>
+      <button class="action" id="saveBtn" title="Save (browser)" style="display:none">Export</button>
       <button class="action primary" id="playBtn" title="Playtest">Send To</button>
     </header>
 
-    <!-- Tinkercad-style transform/edit toolbar -->
+    <!-- Tinkercad-style transform/edit toolbar.
+         Order matches Tinkercad's live editor: 6 edit ops, divider,
+         11 transform/visibility ops, ellipsis overflow. -->
     <div class="toolbar">
+      <!-- Group 1: Edit (clipboard + history) -->
       <div class="group">
-        <button id="copyToolBtn" title="Copy (Ctrl+C)">
+        <button id="copyToolBtn" title="Copy (Ctrl+C)" aria-label="Copy">
           <svg viewBox="0 0 24 24"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>
         </button>
-        <button id="pasteToolBtn" title="Paste (Ctrl+V)">
+        <button id="pasteToolBtn" title="Paste (Ctrl+V)" aria-label="Paste">
           <svg viewBox="0 0 24 24"><path d="M19 2h-4.18C14.4.84 13.3 0 12 0c-1.3 0-2.4.84-2.82 2H5c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-7 0c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1z"/></svg>
         </button>
-        <button id="duplicateToolBtn" title="Duplicate (Ctrl+D)">
+        <button id="duplicateToolBtn" title="Duplicate (Ctrl+D)" aria-label="Duplicate">
           <svg viewBox="0 0 24 24"><path d="M19 21H8V7h11m0-2H8a2 2 0 00-2 2v14a2 2 0 002 2h11a2 2 0 002-2V7a2 2 0 00-2-2m-3-4H4a2 2 0 00-2 2v14h2V3h12V1z"/></svg>
         </button>
-        <button id="deleteToolBtn" title="Delete (Del)">
+        <button id="deleteToolBtn" title="Delete (Del)" aria-label="Delete">
           <svg viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
         </button>
-      </div>
-      <div class="divider"></div>
-      <div class="group">
-        <button id="undoBtn" title="Undo (Ctrl+Z)">
+        <button id="undoBtn" title="Undo (Ctrl+Z)" aria-label="Undo">
           <svg viewBox="0 0 24 24"><path d="M12.5 8c-2.65 0-5.05.99-6.9 2.6L2 7v9h9l-3.62-3.62c1.39-1.16 3.16-1.88 5.12-1.88 3.54 0 6.55 2.31 7.6 5.5l2.37-.78C21.08 11.03 17.15 8 12.5 8z"/></svg>
         </button>
-        <button id="redoBtn" title="Redo (Ctrl+Shift+Z)">
+        <button id="redoBtn" title="Redo (Ctrl+Shift+Z)" aria-label="Redo">
           <svg viewBox="0 0 24 24"><path d="M18.4 10.6C16.55 8.99 14.15 8 11.5 8c-4.65 0-8.58 3.03-9.96 7.22L3.9 16c1.05-3.19 4.05-5.5 7.6-5.5 1.95 0 3.73.72 5.12 1.88L13 16h9V7l-3.6 3.6z"/></svg>
         </button>
       </div>
       <div class="spacer"></div>
+      <!-- Group 2: Visibility / appearance -->
       <div class="group">
-        <button id="alignBtn" title="Align selection">
-          <svg viewBox="0 0 24 24"><path d="M11 17h2v-3h3v-2h-3V9h-2v3H8v2h3z M3 21h18v-2H3z M3 3h18v2H3z"/></svg>
+        <button id="hideBtn" title="Show / Hide (H)" aria-label="Show / Hide">
+          <svg viewBox="0 0 24 24"><path d="M12 4.5C7 4.5 2.7 7.6 1 12c1.7 4.4 6 7.5 11 7.5s9.3-3.1 11-7.5c-1.7-4.4-6-7.5-11-7.5zm0 12.5a5 5 0 110-10 5 5 0 010 10zm0-8a3 3 0 100 6 3 3 0 000-6z"/></svg>
         </button>
-        <button id="groupBtn" title="Group (Ctrl+G)">
-          <svg viewBox="0 0 24 24"><path d="M5 3h14v2H5zm0 16h14v2H5zM3 5v14h2V5zm16 0v14h2V5z"/></svg>
-        </button>
-        <button id="ungroupBtn" title="Ungroup (Ctrl+Shift+G)">
-          <svg viewBox="0 0 24 24"><path d="M3 3h6v2H3zm12 0h6v2h-6zM3 19h6v2H3zm12 0h6v2h-6zM3 5v6h2V5zm16 0v6h2V5zM3 13v6h2v-6zm16 0v6h2v-6z"/></svg>
+        <button id="colorBtn" title="Solid / Hole / Color" aria-label="Color" class="with-caret">
+          <span class="color-chip" id="colorChip"></span>
+          <svg class="caret" viewBox="0 0 6 4"><path d="M0 0 L6 0 L3 4 z"/></svg>
         </button>
       </div>
-      <div class="divider"></div>
-      <div class="right-actions">
-        <button class="action" id="clearBtn" title="Clear all">Clear</button>
-        <button class="action" id="loadBtn" title="Load from browser">Load</button>
+      <div class="group">
+        <button id="groupBtn" title="Group (Ctrl+G)" aria-label="Group">
+          <svg viewBox="0 0 24 24"><path d="M5 3h14v2H5zm0 16h14v2H5zM3 5v14h2V5zm16 0v14h2V5z"/><circle cx="9" cy="11" r="2"/><circle cx="15" cy="11" r="2"/></svg>
+        </button>
+        <button id="ungroupBtn" title="Ungroup (Ctrl+Shift+G)" aria-label="Ungroup">
+          <svg viewBox="0 0 24 24"><path d="M3 3h6v2H3zm12 0h6v2h-6zM3 19h6v2H3zm12 0h6v2h-6zM3 5v6h2V5zm16 0v6h2V5zM3 13v6h2v-6zm16 0v6h2v-6z"/></svg>
+        </button>
+        <button id="alignBtn" title="Align (L)" aria-label="Align">
+          <svg viewBox="0 0 24 24"><path d="M3 3h2v18H3zm4 4h12v3H7zm0 7h8v3H7z"/></svg>
+        </button>
+        <button id="flipBtn" title="Flip (M)" aria-label="Flip">
+          <svg viewBox="0 0 24 24"><path d="M12 2v20M5 7l5 5-5 5V7zm14 0v10l-5-5 5-5z"/></svg>
+        </button>
+      </div>
+      <div class="group">
+        <button id="workplaneBtn" title="Workplane (W)" aria-label="Workplane">
+          <svg viewBox="0 0 24 24"><path d="M2 6l10-4 10 4-10 4zm0 12l10 4 10-4M2 12l10 4 10-4"/></svg>
+        </button>
+        <button id="rulerBtn" title="Ruler (R)" aria-label="Ruler">
+          <svg viewBox="0 0 24 24"><path d="M2 14l8-12 12 8-8 12zM6 14l2-3 1 1 2-3 1 1 2-3 1 1 2-3"/></svg>
+        </button>
+        <button id="dropToWorkplaneBtn" title="Drop to workplane (D)" aria-label="Drop to workplane">
+          <svg viewBox="0 0 24 24"><path d="M12 3v9m-4-4l4 4 4-4M3 18h18v3H3z"/></svg>
+        </button>
+      </div>
+      <div class="spacer-flex"></div>
+      <div class="group">
+        <button id="overflowBtn" title="More tools" aria-label="More tools">
+          <svg viewBox="0 0 24 24"><circle cx="6" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="18" cy="12" r="2"/></svg>
+        </button>
       </div>
     </div>
 
@@ -753,8 +802,8 @@
         <button data-view="ortho" id="orthoToggle" title="Toggle orthographic">PERSP</button>
       </div>
 
-      <!-- HUD piece counter -->
-      <div class="hud" id="hud">Pieces: <b id="pieceCount">0</b></div>
+      <!-- HUD piece counter (compat shim only — Tinkercad has no piece counter) -->
+      <div class="hud" id="hud" style="display:none">Pieces: <b id="pieceCount">0</b></div>
 
       <!-- Help strip removed for Tinkercad parity (no in-canvas hints). -->
 
@@ -777,8 +826,8 @@
         </button>
       </div>
 
-      <!-- Bottom-left settings shortcut + terrain popup -->
-      <div class="vp-bottom-left">
+      <!-- Bottom-left workplane settings popup trigger (Tinkercad shows nothing here by default; we keep a tiny gear). -->
+      <div class="vp-bottom-left" style="display:none">
         <button id="settingsBtn">Settings ⚙</button>
       </div>
       <div class="terrain-popup" id="terrainPopup">
@@ -799,19 +848,22 @@
         </div>
       </div>
 
-      <!-- Bottom-right snap grid (matches Tinkercad's Snap Grid pill) -->
+      <!-- Bottom-right snap grid + workplane settings (Tinkercad parity).
+           Tinkercad shows a 'Settings' link beside the 'Snap Grid 1.0 mm' selector. -->
       <div class="snap-grid-bar">
-        <span>Snap Grid</span>
+        <button id="settingsBtn2" class="settings-link" title="Workplane settings">Settings</button>
+        <span class="snap-label">Snap Grid</span>
         <select id="snapGridSize" title="Snap grid (mm)">
           <option value="0">Off</option>
           <option value="0.1">0.1 mm</option>
-          <option value="1" selected>1 mm</option>
-          <option value="10">10 mm (1 cm)</option>
-          <option value="100">100 mm (1 dm)</option>
-          <option value="1000">1000 mm (1 m)</option>
+          <option value="1" selected>1.0 mm</option>
+          <option value="10">10 mm</option>
+          <option value="100">100 mm</option>
+          <option value="1000">1000 mm</option>
         </select>
-        </select>
-        <button id="gizmoSnap" class="active" title="Toggle grid snap">SNAP</button>
+        <button id="gizmoSnap" class="snap-toggle active" title="Toggle grid snap" aria-label="Toggle grid snap">
+          <svg viewBox="0 0 24 24" width="14" height="14"><path d="M3 3h6v6H3zm0 12h6v6H3zm12-12h6v6h-6zm0 12h6v6h-6z" fill="currentColor"/></svg>
+        </button>
       </div>
 
       <!-- Toast -->

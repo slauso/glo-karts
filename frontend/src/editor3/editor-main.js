@@ -1873,13 +1873,13 @@ document.getElementById('saveBtn').addEventListener('click', () => {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(saveJSON()));
   toast('Saved to browser');
 });
-document.getElementById('loadBtn').addEventListener('click', () => {
+document.getElementById('loadBtn')?.addEventListener('click', () => {
   const raw = localStorage.getItem(STORAGE_KEY);
   if (!raw) { toast('No saved track'); return; }
   loadFromJSON(JSON.parse(raw));
   toast('Loaded');
 });
-document.getElementById('clearBtn').addEventListener('click', () => {
+document.getElementById('clearBtn')?.addEventListener('click', () => {
   if (!confirm('Clear all pieces?')) return;
   track.clear();
   decor.clear();
@@ -1888,7 +1888,7 @@ document.getElementById('clearBtn').addEventListener('click', () => {
   clearSelection();
   pushUndo();
 });
-document.getElementById('undoBtn').addEventListener('click', doUndo);
+document.getElementById('undoBtn')?.addEventListener('click', doUndo);
 
 document.getElementById('shareBtn').addEventListener('click', async () => {
   const code = encodeTrack(track);
@@ -2252,9 +2252,74 @@ document.getElementById('deleteToolBtn')?.addEventListener('click', () => {
   else if (selectedIds.size > 0) deleteSelection();
 });
 document.getElementById('redoBtn')?.addEventListener('click', () => doRedo());
-document.getElementById('alignBtn')?.addEventListener('click', () => toast('Align: select multiple shapes'));
-document.getElementById('groupBtn')?.addEventListener('click', () => toast('Group: coming soon'));
-document.getElementById('ungroupBtn')?.addEventListener('click', () => toast('Ungroup: coming soon'));
+document.getElementById('alignBtn')?.addEventListener('click', () => {
+  if (selectedDecorIds.size < 2) { toast('Align: select 2+ shapes'); return; }
+  // Default: align centers along X (toggle through axes is a future enhancement).
+  alignSelection('x', 'center');
+});
+document.getElementById('groupBtn')?.addEventListener('click', () => groupSelection());
+document.getElementById('ungroupBtn')?.addEventListener('click', () => ungroupSelection());
+document.getElementById('hideBtn')?.addEventListener('click', () => {
+  if (selectedDecorIds.size === 0) { toast('Show/Hide: select shape(s)'); return; }
+  toggleHideSelection();
+});
+document.getElementById('colorBtn')?.addEventListener('click', () => {
+  // Tinkercad parity: opens a color/solid-hole popover. For now jump focus to the inspector's color picker.
+  const c = document.querySelector('#inspector input[type="color"], .inspector-popup input[type="color"]');
+  if (c) { c.click(); c.focus(); }
+  else toast('Select a shape to change color');
+});
+document.getElementById('flipBtn')?.addEventListener('click', () => {
+  if (selectedDecorIds.size === 0) { toast('Flip: select shape(s)'); return; }
+  // Mirror selection along world-X around its bbox center.
+  for (const id of selectedDecorIds) {
+    const d = decor.getById(id);
+    if (!d || d.isLocked) continue;
+    d.s = [-(d.s?.[0] ?? 1), d.s?.[1] ?? 1, d.s?.[2] ?? 1];
+    const mesh = decorMeshById.get(id);
+    if (mesh) syncDecorMesh(mesh, d);
+  }
+  pushUndo();
+  refreshInspector();
+});
+document.getElementById('workplaneBtn')?.addEventListener('click', () => {
+  toast('Workplane: drag onto a face (W) — placement plane is the workplane plate');
+});
+document.getElementById('rulerBtn')?.addEventListener('click', () => {
+  toast('Ruler: dimensions are shown live in the inspector overlay');
+});
+document.getElementById('dropToWorkplaneBtn')?.addEventListener('click', () => {
+  if (selectedDecorIds.size === 0) { toast('Drop: select shape(s)'); return; }
+  // Drop selection so each shape's bbox.min.y == 0.
+  for (const id of selectedDecorIds) {
+    const mesh = decorMeshById.get(id);
+    const d = decor.getById(id);
+    if (!mesh || !d || d.isLocked) continue;
+    mesh.updateMatrixWorld(true);
+    const bb = new THREE.Box3().setFromObject(mesh);
+    const minY = bb.min.y;
+    d.p[1] -= minY;
+    syncDecorMesh(mesh, d);
+  }
+  pushUndo();
+  refreshInspector();
+});
+document.getElementById('overflowBtn')?.addEventListener('click', () => {
+  // Tinkercad parity: opens a small overflow menu. We tie this to the existing Save/Load/Clear actions.
+  const choice = window.prompt('More tools — type one: clear, save, load, export, import', 'save');
+  if (!choice) return;
+  switch (choice.trim().toLowerCase()) {
+    case 'clear': document.getElementById('clearBtn')?.click(); break;
+    case 'save': document.getElementById('saveBtn')?.click(); break;
+    case 'load': document.getElementById('loadBtn')?.click(); break;
+    case 'export': document.getElementById('exportBtn')?.click(); break;
+    case 'import': document.getElementById('importBtn')?.click(); break;
+    default: toast('Unknown action: ' + choice);
+  }
+});
+document.getElementById('settingsBtn2')?.addEventListener('click', () => {
+  document.getElementById('settingsBtn')?.click();
+});
 
 // Viewport stack buttons
 document.getElementById('vpHome')?.addEventListener('click', () => snapView('iso'));
