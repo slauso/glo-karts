@@ -592,10 +592,22 @@ function pickGroundCell(event) {
   // Decor meshes are checked before placement meshes so a decor object
   // sitting on top of a road segment can still be picked. Hidden decor
   // (mesh.visible = false) is naturally excluded by the raycaster.
-  const decorHits = raycaster.intersectObjects(decorGroup.children, true);
+  // Also raycast CSG group meshes — when a group contains holes, the
+  // member meshes are hidden and the merged CSG mesh stands in for them.
+  const decorHits = raycaster.intersectObjects(
+    decorGroup.children.concat(csgGroup.children), true
+  );
   if (decorHits.length) {
     let obj = decorHits[0].object;
-    while (obj && obj.userData.decorId == null) obj = obj.parent;
+    while (obj && obj.userData.decorId == null && obj.userData.csgGroupId == null) obj = obj.parent;
+    if (obj && obj.userData.csgGroupId != null) {
+      // Resolve to the first member of the CSG group so existing
+      // selection / inspector code paths just work.
+      const gid = obj.userData.csgGroupId;
+      const members = _membersOfGroup(gid);
+      const first = members[0];
+      if (first) return { kind: 'decor', id: first.id, gx: cell?.gx, gz: cell?.gz, worldPoint, csgGroupId: gid };
+    }
     if (obj && obj.userData.decorId != null) {
       return { kind: 'decor', id: obj.userData.decorId, gx: cell?.gx, gz: cell?.gz, worldPoint };
     }
