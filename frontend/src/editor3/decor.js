@@ -187,6 +187,91 @@ function _torusKnot() {
   return g;
 }
 
+// Roof: a triangular prism with the peak running along Z axis (gabled).
+function _roof() {
+  const positions = new Float32Array([
+    // bottom (y=0)
+    -0.5, 0, -0.5,  0.5, 0, -0.5,  0.5, 0, 0.5,
+    -0.5, 0, -0.5,  0.5, 0, 0.5,  -0.5, 0, 0.5,
+    // left slope (-x to peak)
+    -0.5, 0, -0.5,  0, 1, -0.5,   0, 1, 0.5,
+    -0.5, 0, -0.5,  0, 1, 0.5,   -0.5, 0, 0.5,
+    // right slope (+x to peak)
+     0.5, 0, -0.5,   0.5, 0, 0.5,  0, 1, 0.5,
+     0.5, 0, -0.5,   0, 1, 0.5,   0, 1, -0.5,
+    // front triangle gable (z=+0.5)
+    -0.5, 0, 0.5,   0, 1, 0.5,    0.5, 0, 0.5,
+    // back triangle gable (z=-0.5)
+    -0.5, 0, -0.5,  0.5, 0, -0.5,  0, 1, -0.5,
+  ]);
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  g.computeVertexNormals();
+  return g;
+}
+// Star: extruded star polygon; points configurable.
+function _star(opts) {
+  const points = clampInt((opts && opts.points) || 5, 3, 12);
+  const inner = clamp01(((opts && opts.inner) || 40) / 100) * 0.5;
+  const outer = 0.5;
+  const shape = new THREE.Shape();
+  for (let i = 0; i < points * 2; i++) {
+    const r = (i % 2 === 0) ? outer : inner;
+    const a = (i / (points * 2)) * Math.PI * 2 - Math.PI / 2;
+    const x = Math.cos(a) * r, y = Math.sin(a) * r;
+    if (i === 0) shape.moveTo(x, y); else shape.lineTo(x, y);
+  }
+  shape.closePath();
+  const g = new THREE.ExtrudeGeometry(shape, { depth: 1, bevelEnabled: false });
+  g.rotateX(-Math.PI / 2);
+  g.translate(0, 1, 0);
+  return g;
+}
+// Tube: open-ended cylindrical shell (annulus extruded).
+function _tube(opts) {
+  const sides = clampInt((opts && opts.sides) || 32, 6, 96);
+  const wall = clamp01(((opts && opts.wall) || 20) / 100) * 0.45;
+  const outer = new THREE.Shape();
+  outer.absarc(0, 0, 0.5, 0, Math.PI * 2, false);
+  const hole = new THREE.Path();
+  hole.absarc(0, 0, 0.5 - wall, 0, Math.PI * 2, true);
+  outer.holes.push(hole);
+  const g = new THREE.ExtrudeGeometry(outer, { depth: 1, bevelEnabled: false, curveSegments: sides });
+  g.rotateX(-Math.PI / 2);
+  g.translate(0, 1, 0);
+  return g;
+}
+// Half-cylinder: half-disk extruded.
+function _halfCylinder(opts) {
+  const sides = clampInt((opts && opts.sides) || 32, 6, 64);
+  const half = new THREE.Shape();
+  half.moveTo(-0.5, 0);
+  half.absarc(0, 0, 0.5, Math.PI, 0, true);
+  half.lineTo(-0.5, 0);
+  const g = new THREE.ExtrudeGeometry(half, { depth: 1, bevelEnabled: false, curveSegments: sides });
+  g.rotateX(-Math.PI / 2);
+  g.translate(0, 1, 0);
+  return g;
+}
+// Arch: tall rectangle with a rounded top arch removed (gateway shape).
+function _arch(opts) {
+  const sides = clampInt((opts && opts.sides) || 24, 6, 64);
+  const wall = clamp01(((opts && opts.wall) || 25) / 100) * 0.4;
+  const shape = new THREE.Shape();
+  shape.moveTo(-0.5, 0);
+  shape.lineTo(-0.5, 1);
+  shape.lineTo(0.5, 1);
+  shape.lineTo(0.5, 0);
+  shape.lineTo(0.5 - wall, 0);
+  shape.lineTo(0.5 - wall, 1 - 0.5);
+  shape.absarc(0, 1 - 0.5, 0.5 - wall, 0, Math.PI, true);
+  shape.lineTo(-0.5 + wall, 0);
+  shape.closePath();
+  const g = new THREE.ExtrudeGeometry(shape, { depth: 0.4, bevelEnabled: false, curveSegments: sides });
+  g.translate(0, 0, -0.2);
+  return g;
+}
+
 // "Nature" presets are just primitives with built-in non-uniform default scale
 // + a themed colour. Their geometry is still the base primitive so the gizmo
 // scaling continues to work intuitively.
@@ -239,6 +324,29 @@ export const DECOR = {
                   stacks: { label: 'Stacks', min: 3, max: 32, step: 1, default: 12, integer: true },
                 },
                 build: (p) => _paraboloid(p || {}) },
+  roof:       { label: 'Roof',       category: 'shape', color: 0xc4533a,
+                build: () => geom('roof', _roof) },
+  star:       { label: 'Star',       category: 'shape', color: 0xead33a,
+                params: {
+                  points: { label: 'Points', min: 3, max: 12, step: 1, default: 5, integer: true },
+                  inner: { label: 'Inner %', min: 10, max: 90, step: 1, default: 40 },
+                },
+                build: (p) => _star(p || {}) },
+  tube:       { label: 'Tube',       category: 'shape', color: 0x6e7378,
+                params: {
+                  sides: { label: 'Sides', min: 6, max: 96, step: 1, default: 32, integer: true },
+                  wall: { label: 'Wall %', min: 5, max: 45, step: 1, default: 20 },
+                },
+                build: (p) => _tube(p || {}) },
+  half_cyl:   { label: 'Half Cylinder', category: 'shape', color: 0xee8b1a,
+                params: { sides: { label: 'Sides', min: 6, max: 64, step: 1, default: 32, integer: true } },
+                build: (p) => _halfCylinder(p || {}) },
+  arch:       { label: 'Arch',       category: 'shape', color: 0xb0b6bf,
+                params: {
+                  sides: { label: 'Sides', min: 6, max: 64, step: 1, default: 24, integer: true },
+                  wall: { label: 'Wall %', min: 10, max: 40, step: 1, default: 25 },
+                },
+                build: (p) => _arch(p || {}) },
 
   // ── Nature presets (primitive + themed default colour/scale) ─
   rock:       { label: 'Rock',       category: 'nature', color: 0x808a8f, build: () => geom('sph', _sphere),
