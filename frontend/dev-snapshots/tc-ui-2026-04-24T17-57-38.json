@@ -1,0 +1,60 @@
+{
+  "url": "https://www.tinkercad.com/things/4yWu87luBAC/edit?returnTo=%2Fdashboard",
+  "viewport": {
+    "w": 1036,
+    "h": 905
+  },
+  "title": "3D design Bodacious Gaaris - Tinkercad",
+  "grouped": {
+    "right-panel": [
+      {
+        "tag": "div",
+        "id": null,
+        "cls": "item-btn favorite-btn favorited",
+        "title": null,
+        "ariaLabel": "Unfavorite",
+        "dataTestid": null,
+        "role": "button",
+        "text": "",
+        "rect": {
+          "x": 821,
+          "y": 230,
+          "w": 30,
+          "h": 30
+        }
+      },
+      {
+        "tag": "div",
+        "id": null,
+        "cls": "item-btn favorite-btn favorited",
+        "title": null,
+        "ariaLabel": "Unfavorite",
+        "dataTestid": null,
+        "role": "button",
+        "text": "",
+        "rect": {
+          "x": 821,
+          "y": 638,
+          "w": 30,
+          "h": 30
+        }
+      },
+      {
+        "tag": "button",
+        "id": null,
+        "cls": "button button--size--standard button--type--primary button--float--inherit button--rounded",
+        "title": null,
+        "ariaLabel": "More Shapes",
+        "dataTestid": null,
+        "role": "button",
+        "text": "More Shapes",
+        "rect": {
+          "x": 839,
+          "y": 1049,
+          "w": 119,
+          "h": 37
+        }
+      }
+    ]
+  }
+}

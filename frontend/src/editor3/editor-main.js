@@ -26,7 +26,7 @@ const STORAGE_KEY = 'gloKartsStudio.lastTrack';
 
 // ── Scene ─────────────────────────────────────────────────────
 const canvas = document.getElementById('canvas');
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, logarithmicDepthBuffer: true });
 renderer.setPixelRatio(window.devicePixelRatio);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -38,9 +38,13 @@ const scene = new THREE.Scene();
 // through to this same color, so there is never a white void.
 scene.background = new THREE.Color(0xdcecf2);
 
-// Tighter near/far range avoids z-fighting on the layered workplane and
-// shape rendering. Even with TILE=12,000 mm a near of 50 mm is plenty.
-const camera = new THREE.PerspectiveCamera(55, 1, m(50), m(800));
+// Camera near must be SMALL (1 mm) — when the user zooms close to the
+// workplane the camera distance from origin can drop well under 50 m, and
+// a near plane bigger than that would clip the entire scene and surface as
+// a "white void" obscuring the workplane. Earlier z-fighting was actually
+// caused by the layered plate/grid Y offsets (already spread); near plane
+// was never the cause.
+const camera = new THREE.PerspectiveCamera(55, 1, mm(1), m(2000));
 // Frame the workplane tight (≈3.5× TILE) so the initial view feels like
 // Tinkercad's framed-on-workplane default.
 camera.position.set(TILE * 3.5, TILE * 3.5, TILE * 3.5);

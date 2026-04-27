@@ -1,0 +1,1369 @@
+{
+  "url": "https://www.tinkercad.com/things/4yWu87luBAC/edit?returnTo=%2Fdashboard",
+  "viewport": {
+    "w": 1036,
+    "h": 905
+  },
+  "title": "3D design Bodacious Gaaris - Tinkercad",
+  "canvases": [
+    {
+      "id": null,
+      "cls": null,
+      "rect": {
+        "x": -12,
+        "y": 84,
+        "w": 150,
+        "h": 150
+      }
+    },
+    {
+      "id": null,
+      "cls": null,
+      "rect": {
+        "x": 0,
+        "y": 96,
+        "w": 760,
+        "h": 809
+      }
+    },
+    {
+      "id": null,
+      "cls": "editor__materialHeaderbtn__icon__canvas js-icon__canvas",
+      "rect": {
+        "x": 0,
+        "y": 0,
+        "w": 0,
+        "h": 0
+      }
+    },
+    {
+      "id": null,
+      "cls": "editor__materialHeaderbtn__icon__canvas js-icon__canvas tilt",
+      "rect": {
+        "x": 0,
+        "y": 0,
+        "w": 0,
+        "h": 0
+      }
+    },
+    {
+      "id": null,
+      "cls": "editor__materialbtn__icon__canvas js-icon__canvas",
+      "rect": {
+        "x": 552,
+        "y": 177,
+        "w": 40,
+        "h": 40
+      }
+    },
+    {
+      "id": null,
+      "cls": "editor__materialbtn__icon__canvas js-icon__canvas tilt",
+      "rect": {
+        "x": 639,
+        "y": 169,
+        "w": 57,
+        "h": 57
+      }
+    },
+    {
+      "id": "scribble-canvas",
+      "cls": null,
+      "rect": {
+        "x": 0,
+        "y": 0,
+        "w": 0,
+        "h": 0
+      }
+    },
+    {
+      "id": "scribble-popup-canvas",
+      "cls": null,
+      "rect": {
+        "x": 0,
+        "y": 0,
+        "w": 0,
+        "h": 0
+      }
+    },
+    {
+      "id": "tk-sketch-canvas",
+      "cls": null,
+      "rect": {
+        "x": 0,
+        "y": 0,
+        "w": 0,
+        "h": 0
+      }
+    }
+  ],
+  "total": 74,
+  "grouped": {
+    "header": [
+      {
+        "tag": "a",
+        "id": "topnav-title",
+        "cls": "editor__topnav__title js-editor__topnav__title",
+        "title": null,
+        "ariaLabel": null,
+        "dataTestid": null,
+        "role": null,
+        "text": "Bodacious Gaaris",
+        "rect": {
+          "x": 93,
+          "y": 0,
+          "w": 134,
+          "h": 48
+        },
+        "depth": 0
+      },
+      {
+        "tag": "a",
+        "id": null,
+        "cls": "",
+        "title": null,
+        "ariaLabel": null,
+        "dataTestid": null,
+        "role": null,
+        "text": "",
+        "rect": {
+          "x": 738,
+          "y": 0,
+          "w": 50,
+          "h": 48
+        },
+        "depth": 0
+      },
+      {
+        "tag": "a",
+        "id": null,
+        "cls": "",
+        "title": null,
+        "ariaLabel": null,
+        "dataTestid": null,
+        "role": null,
+        "text": "",
+        "rect": {
+          "x": 788,
+          "y": 0,
+          "w": 50,
+          "h": 48
+        },
+        "depth": 0
+      },
+      {
+        "tag": "a",
+        "id": null,
+        "cls": "",
+        "title": null,
+        "ariaLabel": null,
+        "dataTestid": null,
+        "role": null,
+        "text": "",
+        "rect": {
+          "x": 837,
+          "y": 0,
+          "w": 50,
+          "h": 48
+        },
+        "depth": 0
+      },
+      {
+        "tag": "a",
+        "id": null,
+        "cls": "",
+        "title": null,
+        "ariaLabel": null,
+        "dataTestid": null,
+        "role": null,
+        "text": "",
+        "rect": {
+          "x": 887,
+          "y": 0,
+          "w": 50,
+          "h": 48
+        },
+        "depth": 0
+      },
+      {
+        "tag": "a",
+        "id": null,
+        "cls": "",
+        "title": null,
+        "ariaLabel": null,
+        "dataTestid": null,
+        "role": null,
+        "text": "",
+        "rect": {
+          "x": 937,
+          "y": 0,
+          "w": 50,
+          "h": 48
+        },
+        "depth": 0
+      },
+      {
+        "tag": "a",
+        "id": null,
+        "cls": "",
+        "title": null,
+        "ariaLabel": null,
+        "dataTestid": null,
+        "role": null,
+        "text": "",
+        "rect": {
+          "x": 986,
+          "y": 1,
+          "w": 50,
+          "h": 48
+        },
+        "depth": 0
+      },
+      {
+        "tag": "a",
+        "id": null,
+        "cls": "js-editor__topnav__logo",
+        "title": null,
+        "ariaLabel": null,
+        "dataTestid": null,
+        "role": null,
+        "text": "",
+        "rect": {
+          "x": 0,
+          "y": 36,
+          "w": 48,
+          "h": 15
+        },
+        "depth": 0
+      },
+      {
+        "tag": "a",
+        "id": null,
+        "cls": "js-editor__tab__subnav__tool__link mouse--action",
+        "title": null,
+        "ariaLabel": null,
+        "dataTestid": null,
+        "role": null,
+        "text": "",
+        "rect": {
+          "x": 0,
+          "y": 48,
+          "w": 48,
+          "h": 48
+        },
+        "depth": 0
+      },
+      {
+        "tag": "a",
+        "id": null,
+        "cls": "js-editor__tab__subnav__tool__link mouse--action",
+        "title": null,
+        "ariaLabel": null,
+        "dataTestid": null,
+        "role": null,
+        "text": "",
+        "rect": {
+          "x": 48,
+          "y": 48,
+          "w": 48,
+          "h": 48
+        },
+        "depth": 0
+      },
+      {
+        "tag": "a",
+        "id": null,
+        "cls": "js-editor__tab__subnav__tool__link mouse--action",
+        "title": null,
+        "ariaLabel": null,
+        "dataTestid": null,
+        "role": null,
+        "text": "",
+        "rect": {
+          "x": 96,
+          "y": 48,
+          "w": 48,
+          "h": 48
+        },
+        "depth": 0
+      },
+      {
+        "tag": "a",
+        "id": null,
+        "cls": "js-editor__tab__subnav__tool__link mouse--action",
+        "title": null,
+        "ariaLabel": null,
+        "dataTestid": null,
+        "role": null,
+        "text": "",
+        "rect": {
+          "x": 144,
+          "y": 48,
+          "w": 48,
+          "h": 48
+        },
+        "depth": 0
+      },
+      {
+        "tag": "a",
+        "id": null,
+        "cls": "js-editor__tab__subnav__tool__link mouse--action",
+        "title": null,
+        "ariaLabel": null,
+        "dataTestid": null,
+        "role": null,
+        "text": "",
+        "rect": {
+          "x": 193,
+          "y": 48,
+          "w": 48,
+          "h": 48
+        },
+        "depth": 0
+      },
+      {
+        "tag": "a",
+        "id": null,
+        "cls": "js-editor__tab__subnav__tool__link mouse--action",
+        "title": null,
+        "ariaLabel": null,
+        "dataTestid": null,
+        "role": null,
+        "text": "",
+        "rect": {
+          "x": 241,
+          "y": 48,
+          "w": 48,
+          "h": 48
+        },
+        "depth": 0
+      },
+      {
+        "tag": "a",
+        "id": null,
+        "cls": "js-editor__tab__subnav__tool__link mouse--action",
+        "title": null,
+        "ariaLabel": null,
+        "dataTestid": null,
+        "role": null,
+        "text": "",
+        "rect": {
+          "x": 529,
+          "y": 48,
+          "w": 42,
+          "h": 48
+        },
+        "depth": 0
+      },
+      {
+        "tag": "a",
+        "id": null,
+        "cls": "js-editor__tab__subnav__tool__link mouse--action",
+        "title": null,
+        "ariaLabel": null,
+        "dataTestid": null,
+        "role": null,
+        "text": "",
+        "rect": {
+          "x": 571,
+          "y": 48,
+          "w": 30,
+          "h": 48
+        },
+        "depth": 0
+      },
+      {
+        "tag": "a",
+        "id": null,
+        "cls": "js-editor__tab__subnav__tool__link mouse--action",
+        "title": null,
+        "ariaLabel": null,
+        "dataTestid": null,
+        "role": null,
+        "text": "",
+        "rect": {
+          "x": 602,
+          "y": 48,
+          "w": 48,
+          "h": 48
+        },
+        "depth": 0
+      },
+      {
+        "tag": "a",
+        "id": null,
+        "cls": "js-editor__tab__subnav__tool__link mouse--action",
+        "title": null,
+        "ariaLabel": null,
+        "dataTestid": null,
+        "role": null,
+        "text": "",
+        "rect": {
+          "x": 650,
+          "y": 48,
+          "w": 48,
+          "h": 48
+        },
+        "depth": 0
+      },
+      {
+        "tag": "a",
+        "id": null,
+        "cls": "js-editor__tab__subnav__tool__link mouse--action",
+        "title": null,
+        "ariaLabel": null,
+        "dataTestid": null,
+        "role": null,
+        "text": "",
+        "rect": {
+          "x": 698,
+          "y": 48,
+          "w": 48,
+          "h": 48
+        },
+        "depth": 0
+      },
+      {
+        "tag": "a",
+        "id": null,
+        "cls": "js-editor__tab__subnav__tool__link mouse--action",
+        "title": null,
+        "ariaLabel": null,
+        "dataTestid": null,
+        "role": null,
+        "text": "",
+        "rect": {
+          "x": 747,
+          "y": 48,
+          "w": 48,
+          "h": 48
+        },
+        "depth": 0
+      },
+      {
+        "tag": "a",
+        "id": null,
+        "cls": "js-editor__tab__subnav__tool__link mouse--action",
+        "title": null,
+        "ariaLabel": null,
+        "dataTestid": null,
+        "role": null,
+        "text": "",
+        "rect": {
+          "x": 795,
+          "y": 48,
+          "w": 48,
+          "h": 48
+        },
+        "depth": 0
+      },
+      {
+        "tag": "a",
+        "id": null,
+        "cls": "js-editor__tab__subnav__tool__link mouse--action",
+        "title": null,
+        "ariaLabel": null,
+        "dataTestid": null,
+        "role": null,
+        "text": "",
+        "rect": {
+          "x": 843,
+          "y": 48,
+          "w": 48,
+          "h": 48
+        },
+        "depth": 0
+      },
+      {
+        "tag": "a",
+        "id": null,
+        "cls": "js-editor__tab__subnav__tool__link mouse--action",
+        "title": null,
+        "ariaLabel": null,
+        "dataTestid": null,
+        "role": null,
+        "text": "",
+        "rect": {
+          "x": 891,
+          "y": 48,
+          "w": 48,
+          "h": 48
+        },
+        "depth": 0
+      },
+      {
+        "tag": "a",
+        "id": null,
+        "cls": "js-editor__tab__subnav__tool__link mouse--action",
+        "title": null,
+        "ariaLabel": null,
+        "dataTestid": null,
+        "role": null,
+        "text": "",
+        "rect": {
+          "x": 939,
+          "y": 48,
+          "w": 48,
+          "h": 48
+        },
+        "depth": 0
+      },
+      {
+        "tag": "a",
+        "id": null,
+        "cls": "js-editor__tab__subnav__tool__link mouse--action",
+        "title": null,
+        "ariaLabel": null,
+        "dataTestid": null,
+        "role": null,
+        "text": "",
+        "rect": {
+          "x": 988,
+          "y": 48,
+          "w": 48,
+          "h": 48
+        },
+        "depth": 0
+      }
+    ],
+    "bottom-hud": [
+      {
+        "tag": "a",
+        "id": null,
+        "cls": "editor__inspector__item__button editor__btn btn--m btn--none_base_borders js-ins",
+        "title": null,
+        "ariaLabel": null,
+        "dataTestid": null,
+        "role": null,
+        "text": "Settings",
+        "rect": {
+          "x": 661,
+          "y": 841,
+          "w": 89,
+          "h": 21
+        },
+        "depth": 0
+      },
+      {
+        "tag": "a",
+        "id": null,
+        "cls": "editor__inspector__select__advanced__button js-inspector__select__button",
+        "title": null,
+        "ariaLabel": null,
+        "dataTestid": null,
+        "role": null,
+        "text": "1.0 mm",
+        "rect": {
+          "x": 674,
+          "y": 873,
+          "w": 75,
+          "h": 20
+        },
+        "depth": 0
+      }
+    ],
+    "toolbar": [
+      {
+        "tag": "div",
+        "id": "sidebarContainer",
+        "cls": "",
+        "title": null,
+        "ariaLabel": null,
+        "dataTestid": null,
+        "role": null,
+        "text": "Shapes Library\nYour Creations\nFavorites\nBasic Shapes\nLetters",
+        "rect": {
+          "x": 760,
+          "y": 96,
+          "w": 276,
+          "h": 809
+        },
+        "depth": 0
+      }
+    ],
+    "right-panel": [
+      {
+        "tag": "div",
+        "id": "sidebarCategoryBtn",
+        "cls": "selectbox non-selectable",
+        "title": null,
+        "ariaLabel": null,
+        "dataTestid": null,
+        "role": null,
+        "text": "Basic Shapes",
+        "rect": {
+          "x": 770,
+          "y": 172,
+          "w": 209,
+          "h": 46
+        },
+        "depth": 0
+      },
+      {
+        "tag": "div",
+        "id": "searchBtn",
+        "cls": "selectbox non-selectable",
+        "title": null,
+        "ariaLabel": null,
+        "dataTestid": null,
+        "role": null,
+        "text": "",
+        "rect": {
+          "x": 979,
+          "y": 172,
+          "w": 47,
+          "h": 46
+        },
+        "depth": 0
+      },
+      {
+        "tag": "div",
+        "id": "sidebar-item-box-1",
+        "cls": "sidebar-item non-selectable twopointoh",
+        "title": null,
+        "ariaLabel": "Box",
+        "dataTestid": null,
+        "role": null,
+        "text": "",
+        "rect": {
+          "x": 770,
+          "y": 229,
+          "w": 82,
+          "h": 91
+        },
+        "depth": 0
+      },
+      {
+        "tag": "div",
+        "id": "sidebar-item-cylinder-1",
+        "cls": "sidebar-item non-selectable twopointoh",
+        "title": null,
+        "ariaLabel": "Cylinder",
+        "dataTestid": null,
+        "role": null,
+        "text": "",
+        "rect": {
+          "x": 857,
+          "y": 229,
+          "w": 82,
+          "h": 91
+        },
+        "depth": 0
+      },
+      {
+        "tag": "div",
+        "id": "sidebar-item-sphere-1",
+        "cls": "sidebar-item non-selectable twopointoh",
+        "title": null,
+        "ariaLabel": "Sphere",
+        "dataTestid": null,
+        "role": null,
+        "text": "",
+        "rect": {
+          "x": 944,
+          "y": 229,
+          "w": 82,
+          "h": 91
+        },
+        "depth": 0
+      },
+      {
+        "tag": "div",
+        "id": null,
+        "cls": "item-btn favorite-btn favorited",
+        "title": null,
+        "ariaLabel": "Unfavorite",
+        "dataTestid": null,
+        "role": "button",
+        "text": "",
+        "rect": {
+          "x": 821,
+          "y": 230,
+          "w": 30,
+          "h": 30
+        },
+        "depth": 0
+      },
+      {
+        "tag": "div",
+        "id": "sidebar-item-box",
+        "cls": "sidebar-item non-selectable twopointoh",
+        "title": null,
+        "ariaLabel": "Box",
+        "dataTestid": null,
+        "role": null,
+        "text": "",
+        "rect": {
+          "x": 770,
+          "y": 328,
+          "w": 82,
+          "h": 91
+        },
+        "depth": 0
+      },
+      {
+        "tag": "div",
+        "id": "sidebar-item-cylinder",
+        "cls": "sidebar-item non-selectable twopointoh",
+        "title": null,
+        "ariaLabel": "Cylinder",
+        "dataTestid": null,
+        "role": null,
+        "text": "",
+        "rect": {
+          "x": 857,
+          "y": 328,
+          "w": 82,
+          "h": 91
+        },
+        "depth": 0
+      },
+      {
+        "tag": "div",
+        "id": "sidebar-item-sphere",
+        "cls": "sidebar-item non-selectable twopointoh",
+        "title": null,
+        "ariaLabel": "Sphere",
+        "dataTestid": null,
+        "role": null,
+        "text": "",
+        "rect": {
+          "x": 944,
+          "y": 328,
+          "w": 82,
+          "h": 91
+        },
+        "depth": 0
+      },
+      {
+        "tag": "div",
+        "id": "sidebar-item-sketch1",
+        "cls": "sidebar-item non-selectable twopointoh",
+        "title": null,
+        "ariaLabel": "Extrude sketch",
+        "dataTestid": null,
+        "role": null,
+        "text": "",
+        "rect": {
+          "x": 770,
+          "y": 431,
+          "w": 82,
+          "h": 91
+        },
+        "depth": 0
+      },
+      {
+        "tag": "div",
+        "id": "sidebar-item-sketchRevolve1",
+        "cls": "sidebar-item non-selectable twopointoh",
+        "title": null,
+        "ariaLabel": "Revolve sketch",
+        "dataTestid": null,
+        "role": null,
+        "text": "",
+        "rect": {
+          "x": 857,
+          "y": 431,
+          "w": 82,
+          "h": 91
+        },
+        "depth": 0
+      },
+      {
+        "tag": "div",
+        "id": "sidebar-item-scribble1",
+        "cls": "sidebar-item non-selectable twopointoh",
+        "title": null,
+        "ariaLabel": "Scribble",
+        "dataTestid": null,
+        "role": null,
+        "text": "",
+        "rect": {
+          "x": 944,
+          "y": 431,
+          "w": 82,
+          "h": 91
+        },
+        "depth": 0
+      },
+      {
+        "tag": "div",
+        "id": "sidebar-collapse-button",
+        "cls": "sidebar-toggleBtn",
+        "title": null,
+        "ariaLabel": null,
+        "dataTestid": null,
+        "role": null,
+        "text": "",
+        "rect": {
+          "x": 750,
+          "y": 478,
+          "w": 16,
+          "h": 46
+        },
+        "depth": 0
+      },
+      {
+        "tag": "div",
+        "id": "sidebar-item-cone",
+        "cls": "sidebar-item non-selectable twopointoh",
+        "title": null,
+        "ariaLabel": "Cone",
+        "dataTestid": null,
+        "role": null,
+        "text": "",
+        "rect": {
+          "x": 770,
+          "y": 534,
+          "w": 82,
+          "h": 91
+        },
+        "depth": 0
+      },
+      {
+        "tag": "div",
+        "id": "sidebar-item-pyramid",
+        "cls": "sidebar-item non-selectable twopointoh",
+        "title": null,
+        "ariaLabel": "Pyramid",
+        "dataTestid": null,
+        "role": null,
+        "text": "",
+        "rect": {
+          "x": 857,
+          "y": 534,
+          "w": 82,
+          "h": 91
+        },
+        "depth": 0
+      },
+      {
+        "tag": "div",
+        "id": "sidebar-item-roof",
+        "cls": "sidebar-item non-selectable twopointoh",
+        "title": null,
+        "ariaLabel": "Roof",
+        "dataTestid": null,
+        "role": null,
+        "text": "",
+        "rect": {
+          "x": 944,
+          "y": 534,
+          "w": 82,
+          "h": 91
+        },
+        "depth": 0
+      },
+      {
+        "tag": "div",
+        "id": "sidebar-item-text",
+        "cls": "sidebar-item non-selectable twopointoh",
+        "title": null,
+        "ariaLabel": "Text",
+        "dataTestid": null,
+        "role": null,
+        "text": "",
+        "rect": {
+          "x": 770,
+          "y": 638,
+          "w": 82,
+          "h": 91
+        },
+        "depth": 0
+      },
+      {
+        "tag": "div",
+        "id": null,
+        "cls": "item-btn favorite-btn favorited",
+        "title": null,
+        "ariaLabel": "Unfavorite",
+        "dataTestid": null,
+        "role": "button",
+        "text": "",
+        "rect": {
+          "x": 821,
+          "y": 638,
+          "w": 30,
+          "h": 30
+        },
+        "depth": 0
+      },
+      {
+        "tag": "div",
+        "id": "sidebar-item-halfCylinder",
+        "cls": "sidebar-item non-selectable twopointoh",
+        "title": null,
+        "ariaLabel": "Round Roof",
+        "dataTestid": null,
+        "role": null,
+        "text": "",
+        "rect": {
+          "x": 857,
+          "y": 638,
+          "w": 82,
+          "h": 91
+        },
+        "depth": 0
+      },
+      {
+        "tag": "div",
+        "id": "sidebar-item-halfSphere",
+        "cls": "sidebar-item non-selectable twopointoh",
+        "title": null,
+        "ariaLabel": "Half Sphere",
+        "dataTestid": null,
+        "role": null,
+        "text": "",
+        "rect": {
+          "x": 944,
+          "y": 638,
+          "w": 82,
+          "h": 91
+        },
+        "depth": 0
+      },
+      {
+        "tag": "div",
+        "id": "sidebar-item-torus",
+        "cls": "sidebar-item non-selectable twopointoh",
+        "title": null,
+        "ariaLabel": "Torus",
+        "dataTestid": null,
+        "role": null,
+        "text": "",
+        "rect": {
+          "x": 770,
+          "y": 741,
+          "w": 82,
+          "h": 91
+        },
+        "depth": 0
+      },
+      {
+        "tag": "div",
+        "id": "sidebar-item-tube2",
+        "cls": "sidebar-item non-selectable twopointoh",
+        "title": null,
+        "ariaLabel": "Tube",
+        "dataTestid": null,
+        "role": null,
+        "text": "",
+        "rect": {
+          "x": 857,
+          "y": 741,
+          "w": 82,
+          "h": 91
+        },
+        "depth": 0
+      },
+      {
+        "tag": "div",
+        "id": "sidebar-item-ring",
+        "cls": "sidebar-item non-selectable twopointoh",
+        "title": null,
+        "ariaLabel": "Ring",
+        "dataTestid": null,
+        "role": null,
+        "text": "",
+        "rect": {
+          "x": 944,
+          "y": 741,
+          "w": 82,
+          "h": 91
+        },
+        "depth": 0
+      },
+      {
+        "tag": "div",
+        "id": "sidebar-item-wedge",
+        "cls": "sidebar-item non-selectable twopointoh",
+        "title": null,
+        "ariaLabel": "Wedge",
+        "dataTestid": null,
+        "role": null,
+        "text": "",
+        "rect": {
+          "x": 770,
+          "y": 844,
+          "w": 82,
+          "h": 91
+        },
+        "depth": 0
+      },
+      {
+        "tag": "div",
+        "id": "sidebar-item-polygon",
+        "cls": "sidebar-item non-selectable twopointoh",
+        "title": null,
+        "ariaLabel": "Polygon",
+        "dataTestid": null,
+        "role": null,
+        "text": "",
+        "rect": {
+          "x": 857,
+          "y": 844,
+          "w": 82,
+          "h": 91
+        },
+        "depth": 0
+      },
+      {
+        "tag": "div",
+        "id": "sidebar-item-icosahedron",
+        "cls": "sidebar-item non-selectable twopointoh",
+        "title": null,
+        "ariaLabel": "Icosahedron",
+        "dataTestid": null,
+        "role": null,
+        "text": "",
+        "rect": {
+          "x": 944,
+          "y": 844,
+          "w": 82,
+          "h": 91
+        },
+        "depth": 0
+      },
+      {
+        "tag": "div",
+        "id": "sidebar-item-star",
+        "cls": "sidebar-item non-selectable twopointoh",
+        "title": null,
+        "ariaLabel": "Star",
+        "dataTestid": null,
+        "role": null,
+        "text": "",
+        "rect": {
+          "x": 770,
+          "y": 948,
+          "w": 82,
+          "h": 91
+        },
+        "depth": 0
+      },
+      {
+        "tag": "div",
+        "id": "sidebar-item-extrudeStar",
+        "cls": "sidebar-item non-selectable twopointoh",
+        "title": null,
+        "ariaLabel": "Star",
+        "dataTestid": null,
+        "role": null,
+        "text": "",
+        "rect": {
+          "x": 857,
+          "y": 948,
+          "w": 82,
+          "h": 91
+        },
+        "depth": 0
+      },
+      {
+        "tag": "div",
+        "id": "sidebar-item-heart",
+        "cls": "sidebar-item non-selectable twopointoh",
+        "title": null,
+        "ariaLabel": "Heart",
+        "dataTestid": null,
+        "role": null,
+        "text": "",
+        "rect": {
+          "x": 944,
+          "y": 948,
+          "w": 82,
+          "h": 91
+        },
+        "depth": 0
+      },
+      {
+        "tag": "div",
+        "id": "selectionPanelCloseBtn",
+        "cls": "selection-panel-header",
+        "title": null,
+        "ariaLabel": null,
+        "dataTestid": null,
+        "role": null,
+        "text": "Shapes Library",
+        "rect": {
+          "x": 767,
+          "y": 992,
+          "w": 262,
+          "h": 40
+        },
+        "depth": 0
+      },
+      {
+        "tag": "div",
+        "id": "selectionPanelOption-0",
+        "cls": "selection-panel-option",
+        "title": null,
+        "ariaLabel": null,
+        "dataTestid": null,
+        "role": null,
+        "text": "Your Creations",
+        "rect": {
+          "x": 767,
+          "y": 1038,
+          "w": 262,
+          "h": 50
+        },
+        "depth": 0
+      },
+      {
+        "tag": "button",
+        "id": null,
+        "cls": "button button--size--standard button--type--primary button--float--inherit butto",
+        "title": null,
+        "ariaLabel": "More Shapes",
+        "dataTestid": null,
+        "role": "button",
+        "text": "More Shapes",
+        "rect": {
+          "x": 839,
+          "y": 1049,
+          "w": 119,
+          "h": 37
+        },
+        "depth": 0
+      },
+      {
+        "tag": "div",
+        "id": "selectionPanelOption-1",
+        "cls": "selection-panel-option group-end",
+        "title": null,
+        "ariaLabel": null,
+        "dataTestid": null,
+        "role": null,
+        "text": "Favorites",
+        "rect": {
+          "x": 767,
+          "y": 1088,
+          "w": 262,
+          "h": 50
+        },
+        "depth": 0
+      },
+      {
+        "tag": "div",
+        "id": "selectionPanelOption-2",
+        "cls": "selection-panel-option selected group-start",
+        "title": null,
+        "ariaLabel": null,
+        "dataTestid": null,
+        "role": null,
+        "text": "Basic Shapes",
+        "rect": {
+          "x": 767,
+          "y": 1142,
+          "w": 262,
+          "h": 50
+        },
+        "depth": 0
+      },
+      {
+        "tag": "div",
+        "id": "selectionPanelOption-3",
+        "cls": "selection-panel-option",
+        "title": null,
+        "ariaLabel": null,
+        "dataTestid": null,
+        "role": null,
+        "text": "Letters & Numbers",
+        "rect": {
+          "x": 767,
+          "y": 1192,
+          "w": 262,
+          "h": 50
+        },
+        "depth": 0
+      },
+      {
+        "tag": "div",
+        "id": "selectionPanelOption-4",
+        "cls": "selection-panel-option",
+        "title": null,
+        "ariaLabel": null,
+        "dataTestid": null,
+        "role": null,
+        "text": "Design Starters",
+        "rect": {
+          "x": 767,
+          "y": 1242,
+          "w": 262,
+          "h": 50
+        },
+        "depth": 0
+      },
+      {
+        "tag": "div",
+        "id": "selectionPanelOption-5",
+        "cls": "selection-panel-option",
+        "title": null,
+        "ariaLabel": null,
+        "dataTestid": null,
+        "role": null,
+        "text": "Creatures & Characters",
+        "rect": {
+          "x": 767,
+          "y": 1292,
+          "w": 262,
+          "h": 50
+        },
+        "depth": 0
+      },
+      {
+        "tag": "div",
+        "id": "selectionPanelOption-6",
+        "cls": "selection-panel-option",
+        "title": null,
+        "ariaLabel": null,
+        "dataTestid": null,
+        "role": null,
+        "text": "Vehicles & Machines",
+        "rect": {
+          "x": 767,
+          "y": 1342,
+          "w": 262,
+          "h": 50
+        },
+        "depth": 0
+      },
+      {
+        "tag": "div",
+        "id": "selectionPanelOption-7",
+        "cls": "selection-panel-option",
+        "title": null,
+        "ariaLabel": null,
+        "dataTestid": null,
+        "role": null,
+        "text": "Structures & Scenery",
+        "rect": {
+          "x": 767,
+          "y": 1392,
+          "w": 262,
+          "h": 50
+        },
+        "depth": 0
+      },
+      {
+        "tag": "div",
+        "id": "selectionPanelOption-9",
+        "cls": "selection-panel-option",
+        "title": null,
+        "ariaLabel": null,
+        "dataTestid": null,
+        "role": null,
+        "text": "Hardware",
+        "rect": {
+          "x": 767,
+          "y": 1442,
+          "w": 262,
+          "h": 50
+        },
+        "depth": 0
+      },
+      {
+        "tag": "div",
+        "id": "selectionPanelOption-10",
+        "cls": "selection-panel-option",
+        "title": null,
+        "ariaLabel": null,
+        "dataTestid": null,
+        "role": null,
+        "text": "Electronics",
+        "rect": {
+          "x": 767,
+          "y": 1492,
+          "w": 262,
+          "h": 50
+        },
+        "depth": 0
+      },
+      {
+        "tag": "div",
+        "id": "selectionPanelOption-11",
+        "cls": "selection-panel-option",
+        "title": null,
+        "ariaLabel": null,
+        "dataTestid": null,
+        "role": null,
+        "text": "Fun & Games",
+        "rect": {
+          "x": 767,
+          "y": 1542,
+          "w": 262,
+          "h": 50
+        },
+        "depth": 0
+      },
+      {
+        "tag": "div",
+        "id": "selectionPanelOption-13",
+        "cls": "selection-panel-option",
+        "title": null,
+        "ariaLabel": null,
+        "dataTestid": null,
+        "role": null,
+        "text": "Everyday Objects",
+        "rect": {
+          "x": 767,
+          "y": 1592,
+          "w": 262,
+          "h": 50
+        },
+        "depth": 0
+      },
+      {
+        "tag": "div",
+        "id": "selectionPanelOption-14",
+        "cls": "selection-panel-option group-end",
+        "title": null,
+        "ariaLabel": null,
+        "dataTestid": null,
+        "role": null,
+        "text": "Featured Collections",
+        "rect": {
+          "x": 767,
+          "y": 1642,
+          "w": 262,
+          "h": 50
+        },
+        "depth": 0
+      },
+      {
+        "tag": "div",
+        "id": "selectionPanelOption-15",
+        "cls": "selection-panel-option group-start group-end",
+        "title": null,
+        "ariaLabel": null,
+        "dataTestid": null,
+        "role": null,
+        "text": "Sim Lab",
+        "rect": {
+          "x": 767,
+          "y": 1696,
+          "w": 262,
+          "h": 50
+        },
+        "depth": 0
+      },
+      {
+        "tag": "div",
+        "id": "selectionPanelOption-16",
+        "cls": "selection-panel-option group-start",
+        "title": null,
+        "ariaLabel": null,
+        "dataTestid": null,
+        "role": null,
+        "text": "Shape Generators",
+        "rect": {
+          "x": 767,
+          "y": 1750,
+          "w": 262,
+          "h": 50
+        },
+        "depth": 0
+      }
+    ]
+  }
+}

@@ -1,0 +1,1670 @@
+{
+  "url": "https://www.tinkercad.com/things/4yWu87luBAC/edit?returnTo=%2Fdashboard",
+  "viewport": {
+    "w": 1036,
+    "h": 905
+  },
+  "title": "3D design Bodacious Gaaris - Tinkercad",
+  "canvases": [
+    {
+      "id": null,
+      "cls": null,
+      "rect": {
+        "x": -12,
+        "y": 84,
+        "w": 150,
+        "h": 150
+      }
+    },
+    {
+      "id": null,
+      "cls": null,
+      "rect": {
+        "x": 0,
+        "y": 96,
+        "w": 760,
+        "h": 809
+      }
+    },
+    {
+      "id": null,
+      "cls": "editor__materialHeaderbtn__icon__canvas js-icon__canvas",
+      "rect": {
+        "x": 0,
+        "y": 0,
+        "w": 0,
+        "h": 0
+      }
+    },
+    {
+      "id": null,
+      "cls": "editor__materialHeaderbtn__icon__canvas js-icon__canvas tilt",
+      "rect": {
+        "x": 0,
+        "y": 0,
+        "w": 0,
+        "h": 0
+      }
+    },
+    {
+      "id": null,
+      "cls": "editor__materialbtn__icon__canvas js-icon__canvas",
+      "rect": {
+        "x": 552,
+        "y": 177,
+        "w": 40,
+        "h": 40
+      }
+    },
+    {
+      "id": null,
+      "cls": "editor__materialbtn__icon__canvas js-icon__canvas tilt",
+      "rect": {
+        "x": 639,
+        "y": 169,
+        "w": 57,
+        "h": 57
+      }
+    },
+    {
+      "id": "scribble-canvas",
+      "cls": null,
+      "rect": {
+        "x": 0,
+        "y": 0,
+        "w": 0,
+        "h": 0
+      }
+    },
+    {
+      "id": "scribble-popup-canvas",
+      "cls": null,
+      "rect": {
+        "x": 0,
+        "y": 0,
+        "w": 0,
+        "h": 0
+      }
+    },
+    {
+      "id": "tk-sketch-canvas",
+      "cls": null,
+      "rect": {
+        "x": 0,
+        "y": 0,
+        "w": 0,
+        "h": 0
+      }
+    }
+  ],
+  "total": 74,
+  "grouped": {
+    "header": [
+      {
+        "tag": "a",
+        "id": "topnav-title",
+        "cls": "editor__topnav__title js-editor__topnav__title",
+        "title": null,
+        "ariaLabel": null,
+        "dataTestid": null,
+        "role": null,
+        "text": "Bodacious Gaaris",
+        "inner": "<div id=\"topnav-title-text\" class=\"editor__topnav__title__span js-editor__topnav__title__text\">Bodacious Gaaris</div> <input id=\"topnav-title-input\" class=\"editor__topnav__title__input js-editor__title__input\" type=\"text\" style=\"\">",
+        "rect": {
+          "x": 93,
+          "y": 0,
+          "w": 134,
+          "h": 48
+        },
+        "depth": 0
+      },
+      {
+        "tag": "a",
+        "id": null,
+        "cls": "",
+        "title": null,
+        "ariaLabel": null,
+        "dataTestid": null,
+        "role": null,
+        "text": "",
+        "inner": "<div class=\"editor__topnav__tabbutton__link js-editor__topnav__tabbutton__link editor__topnav__tabbutton__link--leftborder editor__topnav__tabbutton__link--active\"> <svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"-399 201 160 160\" role=\"img\" title=\"icon editor\"><path d=\"M-335,265h-24v-20c0-2.21,1.7",
+        "rect": {
+          "x": 738,
+          "y": 0,
+          "w": 50,
+          "h": 48
+        },
+        "depth": 0
+      },
+      {
+        "tag": "a",
+        "id": null,
+        "cls": "",
+        "title": null,
+        "ariaLabel": null,
+        "dataTestid": null,
+        "role": null,
+        "text": "",
+        "inner": "<div class=\"editor__topnav__tabbutton__link js-editor__topnav__tabbutton__link editor__topnav__tabbutton__link--leftborder\"> <svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 160 160\" role=\"img\" title=\"icon physics\"><path fill-rule=\"evenodd\" transform=\"matrix(0 .9 .9 0 84.5 94.5)\" d=\"m24.44-36.04",
+        "rect": {
+          "x": 788,
+          "y": 0,
+          "w": 50,
+          "h": 48
+        },
+        "depth": 0
+      },
+      {
+        "tag": "a",
+        "id": null,
+        "cls": "",
+        "title": null,
+        "ariaLabel": null,
+        "dataTestid": null,
+        "role": null,
+        "text": "",
+        "inner": "<div class=\"editor__topnav__tabbutton__link js-editor__topnav__tabbutton__link editor__topnav__tabbutton__link--leftborder\"> <svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"-399 201 160 160\" role=\"img\" title=\"icon tinkercraft pickaxe\"><rect x=\"-351\" y=\"249\" width=\"24\" height=\"8\"></rect><rect x=\"-35",
+        "rect": {
+          "x": 837,
+          "y": 0,
+          "w": 50,
+          "h": 48
+        },
+        "depth": 0
+      },
+      {
+        "tag": "a",
+        "id": null,
+        "cls": "",
+        "title": null,
+        "ariaLabel": null,
+        "dataTestid": null,
+        "role": null,
+        "text": "",
+        "inner": "<div class=\"editor__topnav__tabbutton__link js-editor__topnav__tabbutton__link editor__topnav__tabbutton__link--leftborder\"> <svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 40 40\" role=\"img\" title=\"icon lego\"><path d=\"M18,15h3V13a1,1,0,0,1,1-1h4a1,1,0,0,1,1,1v2h1.5A1.54,1.54,0,0,1,30,16.5V28H9V",
+        "rect": {
+          "x": 887,
+          "y": 0,
+          "w": 50,
+          "h": 48
+        },
+        "depth": 0
+      },
+      {
+        "tag": "a",
+        "id": null,
+        "cls": "",
+        "title": null,
+        "ariaLabel": null,
+        "dataTestid": null,
+        "role": null,
+        "text": "",
+        "inner": "<div class=\"editor__topnav__tabbutton__link js-editor__topnav__tabbutton__link editor__topnav__tabbutton__link--leftborder\"> <svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 160 160\" role=\"img\" title=\"icon community\"><path d=\"M80,80c12.15,0,22-9.85,22-22s-9.85-22-22-22s-22,9.85-22,22S67.85,80,80",
+        "rect": {
+          "x": 937,
+          "y": 0,
+          "w": 50,
+          "h": 48
+        },
+        "depth": 0
+      },
+      {
+        "tag": "a",
+        "id": null,
+        "cls": "",
+        "title": null,
+        "ariaLabel": null,
+        "dataTestid": null,
+        "role": null,
+        "text": "",
+        "inner": "<div class=\"editor__topnav__tabbutton__link js-editor__topnav__tabbutton__link editor__topnav__tabbutton__link--leftborder\"><div style=\"background-image: url(https://api-reader-prd.tinkercad.com/api/user/3JbX7mYbMFL/images/eaVbdYX51Lf/t40.jpg);\" class=\"editor__topnav__tabbutton__icondiv\"></div></div",
+        "rect": {
+          "x": 986,
+          "y": 1,
+          "w": 50,
+          "h": 48
+        },
+        "depth": 0
+      },
+      {
+        "tag": "a",
+        "id": null,
+        "cls": "js-editor__topnav__logo",
+        "title": null,
+        "ariaLabel": null,
+        "dataTestid": null,
+        "role": null,
+        "text": "",
+        "inner": "<img src=\"data:image/svg+xml;base64,PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz4NCjwhLS0gR2VuZXJhdG9yOiBBZG9iZSBJbGx1c3RyYXRvciAxOS4xLjEsIFNWRyBFeHBvcnQgUGx1Zy1JbiAuIFNWRyBWZXJzaW9uOiA2LjAwIEJ1aWxkIDApICAtLT4NCjxzdmcgdmVyc2lvbj0iMS4xIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHhtbG5zOnhs",
+        "rect": {
+          "x": 0,
+          "y": 36,
+          "w": 48,
+          "h": 15
+        },
+        "depth": 0
+      },
+      {
+        "tag": "a",
+        "id": null,
+        "cls": "js-editor__tab__subnav__tool__link mouse--action",
+        "title": null,
+        "ariaLabel": null,
+        "dataTestid": null,
+        "role": null,
+        "text": "",
+        "inner": "<div class=\"editor__tab__subnav__tool__svg\"><svg width=\"32\" height=\"32\" viewBox=\"0 0 32 32\" fill=\"none\" xmlns=\"http://www.w3.org/2000/svg\" role=\"img\" title=\"icon copy\"><g class=\"fill\" fill=\"#B3DDFF\"><path d=\"M10 13C10 11.3431 11.3431 10 13 10H20V7H7V20H10V13Z\"></path><path d=\"M26 13H13V26H26V13Z\"></",
+        "rect": {
+          "x": 0,
+          "y": 48,
+          "w": 48,
+          "h": 48
+        },
+        "depth": 0
+      },
+      {
+        "tag": "a",
+        "id": null,
+        "cls": "js-editor__tab__subnav__tool__link mouse--action",
+        "title": null,
+        "ariaLabel": null,
+        "dataTestid": null,
+        "role": null,
+        "text": "",
+        "inner": "<div class=\"editor__tab__subnav__tool__svg\"><svg width=\"32\" height=\"32\" viewBox=\"0 0 32 32\" fill=\"none\" xmlns=\"http://www.w3.org/2000/svg\" role=\"img\" title=\"icon paste\"><path class=\"fill\" d=\"M16 13H26V23H16V13Z\" fill=\"#B3DDFF\"></path><g class=\"icon\" fill-rule=\"evenodd\" clip-rule=\"evenodd\" fill=\"#2E4",
+        "rect": {
+          "x": 48,
+          "y": 48,
+          "w": 48,
+          "h": 48
+        },
+        "depth": 0
+      },
+      {
+        "tag": "a",
+        "id": null,
+        "cls": "js-editor__tab__subnav__tool__link mouse--action",
+        "title": null,
+        "ariaLabel": null,
+        "dataTestid": null,
+        "role": null,
+        "text": "",
+        "inner": "<div class=\"editor__tab__subnav__tool__svg\"><svg width=\"32\" height=\"32\" viewBox=\"0 0 32 32\" fill=\"none\" xmlns=\"http://www.w3.org/2000/svg\" role=\"img\" title=\"icon duplicate\"><g class=\"fill\" fill=\"#B3DDFF\"><path d=\"M7.44727 23.5967C7.59144 24.6917 8.59545 25.4623 9.69043 25.3184L15.0713 24.6094L15.366",
+        "rect": {
+          "x": 96,
+          "y": 48,
+          "w": 48,
+          "h": 48
+        },
+        "depth": 0
+      },
+      {
+        "tag": "a",
+        "id": null,
+        "cls": "js-editor__tab__subnav__tool__link mouse--action",
+        "title": null,
+        "ariaLabel": null,
+        "dataTestid": null,
+        "role": null,
+        "text": "",
+        "inner": "<div class=\"editor__tab__subnav__tool__svg\"><svg width=\"32\" height=\"32\" viewBox=\"0 0 32 32\" fill=\"none\" xmlns=\"http://www.w3.org/2000/svg\" role=\"img\" title=\"icon trash\"><g class=\"fill\" fill=\"#B3DDFF\"><path fill-rule=\"evenodd\" clip-rule=\"evenodd\" d=\"M9 11C9.55228 11 10 11.4477 10 12V24C10 24.6329 10.",
+        "rect": {
+          "x": 144,
+          "y": 48,
+          "w": 48,
+          "h": 48
+        },
+        "depth": 0
+      },
+      {
+        "tag": "a",
+        "id": null,
+        "cls": "js-editor__tab__subnav__tool__link mouse--action",
+        "title": null,
+        "ariaLabel": null,
+        "dataTestid": null,
+        "role": null,
+        "text": "",
+        "inner": "<div class=\"editor__tab__subnav__tool__svg\"><svg width=\"32\" height=\"32\" viewBox=\"0 0 32 32\" fill=\"none\" xmlns=\"http://www.w3.org/2000/svg\" role=\"img\" title=\"icon undo\"><path class=\"fill\" d=\"M14 20.1573L6.8349 15.5L14 10.8427V20.1573Z\" fill=\"#B3DDFF\"></path><path class=\"icon\" fill-rule=\"evenodd\" clip",
+        "rect": {
+          "x": 193,
+          "y": 48,
+          "w": 48,
+          "h": 48
+        },
+        "depth": 0
+      },
+      {
+        "tag": "a",
+        "id": null,
+        "cls": "js-editor__tab__subnav__tool__link mouse--action",
+        "title": null,
+        "ariaLabel": null,
+        "dataTestid": null,
+        "role": null,
+        "text": "",
+        "inner": "<div class=\"editor__tab__subnav__tool__svg\"><svg width=\"32\" height=\"32\" viewBox=\"0 0 32 32\" fill=\"none\" xmlns=\"http://www.w3.org/2000/svg\" role=\"img\" title=\"icon redo\"><path class=\"fill\" d=\"M18 20.1574L25.1651 15.5001L18 10.8428V20.1574Z\" fill=\"#B3DDFF\"></path><path class=\"icon\" fill-rule=\"evenodd\" ",
+        "rect": {
+          "x": 241,
+          "y": 48,
+          "w": 48,
+          "h": 48
+        },
+        "depth": 0
+      },
+      {
+        "tag": "a",
+        "id": null,
+        "cls": "js-editor__tab__subnav__tool__link mouse--action",
+        "title": null,
+        "ariaLabel": null,
+        "dataTestid": null,
+        "role": null,
+        "text": "",
+        "inner": "<div class=\"editor__tab__subnav__tool__svg\"><svg width=\"32\" height=\"32\" viewBox=\"0 0 32 32\" fill=\"none\" xmlns=\"http://www.w3.org/2000/svg\" role=\"img\" title=\"icon object visible\"><path class=\"fill\" fill-rule=\"evenodd\" clip-rule=\"evenodd\" d=\"M16 4C20.4183 4 24 7.58172 24 12C24 14.0961 23.1951 16.0011 ",
+        "rect": {
+          "x": 529,
+          "y": 48,
+          "w": 42,
+          "h": 48
+        },
+        "depth": 0
+      },
+      {
+        "tag": "a",
+        "id": null,
+        "cls": "js-editor__tab__subnav__tool__link mouse--action",
+        "title": null,
+        "ariaLabel": null,
+        "dataTestid": null,
+        "role": null,
+        "text": "",
+        "inner": "<div class=\"editor__tab__subnav__tool__svg\"><svg width=\"6\" height=\"4\" viewBox=\"0 0 6 4\" xmlns=\"http://www.w3.org/2000/svg\" role=\"img\" title=\"icon dropdown triangle\"><path d=\"M0,0 L6,0 L3,3.3 L0,0 Z\" fill=\"#000\" fill-rule=\"evenodd\"></path></svg></div>",
+        "rect": {
+          "x": 571,
+          "y": 48,
+          "w": 30,
+          "h": 48
+        },
+        "depth": 0
+      },
+      {
+        "tag": "a",
+        "id": null,
+        "cls": "js-editor__tab__subnav__tool__link mouse--action",
+        "title": null,
+        "ariaLabel": null,
+        "dataTestid": null,
+        "role": null,
+        "text": "",
+        "inner": "<div class=\"editor__tab__subnav__tool__svg\"><svg width=\"32\" height=\"32\" viewBox=\"0 0 32 32\" fill=\"none\" xmlns=\"http://www.w3.org/2000/svg\"> <g class=\"fill\"> <path d=\"M24 28C24.5523 28 25 28.4477 25 29C25 29.5523 24.5523 30 24 30H8C7.44772 30 7 29.5523 7 29C7 28.4477 7.44772 28 8 28H24Z\" fill=\"#B3DDF",
+        "rect": {
+          "x": 602,
+          "y": 48,
+          "w": 48,
+          "h": 48
+        },
+        "depth": 0
+      },
+      {
+        "tag": "a",
+        "id": null,
+        "cls": "js-editor__tab__subnav__tool__link mouse--action",
+        "title": null,
+        "ariaLabel": null,
+        "dataTestid": null,
+        "role": null,
+        "text": "",
+        "inner": "<div class=\"editor__tab__subnav__tool__svg\"><svg width=\"32\" height=\"32\" viewBox=\"0 0 32 32\" fill=\"none\" xmlns=\"http://www.w3.org/2000/svg\"> <g class=\"fill-dark\"> <path d=\"M19.5 11C20.0137 11 20.5154 11.051 21 11.1494V20C21 20.5523 20.5523 21 20 21H12.4287C12.2052 20.3678 12.0645 19.6971 12.0186 19H1",
+        "rect": {
+          "x": 650,
+          "y": 48,
+          "w": 48,
+          "h": 48
+        },
+        "depth": 0
+      },
+      {
+        "tag": "a",
+        "id": null,
+        "cls": "js-editor__tab__subnav__tool__link mouse--action",
+        "title": null,
+        "ariaLabel": null,
+        "dataTestid": null,
+        "role": null,
+        "text": "",
+        "inner": "<div class=\"editor__tab__subnav__tool__svg\"><svg width=\"32\" height=\"32\" viewBox=\"0 0 32 32\" fill=\"none\" xmlns=\"http://www.w3.org/2000/svg\"> <path class=\"fill\" d=\"M5 5H13V13H5V5Z\" fill=\"#B3DDFF\"></path> <g class=\"icon\"> <path fill-rule=\"evenodd\" clip-rule=\"evenodd\" d=\"M23.0001 16.0001C26.8661 16.0001",
+        "rect": {
+          "x": 698,
+          "y": 48,
+          "w": 48,
+          "h": 48
+        },
+        "depth": 0
+      },
+      {
+        "tag": "a",
+        "id": null,
+        "cls": "js-editor__tab__subnav__tool__link mouse--action",
+        "title": null,
+        "ariaLabel": null,
+        "dataTestid": null,
+        "role": null,
+        "text": "",
+        "inner": "<div class=\"editor__tab__subnav__tool__svg\"><svg width=\"32\" height=\"32\" viewBox=\"0 0 32 32\" fill=\"none\" xmlns=\"http://www.w3.org/2000/svg\" role=\"img\" title=\"icon align\"><path class=\"fill\" d=\"M9 19H27V25H9V19Z\" fill=\"#B3DDFF\"></path><g class=\"icon\" fill=\"#2E4258\"><path d=\"M4 3C4.55228 3 5 3.41588 5 3",
+        "rect": {
+          "x": 747,
+          "y": 48,
+          "w": 48,
+          "h": 48
+        },
+        "depth": 0
+      },
+      {
+        "tag": "a",
+        "id": null,
+        "cls": "js-editor__tab__subnav__tool__link mouse--action",
+        "title": null,
+        "ariaLabel": null,
+        "dataTestid": null,
+        "role": null,
+        "text": "",
+        "inner": "<div class=\"editor__tab__subnav__tool__svg\"><svg width=\"32\" height=\"32\" viewBox=\"0 0 32 32\" fill=\"none\" xmlns=\"http://www.w3.org/2000/svg\" role=\"img\" title=\"icon flip vertical\"><path class=\"fill\" d=\"M27.3477 25H19V9.06348L27.3477 25Z\" fill=\"#B3DDFF\"></path><g class=\"icon\" fill-rule=\"evenodd\" clip-ru",
+        "rect": {
+          "x": 795,
+          "y": 48,
+          "w": 48,
+          "h": 48
+        },
+        "depth": 0
+      },
+      {
+        "tag": "a",
+        "id": null,
+        "cls": "js-editor__tab__subnav__tool__link mouse--action",
+        "title": null,
+        "ariaLabel": null,
+        "dataTestid": null,
+        "role": null,
+        "text": "",
+        "inner": "<div class=\"editor__tab__subnav__tool__svg\"><svg width=\"32\" height=\"32\" viewBox=\"0 0 32 32\" fill=\"none\" xmlns=\"http://www.w3.org/2000/svg\" role=\"img\" title=\"icon cruise\"><g class=\"fill\" fill=\"#B3DDFF\"><path d=\"M12.9644 5.81869C16.1734 4.95884 19.45 6.84106 20.2964 9.99935L21.4546 14.3236L19.522 14.8",
+        "rect": {
+          "x": 843,
+          "y": 48,
+          "w": 48,
+          "h": 48
+        },
+        "depth": 0
+      },
+      {
+        "tag": "a",
+        "id": null,
+        "cls": "js-editor__tab__subnav__tool__link mouse--action",
+        "title": null,
+        "ariaLabel": null,
+        "dataTestid": null,
+        "role": null,
+        "text": "",
+        "inner": "<div class=\"editor__tab__subnav__tool__svg\"><svg width=\"32\" height=\"32\" viewBox=\"0 0 32 32\" fill=\"none\" xmlns=\"http://www.w3.org/2000/svg\" role=\"img\" title=\"icon shape workplane\"><g class=\"fill\" fill=\"#99FFAB\"><path d=\"M21.6686 14.2631L20.1686 11.665L22.1319 10.5315L24.4524 12.6559L21.6686 14.2631Z\"",
+        "rect": {
+          "x": 891,
+          "y": 48,
+          "w": 48,
+          "h": 48
+        },
+        "depth": 0
+      },
+      {
+        "tag": "a",
+        "id": null,
+        "cls": "js-editor__tab__subnav__tool__link mouse--action",
+        "title": null,
+        "ariaLabel": null,
+        "dataTestid": null,
+        "role": null,
+        "text": "",
+        "inner": "<div class=\"editor__tab__subnav__tool__svg\"><svg width=\"32\" height=\"32\" viewBox=\"0 0 32 32\" fill=\"none\" xmlns=\"http://www.w3.org/2000/svg\" role=\"img\" title=\"icon drop to workplane\"><path class=\"fill\" d=\"M14.4999 13L11 13V22H21V13L17.5001 13C16.6125 13.6667 15.3876 13.6667 14.4999 13Z\" fill=\"#B3DDFF\"",
+        "rect": {
+          "x": 939,
+          "y": 48,
+          "w": 48,
+          "h": 48
+        },
+        "depth": 0
+      },
+      {
+        "tag": "a",
+        "id": null,
+        "cls": "js-editor__tab__subnav__tool__link mouse--action",
+        "title": null,
+        "ariaLabel": null,
+        "dataTestid": null,
+        "role": null,
+        "text": "",
+        "inner": "<div class=\"editor__tab__subnav__tool__svg\"><svg width=\"30\" height=\"30\" viewBox=\"0 0 30 30\" xmlns=\"http://www.w3.org/2000/svg\" role=\"img\" title=\"icon ellipsis\"><path d=\"M7 17C8.10457 17 9 16.1046 9 15C9 13.8954 8.10457 13 7 13C5.89543 13 5 13.8954 5 15C5 16.1046 5.89543 17 7 17Z\"></path><path d=\"M15",
+        "rect": {
+          "x": 988,
+          "y": 48,
+          "w": 48,
+          "h": 48
+        },
+        "depth": 0
+      }
+    ],
+    "bottom-hud": [
+      {
+        "tag": "a",
+        "id": null,
+        "cls": "editor__inspector__item__button editor__btn btn--m btn--none_base_borders js-ins",
+        "title": null,
+        "ariaLabel": null,
+        "dataTestid": null,
+        "role": null,
+        "text": "Settings",
+        "inner": "Settings",
+        "rect": {
+          "x": 661,
+          "y": 841,
+          "w": 89,
+          "h": 21
+        },
+        "depth": 0
+      },
+      {
+        "tag": "a",
+        "id": null,
+        "cls": "editor__inspector__select__advanced__button js-inspector__select__button",
+        "title": null,
+        "ariaLabel": null,
+        "dataTestid": null,
+        "role": null,
+        "text": "1.0 mm",
+        "inner": "<div class=\"editor__inspector__select__advanced__text\"> <span class=\"editor__inspector__select__advanced__text--category js-inspector__select__text--category\"></span> <span class=\"editor__inspector__select__advanced__text--item js-inspector__select__text--item\">1.0 mm</span> </div> <span class=\"edit",
+        "rect": {
+          "x": 674,
+          "y": 873,
+          "w": 75,
+          "h": 20
+        },
+        "depth": 0
+      }
+    ],
+    "toolbar": [
+      {
+        "tag": "div",
+        "id": "sidebarContainer",
+        "cls": "",
+        "title": null,
+        "ariaLabel": null,
+        "dataTestid": null,
+        "role": null,
+        "text": "Shapes Library\nYour Creations\nFavorites\nBasic Shapes\nLetters",
+        "inner": "<div class=\"sidebar\"><div class=\"twopointoh\"><div class=\"sidebar-toolbox twopointoh\"><div id=\"sidebar-toolbox-workplane\" class=\"sidebar-tool\" communication=\"82\" style=\"touch-action: auto; user-select: none; -webkit-user-drag: none; -webkit-tap-highlight-color: rgba(0, 0, 0, 0);\"><div class=\"twopoint",
+        "rect": {
+          "x": 760,
+          "y": 96,
+          "w": 276,
+          "h": 809
+        },
+        "depth": 0
+      }
+    ],
+    "right-panel": [
+      {
+        "tag": "div",
+        "id": "sidebarCategoryBtn",
+        "cls": "selectbox non-selectable",
+        "title": null,
+        "ariaLabel": null,
+        "dataTestid": null,
+        "role": null,
+        "text": "Basic Shapes",
+        "inner": "<div class=\"selectbox-container\"><div class=\"selectbox-selected-label\"><div class=\"selectbox-selected\">Basic Shapes</div></div><div class=\"selectbox-selected-arrow dual-arrow\"><svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 8 16\" role=\"img\" title=\"icon dual arrow_sm\"><path d=\"M0,11.75a.72.72,0,",
+        "rect": {
+          "x": 770,
+          "y": 172,
+          "w": 209,
+          "h": 46
+        },
+        "depth": 0
+      },
+      {
+        "tag": "div",
+        "id": "searchBtn",
+        "cls": "selectbox non-selectable",
+        "title": null,
+        "ariaLabel": null,
+        "dataTestid": null,
+        "role": null,
+        "text": "",
+        "inner": "<div class=\"search-btn selectbox-container\"><svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 20 20\" role=\"img\" title=\"icon magnify\"><path d=\"M19.71,18.29l-4.54-4.54c1.14-1.45,1.83-3.27,1.83-5.26C17,3.81,13.19,0,8.5,0S0,3.81,0,8.5s3.81,8.5,8.5,8.5c1.99,0,3.81-.69,5.26-1.83l4.54,4.54c.2,.2,.45,.29",
+        "rect": {
+          "x": 979,
+          "y": 172,
+          "w": 47,
+          "h": 46
+        },
+        "depth": 0
+      },
+      {
+        "tag": "div",
+        "id": "sidebar-item-box-1",
+        "cls": "sidebar-item non-selectable twopointoh",
+        "title": null,
+        "ariaLabel": "Box",
+        "dataTestid": null,
+        "role": null,
+        "text": "",
+        "inner": "<div class=\"item-btn favorite-btn favorited\" role=\"button\" aria-label=\"Unfavorite\" style=\"z-index: 1; touch-action: auto; user-select: none; -webkit-user-drag: none; -webkit-tap-highlight-color: rgba(0, 0, 0, 0);\"><svg width=\"28\" height=\"28\" viewBox=\"0 0 28 28\" xmlns=\"http://www.w3.org/2000/svg\" rol",
+        "rect": {
+          "x": 770,
+          "y": 229,
+          "w": 82,
+          "h": 91
+        },
+        "depth": 0
+      },
+      {
+        "tag": "div",
+        "id": "sidebar-item-cylinder-1",
+        "cls": "sidebar-item non-selectable twopointoh",
+        "title": null,
+        "ariaLabel": "Cylinder",
+        "dataTestid": null,
+        "role": null,
+        "text": "",
+        "inner": "<div class=\"item-btn favorite-btn\" role=\"button\" aria-label=\"Favorite\" style=\"z-index: 1; touch-action: auto; user-select: none; -webkit-user-drag: none; -webkit-tap-highlight-color: rgba(0, 0, 0, 0);\"><svg width=\"28\" height=\"28\" viewBox=\"0 0 28 28\" xmlns=\"http://www.w3.org/2000/svg\" role=\"img\" titl",
+        "rect": {
+          "x": 857,
+          "y": 229,
+          "w": 82,
+          "h": 91
+        },
+        "depth": 0
+      },
+      {
+        "tag": "div",
+        "id": "sidebar-item-sphere-1",
+        "cls": "sidebar-item non-selectable twopointoh",
+        "title": null,
+        "ariaLabel": "Sphere",
+        "dataTestid": null,
+        "role": null,
+        "text": "",
+        "inner": "<div class=\"item-btn favorite-btn\" role=\"button\" aria-label=\"Favorite\" style=\"z-index: 1; touch-action: auto; user-select: none; -webkit-user-drag: none; -webkit-tap-highlight-color: rgba(0, 0, 0, 0);\"><svg width=\"28\" height=\"28\" viewBox=\"0 0 28 28\" xmlns=\"http://www.w3.org/2000/svg\" role=\"img\" titl",
+        "rect": {
+          "x": 944,
+          "y": 229,
+          "w": 82,
+          "h": 91
+        },
+        "depth": 0
+      },
+      {
+        "tag": "div",
+        "id": null,
+        "cls": "item-btn favorite-btn favorited",
+        "title": null,
+        "ariaLabel": "Unfavorite",
+        "dataTestid": null,
+        "role": "button",
+        "text": "",
+        "inner": "<svg width=\"28\" height=\"28\" viewBox=\"0 0 28 28\" xmlns=\"http://www.w3.org/2000/svg\" role=\"img\" title=\"icon starred big\"><path d=\"M13.0178617,0.846081634 C13.5840046,-0.282027211 14.4339944,-0.282027211 14.9287878,0.846081634 L17.6881526,6.62725313 C18.182946,7.75536197 19.5990787,8.81238451 20.802713",
+        "rect": {
+          "x": 821,
+          "y": 230,
+          "w": 30,
+          "h": 30
+        },
+        "depth": 0
+      },
+      {
+        "tag": "div",
+        "id": "sidebar-item-box",
+        "cls": "sidebar-item non-selectable twopointoh",
+        "title": null,
+        "ariaLabel": "Box",
+        "dataTestid": null,
+        "role": null,
+        "text": "",
+        "inner": "<div class=\"item-btn favorite-btn\" role=\"button\" aria-label=\"Favorite\" style=\"z-index: 1; touch-action: auto; user-select: none; -webkit-user-drag: none; -webkit-tap-highlight-color: rgba(0, 0, 0, 0);\"><svg width=\"28\" height=\"28\" viewBox=\"0 0 28 28\" xmlns=\"http://www.w3.org/2000/svg\" role=\"img\" titl",
+        "rect": {
+          "x": 770,
+          "y": 328,
+          "w": 82,
+          "h": 91
+        },
+        "depth": 0
+      },
+      {
+        "tag": "div",
+        "id": "sidebar-item-cylinder",
+        "cls": "sidebar-item non-selectable twopointoh",
+        "title": null,
+        "ariaLabel": "Cylinder",
+        "dataTestid": null,
+        "role": null,
+        "text": "",
+        "inner": "<div class=\"item-btn favorite-btn\" role=\"button\" aria-label=\"Favorite\" style=\"z-index: 1; touch-action: auto; user-select: none; -webkit-user-drag: none; -webkit-tap-highlight-color: rgba(0, 0, 0, 0);\"><svg width=\"28\" height=\"28\" viewBox=\"0 0 28 28\" xmlns=\"http://www.w3.org/2000/svg\" role=\"img\" titl",
+        "rect": {
+          "x": 857,
+          "y": 328,
+          "w": 82,
+          "h": 91
+        },
+        "depth": 0
+      },
+      {
+        "tag": "div",
+        "id": "sidebar-item-sphere",
+        "cls": "sidebar-item non-selectable twopointoh",
+        "title": null,
+        "ariaLabel": "Sphere",
+        "dataTestid": null,
+        "role": null,
+        "text": "",
+        "inner": "<div class=\"item-btn favorite-btn\" role=\"button\" aria-label=\"Favorite\" style=\"z-index: 1; touch-action: auto; user-select: none; -webkit-user-drag: none; -webkit-tap-highlight-color: rgba(0, 0, 0, 0);\"><svg width=\"28\" height=\"28\" viewBox=\"0 0 28 28\" xmlns=\"http://www.w3.org/2000/svg\" role=\"img\" titl",
+        "rect": {
+          "x": 944,
+          "y": 328,
+          "w": 82,
+          "h": 91
+        },
+        "depth": 0
+      },
+      {
+        "tag": "div",
+        "id": "sidebar-item-sketch1",
+        "cls": "sidebar-item non-selectable twopointoh",
+        "title": null,
+        "ariaLabel": "Extrude sketch",
+        "dataTestid": null,
+        "role": null,
+        "text": "",
+        "inner": "<div class=\"item-btn favorite-btn\" role=\"button\" aria-label=\"Favorite\" style=\"z-index: 1; touch-action: auto; user-select: none; -webkit-user-drag: none; -webkit-tap-highlight-color: rgba(0, 0, 0, 0);\"><svg width=\"28\" height=\"28\" viewBox=\"0 0 28 28\" xmlns=\"http://www.w3.org/2000/svg\" role=\"img\" titl",
+        "rect": {
+          "x": 770,
+          "y": 431,
+          "w": 82,
+          "h": 91
+        },
+        "depth": 0
+      },
+      {
+        "tag": "div",
+        "id": "sidebar-item-sketchRevolve1",
+        "cls": "sidebar-item non-selectable twopointoh",
+        "title": null,
+        "ariaLabel": "Revolve sketch",
+        "dataTestid": null,
+        "role": null,
+        "text": "",
+        "inner": "<div class=\"item-btn favorite-btn\" role=\"button\" aria-label=\"Favorite\" style=\"z-index: 1; touch-action: auto; user-select: none; -webkit-user-drag: none; -webkit-tap-highlight-color: rgba(0, 0, 0, 0);\"><svg width=\"28\" height=\"28\" viewBox=\"0 0 28 28\" xmlns=\"http://www.w3.org/2000/svg\" role=\"img\" titl",
+        "rect": {
+          "x": 857,
+          "y": 431,
+          "w": 82,
+          "h": 91
+        },
+        "depth": 0
+      },
+      {
+        "tag": "div",
+        "id": "sidebar-item-scribble1",
+        "cls": "sidebar-item non-selectable twopointoh",
+        "title": null,
+        "ariaLabel": "Scribble",
+        "dataTestid": null,
+        "role": null,
+        "text": "",
+        "inner": "<div class=\"item-btn favorite-btn\" role=\"button\" aria-label=\"Favorite\" style=\"z-index: 1; touch-action: auto; user-select: none; -webkit-user-drag: none; -webkit-tap-highlight-color: rgba(0, 0, 0, 0);\"><svg width=\"28\" height=\"28\" viewBox=\"0 0 28 28\" xmlns=\"http://www.w3.org/2000/svg\" role=\"img\" titl",
+        "rect": {
+          "x": 944,
+          "y": 431,
+          "w": 82,
+          "h": 91
+        },
+        "depth": 0
+      },
+      {
+        "tag": "div",
+        "id": "sidebar-collapse-button",
+        "cls": "sidebar-toggleBtn",
+        "title": null,
+        "ariaLabel": null,
+        "dataTestid": null,
+        "role": null,
+        "text": "",
+        "inner": "",
+        "rect": {
+          "x": 750,
+          "y": 478,
+          "w": 16,
+          "h": 46
+        },
+        "depth": 0
+      },
+      {
+        "tag": "div",
+        "id": "sidebar-item-cone",
+        "cls": "sidebar-item non-selectable twopointoh",
+        "title": null,
+        "ariaLabel": "Cone",
+        "dataTestid": null,
+        "role": null,
+        "text": "",
+        "inner": "<div class=\"item-btn favorite-btn\" role=\"button\" aria-label=\"Favorite\" style=\"z-index: 1; touch-action: auto; user-select: none; -webkit-user-drag: none; -webkit-tap-highlight-color: rgba(0, 0, 0, 0);\"><svg width=\"28\" height=\"28\" viewBox=\"0 0 28 28\" xmlns=\"http://www.w3.org/2000/svg\" role=\"img\" titl",
+        "rect": {
+          "x": 770,
+          "y": 534,
+          "w": 82,
+          "h": 91
+        },
+        "depth": 0
+      },
+      {
+        "tag": "div",
+        "id": "sidebar-item-pyramid",
+        "cls": "sidebar-item non-selectable twopointoh",
+        "title": null,
+        "ariaLabel": "Pyramid",
+        "dataTestid": null,
+        "role": null,
+        "text": "",
+        "inner": "<div class=\"item-btn favorite-btn\" role=\"button\" aria-label=\"Favorite\" style=\"z-index: 1; touch-action: auto; user-select: none; -webkit-user-drag: none; -webkit-tap-highlight-color: rgba(0, 0, 0, 0);\"><svg width=\"28\" height=\"28\" viewBox=\"0 0 28 28\" xmlns=\"http://www.w3.org/2000/svg\" role=\"img\" titl",
+        "rect": {
+          "x": 857,
+          "y": 534,
+          "w": 82,
+          "h": 91
+        },
+        "depth": 0
+      },
+      {
+        "tag": "div",
+        "id": "sidebar-item-roof",
+        "cls": "sidebar-item non-selectable twopointoh",
+        "title": null,
+        "ariaLabel": "Roof",
+        "dataTestid": null,
+        "role": null,
+        "text": "",
+        "inner": "<div class=\"item-btn favorite-btn\" role=\"button\" aria-label=\"Favorite\" style=\"z-index: 1; touch-action: auto; user-select: none; -webkit-user-drag: none; -webkit-tap-highlight-color: rgba(0, 0, 0, 0);\"><svg width=\"28\" height=\"28\" viewBox=\"0 0 28 28\" xmlns=\"http://www.w3.org/2000/svg\" role=\"img\" titl",
+        "rect": {
+          "x": 944,
+          "y": 534,
+          "w": 82,
+          "h": 91
+        },
+        "depth": 0
+      },
+      {
+        "tag": "div",
+        "id": "sidebar-item-text",
+        "cls": "sidebar-item non-selectable twopointoh",
+        "title": null,
+        "ariaLabel": "Text",
+        "dataTestid": null,
+        "role": null,
+        "text": "",
+        "inner": "<div class=\"item-btn favorite-btn favorited\" role=\"button\" aria-label=\"Unfavorite\" style=\"z-index: 1; touch-action: auto; user-select: none; -webkit-user-drag: none; -webkit-tap-highlight-color: rgba(0, 0, 0, 0);\"><svg width=\"28\" height=\"28\" viewBox=\"0 0 28 28\" xmlns=\"http://www.w3.org/2000/svg\" rol",
+        "rect": {
+          "x": 770,
+          "y": 638,
+          "w": 82,
+          "h": 91
+        },
+        "depth": 0
+      },
+      {
+        "tag": "div",
+        "id": null,
+        "cls": "item-btn favorite-btn favorited",
+        "title": null,
+        "ariaLabel": "Unfavorite",
+        "dataTestid": null,
+        "role": "button",
+        "text": "",
+        "inner": "<svg width=\"28\" height=\"28\" viewBox=\"0 0 28 28\" xmlns=\"http://www.w3.org/2000/svg\" role=\"img\" title=\"icon starred big\"><path d=\"M13.0178617,0.846081634 C13.5840046,-0.282027211 14.4339944,-0.282027211 14.9287878,0.846081634 L17.6881526,6.62725313 C18.182946,7.75536197 19.5990787,8.81238451 20.802713",
+        "rect": {
+          "x": 821,
+          "y": 638,
+          "w": 30,
+          "h": 30
+        },
+        "depth": 0
+      },
+      {
+        "tag": "div",
+        "id": "sidebar-item-halfCylinder",
+        "cls": "sidebar-item non-selectable twopointoh",
+        "title": null,
+        "ariaLabel": "Round Roof",
+        "dataTestid": null,
+        "role": null,
+        "text": "",
+        "inner": "<div class=\"item-btn favorite-btn\" role=\"button\" aria-label=\"Favorite\" style=\"z-index: 1; touch-action: auto; user-select: none; -webkit-user-drag: none; -webkit-tap-highlight-color: rgba(0, 0, 0, 0);\"><svg width=\"28\" height=\"28\" viewBox=\"0 0 28 28\" xmlns=\"http://www.w3.org/2000/svg\" role=\"img\" titl",
+        "rect": {
+          "x": 857,
+          "y": 638,
+          "w": 82,
+          "h": 91
+        },
+        "depth": 0
+      },
+      {
+        "tag": "div",
+        "id": "sidebar-item-halfSphere",
+        "cls": "sidebar-item non-selectable twopointoh",
+        "title": null,
+        "ariaLabel": "Half Sphere",
+        "dataTestid": null,
+        "role": null,
+        "text": "",
+        "inner": "<div class=\"item-btn favorite-btn\" role=\"button\" aria-label=\"Favorite\" style=\"z-index: 1; touch-action: auto; user-select: none; -webkit-user-drag: none; -webkit-tap-highlight-color: rgba(0, 0, 0, 0);\"><svg width=\"28\" height=\"28\" viewBox=\"0 0 28 28\" xmlns=\"http://www.w3.org/2000/svg\" role=\"img\" titl",
+        "rect": {
+          "x": 944,
+          "y": 638,
+          "w": 82,
+          "h": 91
+        },
+        "depth": 0
+      },
+      {
+        "tag": "div",
+        "id": "sidebar-item-torus",
+        "cls": "sidebar-item non-selectable twopointoh",
+        "title": null,
+        "ariaLabel": "Torus",
+        "dataTestid": null,
+        "role": null,
+        "text": "",
+        "inner": "<div class=\"item-btn favorite-btn\" role=\"button\" aria-label=\"Favorite\" style=\"z-index: 1; touch-action: auto; user-select: none; -webkit-user-drag: none; -webkit-tap-highlight-color: rgba(0, 0, 0, 0);\"><svg width=\"28\" height=\"28\" viewBox=\"0 0 28 28\" xmlns=\"http://www.w3.org/2000/svg\" role=\"img\" titl",
+        "rect": {
+          "x": 770,
+          "y": 741,
+          "w": 82,
+          "h": 91
+        },
+        "depth": 0
+      },
+      {
+        "tag": "div",
+        "id": "sidebar-item-tube2",
+        "cls": "sidebar-item non-selectable twopointoh",
+        "title": null,
+        "ariaLabel": "Tube",
+        "dataTestid": null,
+        "role": null,
+        "text": "",
+        "inner": "<div class=\"item-btn favorite-btn\" role=\"button\" aria-label=\"Favorite\" style=\"z-index: 1; touch-action: auto; user-select: none; -webkit-user-drag: none; -webkit-tap-highlight-color: rgba(0, 0, 0, 0);\"><svg width=\"28\" height=\"28\" viewBox=\"0 0 28 28\" xmlns=\"http://www.w3.org/2000/svg\" role=\"img\" titl",
+        "rect": {
+          "x": 857,
+          "y": 741,
+          "w": 82,
+          "h": 91
+        },
+        "depth": 0
+      },
+      {
+        "tag": "div",
+        "id": "sidebar-item-ring",
+        "cls": "sidebar-item non-selectable twopointoh",
+        "title": null,
+        "ariaLabel": "Ring",
+        "dataTestid": null,
+        "role": null,
+        "text": "",
+        "inner": "<div class=\"item-btn favorite-btn\" role=\"button\" aria-label=\"Favorite\" style=\"z-index: 1; touch-action: auto; user-select: none; -webkit-user-drag: none; -webkit-tap-highlight-color: rgba(0, 0, 0, 0);\"><svg width=\"28\" height=\"28\" viewBox=\"0 0 28 28\" xmlns=\"http://www.w3.org/2000/svg\" role=\"img\" titl",
+        "rect": {
+          "x": 944,
+          "y": 741,
+          "w": 82,
+          "h": 91
+        },
+        "depth": 0
+      },
+      {
+        "tag": "div",
+        "id": "sidebar-item-wedge",
+        "cls": "sidebar-item non-selectable twopointoh",
+        "title": null,
+        "ariaLabel": "Wedge",
+        "dataTestid": null,
+        "role": null,
+        "text": "",
+        "inner": "<div class=\"item-btn favorite-btn\" role=\"button\" aria-label=\"Favorite\" style=\"z-index: 1; touch-action: auto; user-select: none; -webkit-user-drag: none; -webkit-tap-highlight-color: rgba(0, 0, 0, 0);\"><svg width=\"28\" height=\"28\" viewBox=\"0 0 28 28\" xmlns=\"http://www.w3.org/2000/svg\" role=\"img\" titl",
+        "rect": {
+          "x": 770,
+          "y": 844,
+          "w": 82,
+          "h": 91
+        },
+        "depth": 0
+      },
+      {
+        "tag": "div",
+        "id": "sidebar-item-polygon",
+        "cls": "sidebar-item non-selectable twopointoh",
+        "title": null,
+        "ariaLabel": "Polygon",
+        "dataTestid": null,
+        "role": null,
+        "text": "",
+        "inner": "<div class=\"item-btn favorite-btn\" role=\"button\" aria-label=\"Favorite\" style=\"z-index: 1; touch-action: auto; user-select: none; -webkit-user-drag: none; -webkit-tap-highlight-color: rgba(0, 0, 0, 0);\"><svg width=\"28\" height=\"28\" viewBox=\"0 0 28 28\" xmlns=\"http://www.w3.org/2000/svg\" role=\"img\" titl",
+        "rect": {
+          "x": 857,
+          "y": 844,
+          "w": 82,
+          "h": 91
+        },
+        "depth": 0
+      },
+      {
+        "tag": "div",
+        "id": "sidebar-item-icosahedron",
+        "cls": "sidebar-item non-selectable twopointoh",
+        "title": null,
+        "ariaLabel": "Icosahedron",
+        "dataTestid": null,
+        "role": null,
+        "text": "",
+        "inner": "<div class=\"item-btn favorite-btn\" role=\"button\" aria-label=\"Favorite\" style=\"z-index: 1; touch-action: auto; user-select: none; -webkit-user-drag: none; -webkit-tap-highlight-color: rgba(0, 0, 0, 0);\"><svg width=\"28\" height=\"28\" viewBox=\"0 0 28 28\" xmlns=\"http://www.w3.org/2000/svg\" role=\"img\" titl",
+        "rect": {
+          "x": 944,
+          "y": 844,
+          "w": 82,
+          "h": 91
+        },
+        "depth": 0
+      },
+      {
+        "tag": "div",
+        "id": "sidebar-item-star",
+        "cls": "sidebar-item non-selectable twopointoh",
+        "title": null,
+        "ariaLabel": "Star",
+        "dataTestid": null,
+        "role": null,
+        "text": "",
+        "inner": "<div class=\"item-btn favorite-btn\" role=\"button\" aria-label=\"Favorite\" style=\"z-index: 1; touch-action: auto; user-select: none; -webkit-user-drag: none; -webkit-tap-highlight-color: rgba(0, 0, 0, 0);\"><svg width=\"28\" height=\"28\" viewBox=\"0 0 28 28\" xmlns=\"http://www.w3.org/2000/svg\" role=\"img\" titl",
+        "rect": {
+          "x": 770,
+          "y": 948,
+          "w": 82,
+          "h": 91
+        },
+        "depth": 0
+      },
+      {
+        "tag": "div",
+        "id": "sidebar-item-extrudeStar",
+        "cls": "sidebar-item non-selectable twopointoh",
+        "title": null,
+        "ariaLabel": "Star",
+        "dataTestid": null,
+        "role": null,
+        "text": "",
+        "inner": "<div class=\"item-btn favorite-btn\" role=\"button\" aria-label=\"Favorite\" style=\"z-index: 1; touch-action: auto; user-select: none; -webkit-user-drag: none; -webkit-tap-highlight-color: rgba(0, 0, 0, 0);\"><svg width=\"28\" height=\"28\" viewBox=\"0 0 28 28\" xmlns=\"http://www.w3.org/2000/svg\" role=\"img\" titl",
+        "rect": {
+          "x": 857,
+          "y": 948,
+          "w": 82,
+          "h": 91
+        },
+        "depth": 0
+      },
+      {
+        "tag": "div",
+        "id": "sidebar-item-heart",
+        "cls": "sidebar-item non-selectable twopointoh",
+        "title": null,
+        "ariaLabel": "Heart",
+        "dataTestid": null,
+        "role": null,
+        "text": "",
+        "inner": "<div class=\"item-btn favorite-btn\" role=\"button\" aria-label=\"Favorite\" style=\"z-index: 1; touch-action: auto; user-select: none; -webkit-user-drag: none; -webkit-tap-highlight-color: rgba(0, 0, 0, 0);\"><svg width=\"28\" height=\"28\" viewBox=\"0 0 28 28\" xmlns=\"http://www.w3.org/2000/svg\" role=\"img\" titl",
+        "rect": {
+          "x": 944,
+          "y": 948,
+          "w": 82,
+          "h": 91
+        },
+        "depth": 0
+      },
+      {
+        "tag": "div",
+        "id": "selectionPanelCloseBtn",
+        "cls": "selection-panel-header",
+        "title": null,
+        "ariaLabel": null,
+        "dataTestid": null,
+        "role": null,
+        "text": "Shapes Library",
+        "inner": "<div>Shapes Library</div><div style=\"width: 12px;\"><svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 12 12\" role=\"img\" title=\"icon close thin\"><path d=\"M7.41,6l4.3-4.29A1,1,0,1,0,10.29.29L6,4.59,1.71.29A1,1,0,0,0,.29,1.71L4.59,6,.29,10.29a1,1,0,0,0,0,1.42,1,1,0,0,0,1.42,0L6,7.41l4.29,4.3a1,1,0,0,",
+        "rect": {
+          "x": 767,
+          "y": 992,
+          "w": 262,
+          "h": 40
+        },
+        "depth": 0
+      },
+      {
+        "tag": "div",
+        "id": "selectionPanelOption-0",
+        "cls": "selection-panel-option",
+        "title": null,
+        "ariaLabel": null,
+        "dataTestid": null,
+        "role": null,
+        "text": "Your Creations",
+        "inner": "<div class=\"bar\"></div><div class=\"icon\"><img src=\"https://editor.tinkercad.com/shapepanel/your-creations.png\"></div><div>Your Creations</div>",
+        "rect": {
+          "x": 767,
+          "y": 1038,
+          "w": 262,
+          "h": 50
+        },
+        "depth": 0
+      },
+      {
+        "tag": "button",
+        "id": null,
+        "cls": "button button--size--standard button--type--primary button--float--inherit butto",
+        "title": null,
+        "ariaLabel": "More Shapes",
+        "dataTestid": null,
+        "role": "button",
+        "text": "More Shapes",
+        "inner": "<span style=\"width: 20px; height: 20px;\">More Shapes</span>",
+        "rect": {
+          "x": 839,
+          "y": 1049,
+          "w": 119,
+          "h": 37
+        },
+        "depth": 0
+      },
+      {
+        "tag": "div",
+        "id": "selectionPanelOption-1",
+        "cls": "selection-panel-option group-end",
+        "title": null,
+        "ariaLabel": null,
+        "dataTestid": null,
+        "role": null,
+        "text": "Favorites",
+        "inner": "<div class=\"bar\"></div><div class=\"icon\"><img src=\"https://editor.tinkercad.com/shapepanel/favorites.png\"></div><div>Favorites</div>",
+        "rect": {
+          "x": 767,
+          "y": 1088,
+          "w": 262,
+          "h": 50
+        },
+        "depth": 0
+      },
+      {
+        "tag": "div",
+        "id": "selectionPanelOption-2",
+        "cls": "selection-panel-option selected group-start",
+        "title": null,
+        "ariaLabel": null,
+        "dataTestid": null,
+        "role": null,
+        "text": "Basic Shapes",
+        "inner": "<div class=\"bar\"></div><div class=\"icon\"><img src=\"https://editor.tinkercad.com/shapepanel/basic-shapes.png\"></div><div>Basic Shapes</div>",
+        "rect": {
+          "x": 767,
+          "y": 1142,
+          "w": 262,
+          "h": 50
+        },
+        "depth": 0
+      },
+      {
+        "tag": "div",
+        "id": "selectionPanelOption-3",
+        "cls": "selection-panel-option",
+        "title": null,
+        "ariaLabel": null,
+        "dataTestid": null,
+        "role": null,
+        "text": "Letters & Numbers",
+        "inner": "<div class=\"bar\"></div><div class=\"icon\"><img src=\"https://editor.tinkercad.com/shapepanel/AB12.png\"></div><div>Letters &amp; Numbers</div>",
+        "rect": {
+          "x": 767,
+          "y": 1192,
+          "w": 262,
+          "h": 50
+        },
+        "depth": 0
+      },
+      {
+        "tag": "div",
+        "id": "selectionPanelOption-4",
+        "cls": "selection-panel-option",
+        "title": null,
+        "ariaLabel": null,
+        "dataTestid": null,
+        "role": null,
+        "text": "Design Starters",
+        "inner": "<div class=\"bar\"></div><div class=\"icon\"><img src=\"https://editor.tinkercad.com/shapepanel/design-starters1.png\"></div><div>Design Starters</div>",
+        "rect": {
+          "x": 767,
+          "y": 1242,
+          "w": 262,
+          "h": 50
+        },
+        "depth": 0
+      },
+      {
+        "tag": "div",
+        "id": "selectionPanelOption-5",
+        "cls": "selection-panel-option",
+        "title": null,
+        "ariaLabel": null,
+        "dataTestid": null,
+        "role": null,
+        "text": "Creatures & Characters",
+        "inner": "<div class=\"bar\"></div><div class=\"icon\"><img src=\"https://editor.tinkercad.com/shapepanel/characters-creatures.png\"></div><div>Creatures &amp; Characters</div>",
+        "rect": {
+          "x": 767,
+          "y": 1292,
+          "w": 262,
+          "h": 50
+        },
+        "depth": 0
+      },
+      {
+        "tag": "div",
+        "id": "selectionPanelOption-6",
+        "cls": "selection-panel-option",
+        "title": null,
+        "ariaLabel": null,
+        "dataTestid": null,
+        "role": null,
+        "text": "Vehicles & Machines",
+        "inner": "<div class=\"bar\"></div><div class=\"icon\"><img src=\"https://editor.tinkercad.com/shapepanel/vehicles-machines.png\"></div><div>Vehicles &amp; Machines</div>",
+        "rect": {
+          "x": 767,
+          "y": 1342,
+          "w": 262,
+          "h": 50
+        },
+        "depth": 0
+      },
+      {
+        "tag": "div",
+        "id": "selectionPanelOption-7",
+        "cls": "selection-panel-option",
+        "title": null,
+        "ariaLabel": null,
+        "dataTestid": null,
+        "role": null,
+        "text": "Structures & Scenery",
+        "inner": "<div class=\"bar\"></div><div class=\"icon\"><img src=\"https://editor.tinkercad.com/shapepanel/structures-scenery.png\"></div><div>Structures &amp; Scenery</div>",
+        "rect": {
+          "x": 767,
+          "y": 1392,
+          "w": 262,
+          "h": 50
+        },
+        "depth": 0
+      },
+      {
+        "tag": "div",
+        "id": "selectionPanelOption-9",
+        "cls": "selection-panel-option",
+        "title": null,
+        "ariaLabel": null,
+        "dataTestid": null,
+        "role": null,
+        "text": "Hardware",
+        "inner": "<div class=\"bar\"></div><div class=\"icon\"><img src=\"https://editor.tinkercad.com/shapepanel/hardware.png\"></div><div>Hardware</div>",
+        "rect": {
+          "x": 767,
+          "y": 1442,
+          "w": 262,
+          "h": 50
+        },
+        "depth": 0
+      },
+      {
+        "tag": "div",
+        "id": "selectionPanelOption-10",
+        "cls": "selection-panel-option",
+        "title": null,
+        "ariaLabel": null,
+        "dataTestid": null,
+        "role": null,
+        "text": "Electronics",
+        "inner": "<div class=\"bar\"></div><div class=\"icon\"><img src=\"https://editor.tinkercad.com/shapepanel/electronics.png\"></div><div>Electronics</div>",
+        "rect": {
+          "x": 767,
+          "y": 1492,
+          "w": 262,
+          "h": 50
+        },
+        "depth": 0
+      },
+      {
+        "tag": "div",
+        "id": "selectionPanelOption-11",
+        "cls": "selection-panel-option",
+        "title": null,
+        "ariaLabel": null,
+        "dataTestid": null,
+        "role": null,
+        "text": "Fun & Games",
+        "inner": "<div class=\"bar\"></div><div class=\"icon\"><img src=\"https://editor.tinkercad.com/shapepanel/fun-play.png\"></div><div>Fun &amp; Games</div>",
+        "rect": {
+          "x": 767,
+          "y": 1542,
+          "w": 262,
+          "h": 50
+        },
+        "depth": 0
+      },
+      {
+        "tag": "div",
+        "id": "selectionPanelOption-13",
+        "cls": "selection-panel-option",
+        "title": null,
+        "ariaLabel": null,
+        "dataTestid": null,
+        "role": null,
+        "text": "Everyday Objects",
+        "inner": "<div class=\"bar\"></div><div class=\"icon\"><img src=\"https://editor.tinkercad.com/shapepanel/everyday-things.png\"></div><div>Everyday Objects</div>",
+        "rect": {
+          "x": 767,
+          "y": 1592,
+          "w": 262,
+          "h": 50
+        },
+        "depth": 0
+      },
+      {
+        "tag": "div",
+        "id": "selectionPanelOption-14",
+        "cls": "selection-panel-option group-end",
+        "title": null,
+        "ariaLabel": null,
+        "dataTestid": null,
+        "role": null,
+        "text": "Featured Collections",
+        "inner": "<div class=\"bar\"></div><div class=\"icon\"><img src=\"https://editor.tinkercad.com/shapepanel/featured-collections.png\"></div><div>Featured Collections</div>",
+        "rect": {
+          "x": 767,
+          "y": 1642,
+          "w": 262,
+          "h": 50
+        },
+        "depth": 0
+      },
+      {
+        "tag": "div",
+        "id": "selectionPanelOption-15",
+        "cls": "selection-panel-option group-start group-end",
+        "title": null,
+        "ariaLabel": null,
+        "dataTestid": null,
+        "role": null,
+        "text": "Sim Lab",
+        "inner": "<div class=\"bar\"></div><div class=\"icon\"><img src=\"https://editor.tinkercad.com/shapepanel/simlab.png\"></div><div>Sim Lab</div>",
+        "rect": {
+          "x": 767,
+          "y": 1696,
+          "w": 262,
+          "h": 50
+        },
+        "depth": 0
+      },
+      {
+        "tag": "div",
+        "id": "selectionPanelOption-16",
+        "cls": "selection-panel-option group-start",
+        "title": null,
+        "ariaLabel": null,
+        "dataTestid": null,
+        "role": null,
+        "text": "Shape Generators",
+        "inner": "<div class=\"bar\"></div><div class=\"icon\"><img src=\"https://editor.tinkercad.com/shapepanel/shape-generators.png\"></div><div>Shape Generators</div>",
+        "rect": {
+          "x": 767,
+          "y": 1750,
+          "w": 262,
+          "h": 50
+        },
+        "depth": 0
+      }
+    ]
+  },
+  "tooltips": [
+    {
+      "btn": {
+        "x": 93,
+        "y": 0,
+        "w": 134,
+        "h": 48
+      },
+      "tip": null
+    },
+    {
+      "btn": {
+        "x": 738,
+        "y": 0,
+        "w": 50,
+        "h": 48
+      },
+      "tip": null
+    },
+    {
+      "btn": {
+        "x": 788,
+        "y": 0,
+        "w": 50,
+        "h": 48
+      },
+      "tip": null
+    },
+    {
+      "btn": {
+        "x": 837,
+        "y": 0,
+        "w": 50,
+        "h": 48
+      },
+      "tip": null
+    },
+    {
+      "btn": {
+        "x": 887,
+        "y": 0,
+        "w": 50,
+        "h": 48
+      },
+      "tip": null
+    },
+    {
+      "btn": {
+        "x": 937,
+        "y": 0,
+        "w": 50,
+        "h": 48
+      },
+      "tip": null
+    },
+    {
+      "btn": {
+        "x": 986,
+        "y": 1,
+        "w": 50,
+        "h": 48
+      },
+      "tip": null
+    },
+    {
+      "btn": {
+        "x": 0,
+        "y": 48,
+        "w": 48,
+        "h": 48
+      },
+      "tip": null
+    },
+    {
+      "btn": {
+        "x": 48,
+        "y": 48,
+        "w": 48,
+        "h": 48
+      },
+      "tip": null
+    },
+    {
+      "btn": {
+        "x": 96,
+        "y": 48,
+        "w": 48,
+        "h": 48
+      },
+      "tip": null
+    },
+    {
+      "btn": {
+        "x": 144,
+        "y": 48,
+        "w": 48,
+        "h": 48
+      },
+      "tip": null
+    },
+    {
+      "btn": {
+        "x": 193,
+        "y": 48,
+        "w": 48,
+        "h": 48
+      },
+      "tip": null
+    },
+    {
+      "btn": {
+        "x": 241,
+        "y": 48,
+        "w": 48,
+        "h": 48
+      },
+      "tip": null
+    },
+    {
+      "btn": {
+        "x": 529,
+        "y": 48,
+        "w": 42,
+        "h": 48
+      },
+      "tip": null
+    },
+    {
+      "btn": {
+        "x": 571,
+        "y": 48,
+        "w": 30,
+        "h": 48
+      },
+      "tip": null
+    },
+    {
+      "btn": {
+        "x": 602,
+        "y": 48,
+        "w": 48,
+        "h": 48
+      },
+      "tip": null
+    },
+    {
+      "btn": {
+        "x": 650,
+        "y": 48,
+        "w": 48,
+        "h": 48
+      },
+      "tip": null
+    },
+    {
+      "btn": {
+        "x": 698,
+        "y": 48,
+        "w": 48,
+        "h": 48
+      },
+      "tip": null
+    },
+    {
+      "btn": {
+        "x": 747,
+        "y": 48,
+        "w": 48,
+        "h": 48
+      },
+      "tip": null
+    },
+    {
+      "btn": {
+        "x": 795,
+        "y": 48,
+        "w": 48,
+        "h": 48
+      },
+      "tip": null
+    },
+    {
+      "btn": {
+        "x": 843,
+        "y": 48,
+        "w": 48,
+        "h": 48
+      },
+      "tip": null
+    },
+    {
+      "btn": {
+        "x": 891,
+        "y": 48,
+        "w": 48,
+        "h": 48
+      },
+      "tip": null
+    },
+    {
+      "btn": {
+        "x": 939,
+        "y": 48,
+        "w": 48,
+        "h": 48
+      },
+      "tip": null
+    },
+    {
+      "btn": {
+        "x": 988,
+        "y": 48,
+        "w": 48,
+        "h": 48
+      },
+      "tip": null
+    },
+    {
+      "btn": {
+        "x": 760,
+        "y": 96,
+        "w": 276,
+        "h": 809
+      },
+      "tip": null
+    }
+  ]
+}
