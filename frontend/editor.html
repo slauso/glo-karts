@@ -447,104 +447,166 @@
     }
     .toast.show { opacity: 0.95; }
 
-    /* ── Floating "Inspector" / shape-properties popup that hovers
-         next to the selected object — Tinkercad-style ──────────── */
+    /* ── Floating "Inspector" / shape-properties popup that mirrors
+         Tinkercad's `.editor__inspector` floater. White card, ~256 px
+         wide, anchored top-right (just left of the shape gallery panel).
+         Header has a left chevron, "Shapes (N)" title, two small material
+         icon buttons. Body has the big Solid/Hole material picker, a
+         12-color swatch grid + Custom, per-shape param section, and a
+         Transparent toggle. ───────────────────────────────────────── */
     .inspector-popup {
       position: absolute; z-index: 25;
-      top: 12px; right: 12px;
-      width: 240px;
-      background: var(--panel-2);
-      border: 1px solid var(--line);
-      border-radius: 6px;
-      box-shadow: var(--shadow-md);
+      top: 56px; right: 268px;            /* sits just left of the 256-px shape gallery */
+      width: 256px;
+      background: #ffffff;
+      border: 1px solid #e1e6ec;
+      border-radius: 4px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.10);
       pointer-events: auto;
-      max-height: calc(100% - 24px);
+      max-height: calc(100% - 80px);
       display: flex; flex-direction: column;
       overflow: hidden;
+      font-family: 'Inter', system-ui, sans-serif;
+      color: #2a2f36;
     }
     .inspector-popup[hidden] { display: none; }
     .inspector-popup .ip-body {
       overflow-y: auto;
-      transition: max-height 0.18s ease;
     }
     .inspector-popup.collapsed .ip-body { display: none; }
+
+    /* Header (TC's `editor__inspector__header`, 41 px) */
+    .inspector-popup .ip-header {
+      display: flex; align-items: center; gap: 6px;
+      padding: 0 8px; height: 41px;
+      border-bottom: 1px solid #e1e6ec;
+      background: #fafbfc;
+      flex: 0 0 auto;
+    }
     .inspector-popup .collapse-btn {
       background: transparent; border: none; cursor: pointer;
-      color: var(--muted); padding: 2px 4px; border-radius: 3px; font-size: 14px;
+      color: #7a8694; padding: 4px; border-radius: 3px;
+      display: inline-flex; align-items: center; justify-content: center;
+      transition: transform 0.15s ease;
     }
-    .inspector-popup .collapse-btn:hover { background: var(--line); color: var(--text); }
-    .inspector-popup.collapsed .collapse-btn { transform: rotate(-90deg); }
-    .inspector-popup .ip-header {
-      display: flex; align-items: center; gap: 8px;
-      padding: 6px 10px; border-bottom: 1px solid var(--line);
-      font-size: 12px; font-weight: 600;
+    .inspector-popup .collapse-btn:hover { background: #eef2f6; color: #2a2f36; }
+    .inspector-popup:not(.collapsed) .collapse-btn { transform: rotate(90deg); }
+    .inspector-popup .ip-header .title {
+      flex: 1; font-size: 13px; font-weight: 600; color: #2a2f36;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     }
-    .inspector-popup .ip-header .title { flex: 1; color: var(--text); }
-    .inspector-popup .ip-header .close-btn {
+    .inspector-popup .ip-header-mat {
+      display: flex; gap: 2px;
+    }
+    .inspector-popup .ip-header-btn {
+      width: 26px; height: 26px;
+      background: #fff; border: 1px solid #d4d9e0;
+      border-radius: 3px; cursor: pointer;
+      display: inline-flex; align-items: center; justify-content: center;
+      padding: 0;
+    }
+    .inspector-popup .ip-header-btn:hover { border-color: #1faaf2; }
+    .inspector-popup .ip-header-btn.active { border-color: #1faaf2; box-shadow: 0 0 0 1px #1faaf2 inset; }
+    .inspector-popup .ip-header-dot {
+      width: 16px; height: 16px; border-radius: 2px;
+      background: #e6453a; border: 1px solid rgba(0,0,0,0.10);
+    }
+    .inspector-popup .ip-hole-pattern {
+      background: repeating-linear-gradient(135deg, #c8cdd4 0 3px, #fff 3px 6px) !important;
+    }
+    .inspector-popup .close-btn {
       background: transparent; border: none; cursor: pointer;
-      color: var(--muted); padding: 2px 4px; border-radius: 3px;
+      color: #7a8694; padding: 4px 6px; border-radius: 3px; font-size: 16px;
+      line-height: 1;
     }
-    .inspector-popup .ip-header .close-btn:hover { background: var(--line); color: var(--text); }
-    .inspector-popup .ip-tabs {
-      display: flex; gap: 4px; padding: 8px 10px 0;
+    .inspector-popup .close-btn:hover { background: #eef2f6; color: #2a2f36; }
+
+    /* Big Solid / Hole material picker (TC's `editor__inspector__commoncontrols`) */
+    .inspector-popup .ip-mat-row {
+      display: flex; gap: 6px; padding: 10px 10px 6px;
     }
-    .inspector-popup .ip-tab {
-      flex: 1; padding: 6px 4px;
-      background: transparent; border: 1px solid transparent;
-      border-radius: 4px; cursor: pointer; color: var(--text);
-      font-size: 11px; display: flex; flex-direction: column;
+    .inspector-popup .ip-mat-btn {
+      flex: 1; padding: 8px 6px;
+      background: #fff; border: 1px solid #d4d9e0;
+      border-radius: 4px; cursor: pointer; color: #2a2f36;
+      font-size: 12px; display: flex; flex-direction: column;
       align-items: center; gap: 4px;
+      transition: border-color 0.12s ease;
     }
-    .inspector-popup .ip-tab.active {
-      background: var(--danger); color: #fff; border-color: var(--danger);
+    .inspector-popup .ip-mat-btn:hover { border-color: #1faaf2; }
+    .inspector-popup .ip-mat-btn.active {
+      border-color: #1faaf2; box-shadow: 0 0 0 1px #1faaf2 inset;
     }
-    .inspector-popup .ip-tab[data-mode="hole"].active {
-      background: var(--panel-2); border-color: var(--line); color: var(--text);
+    .inspector-popup .ip-mat-icon {
+      width: 28px; height: 28px; border-radius: 3px;
+      background: #e6453a; border: 1px solid rgba(0,0,0,0.10);
     }
-    .inspector-popup .ip-tab .dot {
-      width: 16px; height: 16px; border-radius: 50%;
-      background: var(--danger); border: 1px solid var(--line);
+    .inspector-popup .ip-mat-label {
+      font-size: 11px; color: #4a5360; font-weight: 500;
     }
-    .inspector-popup .ip-tab[data-mode="hole"] .dot {
-      background: repeating-linear-gradient(135deg, #d8d8d8 0 4px, transparent 4px 8px);
+
+    /* 12-swatch color grid + Custom picker */
+    .inspector-popup .ip-color-block {
+      padding: 6px 10px 8px;
+      border-bottom: 1px solid #eef2f6;
     }
     .inspector-popup .ip-color {
-      display: grid; grid-template-columns: repeat(7, 1fr);
-      gap: 4px; padding: 8px 10px;
+      display: grid; grid-template-columns: repeat(6, 1fr);
+      gap: 4px; margin-bottom: 6px;
     }
     .inspector-popup .swatch-pick {
       width: 100%; aspect-ratio: 1; border-radius: 3px;
       border: 1px solid rgba(0,0,0,0.12); cursor: pointer;
-      box-shadow: inset 0 -2px 4px rgba(0,0,0,0.12);
+      padding: 0;
     }
-    .inspector-popup .swatch-pick:hover { transform: scale(1.1); }
-    .inspector-popup .swatch-pick.active { box-shadow: 0 0 0 2px var(--accent); }
-    .inspector-popup .ip-section {
-      padding: 8px 10px; border-top: 1px solid var(--line);
-      font-size: 11px; color: var(--muted);
+    .inspector-popup .swatch-pick:hover { transform: scale(1.08); }
+    .inspector-popup .swatch-pick.active { box-shadow: 0 0 0 2px #1faaf2; }
+    .inspector-popup .ip-color-custom {
+      display: flex; align-items: center; gap: 6px;
+      width: 100%; padding: 4px 6px;
+      background: #fff; border: 1px solid #d4d9e0;
+      border-radius: 3px; cursor: pointer;
+      color: #2a2f36; font-size: 11px;
     }
-    .inspector-popup .ip-section .row {
-      display: flex; align-items: center; justify-content: space-between;
-      padding: 3px 0;
+    .inspector-popup .ip-color-custom:hover { border-color: #1faaf2; }
+    .inspector-popup .ip-custom-swatch {
+      width: 16px; height: 16px; border-radius: 2px;
+      background: #e6453a; border: 1px solid rgba(0,0,0,0.12);
     }
-    .inspector-popup .ip-section .row label {
-      flex: 0 0 60px;
+
+    /* Per-shape params (e.g. Sides for cylinder, Bevel for box). */
+    .inspector-popup .ip-params {
+      padding: 0 10px;
     }
-    .inspector-popup .ip-section .row input[type=range] {
-      flex: 1; min-width: 0; margin: 0 8px;
+    .inspector-popup .ip-params:empty { display: none; }
+    .inspector-popup .ip-param-row {
+      display: flex; align-items: center; gap: 8px;
+      padding: 6px 0; font-size: 12px;
+      border-top: 1px solid #eef2f6;
     }
-    .inspector-popup .ip-section .row input[type=number] {
-      width: 50px; background: var(--panel); border: 1px solid var(--line);
-      color: var(--text); padding: 2px 4px; border-radius: 3px; font-size: 11px;
+    .inspector-popup .ip-param-row:first-child { border-top: none; }
+    .inspector-popup .ip-param-row label {
+      flex: 0 0 80px; color: #4a5360;
     }
-    .inspector-popup .ip-section .row input[type=color] {
-      width: 36px; height: 22px; padding: 0; border: 1px solid var(--line);
-      background: transparent; cursor: pointer;
+    .inspector-popup .ip-param-row input[type=range] {
+      flex: 1; min-width: 0; margin: 0;
+      accent-color: #1faaf2;
     }
-    .inspector-popup .ip-section h4 {
-      margin: 0 0 6px; font-size: 10px; letter-spacing: 0.1em;
-      text-transform: uppercase; color: var(--muted);
+    .inspector-popup .ip-param-row input[type=number] {
+      width: 52px; background: #fff; border: 1px solid #d4d9e0;
+      color: #2a2f36; padding: 2px 4px; border-radius: 3px; font-size: 11px;
     }
+
+    /* Transparent / extras row */
+    .inspector-popup .ip-extra {
+      padding: 8px 10px;
+      border-top: 1px solid #eef2f6;
+    }
+    .inspector-popup .ip-checkbox {
+      display: flex; align-items: center; gap: 6px;
+      font-size: 12px; color: #4a5360; cursor: pointer;
+    }
+    .inspector-popup .ip-checkbox input { accent-color: #1faaf2; }
 
     /* Right column "Inspector" alternative summary (kept for compatibility) */
     .right-summary {
@@ -971,68 +1033,61 @@
         <div class="hint">Press A to close</div>
       </div>
 
-      <!-- Floating Tinkercad-style shape inspector popup (Solid/Hole + colour swatches + dimension grid) -->
+      <!-- Floating Tinkercad-style shape inspector popup.
+           Mirrors TC's `.editor__inspector` (~256 px wide; header with
+           collapse chevron + "Shapes (N)" title + small material header
+           buttons; body with Solid/Hole material picker, 12-color swatch
+           grid + Custom, per-shape param section, Transparent toggle).
+           Position/rotation/size are intentionally NOT in this floater —
+           they live at the on-shape gizmo handles (.dm-size / dm-rot). -->
       <div id="inspectorPopup" class="inspector-popup" hidden>
         <div class="ip-header">
-          <button class="collapse-btn" id="ipCollapse" title="Collapse">▾</button>
+          <button class="collapse-btn" id="ipCollapse" title="Collapse">
+            <svg viewBox="0 0 16 16" width="14" height="14"><path fill="currentColor" d="M4,3a1,1,0,0,1,1.7-.71l5,5a1,1,0,0,1,0,1.42l-5,5A1,1,0,0,1,4,13Z"/></svg>
+          </button>
           <span class="title" id="ipTitle">Shape</span>
+          <div class="ip-header-mat">
+            <button class="ip-header-btn" data-mode="solid" id="ipHeaderSolid" title="Solid">
+              <span class="ip-header-dot" id="ipHeaderSolidDot"></span>
+            </button>
+            <button class="ip-header-btn" data-mode="hole" id="ipHeaderHole" title="Hole">
+              <span class="ip-header-dot ip-hole-pattern"></span>
+            </button>
+          </div>
           <button class="close-btn" id="ipClose" title="Close">×</button>
         </div>
         <div class="ip-body" id="ipBody">
-        <div class="ip-tabs">
-          <button class="ip-tab active" data-mode="solid">
-            <span class="dot" id="ipSolidDot"></span>Solid
-          </button>
-          <button class="ip-tab" data-mode="hole">
-            <span class="dot"></span>Hole
-          </button>
-        </div>
-        <div class="ip-color" id="ipColors"></div>
-        <div class="ip-section">
-          <h4>Position (mm)</h4>
-          <div class="row"><label>X</label>
-            <input type="range" id="decorX_r" min="-50000" max="50000" step="1" />
-            <input type="number" id="decorX" step="1" />
+          <!-- Big Solid / Hole material picker (TC's `editor__inspector__commoncontrols`). -->
+          <div class="ip-mat-row">
+            <button class="ip-mat-btn active" data-mode="solid">
+              <span class="ip-mat-icon" id="ipMatSolidIcon"></span>
+              <span class="ip-mat-label">Solid</span>
+            </button>
+            <button class="ip-mat-btn" data-mode="hole">
+              <span class="ip-mat-icon ip-hole-pattern"></span>
+              <span class="ip-mat-label">Hole</span>
+            </button>
           </div>
-          <div class="row"><label>Y</label>
-            <input type="range" id="decorY_r" min="0" max="20000" step="1" />
-            <input type="number" id="decorY" step="1" />
+          <!-- 12-swatch color grid (mirrors TC palette) + Custom. -->
+          <div class="ip-color-block">
+            <div class="ip-color" id="ipColors"></div>
+            <button class="ip-color-custom" id="ipColorCustom">
+              <span class="ip-custom-swatch" id="ipCustomSwatch"></span>
+              <span>Custom...</span>
+              <input type="color" id="ipColorPicker" hidden />
+            </button>
           </div>
-          <div class="row"><label>Z</label>
-            <input type="range" id="decorZ_r" min="-50000" max="50000" step="1" />
-            <input type="number" id="decorZ" step="1" />
+          <!-- Per-shape parameter section. Populated dynamically based
+               on selected shape type (sphere → segments, cylinder → sides,
+               box → bevel, etc.). Empty for primitives without params. -->
+          <div class="ip-params" id="ipParams"></div>
+          <!-- Transparent / opacity toggle. -->
+          <div class="ip-extra">
+            <label class="ip-checkbox">
+              <input type="checkbox" id="ipTransparent" />
+              <span>Transparent</span>
+            </label>
           </div>
-        </div>
-        <div class="ip-section">
-          <h4>Rotation (°)</h4>
-          <div class="row"><label>X</label>
-            <input type="range" id="decorRX_r" min="-180" max="180" step="1" />
-            <input type="number" id="decorRX" step="1" />
-          </div>
-          <div class="row"><label>Y</label>
-            <input type="range" id="decorRY_r" min="-180" max="180" step="1" />
-            <input type="number" id="decorRY" step="1" />
-          </div>
-          <div class="row"><label>Z</label>
-            <input type="range" id="decorRZ_r" min="-180" max="180" step="1" />
-            <input type="number" id="decorRZ" step="1" />
-          </div>
-        </div>
-        <div class="ip-section">
-          <h4>Size (mm)</h4>
-          <div class="row"><label>L</label>
-            <input type="range" id="decorSX_r" min="1" max="10000" step="1" />
-            <input type="number" id="decorSX" step="1" min="1" />
-          </div>
-          <div class="row"><label>W</label>
-            <input type="range" id="decorSZ_r" min="1" max="10000" step="1" />
-            <input type="number" id="decorSZ" step="1" min="1" />
-          </div>
-          <div class="row"><label>H</label>
-            <input type="range" id="decorSY_r" min="1" max="10000" step="1" />
-            <input type="number" id="decorSY" step="1" min="1" />
-          </div>
-        </div>
         </div>
       </div>
 

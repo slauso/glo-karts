@@ -1696,10 +1696,10 @@ function bindDecorInspector(d) {
 }
 
 // ── Tinkercad-style floating shape inspector ────────────────
+// 12-color swatch palette mirroring TC's standard inspector grid (6×2).
 const TINKER_PALETTE = [
-  0xe6453a, 0xee8b1a, 0xead33a, 0x4ab84a, 0x2e9bd6,
-  0x9b6dc6, 0xf06ec6, 0x6e7378, 0xb0b6bf, 0x2a2f36,
-  0xffffff, 0xff7a3a, 0xc4a06b, 0x4ec0a3, 0xff5c8a,
+  0xe6453a, 0xee8b1a, 0xead33a, 0x4ab84a, 0x2e9bd6, 0x9b6dc6,
+  0xf06ec6, 0x6e7378, 0xb0b6bf, 0x2a2f36, 0xffffff, 0xc4a06b,
 ];
 function _setRange(idR, idN, val, fmt = (v) => v) {
   const r = document.getElementById(idR);
@@ -1744,35 +1744,44 @@ function buildColorSwatches(activeColor) {
 let _ipBound = false;
 function bindInspectorPopupOnce() {
   if (_ipBound) return; _ipBound = true;
-  const upd = (key) => (v) => {
-    const d = decor.getById(lastSelectedDecorId);
-    if (!d) return;
-    d[key] = v;
-  };
-  const updRad = (key) => (v) => {
-    const d = decor.getById(lastSelectedDecorId);
-    if (!d) return;
-    d[key] = v * Math.PI / 180;
-  };
-  _bindPair('decorX_r', 'decorX', upd('x'));
-  _bindPair('decorY_r', 'decorY', upd('y'));
-  _bindPair('decorZ_r', 'decorZ', upd('z'));
-  _bindPair('decorRX_r', 'decorRX', updRad('rx'));
-  _bindPair('decorRY_r', 'decorRY', updRad('ry'));
-  _bindPair('decorRZ_r', 'decorRZ', updRad('rz'));
-  _bindPair('decorSX_r', 'decorSX', (v) => upd('sx')(Math.max(0.05, v)));
-  _bindPair('decorSY_r', 'decorSY', (v) => upd('sy')(Math.max(0.05, v)));
-  _bindPair('decorSZ_r', 'decorSZ', (v) => upd('sz')(Math.max(0.05, v)));
-  document.querySelectorAll('#inspectorPopup .ip-tab').forEach(b => {
-    b.addEventListener('click', () => {
-      const mode = b.dataset.mode;
-      document.querySelectorAll('#inspectorPopup .ip-tab').forEach(t => t.classList.toggle('active', t === b));
-      const d = decor.getById(lastSelectedDecorId);
-      if (!d) return;
-      d.isHole = (mode === 'hole');
-      applySelectedDecor();
-      pushUndo();
+  // Solid/Hole material picker buttons (both header + body share data-mode).
+  const setMode = (mode) => {
+    document.querySelectorAll('#inspectorPopup [data-mode]').forEach(t => {
+      t.classList.toggle('active', t.dataset.mode === mode);
     });
+    const d = decor.getById(lastSelectedDecorId);
+    if (!d) return;
+    const wantHole = (mode === 'hole');
+    if (d.isHole === wantHole) return;
+    d.isHole = wantHole;
+    applySelectedDecor();
+    pushUndo();
+  };
+  document.querySelectorAll('#inspectorPopup [data-mode]').forEach(b => {
+    b.addEventListener('click', () => setMode(b.dataset.mode));
+  });
+  // Custom color picker — opens native color input, applies on change.
+  const customBtn = document.getElementById('ipColorCustom');
+  const picker = document.getElementById('ipColorPicker');
+  customBtn?.addEventListener('click', () => picker?.click());
+  picker?.addEventListener('input', () => {
+    const d = decor.getById(lastSelectedDecorId);
+    if (!d || !picker.value) return;
+    d.color = parseInt(picker.value.slice(1), 16);
+    applySelectedDecor();
+    buildColorSwatches(d.color);
+    document.getElementById('ipCustomSwatch').style.background = picker.value;
+    document.getElementById('ipMatSolidIcon').style.background = picker.value;
+    document.getElementById('ipHeaderSolidDot').style.background = picker.value;
+  });
+  picker?.addEventListener('change', () => pushUndo());
+  // Transparent toggle.
+  document.getElementById('ipTransparent')?.addEventListener('change', (e) => {
+    const d = decor.getById(lastSelectedDecorId);
+    if (!d) return;
+    d.transparent = !!e.target.checked;
+    applySelectedDecor();
+    pushUndo();
   });
   document.getElementById('ipClose')?.addEventListener('click', () => clearSelection());
   document.getElementById('ipCollapse')?.addEventListener('click', () => {
@@ -1784,26 +1793,34 @@ function showInspectorPopup() {
   const pop = document.getElementById('inspectorPopup');
   if (!pop) return;
   bindInspectorPopupOnce();
+  const titleEl = document.getElementById('ipTitle');
   if (selectedDecorIds.size > 1) {
-    document.getElementById('ipTitle').textContent = selectedDecorIds.size + ' objects';
+    titleEl.textContent = `Shapes (${selectedDecorIds.size})`;
   } else {
     const d = decor.getById(lastSelectedDecorId);
     if (!d) { pop.hidden = true; return; }
     const def = DECOR[d.type];
-    document.getElementById('ipTitle').textContent = def.label;
-    _setRange('decorX_r', 'decorX', round2(d.x));
-    _setRange('decorY_r', 'decorY', round2(d.y));
-    _setRange('decorZ_r', 'decorZ', round2(d.z));
-    _setRange('decorRX_r', 'decorRX', Math.round(d.rx * 180 / Math.PI));
-    _setRange('decorRY_r', 'decorRY', Math.round(d.ry * 180 / Math.PI));
-    _setRange('decorRZ_r', 'decorRZ', Math.round(d.rz * 180 / Math.PI));
-    _setRange('decorSX_r', 'decorSX', round2(d.sx));
-    _setRange('decorSY_r', 'decorSY', round2(d.sy));
-    _setRange('decorSZ_r', 'decorSZ', round2(d.sz));
+    titleEl.textContent = def.label || 'Shape';
     buildColorSwatches(d.color);
-    document.querySelectorAll('#inspectorPopup .ip-tab').forEach(b => {
-      b.classList.toggle('active', b.dataset.mode === (d.isHole ? 'hole' : 'solid'));
+    // Sync solid/hole on both header + body buttons.
+    const mode = d.isHole ? 'hole' : 'solid';
+    document.querySelectorAll('#inspectorPopup [data-mode]').forEach(b => {
+      b.classList.toggle('active', b.dataset.mode === mode);
     });
+    // Sync color preview swatches in header / mat row / custom button.
+    const hex = '#' + (d.color & 0xffffff).toString(16).padStart(6, '0');
+    const setBg = (id) => { const el = document.getElementById(id); if (el) el.style.background = hex; };
+    setBg('ipMatSolidIcon');
+    setBg('ipHeaderSolidDot');
+    setBg('ipCustomSwatch');
+    const picker = document.getElementById('ipColorPicker');
+    if (picker) picker.value = hex;
+    // Transparent checkbox.
+    const t = document.getElementById('ipTransparent');
+    if (t) t.checked = !!d.transparent;
+    // Per-shape params currently empty — primitives don't expose live geometry params yet.
+    const params = document.getElementById('ipParams');
+    if (params) params.innerHTML = '';
   }
   pop.hidden = false;
   positionInspectorPopup();
