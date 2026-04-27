@@ -20,7 +20,12 @@ const TEX = (() => {
     ctx.putImageData(img, 0, 0);
     const t = new THREE.CanvasTexture(c);
     t.wrapS = t.wrapT = THREE.RepeatWrapping;
-    t.anisotropy = 8;
+    t.minFilter = THREE.LinearMipmapLinearFilter;
+    t.magFilter = THREE.LinearFilter;
+    t.generateMipmaps = true;
+    // Max anisotropy avoids the moiré stripe artifact on the asphalt at
+    // grazing camera angles (was producing horizontal scan-line stripes).
+    t.anisotropy = 16;
     return t;
   };
   // Asphalt grain — speckle of dark gray on slightly lighter gray
@@ -48,15 +53,22 @@ const TEX = (() => {
 })();
 
 const MATS = {
+  // Use DoubleSide on the asphalt: the extruded-ribbon top/bottom face
+  // winding depends on path tangent direction and is inverted for some
+  // segment shapes (straight had top quads CCW-from-below, so backface
+  // culling hid the deck top from above). DoubleSide is robust regardless
+  // of curve orientation and the perf cost is trivial for road geometry.
   asphalt: new THREE.MeshStandardMaterial({
     color: 0x2a2d33, map: TEX.asphalt, roughnessMap: TEX.asphaltRough,
-    roughness: 0.95, metalness: 0.02,
+    roughness: 0.95, metalness: 0.02, side: THREE.DoubleSide,
   }),
   asphaltDark: new THREE.MeshStandardMaterial({
     color: 0x1a1c20, map: TEX.asphalt, roughness: 0.92, metalness: 0.02,
+    side: THREE.DoubleSide,
   }),
   concrete: new THREE.MeshStandardMaterial({
     color: 0x8b8e95, map: TEX.concrete, roughness: 0.78, metalness: 0.05,
+    side: THREE.DoubleSide,
   }),
   curbRed: new THREE.MeshStandardMaterial({
     color: 0xd0312d, roughness: 0.5, metalness: 0.0, emissive: 0x2a0000, emissiveIntensity: 0.4,
