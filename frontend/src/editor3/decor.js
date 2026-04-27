@@ -181,6 +181,49 @@ function _capsule() {
   g.translate(0, 0.5, 0);
   return g;
 }
+// Heart: classic Bezier heart shape extruded as a flat-bottomed plaque.
+function _heart() {
+  const x = 0, y = 0;
+  const shape = new THREE.Shape();
+  // Authored point-down (heart point at y=0, dimple lobes at top).
+  shape.moveTo(x + 0.5, y + 0.5);
+  shape.bezierCurveTo(x + 0.5, y + 0.5, x + 0.4, y, x, y);
+  shape.bezierCurveTo(x - 0.6, y, x - 0.6, y + 0.7, x - 0.6, y + 0.7);
+  shape.bezierCurveTo(x - 0.6, y + 1.1, x - 0.3, y + 1.54, x + 0.5, y + 1.9);
+  shape.bezierCurveTo(x + 1.2, y + 1.54, x + 1.6, y + 1.1, x + 1.6, y + 0.7);
+  shape.bezierCurveTo(x + 1.6, y + 0.7, x + 1.6, y, x + 1.0, y);
+  shape.bezierCurveTo(x + 0.7, y, x + 0.5, y + 0.5, x + 0.5, y + 0.5);
+  const g = new THREE.ExtrudeGeometry(shape, { depth: 0.6, bevelEnabled: false });
+  // Extrude is along +Z; rotate so the depth becomes -Y (flat plaque on workplane).
+  g.rotateX(-Math.PI / 2);
+  // Normalize footprint to unit cube and lift onto workplane (y in [0,1]).
+  g.computeBoundingBox();
+  const bb = g.boundingBox;
+  const sx = 1 / (bb.max.x - bb.min.x);
+  const sy = 1 / (bb.max.y - bb.min.y);
+  const sz = 1 / (bb.max.z - bb.min.z);
+  g.scale(sx, sy, sz);
+  g.computeBoundingBox();
+  const bb2 = g.boundingBox;
+  g.translate(-(bb2.min.x + bb2.max.x) / 2, -bb2.min.y, -(bb2.min.z + bb2.max.z) / 2);
+  return g;
+}
+function _octahedron() {
+  const g = new THREE.OctahedronGeometry(0.5, 0);
+  g.translate(0, 0.5, 0);
+  return g;
+}
+function _dodecahedron() {
+  const g = new THREE.DodecahedronGeometry(0.5, 0);
+  g.translate(0, 0.5, 0);
+  return g;
+}
+function _icosahedron() {
+  const g = new THREE.IcosahedronGeometry(0.5, 0);
+  g.translate(0, 0.5, 0);
+  return g;
+}
+
 function _torusKnot() {
   const g = new THREE.TorusKnotGeometry(0.35, 0.1, 96, 12);
   g.translate(0, 0.5, 0);
@@ -347,6 +390,14 @@ export const DECOR = {
                   wall: { label: 'Wall %', min: 10, max: 40, step: 1, default: 25 },
                 },
                 build: (p) => _arch(p || {}) },
+  heart:      { label: 'Heart',      category: 'shape', color: 0xe53d5a,
+                build: () => geom('heart', _heart) },
+  octahedron: { label: 'Octahedron', category: 'shape', color: 0x9367e2,
+                build: () => geom('octahedron', _octahedron) },
+  dodecahedron: { label: 'Dodecahedron', category: 'shape', color: 0x4cb6c0,
+                build: () => geom('dodecahedron', _dodecahedron) },
+  icosahedron: { label: 'Icosahedron', category: 'shape', color: 0xebab33,
+                build: () => geom('icosahedron', _icosahedron) },
 
   // ── Nature presets (primitive + themed default colour/scale) ─
   rock:       { label: 'Rock',       category: 'nature', color: 0x808a8f, build: () => geom('sph', _sphere),

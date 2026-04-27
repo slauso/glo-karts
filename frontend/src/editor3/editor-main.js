@@ -1889,7 +1889,15 @@ function renderShapeParams(d) {
 }
 let _ipBound = false;
 // ── HSV color picker popover ─────────────────────────────────
-const _recentColors = [];
+const _CP_RECENTS_KEY = 'editor3.cpRecents.v1';
+const _recentColors = (() => {
+  try {
+    const raw = localStorage.getItem(_CP_RECENTS_KEY);
+    if (!raw) return [];
+    const arr = JSON.parse(raw);
+    return Array.isArray(arr) ? arr.filter(n => typeof n === 'number').slice(0, 16) : [];
+  } catch { return []; }
+})();
 let _cpHue = 0, _cpSat = 1, _cpVal = 1;
 function _hsvToRgb(h, s, v) {
   const i = Math.floor(h * 6);
@@ -1961,6 +1969,7 @@ function _addRecent(c) {
   if (i >= 0) _recentColors.splice(i, 1);
   _recentColors.unshift(c);
   if (_recentColors.length > 16) _recentColors.length = 16;
+  try { localStorage.setItem(_CP_RECENTS_KEY, JSON.stringify(_recentColors)); } catch {}
   _renderRecents();
 }
 function _renderRecents() {

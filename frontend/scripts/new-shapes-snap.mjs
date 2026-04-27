@@ -21,9 +21,9 @@ await page.evaluate(() => {
   const s = window.__studio;
   s.decor.clear();
   // Lay 5 shapes in a row.
-  const shapes = ['roof', 'star', 'tube', 'half_cyl', 'arch'];
+  const shapes = ['heart', 'octahedron', 'dodecahedron', 'icosahedron'];
   for (let i = 0; i < shapes.length; i++) {
-    s.decor.add({ type: shapes[i], x: (i - 2) * 8000, y: 0, z: 0, sx: 5000, sy: 5000, sz: 5000 });
+    s.decor.add({ type: shapes[i], x: (i - 1.5) * 8000, y: 0, z: 0, sx: 5000, sy: 5000, sz: 5000 });
   }
   s.rebuildAllDecor();
   s.camera.position.set(0, 18000, 28000);
