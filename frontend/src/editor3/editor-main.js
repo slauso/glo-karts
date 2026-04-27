@@ -101,7 +101,14 @@ const _plate = new THREE.Mesh(
   new THREE.MeshBasicMaterial({ color: 0xdcecf2, transparent: true, opacity: 0.95 })
 );
 _plate.rotation.x = -Math.PI / 2;
-_plate.position.y = mm(5);
+// Park plate slightly BELOW the workplane (y=0). Decor and road segments
+// rest with their bases at y=0; previously the plate sat at y=mm(5) which
+// was *inside* the road slab (deck spans 0..ROAD_THICK*1000 ≈ 500mm),
+// causing the cyan workplane to slice horizontally through the tarmac
+// side walls and z-fight along the entire visible surface. Moving the
+// plate (and grid layers) to y<0 keeps them visible on empty workplane
+// tiles but ensures any opaque object sitting on y=0 fully occludes them.
+_plate.position.y = mm(-2);
 _plate.name = 'workplane-plate';
 scene.add(_plate);
 const _plateEdge = new THREE.LineSegments(
@@ -109,26 +116,27 @@ const _plateEdge = new THREE.LineSegments(
   new THREE.LineBasicMaterial({ color: 0x1faaf2, transparent: true, opacity: 0.7 })
 );
 _plateEdge.rotation.x = -Math.PI / 2;
-_plateEdge.position.y = mm(8);
+_plateEdge.position.y = mm(-1);
 scene.add(_plateEdge);
 
 // Dual-density base-10 grid in world units (1 unit = 1 mm). Fine lines
 // every 1 m, major every 10 m. Bounded to the workplane plate so the area
 // outside reads as flat white (Tinkercad). Generous Y separation between
-// layers prevents z-fighting/flicker when the camera moves.
+// layers prevents z-fighting/flicker when the camera moves. All grid
+// layers live BELOW y=0 so they never clip the bases of placed objects.
 const _gridSpan = m(200);
 const _gridFineDivs = Math.max(2, Math.round(_gridSpan / m(1)));
 const _gridFine = new THREE.GridHelper(_gridSpan, _gridFineDivs, 0x9fc8d8, 0x9fc8d8);
 _gridFine.material.opacity = 0.32;
 _gridFine.material.transparent = true;
 _gridFine.material.depthWrite = false;
-_gridFine.position.y = mm(20);
+_gridFine.position.y = mm(-4);
 scene.add(_gridFine);
 const grid = new THREE.GridHelper(_gridSpan, Math.max(2, Math.round(_gridFineDivs / 10)), 0x1faaf2, 0x4cb8e8);
 grid.material.opacity = 0.6;
 grid.material.transparent = true;
 grid.material.depthWrite = false;
-grid.position.y = mm(40);
+grid.position.y = mm(-6);
 scene.add(grid);
 
 // ── Editor state ──────────────────────────────────────────────
