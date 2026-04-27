@@ -15,6 +15,7 @@ import { preloadAllKarts, cloneKart } from './kart-loader.js';
 import {
   DECOR, DECOR_KEYS, DECOR_CATEGORY_ORDER, DECOR_CATEGORY_LABELS,
   isDecorKey, DecorStore, buildDecorMesh, syncDecorMesh, getDecorMaterial,
+  getParamSchema,
 } from './decor.js';
 import { WORLD_UNITS_PER_M, m, mm } from './units.js';
 
@@ -1741,6 +1742,58 @@ function buildColorSwatches(activeColor) {
     c.appendChild(s);
   }
 }
+function renderShapeParams(d) {
+  const host = document.getElementById('ipParams');
+  if (!host) return;
+  host.innerHTML = '';
+  if (!d) return;
+  const schema = getParamSchema(d.type);
+  if (!schema) return;
+  for (const [key, def] of Object.entries(schema)) {
+    const row = document.createElement('div');
+    row.className = 'ip-param-row';
+    const label = document.createElement('label');
+    label.className = 'ip-param-label';
+    label.textContent = def.label || key;
+    const valEl = document.createElement('span');
+    valEl.className = 'ip-param-val';
+    const cur = (d.params && key in d.params) ? d.params[key] : def.default;
+    valEl.textContent = String(cur);
+    label.appendChild(valEl);
+    const slider = document.createElement('input');
+    slider.type = 'range';
+    slider.className = 'ip-param-slider';
+    slider.min = String(def.min);
+    slider.max = String(def.max);
+    slider.step = String(def.step ?? 1);
+    slider.value = String(cur);
+    const apply = (commit) => {
+      const inst = decor.getById(lastSelectedDecorId);
+      if (!inst) return;
+      let v = parseFloat(slider.value);
+      if (def.integer) v = Math.round(v);
+      if (!inst.params) inst.params = {};
+      inst.params[key] = v;
+      valEl.textContent = String(v);
+      // Apply to all selected of same type for multi-edit parity.
+      for (const id of selectedDecorIds) {
+        const o = decor.getById(id);
+        if (o && o.type === d.type) {
+          if (!o.params) o.params = {};
+          o.params[key] = v;
+          const m = decorMeshById.get(id);
+          if (m) syncDecorMesh(m, o);
+        }
+      }
+      if (commit) pushUndo();
+    };
+    slider.addEventListener('input', () => apply(false));
+    slider.addEventListener('change', () => apply(true));
+    row.appendChild(label);
+    row.appendChild(slider);
+    host.appendChild(row);
+  }
+}
 let _ipBound = false;
 function bindInspectorPopupOnce() {
   if (_ipBound) return; _ipBound = true;
@@ -1818,9 +1871,8 @@ function showInspectorPopup() {
     // Transparent checkbox.
     const t = document.getElementById('ipTransparent');
     if (t) t.checked = !!d.transparent;
-    // Per-shape params currently empty — primitives don't expose live geometry params yet.
-    const params = document.getElementById('ipParams');
-    if (params) params.innerHTML = '';
+    // Per-shape params: render schema-driven sliders into #ipParams.
+    renderShapeParams(d);
   }
   pop.hidden = false;
   positionInspectorPopup();

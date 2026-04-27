@@ -580,21 +580,22 @@
     }
     .inspector-popup .ip-params:empty { display: none; }
     .inspector-popup .ip-param-row {
-      display: flex; align-items: center; gap: 8px;
-      padding: 6px 0; font-size: 12px;
+      display: flex; flex-direction: column; gap: 4px;
+      padding: 8px 0; font-size: 12px;
       border-top: 1px solid #eef2f6;
     }
     .inspector-popup .ip-param-row:first-child { border-top: none; }
-    .inspector-popup .ip-param-row label {
-      flex: 0 0 80px; color: #4a5360;
+    .inspector-popup .ip-param-label {
+      display: flex; justify-content: space-between; align-items: center;
+      color: #4a5360; font-size: 11px;
     }
-    .inspector-popup .ip-param-row input[type=range] {
-      flex: 1; min-width: 0; margin: 0;
-      accent-color: #1faaf2;
+    .inspector-popup .ip-param-val {
+      color: #1a8fb5; font-weight: 600; font-variant-numeric: tabular-nums;
+      background: #f0f6fa; padding: 1px 6px; border-radius: 3px; min-width: 28px;
+      text-align: center;
     }
-    .inspector-popup .ip-param-row input[type=number] {
-      width: 52px; background: #fff; border: 1px solid #d4d9e0;
-      color: #2a2f36; padding: 2px 4px; border-radius: 3px; font-size: 11px;
+    .inspector-popup .ip-param-slider {
+      width: 100%; margin: 0; accent-color: #1faaf2;
     }
 
     /* Transparent / extras row */
