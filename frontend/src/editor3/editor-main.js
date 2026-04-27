@@ -17,6 +17,7 @@ import {
   isDecorKey, DecorStore, buildDecorMesh, syncDecorMesh, getDecorMaterial,
   getParamSchema,
 } from './decor.js';
+import { buildGroupMesh } from './csg.js';
 import { WORLD_UNITS_PER_M, m, mm } from './units.js';
 
 // Editor runs in world units where 1 unit = 1 mm. Segments are authored in
@@ -140,6 +141,11 @@ const decor = new DecorStore();
 const decorGroup = new THREE.Group();
 scene.add(decorGroup);
 const decorMeshById = new Map();
+// CSG-merged group meshes (one per groupId). Members are hidden while their
+// group has an active CSG mesh; the merged mesh is what's drawn + picked.
+const csgGroup = new THREE.Group();
+scene.add(csgGroup);
+const csgMeshByGid = new Map();
 const selectedDecorIds = new Set();
 let lastSelectedDecorId = null;
 let gizmoMode = 'translate';
@@ -260,6 +266,63 @@ function rebuildAllDecor() {
   while (decorGroup.children.length) decorGroup.remove(decorGroup.children[0]);
   decorMeshById.clear();
   for (const d of decor.all()) addDecorMesh(d);
+  rebuildAllCSG();
+}
+
+// ── CSG groups (Tinkercad-style merged solids - holes) ────────
+function _disposeCSGMesh(mesh) {
+  if (!mesh) return;
+  csgGroup.remove(mesh);
+  if (mesh.geometry) mesh.geometry.dispose?.();
+}
+function _membersOfGroup(gid) {
+  const out = [];
+  for (const d of decor.all()) if (d.groupId === gid) out.push(d);
+  return out;
+}
+function rebuildCSGForGroup(gid) {
+  if (!gid) return;
+  const prev = csgMeshByGid.get(gid);
+  if (prev) { _disposeCSGMesh(prev); csgMeshByGid.delete(gid); }
+  const members = _membersOfGroup(gid);
+  if (!members.length) {
+    for (const m of members) { const mesh = decorMeshById.get(m.id); if (mesh) mesh.visible = !m.isHidden; }
+    return;
+  }
+  // Only build a CSG mesh when the group contains at least one Hole;
+  // a pure-solid group renders as the original individual meshes.
+  const hasHole = members.some(d => d.isHole);
+  if (!hasHole) {
+    for (const m of members) { const mesh = decorMeshById.get(m.id); if (mesh) mesh.visible = !m.isHidden; }
+    return;
+  }
+  let merged = null;
+  try { merged = buildGroupMesh(members); }
+  catch (e) { console.warn('[csg] build failed for group', gid, e); }
+  if (!merged) {
+    for (const m of members) { const mesh = decorMeshById.get(m.id); if (mesh) mesh.visible = !m.isHidden; }
+    return;
+  }
+  merged.userData.csgGroupId = gid;
+  csgGroup.add(merged);
+  csgMeshByGid.set(gid, merged);
+  // Hide member meshes — the CSG mesh is now the visible representation.
+  for (const m of members) {
+    const mesh = decorMeshById.get(m.id);
+    if (mesh) mesh.visible = false;
+  }
+}
+function rebuildAllCSG() {
+  for (const mesh of csgMeshByGid.values()) _disposeCSGMesh(mesh);
+  csgMeshByGid.clear();
+  const seen = new Set();
+  for (const d of decor.all()) {
+    if (d.groupId && !seen.has(d.groupId)) { seen.add(d.groupId); rebuildCSGForGroup(d.groupId); }
+  }
+}
+function csgGroupForMember(id) {
+  const d = decor.getById(id);
+  return d?.groupId || null;
 }
 
 // ── Segment thumbnail renderer (offscreen) ────────────────────
@@ -1132,15 +1195,29 @@ function groupSelection() {
     const d = decor.getById(id);
     if (d) d.groupId = gid;
   }
+  rebuildCSGForGroup(gid);
   pushUndo();
   refreshInspector();
   toast('Grouped (' + selectedDecorIds.size + ')');
 }
 function ungroupSelection() {
   if (selectedDecorIds.size === 0) return;
+  const gids = new Set();
   for (const id of selectedDecorIds) {
     const d = decor.getById(id);
-    if (d) d.groupId = null;
+    if (d && d.groupId) {
+      gids.add(d.groupId);
+      d.groupId = null;
+    }
+  }
+  // Remove the merged CSG mesh and re-show member originals.
+  for (const gid of gids) {
+    const mesh = csgMeshByGid.get(gid);
+    if (mesh) { _disposeCSGMesh(mesh); csgMeshByGid.delete(gid); }
+  }
+  for (const d of decor.all()) {
+    const m = decorMeshById.get(d.id);
+    if (m) m.visible = !d.isHidden;
   }
   pushUndo();
   refreshInspector();
@@ -1721,6 +1798,7 @@ function applySelectedDecor() {
   const d = decor.getById(lastSelectedDecorId);
   const m = decorMeshById.get(lastSelectedDecorId);
   if (d && m) syncDecorMesh(m, d);
+  if (d?.groupId) rebuildCSGForGroup(d.groupId);
 }
 function buildColorSwatches(activeColor) {
   const c = document.getElementById('ipColors');
@@ -1775,6 +1853,7 @@ function renderShapeParams(d) {
       if (!inst.params) inst.params = {};
       inst.params[key] = v;
       valEl.textContent = String(v);
+      const dirtyGroups = new Set();
       // Apply to all selected of same type for multi-edit parity.
       for (const id of selectedDecorIds) {
         const o = decor.getById(id);
@@ -1783,8 +1862,10 @@ function renderShapeParams(d) {
           o.params[key] = v;
           const m = decorMeshById.get(id);
           if (m) syncDecorMesh(m, o);
+          if (o.groupId) dirtyGroups.add(o.groupId);
         }
       }
+      for (const gid of dirtyGroups) rebuildCSGForGroup(gid);
       if (commit) pushUndo();
     };
     slider.addEventListener('input', () => apply(false));
@@ -3073,4 +3154,4 @@ function _updateAxisBadge() {
 })();
 
 // Expose for debugging
-window.__studio = { track, decor, scene, camera, renderer, rebuildAll, rebuildAllDecor, refreshHud, refreshPlayButton, selectDecor };
+window.__studio = { track, decor, scene, camera, renderer, rebuildAll, rebuildAllDecor, refreshHud, refreshPlayButton, selectDecor, rebuildAllCSG, rebuildCSGForGroup, csgMeshByGid, decorMeshById, groupSelection, ungroupSelection };

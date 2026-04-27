@@ -38,6 +38,8 @@
     "cannon-es": "^0.20.0",
     "cannon-es-debugger": "^1.0.0",
     "colyseus.js": "^0.16.22",
-    "three": "^0.175.0"
+    "three": "^0.175.0",
+    "three-bvh-csg": "^0.0.18",
+    "three-mesh-bvh": "^0.9.9"
   }
 }
