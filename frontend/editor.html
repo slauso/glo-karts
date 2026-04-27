@@ -609,6 +609,72 @@
     }
     .inspector-popup .ip-checkbox input { accent-color: #1faaf2; }
 
+    /* TC-style HSV color picker popover. Anchored beside Custom button. */
+    .ip-color-popover {
+      position: fixed; right: 540px; top: 200px;
+      width: 232px; padding: 10px; z-index: 1100;
+      background: #fff; border: 1px solid #e1e6ec; border-radius: 6px;
+      box-shadow: 0 8px 32px rgba(20, 30, 40, 0.18);
+    }
+    .ip-color-popover .ip-cp-row {
+      display: flex; gap: 8px; margin-bottom: 8px;
+    }
+    .ip-color-popover .ip-cp-sv {
+      position: relative; width: 180px; height: 140px; border-radius: 4px;
+      cursor: crosshair; user-select: none;
+      background: #f00; /* hue overlay set inline */
+    }
+    .ip-color-popover .ip-cp-sv-white {
+      position: absolute; inset: 0;
+      background: linear-gradient(to right, #fff 0%, transparent 100%);
+      pointer-events: none;
+    }
+    .ip-color-popover .ip-cp-sv-black {
+      position: absolute; inset: 0;
+      background: linear-gradient(to top, #000 0%, transparent 100%);
+      pointer-events: none;
+    }
+    .ip-color-popover .ip-cp-sv-cursor {
+      position: absolute; width: 12px; height: 12px;
+      border: 2px solid #fff; border-radius: 50%;
+      box-shadow: 0 0 0 1px rgba(0,0,0,0.5);
+      transform: translate(-50%, -50%); pointer-events: none;
+    }
+    .ip-color-popover .ip-cp-hue {
+      position: relative; width: 18px; height: 140px; border-radius: 4px;
+      background: linear-gradient(to bottom, #f00 0%, #ff0 17%, #0f0 33%, #0ff 50%, #00f 67%, #f0f 83%, #f00 100%);
+      cursor: ns-resize; user-select: none;
+    }
+    .ip-color-popover .ip-cp-hue-cursor {
+      position: absolute; left: -3px; right: -3px; height: 6px;
+      border: 2px solid #fff; border-radius: 2px;
+      box-shadow: 0 0 0 1px rgba(0,0,0,0.5);
+      transform: translateY(-50%); pointer-events: none;
+    }
+    .ip-color-popover .ip-cp-controls {
+      display: flex; align-items: center; gap: 8px; margin-bottom: 8px;
+    }
+    .ip-color-popover .ip-cp-preview {
+      width: 28px; height: 28px; border-radius: 4px;
+      border: 1px solid #d4d9e0; flex-shrink: 0;
+    }
+    .ip-color-popover .ip-cp-hex {
+      flex: 1; height: 28px; padding: 0 8px;
+      border: 1px solid #d4d9e0; border-radius: 4px;
+      font-family: 'SF Mono', Consolas, monospace; font-size: 12px;
+      color: #2a2f36; text-transform: uppercase; outline: none;
+    }
+    .ip-color-popover .ip-cp-hex:focus { border-color: #1faaf2; }
+    .ip-color-popover .ip-cp-recents {
+      display: grid; grid-template-columns: repeat(8, 1fr); gap: 3px;
+      min-height: 22px;
+    }
+    .ip-color-popover .ip-cp-recent {
+      width: 100%; aspect-ratio: 1; border-radius: 3px;
+      border: 1px solid #d4d9e0; cursor: pointer; padding: 0;
+    }
+    .ip-color-popover .ip-cp-recent:hover { transform: scale(1.1); }
+
     /* Right column "Inspector" alternative summary (kept for compatibility) */
     .right-summary {
       border-top: 1px solid var(--line);
@@ -1077,6 +1143,26 @@
               <span>Custom...</span>
               <input type="color" id="ipColorPicker" hidden />
             </button>
+          </div>
+          <!-- TC-style HSV custom color popover. Hidden by default; shown
+               when user clicks the Custom... button. SV square + hue
+               slider + hex input + recent-colors row. -->
+          <div id="ipColorPopover" class="ip-color-popover" hidden>
+            <div class="ip-cp-row">
+              <div class="ip-cp-sv" id="ipCpSv">
+                <div class="ip-cp-sv-white"></div>
+                <div class="ip-cp-sv-black"></div>
+                <div class="ip-cp-sv-cursor" id="ipCpSvCursor"></div>
+              </div>
+              <div class="ip-cp-hue" id="ipCpHue">
+                <div class="ip-cp-hue-cursor" id="ipCpHueCursor"></div>
+              </div>
+            </div>
+            <div class="ip-cp-controls">
+              <div class="ip-cp-preview" id="ipCpPreview"></div>
+              <input type="text" class="ip-cp-hex" id="ipCpHex" maxlength="7" />
+            </div>
+            <div class="ip-cp-recents" id="ipCpRecents"></div>
           </div>
           <!-- Per-shape parameter section. Populated dynamically based
                on selected shape type (sphere → segments, cylinder → sides,

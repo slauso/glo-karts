@@ -1876,6 +1876,167 @@ function renderShapeParams(d) {
   }
 }
 let _ipBound = false;
+// ── HSV color picker popover ─────────────────────────────────
+const _recentColors = [];
+let _cpHue = 0, _cpSat = 1, _cpVal = 1;
+function _hsvToRgb(h, s, v) {
+  const i = Math.floor(h * 6);
+  const f = h * 6 - i;
+  const p = v * (1 - s);
+  const q = v * (1 - f * s);
+  const t = v * (1 - (1 - f) * s);
+  let r, g, b;
+  switch (i % 6) {
+    case 0: r = v; g = t; b = p; break;
+    case 1: r = q; g = v; b = p; break;
+    case 2: r = p; g = v; b = t; break;
+    case 3: r = p; g = q; b = v; break;
+    case 4: r = t; g = p; b = v; break;
+    case 5: r = v; g = p; b = q; break;
+  }
+  return ((Math.round(r * 255) << 16) | (Math.round(g * 255) << 8) | Math.round(b * 255));
+}
+function _rgbToHsv(c) {
+  const r = ((c >> 16) & 0xff) / 255;
+  const g = ((c >> 8) & 0xff) / 255;
+  const b = (c & 0xff) / 255;
+  const mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn;
+  let h = 0;
+  if (d !== 0) {
+    if (mx === r) h = ((g - b) / d) % 6;
+    else if (mx === g) h = (b - r) / d + 2;
+    else h = (r - g) / d + 4;
+    h /= 6;
+    if (h < 0) h += 1;
+  }
+  return { h, s: mx === 0 ? 0 : d / mx, v: mx };
+}
+function _hexFromInt(c) { return '#' + (c & 0xffffff).toString(16).padStart(6, '0'); }
+function _renderCpSv() {
+  const sv = document.getElementById('ipCpSv');
+  if (sv) sv.style.background = _hexFromInt(_hsvToRgb(_cpHue, 1, 1));
+  const cur = document.getElementById('ipCpSvCursor');
+  if (cur) { cur.style.left = (_cpSat * 100) + '%'; cur.style.top = ((1 - _cpVal) * 100) + '%'; }
+  const hueCur = document.getElementById('ipCpHueCursor');
+  if (hueCur) hueCur.style.top = (_cpHue * 100) + '%';
+}
+function _renderCpPreview() {
+  const c = _hsvToRgb(_cpHue, _cpSat, _cpVal);
+  const hex = _hexFromInt(c);
+  const prev = document.getElementById('ipCpPreview');
+  if (prev) prev.style.background = hex;
+  const hexEl = document.getElementById('ipCpHex');
+  if (hexEl && document.activeElement !== hexEl) hexEl.value = hex.toUpperCase();
+}
+function _applyCpColor(commit) {
+  const c = _hsvToRgb(_cpHue, _cpSat, _cpVal);
+  const d = decor.getById(lastSelectedDecorId);
+  if (!d) return;
+  d.color = c;
+  applySelectedDecor();
+  const hex = _hexFromInt(c);
+  for (const id of ['ipCustomSwatch', 'ipMatSolidIcon', 'ipHeaderSolidDot']) {
+    const el = document.getElementById(id); if (el) el.style.background = hex;
+  }
+  buildColorSwatches(c);
+  if (commit) {
+    _addRecent(c);
+    pushUndo();
+  }
+}
+function _addRecent(c) {
+  const i = _recentColors.indexOf(c);
+  if (i >= 0) _recentColors.splice(i, 1);
+  _recentColors.unshift(c);
+  if (_recentColors.length > 16) _recentColors.length = 16;
+  _renderRecents();
+}
+function _renderRecents() {
+  const host = document.getElementById('ipCpRecents');
+  if (!host) return;
+  host.innerHTML = '';
+  for (const c of _recentColors) {
+    const b = document.createElement('button');
+    b.className = 'ip-cp-recent';
+    b.style.background = _hexFromInt(c);
+    b.title = _hexFromInt(c).toUpperCase();
+    b.addEventListener('click', () => {
+      const hsv = _rgbToHsv(c);
+      _cpHue = hsv.h; _cpSat = hsv.s; _cpVal = hsv.v;
+      _renderCpSv(); _renderCpPreview();
+      _applyCpColor(true);
+    });
+    host.appendChild(b);
+  }
+}
+function toggleColorPopover() {
+  const pop = document.getElementById('ipColorPopover');
+  if (!pop) return;
+  if (!pop.hidden) { pop.hidden = true; return; }
+  // Seed popover from current color.
+  const d = decor.getById(lastSelectedDecorId);
+  if (d) {
+    const hsv = _rgbToHsv(d.color);
+    _cpHue = hsv.h; _cpSat = hsv.s; _cpVal = hsv.v;
+  }
+  // Anchor the popover just to the LEFT of the inspector card.
+  const ip = document.getElementById('inspectorPopup');
+  if (ip) {
+    const r = ip.getBoundingClientRect();
+    pop.style.position = 'fixed';
+    pop.style.left = Math.max(8, Math.floor(r.left - 244)) + 'px';
+    pop.style.top = Math.floor(r.top + 184) + 'px';
+    pop.style.right = 'auto';
+  }
+  _renderCpSv();
+  _renderCpPreview();
+  _renderRecents();
+  pop.hidden = false;
+}
+let _cpBound = false;
+function bindColorPopoverOnce() {
+  if (_cpBound) return; _cpBound = true;
+  const sv = document.getElementById('ipCpSv');
+  const hue = document.getElementById('ipCpHue');
+  const hex = document.getElementById('ipCpHex');
+  if (sv) {
+    let dragging = false;
+    const onMove = (e) => {
+      const r = sv.getBoundingClientRect();
+      _cpSat = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width));
+      _cpVal = 1 - Math.max(0, Math.min(1, (e.clientY - r.top) / r.height));
+      _renderCpSv(); _renderCpPreview();
+      _applyCpColor(false);
+    };
+    sv.addEventListener('mousedown', (e) => { dragging = true; onMove(e); });
+    window.addEventListener('mousemove', (e) => { if (dragging) onMove(e); });
+    window.addEventListener('mouseup', () => { if (dragging) { dragging = false; _applyCpColor(true); } });
+  }
+  if (hue) {
+    let dragging = false;
+    const onMove = (e) => {
+      const r = hue.getBoundingClientRect();
+      _cpHue = Math.max(0, Math.min(0.999, (e.clientY - r.top) / r.height));
+      _renderCpSv(); _renderCpPreview();
+      _applyCpColor(false);
+    };
+    hue.addEventListener('mousedown', (e) => { dragging = true; onMove(e); });
+    window.addEventListener('mousemove', (e) => { if (dragging) onMove(e); });
+    window.addEventListener('mouseup', () => { if (dragging) { dragging = false; _applyCpColor(true); } });
+  }
+  if (hex) {
+    hex.addEventListener('input', () => {
+      const m = /^#?([0-9a-fA-F]{6})$/.exec(hex.value.trim());
+      if (!m) return;
+      const c = parseInt(m[1], 16);
+      const hsv = _rgbToHsv(c);
+      _cpHue = hsv.h; _cpSat = hsv.s; _cpVal = hsv.v;
+      _renderCpSv(); _renderCpPreview();
+      _applyCpColor(false);
+    });
+    hex.addEventListener('change', () => _applyCpColor(true));
+  }
+}
 function bindInspectorPopupOnce() {
   if (_ipBound) return; _ipBound = true;
   // Solid/Hole material picker buttons (both header + body share data-mode).
@@ -1894,21 +2055,20 @@ function bindInspectorPopupOnce() {
   document.querySelectorAll('#inspectorPopup [data-mode]').forEach(b => {
     b.addEventListener('click', () => setMode(b.dataset.mode));
   });
-  // Custom color picker — opens native color input, applies on change.
+  // Custom color picker — opens TC-style HSV popover.
   const customBtn = document.getElementById('ipColorCustom');
-  const picker = document.getElementById('ipColorPicker');
-  customBtn?.addEventListener('click', () => picker?.click());
-  picker?.addEventListener('input', () => {
-    const d = decor.getById(lastSelectedDecorId);
-    if (!d || !picker.value) return;
-    d.color = parseInt(picker.value.slice(1), 16);
-    applySelectedDecor();
-    buildColorSwatches(d.color);
-    document.getElementById('ipCustomSwatch').style.background = picker.value;
-    document.getElementById('ipMatSolidIcon').style.background = picker.value;
-    document.getElementById('ipHeaderSolidDot').style.background = picker.value;
+  customBtn?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    toggleColorPopover();
   });
-  picker?.addEventListener('change', () => pushUndo());
+  // Click-outside dismiss for the popover.
+  document.addEventListener('mousedown', (e) => {
+    const pop = document.getElementById('ipColorPopover');
+    if (!pop || pop.hidden) return;
+    if (pop.contains(e.target) || customBtn?.contains(e.target)) return;
+    pop.hidden = true;
+  });
+  bindColorPopoverOnce();
   // Transparent toggle.
   document.getElementById('ipTransparent')?.addEventListener('change', (e) => {
     const d = decor.getById(lastSelectedDecorId);
