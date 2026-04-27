@@ -164,17 +164,24 @@ export function isDecorKey(key) {
 
 // ── Materials ────────────────────────────────────────────────────
 const _matCache = new Map();
-export function getDecorMaterial(color, isHole = false) {
-  const key = `${isHole ? 'h' : 's'}:${color}`;
+// Tinkercad parity: a shape can be Solid (opaque), a Hole (cyan-pattern
+// preview that subtracts on group), or marked Transparent (visible but
+// see-through, opacity ~0.55). Cache key encodes all three so each
+// variant gets its own shared material.
+export function getDecorMaterial(color, isHole = false, isTransparent = false) {
+  const tag = isHole ? 'h' : (isTransparent ? 't' : 's');
+  const key = `${tag}:${color}`;
   let m = _matCache.get(key);
   if (!m) {
+    const opacity = isHole ? 0.35 : (isTransparent ? 0.55 : 1.0);
+    const transparent = isHole || isTransparent;
     m = new THREE.MeshStandardMaterial({
       color,
       roughness: 0.55,
       metalness: 0.02,
-      transparent: isHole,
-      opacity: isHole ? 0.35 : 1.0,
-      depthWrite: !isHole,
+      transparent,
+      opacity,
+      depthWrite: !transparent,
     });
     _matCache.set(key, m);
   }
@@ -191,7 +198,7 @@ export class DecorStore {
   }
 
   /** Create a new instance. Caller passes a partial; defaults from registry are filled in. */
-  add({ type, x = 0, y, z = 0, rx, ry, rz, sx, sy, sz, color, isHole = false, isLocked = false, isHidden = false, groupId = null } = {}) {
+  add({ type, x = 0, y, z = 0, rx, ry, rz, sx, sy, sz, color, isHole = false, transparent = false, isLocked = false, isHidden = false, groupId = null } = {}) {
     if (!DECOR[type]) return null;
     const def = DECOR[type];
     const dr = def.defaultRot || [0, 0, 0];
@@ -215,6 +222,7 @@ export class DecorStore {
       sx: _sx, sy: _sy, sz: _sz,
       color: color ?? def.color,
       isHole: !!isHole,
+      transparent: !!transparent,
       isLocked: !!isLocked,
       isHidden: !!isHidden,
       groupId: groupId ?? null,
@@ -236,6 +244,7 @@ export class DecorStore {
       s: [round3(d.sx), round3(d.sy), round3(d.sz)],
       c: d.color,
       h: d.isHole ? 1 : 0,
+      tr: d.transparent ? 1 : 0,
       l: d.isLocked ? 1 : 0,
       v: d.isHidden ? 1 : 0,
       g: d.groupId ?? null,
@@ -249,7 +258,7 @@ export class DecorStore {
       const [x, y, z] = d.p || [0, 0, 0];
       const [rx, ry, rz] = d.r || [0, 0, 0];
       const [sx, sy, sz] = d.s || [1, 1, 1];
-      this.add({ type: d.t, x, y, z, rx, ry, rz, sx, sy, sz, color: d.c, isHole: !!d.h, isLocked: !!d.l, isHidden: !!d.v, groupId: d.g ?? null });
+      this.add({ type: d.t, x, y, z, rx, ry, rz, sx, sy, sz, color: d.c, isHole: !!d.h, transparent: !!d.tr, isLocked: !!d.l, isHidden: !!d.v, groupId: d.g ?? null });
     }
   }
 }
@@ -276,6 +285,6 @@ export function syncDecorMesh(mesh, inst) {
   mesh.position.set(inst.x, inst.y, inst.z);
   mesh.rotation.set(inst.rx, inst.ry, inst.rz);
   mesh.scale.set(inst.sx, inst.sy, inst.sz);
-  mesh.material = getDecorMaterial(inst.color, inst.isHole);
+  mesh.material = getDecorMaterial(inst.color, inst.isHole, !!inst.transparent);
   mesh.visible = !inst.isHidden;
 }
