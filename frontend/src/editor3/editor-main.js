@@ -15,8 +15,9 @@ import { preloadAllKarts, cloneKart } from './kart-loader.js';
 import {
   DECOR, DECOR_KEYS, DECOR_CATEGORY_ORDER, DECOR_CATEGORY_LABELS,
   isDecorKey, DecorStore, buildDecorMesh, syncDecorMesh, getDecorMaterial,
-  getParamSchema,
+  getParamSchema, preloadKenneyKit,
 } from './decor.js';
+import { onGlbLoaded, instanceGLB } from './glb-cache.js';
 import { buildGroupMesh } from './csg.js';
 import { WORLD_UNITS_PER_M, m, mm } from './units.js';
 
@@ -375,13 +376,21 @@ function makeThumb(key) {
     let mesh;
     if (isDecorKey(key)) {
       const def = DECOR[key];
-      const dr = def.defaultRot || [0, 0, 0];
-      // Frame the same 1000 mm default the user actually drops, so the
-      // thumbnail represents what they'll get on the workplane.
-      const ds = [1000, 1000, 1000];
-      mesh = new THREE.Mesh(def.build(), getDecorMaterial(def.color, false).clone());
-      mesh.rotation.set(dr[0], dr[1], dr[2]);
-      mesh.scale.set(ds[0], ds[1], ds[2]);
+      // GLB-backed kit prop: try to render the actual scene; if not loaded
+      // yet, return '' so the palette tile re-asks once preload completes.
+      if (def.glb) {
+        const inst = instanceGLB(def.glb);
+        if (!inst) { return ''; }
+        const ds = def.defaultScale || [2, 2, 2];
+        inst.scale.set(ds[0] * 1000, ds[1] * 1000, ds[2] * 1000);
+        mesh = inst;
+      } else {
+        const dr = def.defaultRot || [0, 0, 0];
+        const ds = [1000, 1000, 1000];
+        mesh = new THREE.Mesh(def.build(), getDecorMaterial(def.color, false).clone());
+        mesh.rotation.set(dr[0], dr[1], dr[2]);
+        mesh.scale.set(ds[0], ds[1], ds[2]);
+      }
     } else {
       mesh = buildSegmentMesh(key);
     }
@@ -2349,6 +2358,26 @@ function positionKartPreview() {
 // Kick off kart preload so the playtest swap is instant.
 preloadAllKarts([activeKartId]);
 updateKartPreview(activeKartId);
+
+// Kick off Kenney CC0 GLB prop preload. Once each GLB resolves, invalidate
+// the cached palette thumbnail and rebuild any placeholder decor instances
+// in the scene so they swap to the real model.
+preloadKenneyKit();
+onGlbLoaded((path) => {
+  // Invalidate any palette tile whose def.glb matches this path.
+  for (const key of DECOR_KEYS) {
+    const def = DECOR[key];
+    if (def && def.glb === path) thumbCache.delete(key);
+  }
+  buildPalette();
+  // Replace any placeholder/stale meshes for kit instances that match.
+  let needsRebuild = false;
+  for (const d of decor.all()) {
+    const def = DECOR[d.type];
+    if (def && def.glb === path) { needsRebuild = true; break; }
+  }
+  if (needsRebuild) rebuildAllDecor();
+});
 
 // ── Terrain controls ──────────────────────────────────────────
 // v2 key: previous v1 stored sky/ground colours that produced a coloured

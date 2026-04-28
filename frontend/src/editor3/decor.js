@@ -11,6 +11,29 @@
  */
 
 import * as THREE from 'three';
+import { instanceGLB, loadGLB } from './glb-cache.js';
+
+// ── Kenney CC0 racing-kit GLB props ────────────────────────────
+// Public folder lives at /models/kenney/* relative to site root. These
+// entries are surfaced in the palette under the 'kit' category. Each one
+// loads its GLB once via glb-cache.js and clones it per instance.
+export const KIT_GLBS = [
+  { key: 'kit_truck_yellow',  label: 'Truck (Yellow)',  file: '/models/kenney/vehicle-truck-yellow.glb', defaultScale: [2, 2, 2] },
+  { key: 'kit_truck_red',     label: 'Truck (Red)',     file: '/models/kenney/vehicle-truck-red.glb',    defaultScale: [2, 2, 2] },
+  { key: 'kit_truck_green',   label: 'Truck (Green)',   file: '/models/kenney/vehicle-truck-green.glb',  defaultScale: [2, 2, 2] },
+  { key: 'kit_truck_purple',  label: 'Truck (Purple)',  file: '/models/kenney/vehicle-truck-purple.glb', defaultScale: [2, 2, 2] },
+  { key: 'kit_motorcycle',    label: 'Motorcycle',      file: '/models/kenney/vehicle-motorcycle.glb',   defaultScale: [2, 2, 2] },
+  { key: 'kit_decor_forest',  label: 'Forest Scene',    file: '/models/kenney/decoration-forest.glb',    defaultScale: [3, 3, 3] },
+  { key: 'kit_decor_tents',   label: 'Tents Scene',     file: '/models/kenney/decoration-tents.glb',     defaultScale: [3, 3, 3] },
+  { key: 'kit_decor_empty',   label: 'Pit Lane',        file: '/models/kenney/decoration-empty.glb',     defaultScale: [3, 3, 3] },
+  { key: 'kit_track_finish',  label: 'Finish Banner',   file: '/models/kenney/track-finish.glb',         defaultScale: [3, 3, 3] },
+  { key: 'kit_track_tents',   label: 'Trackside Tents', file: '/models/kenney/track-tents.glb',          defaultScale: [3, 3, 3] },
+];
+
+export function preloadKenneyKit() {
+  return Promise.allSettled(KIT_GLBS.map(g => loadGLB(g.file)));
+}
+
 
 // ── Shared geometry cache ────────────────────────────────────────
 const _geomCache = new Map();
@@ -430,12 +453,30 @@ export const DECOR = {
                 defaultScale: [3.0, 1.5, 4.0] },
 };
 
+// ── Kenney CC0 GLB props (registered programmatically) ──────────────
+for (const e of KIT_GLBS) {
+  DECOR[e.key] = {
+    label: e.label,
+    category: 'kit',
+    color: 0xffffff,
+    glb: e.file,
+    defaultScale: e.defaultScale || [2, 2, 2],
+    // Placeholder geometry used for thumbnails until the GLB streams in.
+    build: () => geom('kit_placeholder', () => {
+      const g = new THREE.BoxGeometry(1, 1, 1);
+      g.translate(0, 0.5, 0);
+      return g;
+    }),
+  };
+}
+
 export const DECOR_KEYS = Object.keys(DECOR);
-export const DECOR_CATEGORY_ORDER = ['shape', 'nature', 'urban'];
+export const DECOR_CATEGORY_ORDER = ['shape', 'nature', 'urban', 'kit'];
 export const DECOR_CATEGORY_LABELS = {
   shape: 'Shapes',
   nature: 'Nature',
   urban: 'Props',
+  kit: 'Racing Kit',
 };
 
 export function isDecorKey(key) {
@@ -577,6 +618,29 @@ function round3(v) { return Math.round(v * 1000) / 1000; }
 export function buildDecorMesh(inst) {
   const def = DECOR[inst.type];
   if (!def) return null;
+  // GLB-backed prop: instance the cached scene; if not yet loaded, return
+  // a small placeholder cube so the user still sees something at the
+  // drop point. The editor swaps the placeholder for the real instance
+  // once the GLB load resolves (via onGlbLoaded -> rebuildAllDecor).
+  if (def.glb) {
+    const obj = instanceGLB(def.glb);
+    if (obj) {
+      obj.position.set(inst.x, inst.y, inst.z);
+      obj.rotation.set(inst.rx, inst.ry, inst.rz);
+      obj.scale.set(inst.sx, inst.sy, inst.sz);
+      obj.userData.decorId = inst.id;
+      obj.userData.kitGlb = def.glb;
+      return obj;
+    }
+    // Fallback placeholder while loading
+    const ph = new THREE.Mesh(def.build(), getDecorMaterial(0xff8c00, false, true));
+    ph.position.set(inst.x, inst.y, inst.z);
+    ph.rotation.set(inst.rx, inst.ry, inst.rz);
+    ph.scale.set(inst.sx, inst.sy, inst.sz);
+    ph.userData.decorId = inst.id;
+    ph.userData.kitPlaceholder = true;
+    return ph;
+  }
   const mesh = new THREE.Mesh(def.build(inst.params), getDecorMaterial(inst.color, inst.isHole, !!inst.transparent));
   mesh.position.set(inst.x, inst.y, inst.z);
   mesh.rotation.set(inst.rx, inst.ry, inst.rz);
@@ -604,11 +668,14 @@ export function syncDecorMesh(mesh, inst) {
   mesh.position.set(inst.x, inst.y, inst.z);
   mesh.rotation.set(inst.rx, inst.ry, inst.rz);
   mesh.scale.set(inst.sx, inst.sy, inst.sz);
-  mesh.material = getDecorMaterial(inst.color, inst.isHole, !!inst.transparent);
   mesh.visible = !inst.isHidden;
+  const def = DECOR[inst.type];
+  // GLB-backed prop: nothing material-wise to update (uses GLB's own
+  // textures). Param/colour edits don't apply to kit props.
+  if (def && def.glb) return;
+  mesh.material = getDecorMaterial(inst.color, inst.isHole, !!inst.transparent);
   const key = paramsKey(inst.params);
   if (key !== mesh.userData.paramsKey) {
-    const def = DECOR[inst.type];
     if (def) {
       const prev = mesh.geometry;
       mesh.geometry = def.build(inst.params);
