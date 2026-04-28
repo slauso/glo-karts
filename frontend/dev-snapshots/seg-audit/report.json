@@ -1,91 +1,91 @@
 [
   {
     "key": "straight",
-    "meshCount": 36,
-    "triCount": 612,
+    "meshCount": 32,
+    "triCount": 564,
     "materials": 4,
     "bbox": {
-      "sx": 11250,
-      "sy": 661,
-      "sz": 12456
+      "sx": 10800,
+      "sy": 950,
+      "sz": 12523
     },
     "center": {
       "x": 0,
-      "y": 330,
-      "z": -228
+      "y": 475,
+      "z": -262
     }
   },
   {
     "key": "straight2",
-    "meshCount": 73,
-    "triCount": 1200,
+    "meshCount": 61,
+    "triCount": 1056,
     "materials": 4,
     "bbox": {
-      "sx": 11250,
-      "sy": 661,
-      "sz": 24754
+      "sx": 10800,
+      "sy": 950,
+      "sz": 25002
     },
     "center": {
       "x": 0,
-      "y": 330,
-      "z": -371
+      "y": 475,
+      "z": -495
     }
   },
   {
     "key": "straight4",
-    "meshCount": 145,
-    "triCount": 2400,
+    "meshCount": 121,
+    "triCount": 2112,
     "materials": 4,
     "bbox": {
-      "sx": 11250,
-      "sy": 661,
+      "sx": 10800,
+      "sy": 950,
       "sz": 49492
     },
     "center": {
       "x": 0,
-      "y": 330,
+      "y": 475,
       "z": -728
     }
   },
   {
     "key": "corner",
-    "meshCount": 21,
-    "triCount": 432,
+    "meshCount": 19,
+    "triCount": 408,
     "materials": 4,
     "bbox": {
-      "sx": 11852,
-      "sy": 661,
-      "sz": 11852
+      "sx": 11857,
+      "sy": 950,
+      "sz": 11857
     },
     "center": {
-      "x": -309,
-      "y": 330,
-      "z": -309
+      "x": -526,
+      "y": 475,
+      "z": -526
     }
   },
   {
     "key": "cornerR",
-    "meshCount": 21,
-    "triCount": 432,
+    "meshCount": 19,
+    "triCount": 408,
     "materials": 4,
     "bbox": {
-      "sx": 11852,
-      "sy": 661,
-      "sz": 11852
+      "sx": 11857,
+      "sy": 950,
+      "sz": 11857
     },
     "center": {
-      "x": 309,
-      "y": 330,
-      "z": -309
+      "x": 526,
+      "y": 475,
+      "z": -526
     }
   },
   {
     "key": "ramp_up",
-    "meshCount": 41,
-    "triCount": 1448,
+    "meshCount": 63,
+    "triCount": 1712,
     "materials": 4,
     "bbox": {
-      "sx": 11250,
+      "sx": 10800,
       "sy": 8680,
       "sz": 24008
     },
@@ -97,11 +97,11 @@
   },
   {
     "key": "ramp_down",
-    "meshCount": 41,
-    "triCount": 1448,
+    "meshCount": 63,
+    "triCount": 1712,
     "materials": 4,
     "bbox": {
-      "sx": 11250,
+      "sx": 10800,
       "sy": 8680,
       "sz": 24008
     },
@@ -113,34 +113,34 @@
   },
   {
     "key": "plateau",
-    "meshCount": 38,
-    "triCount": 916,
+    "meshCount": 48,
+    "triCount": 1036,
     "materials": 6,
     "bbox": {
-      "sx": 11250,
+      "sx": 11000,
       "sy": 8740,
-      "sz": 12200
+      "sz": 12623
     },
     "center": {
       "x": 0,
       "y": 4370,
-      "z": 0
+      "z": -212
     }
   },
   {
     "key": "finish",
-    "meshCount": 59,
-    "triCount": 960,
+    "meshCount": 55,
+    "triCount": 912,
     "materials": 18,
     "bbox": {
       "sx": 11760,
       "sy": 3775,
-      "sz": 12456
+      "sz": 12523
     },
     "center": {
       "x": 0,
       "y": 1887,
-      "z": -228
+      "z": -262
     }
   },
   {
@@ -209,145 +209,145 @@
   },
   {
     "key": "corner_large",
-    "meshCount": 27,
-    "triCount": 600,
-    "materials": 4,
+    "meshCount": 71,
+    "triCount": 1128,
+    "materials": 5,
     "bbox": {
-      "sx": 21483,
-      "sy": 661,
-      "sz": 27819
+      "sx": 21560,
+      "sy": 950,
+      "sz": 27878
     },
     "center": {
-      "x": 5077,
-      "y": 330,
-      "z": 7909
+      "x": 5115,
+      "y": 475,
+      "z": 7879
     }
   },
   {
     "key": "corner_largeR",
-    "meshCount": 27,
-    "triCount": 600,
-    "materials": 4,
+    "meshCount": 71,
+    "triCount": 1128,
+    "materials": 5,
     "bbox": {
-      "sx": 21483,
-      "sy": 661,
-      "sz": 27819
+      "sx": 21560,
+      "sy": 950,
+      "sz": 27878
     },
     "center": {
-      "x": -5077,
-      "y": 330,
-      "z": 7909
+      "x": -5115,
+      "y": 475,
+      "z": 7879
     }
   },
   {
     "key": "bend_left",
-    "meshCount": 48,
-    "triCount": 948,
+    "meshCount": 68,
+    "triCount": 1188,
     "materials": 4,
     "bbox": {
-      "sx": 16735,
-      "sy": 661,
-      "sz": 25621
+      "sx": 16436,
+      "sy": 950,
+      "sz": 25576
     },
     "center": {
-      "x": -2516,
-      "y": 330,
-      "z": 5927
+      "x": -2574,
+      "y": 475,
+      "z": 6067
     }
   },
   {
     "key": "bend_right",
-    "meshCount": 48,
-    "triCount": 948,
+    "meshCount": 68,
+    "triCount": 1188,
     "materials": 4,
     "bbox": {
-      "sx": 16735,
-      "sy": 661,
-      "sz": 25621
+      "sx": 16436,
+      "sy": 950,
+      "sz": 25576
     },
     "center": {
-      "x": 2516,
-      "y": 330,
-      "z": 5927
+      "x": 2574,
+      "y": 475,
+      "z": 6067
     }
   },
   {
     "key": "chicane",
-    "meshCount": 70,
-    "triCount": 1340,
+    "meshCount": 146,
+    "triCount": 2252,
     "materials": 4,
     "bbox": {
-      "sx": 25442,
-      "sy": 661,
-      "sz": 52685
+      "sx": 25123,
+      "sy": 950,
+      "sz": 53276
     },
     "center": {
-      "x": -64,
-      "y": 330,
-      "z": 20341
+      "x": -2,
+      "y": 475,
+      "z": 20208
     }
   },
   {
     "key": "banked_turn",
-    "meshCount": 38,
-    "triCount": 764,
+    "meshCount": 67,
+    "triCount": 1112,
     "materials": 5,
     "bbox": {
-      "sx": 21545,
-      "sy": 2588,
-      "sz": 27819
+      "sx": 21564,
+      "sy": 2877,
+      "sz": 27878
     },
     "center": {
-      "x": 5046,
-      "y": 1294,
-      "z": 7909
+      "x": 5116,
+      "y": 1439,
+      "z": 7879
     }
   },
   {
     "key": "banked_turnR",
-    "meshCount": 38,
-    "triCount": 764,
+    "meshCount": 67,
+    "triCount": 1112,
     "materials": 5,
     "bbox": {
-      "sx": 21545,
-      "sy": 2588,
-      "sz": 27819
+      "sx": 21564,
+      "sy": 2877,
+      "sz": 27878
     },
     "center": {
-      "x": -5046,
-      "y": 1294,
-      "z": 7909
+      "x": -5116,
+      "y": 1439,
+      "z": 7879
     }
   },
   {
     "key": "bump_up",
-    "meshCount": 19,
-    "triCount": 456,
+    "meshCount": 31,
+    "triCount": 600,
     "materials": 3,
     "bbox": {
-      "sx": 11250,
-      "sy": 1096,
-      "sz": 12000
+      "sx": 10800,
+      "sy": 1396,
+      "sz": 12007
     },
     "center": {
       "x": 0,
-      "y": 548,
+      "y": 698,
       "z": 0
     }
   },
   {
     "key": "hill_complete",
-    "meshCount": 40,
-    "triCount": 852,
+    "meshCount": 68,
+    "triCount": 1188,
     "materials": 4,
     "bbox": {
-      "sx": 11250,
-      "sy": 7205,
-      "sz": 24000
+      "sx": 10800,
+      "sy": 7536,
+      "sz": 24243
     },
     "center": {
       "x": 0,
-      "y": 3602,
+      "y": 3768,
       "z": 6006
     }
   },
@@ -369,27 +369,27 @@
   },
   {
     "key": "bridge",
-    "meshCount": 37,
-    "triCount": 1960,
-    "materials": 4,
+    "meshCount": 86,
+    "triCount": 1572,
+    "materials": 10,
     "bbox": {
-      "sx": 11340,
-      "sy": 8817,
-      "sz": 24900
+      "sx": 11016,
+      "sy": 8740,
+      "sz": 25202
     },
     "center": {
       "x": 0,
-      "y": 4332,
-      "z": 6006
+      "y": 4370,
+      "z": 5605
     }
   },
   {
     "key": "bridge_onramp",
-    "meshCount": 41,
-    "triCount": 1448,
+    "meshCount": 63,
+    "triCount": 1712,
     "materials": 4,
     "bbox": {
-      "sx": 11250,
+      "sx": 10800,
       "sy": 8680,
       "sz": 24008
     },
@@ -401,11 +401,11 @@
   },
   {
     "key": "bridge_offramp",
-    "meshCount": 41,
-    "triCount": 1448,
+    "meshCount": 63,
+    "triCount": 1712,
     "materials": 4,
     "bbox": {
-      "sx": 11250,
+      "sx": 10800,
       "sy": 8680,
       "sz": 24008
     },
@@ -417,34 +417,34 @@
   },
   {
     "key": "tunnel",
-    "meshCount": 35,
-    "triCount": 1668,
+    "meshCount": 57,
+    "triCount": 1932,
     "materials": 7,
     "bbox": {
       "sx": 12160,
       "sy": 11930,
-      "sz": 24632
+      "sz": 25132
     },
     "center": {
       "x": 0,
       "y": 2055,
-      "z": 5820
+      "z": 5570
     }
   },
   {
     "key": "cap_end",
-    "meshCount": 37,
-    "triCount": 624,
+    "meshCount": 33,
+    "triCount": 576,
     "materials": 7,
     "bbox": {
       "sx": 12000,
       "sy": 2260,
-      "sz": 12456
+      "sz": 12523
     },
     "center": {
       "x": 0,
       "y": 1130,
-      "z": -228
+      "z": -262
     }
   }
 ]

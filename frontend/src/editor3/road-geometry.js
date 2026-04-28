@@ -297,15 +297,30 @@ function extrudeRoadBanked(path, bankFn, outerSign, opts = {}) {
   return mesh;
 }
 
+// ── Curb constants ──────────────────────────────────────────────
+// Stripe length is fixed (1.0m) so the red/white pattern is consistent
+// across every segment regardless of length. Stripes TOUCH (no gap) and
+// are slightly taller so they read as a barrier wall, while staying low
+// enough that karts can see over them and "climb" them in the editor.
+const CURB_STRIPE_LEN = 1.0;
+const CURB_STRIPE_HEIGHT = 0.45;
+const CURB_STRIPE_WIDTH = 0.55;
+
 // Banked-aware curb placement. Curbs follow the same lifted edges as the
 // banked extrusion. `sideSign` is the side of the path (+1 or -1).
 // `bankFn` returns the roll angle. `outerSign` is which side is outside.
+//
+// Stripe length is computed from the path length so adjacent stripes touch
+// → continuous red/white barrier (no gaps). Outer-side stripes lift with
+// the deck bank.
 function curbAlongPathBanked(path, sideSign, bankFn, outerSign, opts = {}) {
   const grp = new THREE.Group();
-  const count = opts.count || Math.max(6, Math.floor(path.getLength() / 0.8));
-  const offset = (ROAD_WIDTH / 2) - 0.05;
+  const total = path.getLength();
+  const count = Math.max(2, Math.round(total / CURB_STRIPE_LEN));
+  const stripeLen = total / count;
+  const offset = (ROAD_WIDTH / 2) - CURB_STRIPE_WIDTH / 2;
   const halfW = ROAD_WIDTH / 2;
-  const stone = new THREE.BoxGeometry(0.55, 0.16, 0.7);
+  const stone = new THREE.BoxGeometry(CURB_STRIPE_WIDTH, CURB_STRIPE_HEIGHT, stripeLen);
   for (let i = 0; i < count; i++) {
     const t = (i + 0.5) / count;
     const p = path.getPointAt(t);
@@ -321,41 +336,55 @@ function curbAlongPathBanked(path, sideSign, bankFn, outerSign, opts = {}) {
     const m = new THREE.Mesh(stone, mat);
     m.position.set(
       p.x + nx * offset,
-      ROAD_THICK + 0.001 + 0.08 + (p.y || 0) + lift,
+      ROAD_THICK + (p.y || 0) + CURB_STRIPE_HEIGHT / 2 + lift,
       p.z + nz * offset,
     );
     m.rotation.y = yaw;
     if (sideSign === outerSign) m.rotation.z = -bank;
-    else m.rotation.z = +bank * 0.0;
-    if (opts.paint) m.scale.set(0.4, 0.3, 0.6);
+    if (opts.paint) m.scale.set(0.4, 0.3, 1.0);
     m.castShadow = true; m.receiveShadow = true;
     grp.add(m);
   }
   return grp;
 }
 
-// Place small alternating-color curb stones along one side of a path.
+// Place a CONTINUOUS chain of alternating red/white curb stones along one
+// side of a path. Stripe length is auto-computed so stripes touch end-to-end
+// (no gaps) — produces a wall-like barrier of consistent visual density.
 function curbAlongPath(path, sideSign, opts = {}) {
   const grp = new THREE.Group();
-  const count = opts.count || Math.max(6, Math.floor(path.getLength() / 0.8));
-  const offset = (ROAD_WIDTH / 2) - 0.05;
-  const yTop = ROAD_THICK + 0.001;
-  const stone = new THREE.BoxGeometry(0.55, 0.16, 0.7);
+  const total = path.getLength();
+  const count = Math.max(2, Math.round(total / CURB_STRIPE_LEN));
+  const stripeLen = total / count;
+  const offset = (ROAD_WIDTH / 2) - CURB_STRIPE_WIDTH / 2;
+  const stone = new THREE.BoxGeometry(CURB_STRIPE_WIDTH, CURB_STRIPE_HEIGHT, stripeLen);
   for (let i = 0; i < count; i++) {
     const t = (i + 0.5) / count;
     const p = path.getPointAt(t);
     const tan = path.getTangentAt(t);
     const yaw = Math.atan2(tan.x, tan.z);
-    // perpendicular offset in XZ
     const nx = Math.cos(yaw) * sideSign;
     const nz = -Math.sin(yaw) * sideSign;
     const m = new THREE.Mesh(stone, i % 2 === 0 ? MATS.curbRed : MATS.curbWhite);
-    m.position.set(p.x + nx * offset, yTop + 0.08 + (p.y || 0), p.z + nz * offset);
+    m.position.set(
+      p.x + nx * offset,
+      ROAD_THICK + (p.y || 0) + CURB_STRIPE_HEIGHT / 2,
+      p.z + nz * offset,
+    );
     m.rotation.y = yaw;
     m.castShadow = true; m.receiveShadow = true;
     grp.add(m);
   }
   return grp;
+}
+
+// Convenience: add curbs to BOTH sides of a path with the consistent
+// continuous stripe pattern. Used by every road builder.
+function curbsBothSides(path) {
+  const g = new THREE.Group();
+  g.add(curbAlongPath(path, +1));
+  g.add(curbAlongPath(path, -1));
+  return g;
 }
 
 // Dashed centerline paint along a path.
@@ -414,10 +443,10 @@ function buildCorner(mirror) {
   grp.add(extrudeRoad(path));
   // Outside curb: mirror→inside is +X side of arc (closer to center cx>0), outside is -X side → side = -1
   // For L (mirror=false), center is at -TILE/2, outside is +X side → side = +1
-  grp.add(curbAlongPath(path, mirror ? -1 : +1, { count: 10 }));
+  grp.add(curbAlongPath(path, mirror ? -1 : +1));
   // Inner edge gets a thin painted line instead of a curb
-  const inner = curbAlongPath(path, mirror ? +1 : -1, { count: 10 });
-  inner.children.forEach(c => { c.material = MATS.paintWhite; c.scale.set(0.4, 0.3, 0.6); c.position.y -= 0.05; });
+  const inner = curbAlongPath(path, mirror ? +1 : -1);
+  inner.children.forEach(c => { c.material = MATS.paintWhite; c.scale.set(0.4, 0.3, 1.0); c.position.y -= 0.1; });
   grp.add(inner);
   return grp;
 }
@@ -450,7 +479,13 @@ function buildSweep(mirror) {
   ];
   const path = pathFromPoints(pts);
   grp.add(extrudeRoad(path, { steps: 36 }));
-  grp.add(curbAlongPath(path, mirror ? -1 : +1, { count: 14 }));
+  // Outer curb (red/white barrier) on the outside of the sweep
+  grp.add(curbAlongPath(path, mirror ? -1 : +1));
+  // Inner edge — thin white painted line so the kart still has a visible
+  // edge cue but doesn't get walled in on the apex.
+  const inner = curbAlongPath(path, mirror ? +1 : -1);
+  inner.children.forEach(c => { c.material = MATS.paintWhite; c.scale.set(0.4, 0.3, 1.0); c.position.y -= 0.1; });
+  grp.add(inner);
   grp.add(dashedPaintAlongPath(path));
   return grp;
 }
@@ -476,8 +511,7 @@ function buildBend(mirror, lengthZcells = 2) {
   ];
   const path = pathFromPoints(pts);
   grp.add(extrudeRoad(path, { steps: 48 }));
-  grp.add(curbAlongPath(path, +1, { count: 18 }));
-  grp.add(curbAlongPath(path, -1, { count: 18 }));
+  grp.add(curbsBothSides(path));
   grp.add(dashedPaintAlongPath(path));
   return grp;
 }
@@ -497,8 +531,7 @@ function buildChicane() {
   ];
   const path = pathFromPoints(pts);
   grp.add(extrudeRoad(path, { steps: 64 }));
-  grp.add(curbAlongPath(path, +1, { count: 22 }));
-  grp.add(curbAlongPath(path, -1, { count: 22 }));
+  grp.add(curbsBothSides(path));
   grp.add(dashedPaintAlongPath(path));
   return grp;
 }
@@ -526,23 +559,24 @@ function buildBanked(mirror) {
   const bankFn = (t) => Math.sin(Math.min(1, Math.max(0, t)) * Math.PI) * BANK;
   const outerSign = mirror ? -1 : +1; // outside-of-arc direction (outside lifts up)
   grp.add(extrudeRoadBanked(path, bankFn, outerSign, { steps: 40 }));
-  grp.add(curbAlongPathBanked(path, outerSign, bankFn, outerSign, { count: 16, raise: true }));
-  grp.add(curbAlongPathBanked(path, -outerSign, bankFn, outerSign, { count: 16, raise: false, paint: true }));
-  // Concrete buttress underneath following the arc — supports the bank
-  // visually without a flat slab.
-  const buttressN = 5;
-  for (let i = 1; i <= buttressN; i++) {
-    const t = i / (buttressN + 1);
+  grp.add(curbAlongPathBanked(path, outerSign, bankFn, outerSign));
+  grp.add(curbAlongPathBanked(path, -outerSign, bankFn, outerSign, { paint: true }));
+  // Slim continuous concrete plinth following the arc — just enough to
+  // visually carry the banked deck without forming a triangular wedge.
+  const plinthN = 8;
+  for (let i = 1; i <= plinthN; i++) {
+    const t = i / (plinthN + 1);
     const p = path.getPointAt(t);
     const tan = path.getTangentAt(t);
     const yaw = Math.atan2(tan.x, tan.z);
     const bank = bankFn(t);
     const lift = (ROAD_WIDTH / 2) * Math.sin(bank);
+    const h = Math.max(0.25, lift * 0.6);
     const pillar = new THREE.Mesh(
-      new THREE.BoxGeometry(ROAD_WIDTH * 0.85, lift + 0.3, 0.45),
+      new THREE.BoxGeometry(ROAD_WIDTH * 0.55, h, 0.55),
       MATS.concrete,
     );
-    pillar.position.set(p.x, (lift + 0.3) / 2, p.z);
+    pillar.position.set(p.x, h / 2, p.z);
     pillar.rotation.y = yaw;
     pillar.castShadow = true; pillar.receiveShadow = true;
     grp.add(pillar);
@@ -563,8 +597,7 @@ function buildBump() {
   }
   const path = pathFromPoints(pts);
   grp.add(extrudeRoad(path, { steps: 30 }));
-  grp.add(curbAlongPath(path, +1, { count: 6 }));
-  grp.add(curbAlongPath(path, -1, { count: 6 }));
+  grp.add(curbsBothSides(path));
   // Red/white speed-bump warning stripes across the apex
   const stripeCount = 6;
   for (let i = 0; i < stripeCount; i++) {
@@ -596,8 +629,7 @@ function buildHill(lengthZcells = 2) {
   }
   const path = pathFromPoints(pts);
   grp.add(extrudeRoad(path, { steps: 48 }));
-  grp.add(curbAlongPath(path, +1, { count: 14 }));
-  grp.add(curbAlongPath(path, -1, { count: 14 }));
+  grp.add(curbsBothSides(path));
   grp.add(dashedPaintAlongPath(path, MATS.paintYellow, { dashLen: 1.0, gapLen: 1.5 }));
   return grp;
 }
@@ -645,8 +677,7 @@ function buildRamp(yStart, yEnd, lengthZcells = 2) {
       grp.add(post);
     }
   }
-  grp.add(curbAlongPath(path, +1, { count: 14 }));
-  grp.add(curbAlongPath(path, -1, { count: 14 }));
+  grp.add(curbsBothSides(path));
   return grp;
 }
 
@@ -715,21 +746,20 @@ function buildJumpRamp() {
 }
 
 function buildBridge() {
-  // Elevated 1×2 deck supported by chunky concrete pylons at the entry,
-  // exit, and midspan. Replaces the earlier two-arch + cross-brace truss
-  // which extended past the bridge footprint and read as broken geometry.
-  // Approach is now self-contained: pylons sit ON the ground (y=0) and
-  // visually carry the deck, so the bridge reads as architecture even when
-  // placed next to a flat straight at ground level.
+  // Elevated 1×2 deck supported by chunky concrete piers at the entry,
+  // mid, and exit, plus continuous solid spandrel walls (NOT thin tubes)
+  // running between the piers along each side, so the bridge reads as a
+  // single masonry structure rather than a deck floating on toothpicks.
   const grp = new THREE.Group();
   const lengthZ = TILE * 2;
   const deckH = TILE * 0.6;
   const cz = lengthZ / 2 - TILE / 2;
-  // Elevated drivable deck
+  // Elevated drivable deck + curbs (continuous red/white barrier)
   const path = pathFromPoints([[0, deckH, -TILE / 2], [0, deckH, lengthZ - TILE / 2]]);
   grp.add(extrudeRoad(path, { steps: 24 }));
+  grp.add(curbsBothSides(path));
   grp.add(dashedPaintAlongPath(path));
-  // Side guardrails (tubes + posts)
+  // Side guardrails (tubes + posts) above the curbs
   for (const side of [-1, +1]) {
     const x = side * (ROAD_WIDTH / 2 - 0.05);
     const yRail = deckH + ROAD_THICK + WALL_HEIGHT * 0.55;
@@ -750,44 +780,44 @@ function buildBridge() {
       grp.add(post);
     }
   }
-  // Pylons — one each at entry, mid, exit. Built as wide rectangular piers
-  // with a small "cap" matching the deck width so the deck reads as resting
-  // ON the pier, not floating.
+  // Piers: full-width concrete walls flush with the deck width at each
+  // end and at midspan. They sit ON the ground (y=0) and visibly carry
+  // the deck — no floating toothpick look.
   const pylonZs = [-TILE / 2 + 0.4, cz, lengthZ - TILE / 2 - 0.4];
   for (const pz of pylonZs) {
     const pier = new THREE.Mesh(
-      new THREE.BoxGeometry(ROAD_WIDTH * 0.85, deckH, 1.4),
+      new THREE.BoxGeometry(ROAD_WIDTH * 1.02, deckH, 1.2),
       MATS.concrete,
     );
     pier.position.set(0, deckH / 2, pz);
     pier.castShadow = true; pier.receiveShadow = true;
     grp.add(pier);
-    // Cap (slightly wider) under the deck
-    const cap = new THREE.Mesh(
-      new THREE.BoxGeometry(ROAD_WIDTH * 1.05, 0.25, 1.7),
+  }
+  // Continuous spandrel wall on EACH side, running under the deck between
+  // the piers, with arched openings cut as visual recesses (rendered via
+  // a darker recessed panel instead of CSG to keep it cheap). The wall is
+  // INSET from the deck edge so the curbs above can hang slightly proud.
+  for (const side of [-1, +1]) {
+    const xWall = side * (ROAD_WIDTH / 2 - 0.25);
+    const wall = new THREE.Mesh(
+      new THREE.BoxGeometry(0.5, deckH, lengthZ - 0.4),
       MATS.concrete,
     );
-    cap.position.set(0, deckH - 0.1, pz);
-    cap.castShadow = true; cap.receiveShadow = true;
-    grp.add(cap);
-  }
-  // Spandrel arches between piers (decorative, in tube form so they read
-  // as masonry arches under the deck)
-  for (let segI = 0; segI < pylonZs.length - 1; segI++) {
-    const z0 = pylonZs[segI] + 0.7;
-    const z1 = pylonZs[segI + 1] - 0.7;
-    const zMid = (z0 + z1) / 2;
-    const yPeak = deckH * 0.55;
-    for (const x of [-ROAD_WIDTH / 2 + 0.4, +ROAD_WIDTH / 2 - 0.4]) {
-      const arch = new THREE.QuadraticBezierCurve3(
-        new THREE.Vector3(x, 0.05, z0),
-        new THREE.Vector3(x, yPeak, zMid),
-        new THREE.Vector3(x, 0.05, z1),
+    wall.position.set(xWall, deckH / 2, cz);
+    wall.castShadow = true; wall.receiveShadow = true;
+    grp.add(wall);
+    // Recessed arched panels between piers (darker concrete)
+    for (let segI = 0; segI < pylonZs.length - 1; segI++) {
+      const z0 = pylonZs[segI] + 0.7;
+      const z1 = pylonZs[segI + 1] - 0.7;
+      const zMid = (z0 + z1) / 2;
+      const span = Math.abs(z1 - z0);
+      const recess = new THREE.Mesh(
+        new THREE.BoxGeometry(0.12, deckH * 0.55, span),
+        new THREE.MeshStandardMaterial({ color: 0x2a2c30, roughness: 0.95 }),
       );
-      const tube = new THREE.TubeGeometry(arch, 16, 0.16, 8, false);
-      const m = new THREE.Mesh(tube, MATS.concrete);
-      m.castShadow = true; m.receiveShadow = true;
-      grp.add(m);
+      recess.position.set(xWall + (-side) * 0.22, deckH * 0.32, zMid);
+      grp.add(recess);
     }
   }
   return grp;
@@ -810,8 +840,7 @@ function buildTunnel() {
   const cz = lengthZ / 2 - TILE / 2;
   const path = pathFromPoints([[0, 0, -TILE / 2], [0, 0, lengthZ - TILE / 2]]);
   grp.add(extrudeRoad(path));
-  grp.add(curbAlongPath(path, +1, { count: 14 }));
-  grp.add(curbAlongPath(path, -1, { count: 14 }));
+  grp.add(curbsBothSides(path));
   // Side walls (concrete) up to where the dome springs from
   const wallHt = WALL_HEIGHT * 0.9;
   for (const side of [-1, +1]) {
@@ -1179,8 +1208,7 @@ export const VISUAL_BUILDERS = {
     g.add(extrudeRoad(path, { steps: 12 }));
     g.add(dashedPaintAlongPath(path));
     // Curbs along both edges of the elevated deck
-    g.add(curbAlongPath(path, +1, { count: 8 }));
-    g.add(curbAlongPath(path, -1, { count: 8 }));
+    g.add(curbsBothSides(path));
     // Side guardrails
     for (const side of [-1, +1]) {
       const x = side * (ROAD_WIDTH / 2 - 0.05);
