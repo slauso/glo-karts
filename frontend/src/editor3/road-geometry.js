@@ -1116,37 +1116,33 @@ function buildCapEnd() {
 function buildFinish() {
   const grp = new THREE.Group();
   grp.add(buildStraight(TILE, { noPaint: true }));
-  // Checker pattern across the road. Lifted well above road surface and
-  // given polygonOffset to eliminate z-fighting at glancing angles.
+  // Checker pattern across the road. Sit slightly above the road surface
+  // (no polygonOffset — that was bleeding through the road's underside at
+  // grazing angles). Render-order forces the checker to draw last on top.
   const cells = 12;
   const cellW = ROAD_WIDTH / cells;
-  const checkerY = ROAD_THICK + 0.12;
+  const checkerY = ROAD_THICK + 0.06;
   const blackMat = new THREE.MeshStandardMaterial({
     color: 0x0a0a0a,
     roughness: 0.5,
-    polygonOffset: true,
-    polygonOffsetFactor: -2,
-    polygonOffsetUnits: -2,
   });
   const whiteMat = new THREE.MeshStandardMaterial({
     color: 0xf2f2f2,
     roughness: 0.55,
-    polygonOffset: true,
-    polygonOffsetFactor: -2,
-    polygonOffsetUnits: -2,
   });
   for (let i = 0; i < cells; i++) {
     for (let j = 0; j < 2; j++) {
       const isBlack = (i + j) % 2 === 0;
       const tile = new THREE.Mesh(
-        new THREE.BoxGeometry(cellW * 0.98, 0.04, cellW * 0.98),
+        new THREE.BoxGeometry(cellW * 0.94, 0.02, cellW * 0.94),
         isBlack ? blackMat : whiteMat,
       );
       tile.position.set(
         -ROAD_WIDTH / 2 + cellW * (i + 0.5),
         checkerY,
-        (j - 0.5) * cellW * 1.0,
+        (j - 0.5) * cellW,
       );
+      tile.renderOrder = 2;
       grp.add(tile);
     }
   }
