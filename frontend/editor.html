@@ -79,14 +79,6 @@
       cursor: pointer; font-size: 13px;
     }
     .menu-dropdown button:hover { background: var(--accent-soft); color: var(--accent-2); }
-    .notes-panel { flex: 1; padding: 12px; display: flex; flex-direction: column; gap: 6px; }
-    .notes-panel label { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .5px; }
-    .notes-panel textarea {
-      flex: 1; min-height: 200px; padding: 10px; font: 13px/1.4 system-ui, sans-serif;
-      background: var(--panel-2); color: var(--text); border: 1px solid var(--line);
-      border-radius: 5px; resize: vertical;
-    }
-    .notes-panel textarea:focus { border-color: var(--accent); outline: none; }
     header input.name {
       background: transparent; border: 1px solid transparent; color: var(--text);
       padding: 5px 8px; border-radius: 4px; min-width: 220px; font-size: 14px; font-weight: 500;
@@ -1275,9 +1267,6 @@
         <button title="Workplane" id="tabWorkplane">
           <svg viewBox="0 0 24 24"><path d="M3 18h18v2H3zm0-7h18v2H3zm0-7h18v2H3z"/></svg>
         </button>
-        <button title="Notes" id="tabNotes">
-          <svg viewBox="0 0 24 24"><path d="M19 3H5c-1.11 0-2 .89-2 2v14c0 1.11.89 2 2 2h14c1.11 0 2-.89 2-2V5c0-1.11-.89-2-2-2zM7 7h10v2H7zm0 4h10v2H7zm0 4h7v2H7z"/></svg>
-        </button>
       </div>
       <div class="category-row">
         <select id="categorySelect">
@@ -1293,10 +1282,6 @@
       </div>
       <input id="paletteSearch" type="text" placeholder="Search shapes…" class="palette-search" />
       <div class="palette" id="palette"></div>
-      <div class="notes-panel" id="notesPanel" hidden>
-        <label for="trackNotesArea">Track notes (saved with track)</label>
-        <textarea id="trackNotesArea" placeholder="Author notes, lap target, theme ideas…"></textarea>
-      </div>
       <!-- Track Info panel hidden for Tinkercad parity. Compat shims below. -->
       <div class="right-summary" style="display:none">
         <h3>Track Info</h3>

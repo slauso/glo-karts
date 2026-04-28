@@ -3495,49 +3495,24 @@ document.getElementById('topTabBrick')?.addEventListener('click', (e) => {
   toast(_brickViewOn ? 'Wireframe ON' : 'Wireframe OFF');
 });
 
-// 3) Right-aside tabs — Shapes / Workplane / Notes.
+// 3) Right-aside tabs — Shapes / Workplane.
 const _rightTabs = [
   document.getElementById('tabShapes'),
   document.getElementById('tabWorkplane'),
-  document.getElementById('tabNotes'),
 ].filter(Boolean);
 function _setRightTab(name) {
-  const map = { shapes: 'tabShapes', workplane: 'tabWorkplane', notes: 'tabNotes' };
+  const map = { shapes: 'tabShapes', workplane: 'tabWorkplane' };
   for (const t of _rightTabs) t.classList.toggle('active', t.id === map[name]);
-  const palette = document.getElementById('palette');
-  const search = document.getElementById('paletteSearch');
-  const catRow = document.querySelector('.category-row');
-  const notes = document.getElementById('notesPanel');
-  const showShapes = name === 'shapes';
-  const showNotes = name === 'notes';
-  if (palette) palette.style.display = showShapes ? '' : 'none';
-  if (search) search.style.display = showShapes && search.style.display !== 'none' ? '' : (showShapes ? '' : 'none');
-  if (catRow) catRow.style.display = showShapes ? '' : 'none';
-  if (notes) notes.hidden = !showNotes;
   if (name === 'workplane') {
     // Pop the existing terrain settings popup as the "workplane" panel.
     document.getElementById('settingsBtn')?.click();
+    // Auto-revert active state so the Shapes palette stays usable.
+    setTimeout(() => {
+      for (const t of _rightTabs) t.classList.toggle('active', t.id === 'tabShapes');
+    }, 1200);
   }
 }
 document.getElementById('tabShapes')?.addEventListener('click', () => _setRightTab('shapes'));
 document.getElementById('tabWorkplane')?.addEventListener('click', () => _setRightTab('workplane'));
-document.getElementById('tabNotes')?.addEventListener('click', () => _setRightTab('notes'));
-
-// Notes textarea — persisted on the track object as `notes` and serialised
-// via track.toJSON()/fromJSON() if Track supports it; otherwise stays in
-// localStorage keyed by track name.
-const _notesArea = document.getElementById('trackNotesArea');
-function _notesKey() { return 'gloKartsStudio.notes::' + (track.name || 'Untitled'); }
-function _loadNotes() {
-  if (!_notesArea) return;
-  const fromTrack = (track && typeof track.notes === 'string') ? track.notes : null;
-  _notesArea.value = fromTrack ?? localStorage.getItem(_notesKey()) ?? '';
-}
-_loadNotes();
-_notesArea?.addEventListener('input', () => {
-  if (track) track.notes = _notesArea.value;
-  try { localStorage.setItem(_notesKey(), _notesArea.value); } catch {}
-});
-trackNameEl.addEventListener('change', _loadNotes);
 
 window.__studio = { track, decor, scene, camera, renderer, rebuildAll, rebuildAllDecor, refreshHud, refreshPlayButton, selectDecor, rebuildAllCSG, rebuildCSGForGroup, csgMeshByGid, decorMeshById, groupSelection, ungroupSelection, THREE, SEGMENTS, SEGMENT_KEYS };

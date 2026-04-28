@@ -60,19 +60,18 @@ dialog = null;
 await page.click('#topTabAdjust');
 await page.waitForTimeout(200);
 results.adjustOpensTerrainPopup = await page.isVisible('#terrainPopup');
+// Close popup before next test to avoid double-toggling.
+if (results.adjustOpensTerrainPopup) {
+  await page.evaluate(() => document.getElementById('settingsBtn')?.click());
+  await page.waitForTimeout(150);
+}
 
-// 3. Right-aside tabs
-await page.click('#tabNotes');
-await page.waitForTimeout(150);
-results.notesPanelShown = await page.isVisible('#notesPanel');
-results.paletteHiddenWhenNotes = !(await page.isVisible('#palette'));
-
-// Type into notes
-await page.fill('#trackNotesArea', 'audit smoke');
-await page.waitForTimeout(50);
-results.notesPersisted = await page.evaluate(() => {
-  return Object.keys(localStorage).some(k => k.startsWith('gloKartsStudio.notes::'));
-});
+// 3) Right-aside tabs (Shapes / Workplane only — Notes was removed)
+await page.click('#tabWorkplane');
+await page.waitForTimeout(200);
+results.workplaneOpensSettings = await page.isVisible('#terrainPopup');
+// Close popup if open via Escape
+await page.keyboard.press('Escape').catch(() => {});
 
 await page.click('#tabShapes');
 await page.waitForTimeout(150);
