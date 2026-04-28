@@ -1116,51 +1116,71 @@ function buildCapEnd() {
 function buildFinish() {
   const grp = new THREE.Group();
   grp.add(buildStraight(TILE, { noPaint: true }));
-  // Checker pattern across the road
+  // Checker pattern across the road. Lifted well above road surface and
+  // given polygonOffset to eliminate z-fighting at glancing angles.
   const cells = 12;
   const cellW = ROAD_WIDTH / cells;
+  const checkerY = ROAD_THICK + 0.12;
+  const blackMat = new THREE.MeshStandardMaterial({
+    color: 0x0a0a0a,
+    roughness: 0.5,
+    polygonOffset: true,
+    polygonOffsetFactor: -2,
+    polygonOffsetUnits: -2,
+  });
+  const whiteMat = new THREE.MeshStandardMaterial({
+    color: 0xf2f2f2,
+    roughness: 0.55,
+    polygonOffset: true,
+    polygonOffsetFactor: -2,
+    polygonOffsetUnits: -2,
+  });
   for (let i = 0; i < cells; i++) {
     for (let j = 0; j < 2; j++) {
       const isBlack = (i + j) % 2 === 0;
       const tile = new THREE.Mesh(
-        new THREE.BoxGeometry(cellW * 0.98, 0.06, cellW * 0.98),
-        isBlack
-          ? new THREE.MeshStandardMaterial({ color: 0x0a0a0a, roughness: 0.5 })
-          : MATS.paintWhite,
+        new THREE.BoxGeometry(cellW * 0.98, 0.04, cellW * 0.98),
+        isBlack ? blackMat : whiteMat,
       );
       tile.position.set(
         -ROAD_WIDTH / 2 + cellW * (i + 0.5),
-        ROAD_THICK + 0.04,
+        checkerY,
         (j - 0.5) * cellW * 1.0,
       );
       grp.add(tile);
     }
   }
-  // Side gantry posts
+  // Side gantry posts — tall enough to clear any kart with comfortable headroom.
+  // Banner sits forward of the checker line so the two don't visually collide.
+  const POST_H = 6.5;
+  const BAR_Y = ROAD_THICK + POST_H - 0.4;
+  const BANNER_Z = 1.6;
   for (const sx of [-1, +1]) {
     const post = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.18, 0.18, 3.2, 12),
+      new THREE.CylinderGeometry(0.22, 0.22, POST_H, 14),
       MATS.finish,
     );
-    post.position.set(sx * (TILE / 2 - 0.3), ROAD_THICK + 1.6, 0);
+    post.position.set(sx * (TILE / 2 - 0.3), ROAD_THICK + POST_H / 2, BANNER_Z);
     post.castShadow = true;
     grp.add(post);
   }
-  // Top crossbar with banner
+  // Top crossbar
   const bar = new THREE.Mesh(
-    new THREE.BoxGeometry(TILE - 0.4, 0.35, 0.35),
+    new THREE.BoxGeometry(TILE - 0.4, 0.4, 0.4),
     MATS.finish,
   );
-  bar.position.set(0, ROAD_THICK + 3.1, 0);
+  bar.position.set(0, BAR_Y, BANNER_Z);
   bar.castShadow = true;
   grp.add(bar);
+  // Banner (hangs from crossbar)
+  const bannerH = 1.4;
   const banner = new THREE.Mesh(
-    new THREE.BoxGeometry(TILE - 0.8, 0.9, 0.05),
+    new THREE.BoxGeometry(TILE - 0.8, bannerH, 0.06),
     new THREE.MeshStandardMaterial({
       color: 0xffffff, emissive: 0xffaa00, emissiveIntensity: 0.4, roughness: 0.6,
     }),
   );
-  banner.position.set(0, ROAD_THICK + 2.45, 0);
+  banner.position.set(0, BAR_Y - 0.2 - bannerH / 2, BANNER_Z);
   grp.add(banner);
   return grp;
 }
