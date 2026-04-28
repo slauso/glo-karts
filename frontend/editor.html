@@ -65,6 +65,28 @@
       align-items: center; justify-content: center; border-radius: 4px;
     }
     header .menu-btn:hover { background: var(--line); color: var(--text); }
+    .menu-dropdown {
+      position: absolute; top: 44px; left: 64px; z-index: 100;
+      background: var(--panel-2); border: 1px solid var(--line);
+      border-radius: 6px; padding: 4px; min-width: 180px;
+      box-shadow: 0 4px 14px rgba(0,0,0,.18);
+      display: flex; flex-direction: column;
+    }
+    .menu-dropdown[hidden] { display: none; }
+    .menu-dropdown button {
+      background: transparent; border: none; color: var(--text);
+      text-align: left; padding: 7px 12px; border-radius: 4px;
+      cursor: pointer; font-size: 13px;
+    }
+    .menu-dropdown button:hover { background: var(--accent-soft); color: var(--accent-2); }
+    .notes-panel { flex: 1; padding: 12px; display: flex; flex-direction: column; gap: 6px; }
+    .notes-panel label { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .5px; }
+    .notes-panel textarea {
+      flex: 1; min-height: 200px; padding: 10px; font: 13px/1.4 system-ui, sans-serif;
+      background: var(--panel-2); color: var(--text); border: 1px solid var(--line);
+      border-radius: 5px; resize: vertical;
+    }
+    .notes-panel textarea:focus { border-color: var(--accent); outline: none; }
     header input.name {
       background: transparent; border: 1px solid transparent; color: var(--text);
       padding: 5px 8px; border-radius: 4px; min-width: 220px; font-size: 14px; font-weight: 500;
@@ -841,28 +863,36 @@
   <div id="app">
     <header>
       <span class="brand">GLO<br>KARTS</span>
-      <button class="menu-btn" title="Menu">
+      <button class="menu-btn" id="menuBtn" title="Menu">
         <svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
       </button>
+      <div id="menuDropdown" class="menu-dropdown" hidden>
+        <button data-action="new">New track</button>
+        <button data-action="open">Open from URL…</button>
+        <button data-action="export">Export JSON</button>
+        <button data-action="import">Import JSON…</button>
+        <button data-action="save">Save to browser</button>
+        <button data-action="clear">Clear all</button>
+      </div>
       <input class="name" id="trackName" value="My Track" maxlength="40" />
       <span class="spacer"></span>
       <div class="top-tabs">
-        <button class="top-tab active" title="Design (3D)">
+        <button class="top-tab active" id="topTabDesign" title="Design (3D)">
           <svg viewBox="0 0 24 24"><path d="M3 3h8v8H3zm10 0h8v8h-8zM3 13h8v8H3zm10 0h8v8h-8z"/></svg>
         </button>
-        <button class="top-tab" title="Simulate">
+        <button class="top-tab" id="topTabSimulate" title="Simulate">
           <svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 100 20 10 10 0 000-20zm0 18a8 8 0 110-16 8 8 0 010 16zm-1-13h2v6h-2zm0 7h2v2h-2z"/></svg>
         </button>
-        <button class="top-tab" title="Build">
+        <button class="top-tab" id="topTabHome" title="Home (lobby)">
           <svg viewBox="0 0 24 24"><path d="M22 9l-9-7-9 7v11h6v-7h6v7h6z"/></svg>
         </button>
-        <button class="top-tab" title="Library">
+        <button class="top-tab" id="topTabLibrary" title="Library / Import">
           <svg viewBox="0 0 24 24"><path d="M4 4h16v4H4zm0 6h7v10H4zm9 0h7v10h-7z"/></svg>
         </button>
-        <button class="top-tab" title="Adjust">
+        <button class="top-tab" id="topTabAdjust" title="Adjust scene settings">
           <svg viewBox="0 0 24 24"><path d="M3 17v2h6v-2H3zm0-7v2h12v-2H3zm0-5v2h18V5H3zm14 14v-2h4v-2h-4v-2h-2v6h2zm-7-9v-2h-2v2H4v2h4v2h2v-2h12v-2H10z"/></svg>
         </button>
-        <button class="top-tab" title="Brick view">
+        <button class="top-tab" id="topTabBrick" title="Toggle wireframe view">
           <svg viewBox="0 0 24 24"><path d="M3 3h8v8H3V3zm10 0h8v8h-8V3zM3 13h8v8H3v-8zm10 0h8v8h-8v-8z" fill-opacity=".6"/></svg>
         </button>
       </div>
@@ -1263,6 +1293,10 @@
       </div>
       <input id="paletteSearch" type="text" placeholder="Search shapes…" class="palette-search" />
       <div class="palette" id="palette"></div>
+      <div class="notes-panel" id="notesPanel" hidden>
+        <label for="trackNotesArea">Track notes (saved with track)</label>
+        <textarea id="trackNotesArea" placeholder="Author notes, lap target, theme ideas…"></textarea>
+      </div>
       <!-- Track Info panel hidden for Tinkercad parity. Compat shims below. -->
       <div class="right-summary" style="display:none">
         <h3>Track Info</h3>

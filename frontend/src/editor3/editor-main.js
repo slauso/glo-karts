@@ -3377,4 +3377,167 @@ function _updateAxisBadge() {
 })();
 
 // Expose for debugging
+// ── Header buttons (top-tabs, hamburger menu, right-aside tabs) ────────
+// These were rendered in editor.html but had no JS handlers — clicking did
+// nothing. We wire each to a sensible Tinkercad-equivalent action.
+
+// 1) Hamburger menu — opens a small dropdown with file actions.
+const _menuBtn = document.getElementById('menuBtn');
+const _menuDropdown = document.getElementById('menuDropdown');
+function _closeMenu() { if (_menuDropdown) _menuDropdown.hidden = true; }
+_menuBtn?.addEventListener('click', (e) => {
+  e.stopPropagation();
+  if (!_menuDropdown) return;
+  _menuDropdown.hidden = !_menuDropdown.hidden;
+});
+// Use both click + pointerdown in capture phase, scoped to window so canvas
+// pointer interactions still close the menu even when they preventDefault.
+const _maybeCloseMenu = (e) => {
+  if (!_menuDropdown || _menuDropdown.hidden) return;
+  if (e.target === _menuBtn || _menuBtn?.contains(e.target)) return;
+  if (!_menuDropdown.contains(e.target)) _closeMenu();
+};
+window.addEventListener('pointerdown', _maybeCloseMenu, true);
+window.addEventListener('click', _maybeCloseMenu, true);
+_menuDropdown?.addEventListener('click', (e) => {
+  const btn = e.target.closest('button[data-action]');
+  if (!btn) return;
+  const action = btn.dataset.action;
+  _closeMenu();
+  if (action === 'new') {
+    if (!confirm('Start a new track? Unsaved changes will be lost.')) return;
+    track.clear(); decor.clear(); rebuildAll(); rebuildAllDecor();
+    clearSelection(); pushUndo(); toast('New track');
+  } else if (action === 'open') {
+    const url = prompt('Paste a track share URL or ?track=… code:');
+    if (!url) return;
+    try {
+      const m = url.match(/[?&]track=([^&]+)/);
+      const code = m ? m[1] : url.trim();
+      const decoded = decodeTrack(code);
+      loadFromJSON(decoded);
+      toast('Track loaded');
+    } catch (err) { toast('Invalid track code'); console.warn(err); }
+  } else if (action === 'export') {
+    const json = JSON.stringify(saveJSON(), null, 2);
+    const blob = new Blob([json], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = (track.name || 'track').replace(/[^a-z0-9_-]+/gi, '_') + '.json';
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    toast('Exported JSON');
+  } else if (action === 'import') {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'application/json,.json';
+    input.onchange = async () => {
+      const f = input.files?.[0]; if (!f) return;
+      try {
+        const text = await f.text();
+        loadFromJSON(JSON.parse(text));
+        toast('Imported');
+      } catch (err) { toast('Import failed'); console.warn(err); }
+    };
+    input.click();
+  } else if (action === 'save') {
+    document.getElementById('saveBtn')?.click();
+  } else if (action === 'clear') {
+    document.getElementById('clearBtn')?.click()
+      ?? (confirm('Clear all pieces?') && (track.clear(), decor.clear(), rebuildAll(), rebuildAllDecor(), clearSelection(), pushUndo()));
+  }
+});
+
+// 2) Top tabs — Design / Simulate / Home / Library / Adjust / Brick view.
+const _topTabs = [
+  document.getElementById('topTabDesign'),
+  document.getElementById('topTabSimulate'),
+  document.getElementById('topTabHome'),
+  document.getElementById('topTabLibrary'),
+  document.getElementById('topTabAdjust'),
+  document.getElementById('topTabBrick'),
+].filter(Boolean);
+function _setTopTabActive(btn) {
+  for (const t of _topTabs) t.classList.toggle('active', t === btn);
+}
+document.getElementById('topTabDesign')?.addEventListener('click', (e) => {
+  _setTopTabActive(e.currentTarget); // current view
+});
+document.getElementById('topTabSimulate')?.addEventListener('click', () => {
+  document.getElementById('playBtn')?.click();
+});
+document.getElementById('topTabHome')?.addEventListener('click', () => {
+  if (confirm('Leave the editor and return to the lobby? Unsaved work will be lost.')) {
+    window.location.href = '/index.html';
+  }
+});
+document.getElementById('topTabLibrary')?.addEventListener('click', () => {
+  document.getElementById('shareBtn')?.click();
+});
+document.getElementById('topTabAdjust')?.addEventListener('click', (e) => {
+  _setTopTabActive(e.currentTarget);
+  document.getElementById('settingsBtn')?.click();
+  // Reset visual state shortly so it doesn't look stuck.
+  setTimeout(() => _setTopTabActive(document.getElementById('topTabDesign')), 1200);
+});
+// Brick view = toggle wireframe rendering on every placement + decor mesh.
+let _brickViewOn = false;
+document.getElementById('topTabBrick')?.addEventListener('click', (e) => {
+  _brickViewOn = !_brickViewOn;
+  e.currentTarget.classList.toggle('active', _brickViewOn);
+  const apply = (root) => root.traverse?.((o) => {
+    if (o.isMesh && o.material) {
+      const mats = Array.isArray(o.material) ? o.material : [o.material];
+      for (const m of mats) m.wireframe = _brickViewOn;
+    }
+  });
+  scene.traverse((o) => apply(o));
+  toast(_brickViewOn ? 'Wireframe ON' : 'Wireframe OFF');
+});
+
+// 3) Right-aside tabs — Shapes / Workplane / Notes.
+const _rightTabs = [
+  document.getElementById('tabShapes'),
+  document.getElementById('tabWorkplane'),
+  document.getElementById('tabNotes'),
+].filter(Boolean);
+function _setRightTab(name) {
+  const map = { shapes: 'tabShapes', workplane: 'tabWorkplane', notes: 'tabNotes' };
+  for (const t of _rightTabs) t.classList.toggle('active', t.id === map[name]);
+  const palette = document.getElementById('palette');
+  const search = document.getElementById('paletteSearch');
+  const catRow = document.querySelector('.category-row');
+  const notes = document.getElementById('notesPanel');
+  const showShapes = name === 'shapes';
+  const showNotes = name === 'notes';
+  if (palette) palette.style.display = showShapes ? '' : 'none';
+  if (search) search.style.display = showShapes && search.style.display !== 'none' ? '' : (showShapes ? '' : 'none');
+  if (catRow) catRow.style.display = showShapes ? '' : 'none';
+  if (notes) notes.hidden = !showNotes;
+  if (name === 'workplane') {
+    // Pop the existing terrain settings popup as the "workplane" panel.
+    document.getElementById('settingsBtn')?.click();
+  }
+}
+document.getElementById('tabShapes')?.addEventListener('click', () => _setRightTab('shapes'));
+document.getElementById('tabWorkplane')?.addEventListener('click', () => _setRightTab('workplane'));
+document.getElementById('tabNotes')?.addEventListener('click', () => _setRightTab('notes'));
+
+// Notes textarea — persisted on the track object as `notes` and serialised
+// via track.toJSON()/fromJSON() if Track supports it; otherwise stays in
+// localStorage keyed by track name.
+const _notesArea = document.getElementById('trackNotesArea');
+function _notesKey() { return 'gloKartsStudio.notes::' + (track.name || 'Untitled'); }
+function _loadNotes() {
+  if (!_notesArea) return;
+  const fromTrack = (track && typeof track.notes === 'string') ? track.notes : null;
+  _notesArea.value = fromTrack ?? localStorage.getItem(_notesKey()) ?? '';
+}
+_loadNotes();
+_notesArea?.addEventListener('input', () => {
+  if (track) track.notes = _notesArea.value;
+  try { localStorage.setItem(_notesKey(), _notesArea.value); } catch {}
+});
+trackNameEl.addEventListener('change', _loadNotes);
+
 window.__studio = { track, decor, scene, camera, renderer, rebuildAll, rebuildAllDecor, refreshHud, refreshPlayButton, selectDecor, rebuildAllCSG, rebuildCSGForGroup, csgMeshByGid, decorMeshById, groupSelection, ungroupSelection, THREE, SEGMENTS, SEGMENT_KEYS };
