@@ -137,14 +137,50 @@ function pathFromPoints(points) {
   return new THREE.CatmullRomCurve3(v3s, false, 'catmullrom', 0.5);
 }
 
+// True straight-line path (no CatmullRom extrapolation, no overshoot at
+// endpoints). Use this for pieces whose centerline must end EXACTLY at
+// the cell boundary (e.g. straight, ramps, jump deck) so adjacent
+// segments butt without overlap and curb stripes tile cleanly.
+function linePath(p0, p1) {
+  const a = new THREE.Vector3(p0[0], p0[1] ?? 0, p0[2]);
+  const b = new THREE.Vector3(p1[0], p1[1] ?? 0, p1[2]);
+  return new THREE.LineCurve3(a, b);
+}
+
 function arcPath3(cx, cz, radius, a0, a1, y = 0, samples = 24) {
-  const pts = [];
-  for (let i = 0; i <= samples; i++) {
-    const t = i / samples;
-    const a = a0 + (a1 - a0) * t;
-    pts.push([cx + Math.cos(a) * radius, y, cz + Math.sin(a) * radius]);
-  }
-  return pathFromPoints(pts);
+  // Analytic arc curve: returns true tangents at every t (especially at the
+  // endpoints). CatmullRomCurve3 fitted to arc samples gives slightly skewed
+  // endpoint tangents (~5° off), which causes the extruded road's outer
+  // edge vertices to drift past the cell boundary by hundreds of mm —
+  // visible as a "gap" or overshoot where the corner meets adjacent
+  // straights. Sampling the arc analytically eliminates this entirely.
+  const sweep = a1 - a0;
+  const arcLen = Math.abs(sweep) * radius;
+  const curve = {
+    isCurve: true,
+    getLength: () => arcLen,
+    getPointAt: (t) => {
+      const a = a0 + sweep * t;
+      return new THREE.Vector3(cx + Math.cos(a) * radius, y, cz + Math.sin(a) * radius);
+    },
+    getTangentAt: (t) => {
+      const a = a0 + sweep * t;
+      const sign = sweep >= 0 ? 1 : -1;
+      // d/da (cos a, sin a) = (-sin a, cos a); tangent direction depends
+      // on sweep direction.
+      const tx = -Math.sin(a) * sign;
+      const tz = Math.cos(a) * sign;
+      const v = new THREE.Vector3(tx, 0, tz);
+      v.normalize();
+      return v;
+    },
+    getPoints: (n = samples) => {
+      const out = [];
+      for (let i = 0; i <= n; i++) out.push(curve.getPointAt(i / n));
+      return out;
+    },
+  };
+  return curve;
 }
 
 function extrudeRoad(path, opts = {}) {
@@ -349,28 +385,74 @@ function curbAlongPathBanked(path, sideSign, bankFn, outerSign, opts = {}) {
 }
 
 // Place a CONTINUOUS chain of alternating red/white curb stones along one
-// side of a path. Stripe length is auto-computed so stripes touch end-to-end
-// (no gaps) — produces a wall-like barrier of consistent visual density.
+// side of a path. We first build the OFFSET POLYLINE (the curb's true
+// centerline, which on a curve has a different radius/length than the
+// road centerline), then chop it into equal-length chord segments. This
+// guarantees:
+//   • the curb's two ends lie EXACTLY on the offset path endpoints (no
+//     overshoot past the road's cell boundary, no gap before it)
+//   • inner-arc curbs use their own (shorter) arclen, so we don't
+//     stretch a long box across a tight inner radius
+//   • outer-arc curbs likewise sample at the correct higher density
 function curbAlongPath(path, sideSign, opts = {}) {
   const grp = new THREE.Group();
-  const total = path.getLength();
-  const count = Math.max(2, Math.round(total / CURB_STRIPE_LEN));
-  const stripeLen = total / count;
   const offset = (ROAD_WIDTH / 2) - CURB_STRIPE_WIDTH / 2;
-  const stone = new THREE.BoxGeometry(CURB_STRIPE_WIDTH, CURB_STRIPE_HEIGHT, stripeLen);
-  for (let i = 0; i < count; i++) {
-    const t = (i + 0.5) / count;
+  // Dense sampling of the offset centerline (in the XZ plane).
+  const pathLen = path.getLength();
+  const dense = Math.max(48, Math.ceil(pathLen / 0.25));
+  const offPts = new Array(dense + 1);
+  for (let i = 0; i <= dense; i++) {
+    const t = i / dense;
     const p = path.getPointAt(t);
     const tan = path.getTangentAt(t);
     const yaw = Math.atan2(tan.x, tan.z);
     const nx = Math.cos(yaw) * sideSign;
     const nz = -Math.sin(yaw) * sideSign;
+    offPts[i] = new THREE.Vector3(p.x + nx * offset, p.y || 0, p.z + nz * offset);
+  }
+  // Per-segment arc lengths along the offset polyline + cumulative length.
+  const segLens = new Array(dense);
+  let total = 0;
+  for (let i = 0; i < dense; i++) {
+    const dx = offPts[i + 1].x - offPts[i].x;
+    const dz = offPts[i + 1].z - offPts[i].z;
+    segLens[i] = Math.hypot(dx, dz);
+    total += segLens[i];
+  }
+  if (total < CURB_STRIPE_LEN * 0.5) return grp;
+  const count = Math.max(2, Math.round(total / CURB_STRIPE_LEN));
+  const stripeLen = total / count;
+  // Helper: sample the offset polyline at arc-length s.
+  const sampleAt = (s) => {
+    let acc = 0;
+    for (let j = 0; j < dense; j++) {
+      if (s <= acc + segLens[j]) {
+        const t = segLens[j] > 0 ? (s - acc) / segLens[j] : 0;
+        const a = offPts[j], b = offPts[j + 1];
+        return new THREE.Vector3(
+          a.x + (b.x - a.x) * t,
+          a.y + (b.y - a.y) * t,
+          a.z + (b.z - a.z) * t,
+        );
+      }
+      acc += segLens[j];
+    }
+    return offPts[dense];
+  };
+  for (let i = 0; i < count; i++) {
+    const pA = sampleAt(i * stripeLen);
+    const pB = sampleAt((i + 1) * stripeLen);
+    const cx = (pA.x + pB.x) / 2;
+    const cy = (pA.y + pB.y) / 2;
+    const cz = (pA.z + pB.z) / 2;
+    const dx = pB.x - pA.x;
+    const dz = pB.z - pA.z;
+    const chordLen = Math.hypot(dx, dz);
+    if (chordLen < 1e-6) continue;
+    const yaw = Math.atan2(dx, dz);
+    const stone = new THREE.BoxGeometry(CURB_STRIPE_WIDTH, CURB_STRIPE_HEIGHT, chordLen);
     const m = new THREE.Mesh(stone, i % 2 === 0 ? MATS.curbRed : MATS.curbWhite);
-    m.position.set(
-      p.x + nx * offset,
-      ROAD_THICK + (p.y || 0) + CURB_STRIPE_HEIGHT / 2,
-      p.z + nz * offset,
-    );
+    m.position.set(cx, ROAD_THICK + cy + CURB_STRIPE_HEIGHT / 2, cz);
     m.rotation.y = yaw;
     m.castShadow = true; m.receiveShadow = true;
     grp.add(m);
@@ -416,7 +498,7 @@ function buildStraight(lengthZ, opts = {}) {
   const grp = new THREE.Group();
   const z0 = -lengthZ / 2;
   const z1 = lengthZ / 2;
-  const path = pathFromPoints([[0, 0, z0], [0, 0, z1]]);
+  const path = linePath([0, 0, z0], [0, 0, z1]);
   grp.add(extrudeRoad(path));
   if (!opts.noCurbs) {
     grp.add(curbAlongPath(path, +1));
@@ -656,7 +738,7 @@ function buildBridge() {
   const deckH = TILE * 0.6;
   const cz = lengthZ / 2 - TILE / 2;
   // Elevated drivable deck + curbs (continuous red/white barrier)
-  const path = pathFromPoints([[0, deckH, -TILE / 2], [0, deckH, lengthZ - TILE / 2]]);
+  const path = linePath([0, deckH, -TILE / 2], [0, deckH, lengthZ - TILE / 2]);
   grp.add(extrudeRoad(path, { steps: 24 }));
   grp.add(curbsBothSides(path));
   grp.add(dashedPaintAlongPath(path));
@@ -740,7 +822,7 @@ function buildTunnel() {
   const grp = new THREE.Group();
   const lengthZ = TILE * 2;
   const cz = lengthZ / 2 - TILE / 2;
-  const path = pathFromPoints([[0, 0, -TILE / 2], [0, 0, lengthZ - TILE / 2]]);
+  const path = linePath([0, 0, -TILE / 2], [0, 0, lengthZ - TILE / 2]);
   grp.add(extrudeRoad(path));
   grp.add(curbsBothSides(path));
   // Side walls (concrete) up to where the dome springs from
@@ -1128,7 +1210,7 @@ export const VISUAL_BUILDERS = {
     const g = new THREE.Group();
     const deckH = TILE * 0.6;
     // Elevated deck
-    const path = pathFromPoints([[0, deckH, -TILE / 2], [0, deckH, TILE / 2]]);
+    const path = linePath([0, deckH, -TILE / 2], [0, deckH, TILE / 2]);
     g.add(extrudeRoad(path, { steps: 12 }));
     g.add(dashedPaintAlongPath(path));
     // Curbs along both edges of the elevated deck

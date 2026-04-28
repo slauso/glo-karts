@@ -30,9 +30,10 @@ export class Track {
   /** Compute world cell coords occupied by a placement (after rotation). */
   occupiedCells(key, gx, gz, rot) {
     const cells = getFootprint(key);
+    const safeRot = Number.isFinite(rot) ? rot : 0;
     return cells.map(([fx, fz]) => {
       // rotate footprint offset around (0,0)
-      const r = ((rot % 4) + 4) % 4;
+      const r = ((safeRot % 4) + 4) % 4;
       let ox = fx, oz = fz;
       for (let i = 0; i < r; i++) {
         const nx = oz; const nz = -ox;
@@ -71,7 +72,8 @@ export class Track {
       }
     }
     const id = _nextId++;
-    const placement = { id, key, gx, gz, rot: ((rot % 4) + 4) % 4 };
+    const safeRot = Number.isFinite(rot) ? rot : 0;
+    const placement = { id, key, gx, gz, rot: ((safeRot % 4) + 4) % 4 };
     this.placements.set(id, placement);
     if (!overlay) {
       for (const [cx, cz] of this.occupiedCells(key, gx, gz, rot)) {
