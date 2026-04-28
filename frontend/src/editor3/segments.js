@@ -225,57 +225,14 @@ export const SEGMENTS = {
     blocks: crossroadsBlocks(),
   },
 
-  // ── Corner sweeps ─────────────────────────────────────────────
-  corner_large: {
-    label: 'Sweep L',
-    category: 'road',
-    span: { x: 2, z: 2 },
-    blocks: cornerSweepBlocks(false),
-  },
-
-  corner_largeR: {
-    label: 'Sweep R',
-    category: 'road',
-    span: { x: 2, z: 2 },
-    blocks: cornerSweepBlocks(true),
-  },
-
-  // ── Bends & chicane ──────────────────────────────────────────
-  // A bend slips the racing line one cell sideways over a 2-cell length.
-  bend_left: {
-    label: 'Bend L',
-    category: 'road',
-    span: { x: 1, z: 2 },
-    blocks: bendBlocks(false),
-  },
-  bend_right: {
-    label: 'Bend R',
-    category: 'road',
-    span: { x: 1, z: 2 },
-    blocks: bendBlocks(true),
-  },
-  // Chicane = bend left then back right over 4 cells along Z (1×4 footprint).
-  chicane: {
-    label: 'Chicane',
-    category: 'road',
-    span: { x: 1, z: 4 },
-    blocks: chicaneBlocks(),
-  },
-
   // ── Banked turn ──────────────────────────────────────────────
-  // Same footprint as a sweep but with the deck tilted toward the inside,
-  // so karts can corner at higher speed.
+  // Single-cell 90° banked corner. Outside edge of the arc is lifted so
+  // karts can carry more speed through the bend.
   banked_turn: {
-    label: 'Banked L',
+    label: 'Banked Turn',
     category: 'road',
-    span: { x: 2, z: 2 },
-    blocks: bankedTurnBlocks(false),
-  },
-  banked_turnR: {
-    label: 'Banked R',
-    category: 'road',
-    span: { x: 2, z: 2 },
-    blocks: bankedTurnBlocks(true),
+    span: { x: 1, z: 1 },
+    blocks: bankedTurnBlocks(),
   },
 
   // ── Bumps & hills ────────────────────────────────────────────
@@ -291,7 +248,7 @@ export const SEGMENTS = {
     category: 'height',
     span: { x: 1, z: 2 },
     // Up-and-over hill in 2 cells. Gentle parabola approximated by 4 short ramps.
-    blocks: rollingHillBlocks(TILE * 0.5, TILE * 2),
+    blocks: rollingHillBlocks(TILE * 0.25, TILE * 2),
   },
   jump_ramp: {
     label: 'Jump Ramp',
@@ -473,105 +430,20 @@ function crossroadsBlocks() {
   ];
 }
 
-function cornerSweepBlocks(mirror) {
-  // Long-radius sweep across a 2x2 footprint. We pave three cells in an
-  // L shape (anchor cell + adjacent cell along +Z + cell at the bend).
-  // For !mirror (left sweep) the path is (0,0) → (0,1) → (1,1).
-  // For  mirror (right sweep) the path is (0,0) → (0,1) → (-1,1)? No — we
-  // want both variants to fit in a 2x2 anchor-positive footprint, so the
-  // mirrored path uses cells (0,0) → (0,1) → (1,1) too but the curb is on
-  // the opposite side.
-  const blocks = [];
-  const cellPositions = [[0, 0], [0, 1], [1, 1]];
-  for (const [cx, cz] of cellPositions) {
-    blocks.push({
-      kind: 'box',
-      size: [TILE, ROAD_THICK, TILE],
-      pos: [cx * TILE, ROAD_THICK / 2, cz * TILE],
-      color: ROAD_COLOR,
-      drivable: true,
-    });
-  }
-  // Outside-arc curb stripes around the bend.
-  const STRIPES = 7;
-  // Inside corner of the bend in anchor-local coords.
-  const arcCx = mirror ? TILE : 0;
-  const arcCz = TILE;
-  const R = TILE * 1.35;
-  for (let i = 0; i < STRIPES; i++) {
-    const t = (i + 0.5) / STRIPES;
-    // Sweep angle along the arc.
-    const a = mirror
-      ? -Math.PI / 2 - (Math.PI / 2) * t   // start south, sweep east (right turn)
-      : Math.PI + (Math.PI / 2) * t;       // start west, sweep south (left turn)
-    const px = arcCx + Math.cos(a) * R;
-    const pz = arcCz + Math.sin(a) * R;
-    blocks.push({
-      kind: 'box',
-      size: [0.2, 0.06, 0.7],
-      pos: [px, ROAD_THICK + 0.03, pz],
-      rotY: a + Math.PI / 2,
-      color: i % 2 === 0 ? CURB_R : CURB_W,
-      solid: false,
-    });
-  }
-  return blocks;
-}
-
-function bendBlocks(mirror) {
-  // 1x2 piece that slides the racing line one cell sideways. Entry on -Z
-  // edge of anchor cell (centred), exit on +Z edge of second cell shifted
-  // by ±half a cell. We model it as two skewed deck slabs.
-  const dirX = mirror ? 1 : -1;
+function bankedTurnBlocks() {
+  // Block-list FALLBACK only — the editor uses the visual builder in
+  // road-geometry.js (`buildBanked`). We just need a single drivable cell
+  // here so saved layouts and physics still have something solid to stand on
+  // when the visual builder is not available.
   return [
-    // anchor cell: deck biased toward -dirX side
     {
       kind: 'box',
       size: [ROAD_WIDTH, ROAD_THICK, TILE],
-      pos: [-dirX * TILE * 0.18, ROAD_THICK / 2, 0],
-      color: ROAD_COLOR,
-      drivable: true,
-    },
-    // second cell: deck biased toward +dirX side
-    {
-      kind: 'box',
-      size: [ROAD_WIDTH, ROAD_THICK, TILE],
-      pos: [dirX * TILE * 0.18, ROAD_THICK / 2, TILE],
-      color: ROAD_COLOR,
-      drivable: true,
-    },
-    // bridging slab covering the seam
-    {
-      kind: 'box',
-      size: [ROAD_WIDTH * 1.2, ROAD_THICK, TILE * 0.7],
-      pos: [0, ROAD_THICK / 2, TILE / 2],
+      pos: [0, ROAD_THICK / 2, 0],
       color: ROAD_COLOR,
       drivable: true,
     },
   ];
-}
-
-function chicaneBlocks() {
-  // Bend left then right along 4 cells. Reuse bendBlocks logic for each half.
-  const left = bendBlocks(false).map(b => ({ ...b, pos: [b.pos[0], b.pos[1], b.pos[2]] }));
-  const right = bendBlocks(true).map(b => ({ ...b, pos: [b.pos[0], b.pos[1], b.pos[2] + TILE * 2] }));
-  return [...left, ...right];
-}
-
-function bankedTurnBlocks(mirror) {
-  // Sweep deck plus a banked tilt so the outside is higher than the inside.
-  const base = cornerSweepBlocks(mirror);
-  const TILT = Math.PI / 12; // ~15° bank
-  const dirX = mirror ? -1 : 1;
-  return base.map((b) => {
-    if (!b.drivable) return b;
-    return {
-      ...b,
-      // rotate around Z so outside (positive dirX) lifts up
-      rotZ: dirX * TILT,
-      pos: [b.pos[0], b.pos[1] + Math.abs(b.pos[0] - (mirror ? 0 : TILE)) * Math.tan(TILT) * 0.2, b.pos[2]],
-    };
-  });
 }
 
 function bumpBlocks(height, lengthZcells) {

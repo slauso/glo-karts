@@ -454,135 +454,31 @@ function buildCorner(mirror) {
   return grp;
 }
 
-function buildSweep(mirror) {
+function buildBanked(mirror) {
+  // Single-cell 90° banked corner. Same arc as buildCorner but the deck is
+  // tilted so the OUTSIDE edge of the arc is lifted. The bank is baked into
+  // the geometry via extrudeRoadBanked — no concrete plinth or buttress is
+  // parked underneath, so nothing floats. Bank eases in/out so the entry
+  // and exit lie flat against neighbouring straights.
   const grp = new THREE.Group();
-  // 2x2 footprint: cells (0,0),(0,1),(1,1) for left; mirrored on X for right.
-  // Path turns from -Z entry on cell (0,0) to ±X exit on cell (1,1)/((-1,1)).
-  // We anchor at (0,0); world centers used are simpler if we trace through
-  // (0,0) → (0,1) → (1,1) cells. For mirror we trace (0,0) → (0,1) → (-1,1)
-  // but our footprint stays positive (1,1). Editor still uses anchor + span.
-  // Use a quarter-arc with center at (mirror? -TILE : +TILE, 0, +TILE) radius TILE.
-  const cx = mirror ? -TILE : +TILE;
-  const cz = +TILE;
-  const r = TILE * 1.0;
-  const a0 = mirror ? 0 : Math.PI;        // entry pointing toward (0,_,-TILE/2 side)
-  const a1 = mirror ? -Math.PI / 2 : Math.PI / 2;
-  // We want entry exactly at (0, 0, -TILE/2) heading +Z. Recompute:
-  // For !mirror, center at (+TILE,0,+TILE), r=TILE: angle π → point (0,0,+TILE), tangent at angle π is (sinπ,_,?) — let's just sample and rely on arc.
-  // Adjust: use a longer radius and smoother arc starting at (0, 0, -TILE/2).
-  // Simpler: build the path explicitly via bezier-ish curve.
-  const xExit = mirror ? -TILE : +TILE;
-  const zExit = +TILE * 1.5;
-  const pts = [
-    [0, 0, -TILE / 2],
-    [0, 0, +TILE / 2],
-    [xExit * 0.3, 0, +TILE * 0.9],
-    [xExit * 0.75, 0, +TILE * 1.25],
-    [xExit, 0, zExit],
-  ];
-  const path = pathFromPoints(pts);
-  grp.add(extrudeRoad(path, { steps: 36 }));
-  // Outer curb (red/white barrier) on the outside of the sweep
-  grp.add(curbAlongPath(path, mirror ? -1 : +1));
-  // Inside curb at reduced scale so the apex still reads as the racing line.
-  const inner = curbAlongPath(path, mirror ? +1 : -1);
+  const cx = mirror ? +TILE / 2 : -TILE / 2;
+  const cz = -TILE / 2;
+  const r = TILE / 2;
+  const a0 = mirror ? Math.PI : 0;
+  const a1 = Math.PI / 2;
+  const path = arcPath3(cx, cz, r, a0, a1, 0, 24);
+  const BANK = Math.PI / 9; // ~20° at apex
+  const bankFn = (t) => Math.sin(Math.min(1, Math.max(0, t)) * Math.PI) * BANK;
+  // Outside-of-arc direction: opposite to the side the arc center is on.
+  // mirror=false → center at -X → outside is +X; mirror=true → outside is -X.
+  const outerSign = mirror ? -1 : +1;
+  grp.add(extrudeRoadBanked(path, bankFn, outerSign, { steps: 40 }));
+  // Outer (lifted) curb at full size; inner curb shrunk so the apex still
+  // reads as the racing line.
+  grp.add(curbAlongPathBanked(path, +outerSign, bankFn, outerSign));
+  const inner = curbAlongPathBanked(path, -outerSign, bankFn, outerSign);
   inner.children.forEach(c => { c.scale.set(0.65, 0.7, 1.0); });
   grp.add(inner);
-  grp.add(dashedPaintAlongPath(path));
-  return grp;
-}
-
-function buildBend(mirror, lengthZcells = 2) {
-  // 1×2 cell S-wiggle. Enters AND exits centered on x=0 so the piece
-  // snaps cleanly edge-to-edge with a straight on either side; the
-  // racing line bulges to one side mid-piece. Earlier this offset the
-  // exit by a full cell which left a visible jog where the next straight
-  // joined.
-  const grp = new THREE.Group();
-  const dirX = mirror ? +1 : -1;
-  const totalZ = TILE * lengthZcells;
-  const shift = TILE * 0.45;
-  const pts = [
-    [0, 0, -TILE / 2],
-    [0, 0, -TILE / 4],
-    [dirX * shift * 0.6, 0, 0],
-    [dirX * shift, 0, totalZ * 0.5 - TILE / 2],
-    [dirX * shift * 0.6, 0, totalZ - TILE - TILE / 4],
-    [0, 0, totalZ - TILE / 2 - TILE / 4],
-    [0, 0, totalZ - TILE / 2],
-  ];
-  const path = pathFromPoints(pts);
-  grp.add(extrudeRoad(path, { steps: 48 }));
-  grp.add(curbsBothSides(path));
-  grp.add(dashedPaintAlongPath(path));
-  return grp;
-}
-
-function buildChicane() {
-  const grp = new THREE.Group();
-  const totalZ = TILE * 4;
-  const pts = [
-    [0, 0, -TILE / 2],
-    [0, 0, TILE * 0.0],
-    [-TILE * 0.5, 0, TILE * 0.9],
-    [-TILE * 0.5, 0, TILE * 1.6],
-    [+TILE * 0.5, 0, TILE * 2.4],
-    [+TILE * 0.5, 0, TILE * 3.1],
-    [0, 0, TILE * 3.5 - TILE / 2 + TILE / 2],
-    [0, 0, totalZ - TILE / 2],
-  ];
-  const path = pathFromPoints(pts);
-  grp.add(extrudeRoad(path, { steps: 64 }));
-  grp.add(curbsBothSides(path));
-  grp.add(dashedPaintAlongPath(path));
-  return grp;
-}
-
-function buildBanked(mirror) {
-  // Banked sweep — build the same arc as buildSweep but raise the OUTSIDE
-  // edge of the cross-section per step and roll the curbs to match.
-  // The previous implementation post-rotated the whole sweep group around
-  // Z and parked a flat concrete wedge underneath, which left a visibly
-  // floating slab. This version builds the bank into the geometry.
-  const grp = new THREE.Group();
-  const cx = mirror ? -TILE : +TILE;
-  const xExit = mirror ? -TILE : +TILE;
-  const pts = [
-    [0, 0, -TILE / 2],
-    [0, 0, +TILE / 2],
-    [xExit * 0.3, 0, +TILE * 0.9],
-    [xExit * 0.75, 0, +TILE * 1.25],
-    [xExit, 0, +TILE * 1.5],
-  ];
-  const path = pathFromPoints(pts);
-  const BANK = Math.PI / 9; // ~20°
-  // Bank starts at 0 at entry, ramps to BANK midway, eases back to 0 at exit
-  // so neighbouring straights still tile cleanly.
-  const bankFn = (t) => Math.sin(Math.min(1, Math.max(0, t)) * Math.PI) * BANK;
-  const outerSign = mirror ? -1 : +1; // outside-of-arc direction (outside lifts up)
-  grp.add(extrudeRoadBanked(path, bankFn, outerSign, { steps: 40 }));
-  grp.add(curbAlongPathBanked(path, outerSign, bankFn, outerSign));
-  grp.add(curbAlongPathBanked(path, -outerSign, bankFn, outerSign, { paint: true }));
-  // Slim continuous concrete plinth following the arc — just enough to
-  // visually carry the banked deck without forming a triangular wedge.
-  const plinthN = 8;
-  for (let i = 1; i <= plinthN; i++) {
-    const t = i / (plinthN + 1);
-    const p = path.getPointAt(t);
-    const tan = path.getTangentAt(t);
-    const yaw = Math.atan2(tan.x, tan.z);
-    const bank = bankFn(t);
-    const lift = (ROAD_WIDTH / 2) * Math.sin(bank);
-    const h = Math.max(0.25, lift * 0.6);
-    const pillar = new THREE.Mesh(
-      new THREE.BoxGeometry(ROAD_WIDTH * 0.55, h, 0.55),
-      MATS.concrete,
-    );
-    pillar.position.set(p.x, h / 2, p.z);
-    pillar.rotation.y = yaw;
-    pillar.castShadow = true; pillar.receiveShadow = true;
-    grp.add(pillar);
-  }
   return grp;
 }
 
@@ -620,7 +516,8 @@ function buildBump() {
 function buildHill(lengthZcells = 2) {
   const grp = new THREE.Group();
   const totalZ = TILE * lengthZcells;
-  const peak = TILE * 0.55;
+  // Halved peak: 50% gentler height angle than the previous TILE*0.55.
+  const peak = TILE * 0.275;
   const samples = 32;
   const pts = [];
   for (let i = 0; i <= samples; i++) {
@@ -726,15 +623,16 @@ function buildJumpRamp() {
       grp.add(post);
     }
   }
-  // Yellow warning chevrons across the lip surface
+  // Yellow warning stripes across the lip surface (straight, not chevroned
+  // — the previous angled-chevron version read as broken paint at glancing
+  // camera angles).
   for (let i = -2; i <= 2; i++) {
-    const chev = new THREE.Mesh(
+    const stripe = new THREE.Mesh(
       new THREE.BoxGeometry(1.2, 0.06, 0.35),
       MATS.warning,
     );
-    chev.position.set(i * 1.4, ROAD_THICK + peak + 0.05, TILE / 2 - 0.5);
-    chev.rotation.y = (i < 0 ? -1 : 1) * Math.PI / 14;
-    grp.add(chev);
+    stripe.position.set(i * 1.4, ROAD_THICK + peak + 0.05, TILE / 2 - 0.5);
+    grp.add(stripe);
   }
   // Concrete buttress underneath the launch face
   const buttress = new THREE.Mesh(
@@ -1222,13 +1120,7 @@ export const VISUAL_BUILDERS = {
   straight4:       () => { const g = buildStraight(TILE * 4); g.position.z = TILE * 1.5; return g; },
   corner:          () => buildCorner(false),
   cornerR:         () => buildCorner(true),
-  corner_large:    () => buildSweep(false),
-  corner_largeR:   () => buildSweep(true),
-  bend_left:       () => buildBend(false, 2),
-  bend_right:      () => buildBend(true, 2),
-  chicane:         () => buildChicane(),
   banked_turn:     () => buildBanked(false),
-  banked_turnR:    () => buildBanked(true),
   bump_up:         () => buildBump(),
   hill_complete:   () => { const g = buildHill(2); g.position.z = TILE / 2; return g; },
   jump_ramp:       () => buildJumpRamp(),
