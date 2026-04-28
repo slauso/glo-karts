@@ -108,26 +108,6 @@ export const SEGMENTS = {
     blocks: [deck(), ...curbStripes()],
   },
 
-  straight2: {
-    label: 'Straight ×2',
-    category: 'road',
-    span: { x: 1, z: 2 },
-    blocks: [
-      { ...deck(TILE * 2), pos: [0, ROAD_THICK / 2, TILE / 2] },
-      ...curbStripes(TILE * 2).map(b => ({ ...b, pos: [b.pos[0], b.pos[1], b.pos[2] + TILE / 2] })),
-    ],
-  },
-
-  straight4: {
-    label: 'Straight ×4',
-    category: 'road',
-    span: { x: 1, z: 4 },
-    blocks: [
-      { ...deck(TILE * 4), pos: [0, ROAD_THICK / 2, TILE * 1.5] },
-      ...curbStripes(TILE * 4).map(b => ({ ...b, pos: [b.pos[0], b.pos[1], b.pos[2] + TILE * 1.5] })),
-    ],
-  },
-
   // L-bend corner. Default (cornerL) enters at the -Z edge and exits at the -X edge.
   // Built as a full-cell flat deck so it tiles seamlessly with neighbouring straights.
   // The inside-edge curb is drawn to telegraph the turn direction.

@@ -816,6 +816,82 @@ function mouseDownStateConsumedDrag() {
   return performance.now() - _lastDragConsumedAt < 100;
 }
 
+// ── Marquee (rubber-band) selection ─────────────────────────────
+// Click+drag on empty ground (with no placement tool active) draws a
+// rectangle and selects every placement / decor whose centre projects
+// inside the rectangle on mouseup. Holding Shift or Ctrl/Meta adds to
+// the existing selection instead of replacing it.
+const marqueeEl = document.createElement('div');
+marqueeEl.id = 'marqueeRect';
+Object.assign(marqueeEl.style, {
+  position: 'fixed',
+  border: '1px solid #4ab8ff',
+  background: 'rgba(74, 184, 255, 0.12)',
+  pointerEvents: 'none',
+  zIndex: '9000',
+  display: 'none',
+  boxSizing: 'border-box',
+});
+document.body.appendChild(marqueeEl);
+const _marqueeProj = new THREE.Vector3();
+function updateMarqueeRect(x0, y0, x1, y1) {
+  const left = Math.min(x0, x1);
+  const top = Math.min(y0, y1);
+  const w = Math.abs(x1 - x0);
+  const h = Math.abs(y1 - y0);
+  marqueeEl.style.left = left + 'px';
+  marqueeEl.style.top = top + 'px';
+  marqueeEl.style.width = w + 'px';
+  marqueeEl.style.height = h + 'px';
+  marqueeEl.style.display = 'block';
+}
+function hideMarqueeRect() {
+  marqueeEl.style.display = 'none';
+}
+/**
+ * Select every placement + decor whose world-space anchor projects into the
+ * given client-space rectangle. `additive` keeps the existing selection.
+ */
+function applyMarqueeSelection(rect, additive) {
+  const canvasRect = canvas.getBoundingClientRect();
+  if (!additive) {
+    selectedIds.clear();
+    selectedDecorIds.clear();
+    lastSelectedId = null;
+    lastSelectedDecorId = null;
+  }
+  const inside = (cx, cy) =>
+    cx >= rect.left && cx <= rect.right && cy >= rect.top && cy <= rect.bottom;
+  const projectMesh = (mesh) => {
+    if (!mesh) return null;
+    mesh.getWorldPosition(_marqueeProj);
+    _marqueeProj.project(activeCamera);
+    // Behind camera → skip.
+    if (_marqueeProj.z < -1 || _marqueeProj.z > 1) return null;
+    const cx = canvasRect.left + ((_marqueeProj.x + 1) / 2) * canvasRect.width;
+    const cy = canvasRect.top + ((1 - _marqueeProj.y) / 2) * canvasRect.height;
+    return { cx, cy };
+  };
+  for (const p of track.all()) {
+    const mesh = placementGroup.children.find(m => m.userData?.placementId === p.id);
+    const sp = projectMesh(mesh);
+    if (sp && inside(sp.cx, sp.cy)) {
+      selectedIds.add(p.id);
+      lastSelectedId = p.id;
+    }
+  }
+  for (const d of decor.all()) {
+    const mesh = decorMeshById.get(d.id);
+    const sp = projectMesh(mesh);
+    if (sp && inside(sp.cx, sp.cy)) {
+      selectedDecorIds.add(d.id);
+      lastSelectedDecorId = d.id;
+    }
+  }
+  refreshSelectionBoxes();
+  refreshInspector();
+}
+
 canvas.addEventListener('mousedown', (e) => {
   if (e.button !== 0) return;
   hideContextMenu();
@@ -827,6 +903,17 @@ canvas.addEventListener('mousedown', (e) => {
     // Snapshot selection at the time of drag-start so we can move it as a group.
     snapshot: null, anchorId: null, anchorStart: null,
   };
+  // ── Marquee selection ────────────────────────────────────────
+  // No active placement tool + click on empty ground (or no hit) starts a
+  // rubber-band rectangle. The actual selection happens on mouseup.
+  const _hitEmpty = !hit || hit.kind === 'cell';
+  if (activeKey == null && _hitEmpty) {
+    mouseDownState.marquee = {
+      startX: e.clientX, startY: e.clientY,
+      additive: e.shiftKey || e.ctrlKey || e.metaKey,
+    };
+    return;
+  }
   // If clicking on a placement, prepare a potential drag of the whole selection.
   // (Skip when an overlay key is active — the click should drop the overlay
   // on top of whatever's there instead of dragging the underlying piece.
@@ -885,6 +972,17 @@ canvas.addEventListener('mousemove', (e) => {
   if (!mouseDownState) return;
   const dx = e.clientX - mouseDownState.startX;
   const dy = e.clientY - mouseDownState.startY;
+  // Marquee: stretch the rubber-band rectangle.
+  if (mouseDownState.marquee) {
+    if (!mouseDownState.dragging && Math.hypot(dx, dy) < DRAG_PIXEL_THRESHOLD) return;
+    mouseDownState.dragging = true;
+    mouseDownState.movedSinceStart = true;
+    updateMarqueeRect(
+      mouseDownState.marquee.startX, mouseDownState.marquee.startY,
+      e.clientX, e.clientY,
+    );
+    return;
+  }
   // Decor body-drag: move all selected decor instances on the workplane.
   if (mouseDownState.decorDrag) {
     if (!mouseDownState.dragging && Math.hypot(dx, dy) < DRAG_PIXEL_THRESHOLD) return;
@@ -961,6 +1059,24 @@ canvas.addEventListener('mousemove', (e) => {
 
 window.addEventListener('mouseup', (e) => {
   if (e.button !== 0 || !mouseDownState) { mouseDownState = null; return; }
+  // Marquee: commit the rubber-band selection.
+  if (mouseDownState.marquee) {
+    const m = mouseDownState.marquee;
+    const wasDrag = mouseDownState.dragging;
+    mouseDownState = null;
+    hideMarqueeRect();
+    if (wasDrag) {
+      const rect = {
+        left: Math.min(m.startX, e.clientX),
+        right: Math.max(m.startX, e.clientX),
+        top: Math.min(m.startY, e.clientY),
+        bottom: Math.max(m.startY, e.clientY),
+      };
+      applyMarqueeSelection(rect, m.additive);
+      _lastDragConsumedAt = performance.now();
+    }
+    return;
+  }
   const wasDragging = mouseDownState.dragging && mouseDownState.movedSinceStart;
   const wasDecorDrag = !!mouseDownState.decorDrag;
   mouseDownState = null;
@@ -3515,4 +3631,4 @@ function _setRightTab(name) {
 document.getElementById('tabShapes')?.addEventListener('click', () => _setRightTab('shapes'));
 document.getElementById('tabWorkplane')?.addEventListener('click', () => _setRightTab('workplane'));
 
-window.__studio = { track, decor, scene, camera, renderer, rebuildAll, rebuildAllDecor, refreshHud, refreshPlayButton, selectDecor, rebuildAllCSG, rebuildCSGForGroup, csgMeshByGid, decorMeshById, groupSelection, ungroupSelection, THREE, SEGMENTS, SEGMENT_KEYS };
+window.__studio = { track, decor, scene, camera, renderer, rebuildAll, rebuildAllDecor, refreshHud, refreshPlayButton, selectDecor, rebuildAllCSG, rebuildCSGForGroup, csgMeshByGid, decorMeshById, groupSelection, ungroupSelection, setActiveTool, selectedIds, selectedDecorIds, THREE, SEGMENTS, SEGMENT_KEYS };

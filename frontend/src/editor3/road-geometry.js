@@ -1116,8 +1116,6 @@ function buildSpawn() {
 // ── Registry ──────────────────────────────────────────────────────
 export const VISUAL_BUILDERS = {
   straight:        () => buildStraight(TILE),
-  straight2:       () => { const g = buildStraight(TILE * 2); g.position.z = TILE / 2; return g; },
-  straight4:       () => { const g = buildStraight(TILE * 4); g.position.z = TILE * 1.5; return g; },
   corner:          () => buildCorner(false),
   cornerR:         () => buildCorner(true),
   banked_turn:     () => buildBanked(false),

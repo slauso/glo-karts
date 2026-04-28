@@ -19,7 +19,6 @@ const OUT = path.resolve('dev-snapshots/seg-drive');
 // reach an elevated deck (otherwise it would stop at the riser).
 const TESTS = [
   { key: 'straight',       spanZ: 1 },
-  { key: 'straight2',      spanZ: 2 },
   { key: 'ramp_up',        spanZ: 2, requireYAbove: 4 },
   { key: 'ramp_down',      spanZ: 2, comboIntro: 'ramp_up' }, // approach from a high deck
   { key: 'plateau',        spanZ: 1, comboIntro: 'ramp_up', comboOutro: 'ramp_down', requireYAbove: 4 },
@@ -48,9 +47,12 @@ function buildTrackJSON(test) {
   // Spawn
   placements.push({ k: 'spawn', x: 0, z: gz, r: 0 });
   gz += 1;
-  // Straight runway so the kart hits speed
-  placements.push({ k: 'straight2', x: 0, z: gz, r: 0 });
-  gz += 2;
+  // Straight runway so the kart hits speed (two unit straights replace the
+  // retired straight×2 piece).
+  placements.push({ k: 'straight', x: 0, z: gz, r: 0 });
+  gz += 1;
+  placements.push({ k: 'straight', x: 0, z: gz, r: 0 });
+  gz += 1;
   // Optional intro
   if (test.comboIntro) {
     placements.push({ k: test.comboIntro, x: 0, z: gz, r: 0 });
@@ -65,8 +67,10 @@ function buildTrackJSON(test) {
     gz += spanOf(test.comboOutro);
   }
   // Outgoing straight + finish
-  placements.push({ k: 'straight2', x: 0, z: gz, r: 0 });
-  gz += 2;
+  placements.push({ k: 'straight', x: 0, z: gz, r: 0 });
+  gz += 1;
+  placements.push({ k: 'straight', x: 0, z: gz, r: 0 });
+  gz += 1;
   placements.push({ k: 'finish', x: 0, z: gz, r: 0 });
   return { v: 1, name: `Drive: ${test.key}`, placements };
 }
