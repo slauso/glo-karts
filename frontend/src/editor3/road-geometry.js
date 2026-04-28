@@ -232,6 +232,108 @@ function extrudeRoad(path, opts = {}) {
 
 const TEX_SCALE = 4.0;
 
+// Banked variant of extrudeRoad. `bankFn(t)` returns a roll angle (radians)
+// at parameter t in [0,1] along the path. `outerSign` is +1 if the outside
+// of the bank is on the +perp side of the path tangent, -1 otherwise.
+// The cross-section is rolled around the local tangent axis so the outside
+// edge lifts and the inside edge stays at deck level.
+function extrudeRoadBanked(path, bankFn, outerSign, opts = {}) {
+  const width = opts.width ?? ROAD_WIDTH;
+  const halfW = width / 2;
+  const thickness = opts.thickness ?? ROAD_THICK;
+  const segments = opts.steps || Math.max(24, Math.ceil(path.getLength() / 0.6));
+  const N = segments + 1;
+  const positions = [];
+  const uvs = [];
+  const indices = [];
+  for (let i = 0; i < N; i++) {
+    const t = i / segments;
+    const p = path.getPointAt(t);
+    const tan = path.getTangentAt(t);
+    // Perpendicular in XZ
+    const px = -tan.z, pz = tan.x;
+    const plen = Math.hypot(px, pz) || 1;
+    const nx = px / plen, nz = pz / plen;
+    const bank = bankFn(t);
+    // Offsets for left/right edges, with outside edge raised
+    // Edge along +perp gets sign = +1; edge along -perp gets sign = -1.
+    // Outside edge lifts; inside edge stays at deck level.
+    const liftPlus = (outerSign === +1) ? halfW * Math.sin(bank) : 0;
+    const liftMinus = (outerSign === -1) ? halfW * Math.sin(bank) : 0;
+    const yBase = p.y || 0;
+    const lx = p.x - nx * halfW, lz = p.z - nz * halfW;
+    const rx = p.x + nx * halfW, rz = p.z + nz * halfW;
+    const yL = yBase + liftMinus;
+    const yR = yBase + liftPlus;
+    positions.push(lx, yL + thickness, lz);
+    positions.push(rx, yR + thickness, rz);
+    positions.push(lx, yL, lz);
+    positions.push(rx, yR, rz);
+    const sUV = TEX_SCALE;
+    uvs.push(lx / sUV, lz / sUV);
+    uvs.push(rx / sUV, rz / sUV);
+    uvs.push(lx / sUV, lz / sUV);
+    uvs.push(rx / sUV, rz / sUV);
+  }
+  for (let i = 0; i < segments; i++) {
+    const a = i * 4, b = (i + 1) * 4;
+    indices.push(a, b, a + 1);
+    indices.push(a + 1, b, b + 1);
+    indices.push(a + 2, a + 3, b + 2);
+    indices.push(a + 3, b + 3, b + 2);
+    indices.push(a, a + 2, b);
+    indices.push(a + 2, b + 2, b);
+    indices.push(a + 1, b + 1, a + 3);
+    indices.push(b + 1, b + 3, a + 3);
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+  geo.setIndex(indices);
+  geo.computeVertexNormals();
+  const mesh = new THREE.Mesh(geo, opts.material || MATS.asphalt);
+  mesh.castShadow = true; mesh.receiveShadow = true;
+  mesh.userData.drivable = true;
+  return mesh;
+}
+
+// Banked-aware curb placement. Curbs follow the same lifted edges as the
+// banked extrusion. `sideSign` is the side of the path (+1 or -1).
+// `bankFn` returns the roll angle. `outerSign` is which side is outside.
+function curbAlongPathBanked(path, sideSign, bankFn, outerSign, opts = {}) {
+  const grp = new THREE.Group();
+  const count = opts.count || Math.max(6, Math.floor(path.getLength() / 0.8));
+  const offset = (ROAD_WIDTH / 2) - 0.05;
+  const halfW = ROAD_WIDTH / 2;
+  const stone = new THREE.BoxGeometry(0.55, 0.16, 0.7);
+  for (let i = 0; i < count; i++) {
+    const t = (i + 0.5) / count;
+    const p = path.getPointAt(t);
+    const tan = path.getTangentAt(t);
+    const yaw = Math.atan2(tan.x, tan.z);
+    const nx = Math.cos(yaw) * sideSign;
+    const nz = -Math.sin(yaw) * sideSign;
+    const bank = bankFn(t);
+    const lift = (sideSign === outerSign) ? halfW * Math.sin(bank) : 0;
+    const mat = opts.paint
+      ? MATS.paintWhite
+      : (i % 2 === 0 ? MATS.curbRed : MATS.curbWhite);
+    const m = new THREE.Mesh(stone, mat);
+    m.position.set(
+      p.x + nx * offset,
+      ROAD_THICK + 0.001 + 0.08 + (p.y || 0) + lift,
+      p.z + nz * offset,
+    );
+    m.rotation.y = yaw;
+    if (sideSign === outerSign) m.rotation.z = -bank;
+    else m.rotation.z = +bank * 0.0;
+    if (opts.paint) m.scale.set(0.4, 0.3, 0.6);
+    m.castShadow = true; m.receiveShadow = true;
+    grp.add(m);
+  }
+  return grp;
+}
+
 // Place small alternating-color curb stones along one side of a path.
 function curbAlongPath(path, sideSign, opts = {}) {
   const grp = new THREE.Group();
@@ -354,21 +456,28 @@ function buildSweep(mirror) {
 }
 
 function buildBend(mirror, lengthZcells = 2) {
+  // 1×2 cell S-wiggle. Enters AND exits centered on x=0 so the piece
+  // snaps cleanly edge-to-edge with a straight on either side; the
+  // racing line bulges to one side mid-piece. Earlier this offset the
+  // exit by a full cell which left a visible jog where the next straight
+  // joined.
   const grp = new THREE.Group();
   const dirX = mirror ? +1 : -1;
   const totalZ = TILE * lengthZcells;
-  // S-curve from (0,_,-TILE/2) to (dirX*TILE, _, totalZ - TILE/2)
+  const shift = TILE * 0.45;
   const pts = [
     [0, 0, -TILE / 2],
-    [0, 0, 0],
-    [dirX * TILE * 0.5, 0, totalZ * 0.5 - TILE / 2],
-    [dirX * TILE, 0, totalZ - TILE],
-    [dirX * TILE, 0, totalZ - TILE / 2],
+    [0, 0, -TILE / 4],
+    [dirX * shift * 0.6, 0, 0],
+    [dirX * shift, 0, totalZ * 0.5 - TILE / 2],
+    [dirX * shift * 0.6, 0, totalZ - TILE - TILE / 4],
+    [0, 0, totalZ - TILE / 2 - TILE / 4],
+    [0, 0, totalZ - TILE / 2],
   ];
   const path = pathFromPoints(pts);
-  grp.add(extrudeRoad(path, { steps: 36 }));
-  grp.add(curbAlongPath(path, +1, { count: 14 }));
-  grp.add(curbAlongPath(path, -1, { count: 14 }));
+  grp.add(extrudeRoad(path, { steps: 48 }));
+  grp.add(curbAlongPath(path, +1, { count: 18 }));
+  grp.add(curbAlongPath(path, -1, { count: 18 }));
   grp.add(dashedPaintAlongPath(path));
   return grp;
 }
@@ -395,33 +504,49 @@ function buildChicane() {
 }
 
 function buildBanked(mirror) {
-  // Sweep but the cross-section profile is rolled around the path tangent.
-  // ExtrudeGeometry along a 3D path supports this natively if we displace
-  // the path in Y on the outside — but that warps unevenly. Instead we
-  // post-rotate the whole sweep mesh around its tangent — not feasible.
-  // Practical approach: build the sweep, then rotate the entire group around
-  // the chord between entry/exit axes by a fixed bank angle, biased outward.
+  // Banked sweep — build the same arc as buildSweep but raise the OUTSIDE
+  // edge of the cross-section per step and roll the curbs to match.
+  // The previous implementation post-rotated the whole sweep group around
+  // Z and parked a flat concrete wedge underneath, which left a visibly
+  // floating slab. This version builds the bank into the geometry.
   const grp = new THREE.Group();
-  const sweep = buildSweep(mirror);
-  // Apply uniform bank: rotate around Z so outside lifts up.
-  // The path exit is along ±X; the appropriate bank axis isn't single — for
-  // arcade feel we just lift the outside half of the deck via a soft tilt.
-  // Add a wedge under the deck on the outside as a visual ramp surface.
-  const dir = mirror ? -1 : +1;
-  const wedge = new THREE.Mesh(
-    new THREE.BoxGeometry(TILE * 0.45, 0.6, TILE * 1.6),
-    MATS.concrete,
-  );
-  wedge.position.set(dir * TILE * 0.6, 0.3, TILE * 0.9);
-  wedge.rotation.z = -dir * Math.PI / 18;
-  wedge.castShadow = true; wedge.receiveShadow = true;
-  grp.add(wedge);
-  // Lean the sweep outward visually
-  sweep.children.forEach((m) => {
-    m.rotation.z = -dir * Math.PI / 18;
-    m.position.y += 0.18;
-  });
-  grp.add(sweep);
+  const cx = mirror ? -TILE : +TILE;
+  const xExit = mirror ? -TILE : +TILE;
+  const pts = [
+    [0, 0, -TILE / 2],
+    [0, 0, +TILE / 2],
+    [xExit * 0.3, 0, +TILE * 0.9],
+    [xExit * 0.75, 0, +TILE * 1.25],
+    [xExit, 0, +TILE * 1.5],
+  ];
+  const path = pathFromPoints(pts);
+  const BANK = Math.PI / 9; // ~20°
+  // Bank starts at 0 at entry, ramps to BANK midway, eases back to 0 at exit
+  // so neighbouring straights still tile cleanly.
+  const bankFn = (t) => Math.sin(Math.min(1, Math.max(0, t)) * Math.PI) * BANK;
+  const outerSign = mirror ? -1 : +1; // outside-of-arc direction (outside lifts up)
+  grp.add(extrudeRoadBanked(path, bankFn, outerSign, { steps: 40 }));
+  grp.add(curbAlongPathBanked(path, outerSign, bankFn, outerSign, { count: 16, raise: true }));
+  grp.add(curbAlongPathBanked(path, -outerSign, bankFn, outerSign, { count: 16, raise: false, paint: true }));
+  // Concrete buttress underneath following the arc — supports the bank
+  // visually without a flat slab.
+  const buttressN = 5;
+  for (let i = 1; i <= buttressN; i++) {
+    const t = i / (buttressN + 1);
+    const p = path.getPointAt(t);
+    const tan = path.getTangentAt(t);
+    const yaw = Math.atan2(tan.x, tan.z);
+    const bank = bankFn(t);
+    const lift = (ROAD_WIDTH / 2) * Math.sin(bank);
+    const pillar = new THREE.Mesh(
+      new THREE.BoxGeometry(ROAD_WIDTH * 0.85, lift + 0.3, 0.45),
+      MATS.concrete,
+    );
+    pillar.position.set(p.x, (lift + 0.3) / 2, p.z);
+    pillar.rotation.y = yaw;
+    pillar.castShadow = true; pillar.receiveShadow = true;
+    grp.add(pillar);
+  }
   return grp;
 }
 
@@ -512,28 +637,66 @@ function buildRamp(yStart, yEnd, lengthZcells = 2) {
 }
 
 function buildJumpRamp() {
+  // Proper kicker: rising deck with side rails along the launch ramp,
+  // chevron warning paint across the lip, and a concrete buttress under
+  // the launch face so it doesn't float.
   const grp = new THREE.Group();
-  const samples = 14;
+  const samples = 18;
   const pts = [];
-  const peak = 1.4;
+  const peak = 1.6;
   for (let i = 0; i <= samples; i++) {
     const t = i / samples;
     const z = -TILE / 2 + TILE * t;
-    const y = Math.pow(t, 1.6) * peak;
+    // Smooth-ease kicker profile — flat for the first third, rising into
+    // a steep launch toward the lip.
+    const e = Math.pow(t, 2.2);
+    const y = e * peak;
     pts.push([0, y, z]);
   }
   const path = pathFromPoints(pts);
-  grp.add(extrudeRoad(path, { steps: 24 }));
-  // Yellow warning chevrons at the lip
+  grp.add(extrudeRoad(path, { steps: 30 }));
+  // Side rails along the kicker (matches buildRamp visual language)
+  for (const side of [-1, +1]) {
+    const railPts = [];
+    for (let i = 0; i <= samples; i++) {
+      const t = i / samples;
+      const z = -TILE / 2 + TILE * t;
+      const e = Math.pow(t, 2.2);
+      const y = e * peak;
+      railPts.push([side * (ROAD_WIDTH / 2 - 0.1), y + ROAD_THICK + WALL_HEIGHT * 0.55, z]);
+    }
+    const rPath = pathFromPoints(railPts);
+    const tube = new THREE.TubeGeometry(rPath, 18, 0.08, 8, false);
+    grp.add(new THREE.Mesh(tube, MATS.guardrail));
+    for (let i = 0; i < 4; i++) {
+      const t = (i + 0.5) / 4;
+      const p = rPath.getPointAt(t);
+      const post = new THREE.Mesh(
+        new THREE.BoxGeometry(0.12, WALL_HEIGHT, 0.12),
+        MATS.guardrail,
+      );
+      post.position.set(p.x, p.y - WALL_HEIGHT * 0.3, p.z);
+      grp.add(post);
+    }
+  }
+  // Yellow warning chevrons across the lip surface
   for (let i = -2; i <= 2; i++) {
     const chev = new THREE.Mesh(
-      new THREE.BoxGeometry(1.4, 0.06, 0.3),
+      new THREE.BoxGeometry(1.2, 0.06, 0.35),
       MATS.warning,
     );
-    chev.position.set(i * 1.6, ROAD_THICK + peak + 0.04, TILE / 2 - 0.4);
-    chev.rotation.z = (i < 0 ? -1 : 1) * Math.PI / 16;
+    chev.position.set(i * 1.4, ROAD_THICK + peak + 0.05, TILE / 2 - 0.5);
+    chev.rotation.y = (i < 0 ? -1 : 1) * Math.PI / 14;
     grp.add(chev);
   }
+  // Concrete buttress underneath the launch face
+  const buttress = new THREE.Mesh(
+    new THREE.BoxGeometry(ROAD_WIDTH * 0.95, peak * 0.9, 1.6),
+    MATS.concrete,
+  );
+  buttress.position.set(0, peak * 0.45, TILE / 2 - 1.0);
+  buttress.castShadow = true; buttress.receiveShadow = true;
+  grp.add(buttress);
   return grp;
 }
 
@@ -599,6 +762,11 @@ function buildBridgeRamp(direction) {
 }
 
 function buildTunnel() {
+  // Drivable straight + concrete side walls + a half-cylinder roof arching
+  // over the road. Earlier the cylinder rotation was wrong (combining
+  // rot.z=PI/2 then rot.y=PI/2 gave a vertically standing tube), so the
+  // tunnel rendered as a black silo. Cylinder default axis is +Y; we want
+  // axis along Z and the open half facing DOWN (so the dome is the roof).
   const grp = new THREE.Group();
   const lengthZ = TILE * 2;
   const cz = lengthZ / 2 - TILE / 2;
@@ -606,32 +774,46 @@ function buildTunnel() {
   grp.add(extrudeRoad(path));
   grp.add(curbAlongPath(path, +1, { count: 14 }));
   grp.add(curbAlongPath(path, -1, { count: 14 }));
-  // Half-cylinder roof
-  const roofR = ROAD_WIDTH / 2 + 0.4;
+  // Side walls (concrete) up to where the dome springs from
+  const wallHt = WALL_HEIGHT * 0.9;
+  for (const side of [-1, +1]) {
+    const wall = new THREE.Mesh(
+      new THREE.BoxGeometry(0.45, wallHt, lengthZ),
+      MATS.concrete,
+    );
+    wall.position.set(side * (ROAD_WIDTH / 2 + 0.2), ROAD_THICK + wallHt / 2, cz);
+    wall.castShadow = true; wall.receiveShadow = true;
+    grp.add(wall);
+  }
+  // Half-cylinder roof: cylinder along Y → rotate -90° around X so axis
+  // becomes Z and the surface (which lives in the +Z hemisphere of the
+  // cylinder when thetaStart=0..PI) is rotated up to +Y, dome opening
+  // facing down.
+  const roofR = ROAD_WIDTH / 2 + 0.45;
+  const roofY = ROAD_THICK + wallHt;
   const roofGeo = new THREE.CylinderGeometry(
-    roofR, roofR, lengthZ, 24, 1, true, 0, Math.PI,
+    roofR, roofR, lengthZ, 32, 1, true, 0, Math.PI,
   );
   const roof = new THREE.Mesh(roofGeo, MATS.tunnelRoof);
-  roof.rotation.z = Math.PI / 2;
-  roof.rotation.y = Math.PI / 2;
-  roof.position.set(0, ROAD_THICK + WALL_HEIGHT * 0.4, cz);
+  roof.rotation.x = -Math.PI / 2;
+  roof.position.set(0, roofY, cz);
   roof.castShadow = true; roof.receiveShadow = true;
   grp.add(roof);
-  // Glow strip down the middle of the ceiling
+  // Glow strip down the middle of the ceiling apex
   const strip = new THREE.Mesh(
     new THREE.BoxGeometry(0.25, 0.08, lengthZ * 0.96),
     new THREE.MeshStandardMaterial({
       color: 0xfff2cc, emissive: 0xffd060, emissiveIntensity: 1.4, roughness: 0.4,
     }),
   );
-  strip.position.set(0, ROAD_THICK + WALL_HEIGHT * 0.4 + roofR - 0.18, cz);
+  strip.position.set(0, roofY + roofR - 0.18, cz);
   grp.add(strip);
-  // End rim arches
+  // End rim arches — torus default lies in XY plane, half from 0..PI is
+  // the upper hemicircle. Rotate so it stands at the entry/exit faces.
   for (const z of [-TILE / 2 + 0.05, lengthZ - TILE / 2 - 0.05]) {
-    const ringGeo = new THREE.TorusGeometry(roofR + 0.05, 0.18, 8, 24, Math.PI);
+    const ringGeo = new THREE.TorusGeometry(roofR + 0.05, 0.18, 8, 28, Math.PI);
     const ring = new THREE.Mesh(ringGeo, MATS.truss);
-    ring.position.set(0, ROAD_THICK + WALL_HEIGHT * 0.4, z);
-    ring.rotation.y = Math.PI / 2;
+    ring.position.set(0, roofY, z);
     grp.add(ring);
   }
   return grp;

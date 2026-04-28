@@ -3348,4 +3348,4 @@ function _updateAxisBadge() {
 })();
 
 // Expose for debugging
-window.__studio = { track, decor, scene, camera, renderer, rebuildAll, rebuildAllDecor, refreshHud, refreshPlayButton, selectDecor, rebuildAllCSG, rebuildCSGForGroup, csgMeshByGid, decorMeshById, groupSelection, ungroupSelection };
+window.__studio = { track, decor, scene, camera, renderer, rebuildAll, rebuildAllDecor, refreshHud, refreshPlayButton, selectDecor, rebuildAllCSG, rebuildCSGForGroup, csgMeshByGid, decorMeshById, groupSelection, ungroupSelection, THREE, SEGMENTS, SEGMENT_KEYS };

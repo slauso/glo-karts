@@ -1,0 +1,450 @@
+[
+  {
+    "key": "straight",
+    "meshCount": 36,
+    "triCount": 612,
+    "materials": 4,
+    "bbox": {
+      "sx": 11250,
+      "sy": 661,
+      "sz": 12456
+    },
+    "center": {
+      "x": 0,
+      "y": 330,
+      "z": -228
+    }
+  },
+  {
+    "key": "straight2",
+    "meshCount": 73,
+    "triCount": 1200,
+    "materials": 4,
+    "bbox": {
+      "sx": 11250,
+      "sy": 661,
+      "sz": 24754
+    },
+    "center": {
+      "x": 0,
+      "y": 330,
+      "z": -371
+    }
+  },
+  {
+    "key": "straight4",
+    "meshCount": 145,
+    "triCount": 2400,
+    "materials": 4,
+    "bbox": {
+      "sx": 11250,
+      "sy": 661,
+      "sz": 49492
+    },
+    "center": {
+      "x": 0,
+      "y": 330,
+      "z": -728
+    }
+  },
+  {
+    "key": "corner",
+    "meshCount": 21,
+    "triCount": 432,
+    "materials": 4,
+    "bbox": {
+      "sx": 11852,
+      "sy": 661,
+      "sz": 11852
+    },
+    "center": {
+      "x": -309,
+      "y": 330,
+      "z": -309
+    }
+  },
+  {
+    "key": "cornerR",
+    "meshCount": 21,
+    "triCount": 432,
+    "materials": 4,
+    "bbox": {
+      "sx": 11852,
+      "sy": 661,
+      "sz": 11852
+    },
+    "center": {
+      "x": 309,
+      "y": 330,
+      "z": -309
+    }
+  },
+  {
+    "key": "ramp_up",
+    "meshCount": 41,
+    "triCount": 1448,
+    "materials": 4,
+    "bbox": {
+      "sx": 11250,
+      "sy": 8680,
+      "sz": 24008
+    },
+    "center": {
+      "x": 0,
+      "y": 4340,
+      "z": 6006
+    }
+  },
+  {
+    "key": "ramp_down",
+    "meshCount": 41,
+    "triCount": 1448,
+    "materials": 4,
+    "bbox": {
+      "sx": 11250,
+      "sy": 8680,
+      "sz": 24008
+    },
+    "center": {
+      "x": 0,
+      "y": 4340,
+      "z": 6006
+    }
+  },
+  {
+    "key": "plateau",
+    "meshCount": 5,
+    "triCount": 324,
+    "materials": 3,
+    "bbox": {
+      "sx": 10839,
+      "sy": 8660,
+      "sz": 12000
+    },
+    "center": {
+      "x": 0,
+      "y": 4330,
+      "z": 0
+    }
+  },
+  {
+    "key": "finish",
+    "meshCount": 59,
+    "triCount": 960,
+    "materials": 18,
+    "bbox": {
+      "sx": 11760,
+      "sy": 3775,
+      "sz": 12456
+    },
+    "center": {
+      "x": 0,
+      "y": 1887,
+      "z": -228
+    }
+  },
+  {
+    "key": "spawn",
+    "meshCount": 4,
+    "triCount": 840,
+    "materials": 2,
+    "bbox": {
+      "sx": 10800,
+      "sy": 1500,
+      "sz": 12001
+    },
+    "center": {
+      "x": 0,
+      "y": 750,
+      "z": -1
+    }
+  },
+  {
+    "key": "wide",
+    "meshCount": 7,
+    "triCount": 312,
+    "materials": 4,
+    "bbox": {
+      "sx": 24000,
+      "sy": 2100,
+      "sz": 24000
+    },
+    "center": {
+      "x": 6000,
+      "y": 1050,
+      "z": 6000
+    }
+  },
+  {
+    "key": "t_junction",
+    "meshCount": 8,
+    "triCount": 180,
+    "materials": 4,
+    "bbox": {
+      "sx": 12000,
+      "sy": 1620,
+      "sz": 12000
+    },
+    "center": {
+      "x": 0,
+      "y": 810,
+      "z": 0
+    }
+  },
+  {
+    "key": "crossroads",
+    "meshCount": 4,
+    "triCount": 52,
+    "materials": 3,
+    "bbox": {
+      "sx": 12000,
+      "sy": 570,
+      "sz": 12000
+    },
+    "center": {
+      "x": 0,
+      "y": 285,
+      "z": 0
+    }
+  },
+  {
+    "key": "corner_large",
+    "meshCount": 27,
+    "triCount": 600,
+    "materials": 4,
+    "bbox": {
+      "sx": 21483,
+      "sy": 661,
+      "sz": 27819
+    },
+    "center": {
+      "x": 5077,
+      "y": 330,
+      "z": 7909
+    }
+  },
+  {
+    "key": "corner_largeR",
+    "meshCount": 27,
+    "triCount": 600,
+    "materials": 4,
+    "bbox": {
+      "sx": 21483,
+      "sy": 661,
+      "sz": 27819
+    },
+    "center": {
+      "x": -5077,
+      "y": 330,
+      "z": 7909
+    }
+  },
+  {
+    "key": "bend_left",
+    "meshCount": 43,
+    "triCount": 824,
+    "materials": 4,
+    "bbox": {
+      "sx": 17016,
+      "sy": 661,
+      "sz": 24493
+    },
+    "center": {
+      "x": -2718,
+      "y": 330,
+      "z": 5753
+    }
+  },
+  {
+    "key": "bend_right",
+    "meshCount": 43,
+    "triCount": 824,
+    "materials": 4,
+    "bbox": {
+      "sx": 17016,
+      "sy": 661,
+      "sz": 24493
+    },
+    "center": {
+      "x": 2718,
+      "y": 330,
+      "z": 5753
+    }
+  },
+  {
+    "key": "chicane",
+    "meshCount": 70,
+    "triCount": 1340,
+    "materials": 4,
+    "bbox": {
+      "sx": 25442,
+      "sy": 661,
+      "sz": 52685
+    },
+    "center": {
+      "x": -64,
+      "y": 330,
+      "z": 20341
+    }
+  },
+  {
+    "key": "banked_turn",
+    "meshCount": 38,
+    "triCount": 764,
+    "materials": 5,
+    "bbox": {
+      "sx": 21545,
+      "sy": 2588,
+      "sz": 27819
+    },
+    "center": {
+      "x": 5046,
+      "y": 1294,
+      "z": 7909
+    }
+  },
+  {
+    "key": "banked_turnR",
+    "meshCount": 38,
+    "triCount": 764,
+    "materials": 5,
+    "bbox": {
+      "sx": 21545,
+      "sy": 2588,
+      "sz": 27819
+    },
+    "center": {
+      "x": -5046,
+      "y": 1294,
+      "z": 7909
+    }
+  },
+  {
+    "key": "bump_up",
+    "meshCount": 13,
+    "triCount": 384,
+    "materials": 3,
+    "bbox": {
+      "sx": 11250,
+      "sy": 1096,
+      "sz": 12000
+    },
+    "center": {
+      "x": 0,
+      "y": 548,
+      "z": 0
+    }
+  },
+  {
+    "key": "hill_complete",
+    "meshCount": 40,
+    "triCount": 852,
+    "materials": 4,
+    "bbox": {
+      "sx": 11250,
+      "sy": 7205,
+      "sz": 24000
+    },
+    "center": {
+      "x": 0,
+      "y": 3602,
+      "z": 6006
+    }
+  },
+  {
+    "key": "jump_ramp",
+    "meshCount": 17,
+    "triCount": 984,
+    "materials": 4,
+    "bbox": {
+      "sx": 10800,
+      "sy": 3057,
+      "sz": 12022
+    },
+    "center": {
+      "x": 0,
+      "y": 1528,
+      "z": 11
+    }
+  },
+  {
+    "key": "bridge",
+    "meshCount": 32,
+    "triCount": 1832,
+    "materials": 4,
+    "bbox": {
+      "sx": 10900,
+      "sy": 8972,
+      "sz": 24542
+    },
+    "center": {
+      "x": 0,
+      "y": 4334,
+      "z": 5831
+    }
+  },
+  {
+    "key": "bridge_onramp",
+    "meshCount": 41,
+    "triCount": 1448,
+    "materials": 4,
+    "bbox": {
+      "sx": 11250,
+      "sy": 8680,
+      "sz": 24008
+    },
+    "center": {
+      "x": 0,
+      "y": 4340,
+      "z": 6006
+    }
+  },
+  {
+    "key": "bridge_offramp",
+    "meshCount": 41,
+    "triCount": 1448,
+    "materials": 4,
+    "bbox": {
+      "sx": 11250,
+      "sy": 8680,
+      "sz": 24008
+    },
+    "center": {
+      "x": 0,
+      "y": 4340,
+      "z": 6006
+    }
+  },
+  {
+    "key": "tunnel",
+    "meshCount": 35,
+    "triCount": 1668,
+    "materials": 7,
+    "bbox": {
+      "sx": 12160,
+      "sy": 11930,
+      "sz": 24632
+    },
+    "center": {
+      "x": 0,
+      "y": 2055,
+      "z": 5820
+    }
+  },
+  {
+    "key": "cap_end",
+    "meshCount": 37,
+    "triCount": 624,
+    "materials": 7,
+    "bbox": {
+      "sx": 12000,
+      "sy": 2260,
+      "sz": 12456
+    },
+    "center": {
+      "x": 0,
+      "y": 1130,
+      "z": -228
+    }
+  }
+]
