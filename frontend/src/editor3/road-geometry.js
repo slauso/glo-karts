@@ -565,6 +565,20 @@ function buildBump() {
   grp.add(extrudeRoad(path, { steps: 30 }));
   grp.add(curbAlongPath(path, +1, { count: 6 }));
   grp.add(curbAlongPath(path, -1, { count: 6 }));
+  // Red/white speed-bump warning stripes across the apex
+  const stripeCount = 6;
+  for (let i = 0; i < stripeCount; i++) {
+    const stripe = new THREE.Mesh(
+      new THREE.BoxGeometry(ROAD_WIDTH / stripeCount * 0.92, 0.04, 0.6),
+      i % 2 === 0 ? MATS.curbRed : MATS.curbWhite,
+    );
+    stripe.position.set(
+      -ROAD_WIDTH / 2 + (i + 0.5) * (ROAD_WIDTH / stripeCount),
+      0.45 + ROAD_THICK + 0.03,
+      0,
+    );
+    grp.add(stripe);
+  }
   return grp;
 }
 
@@ -701,56 +715,80 @@ function buildJumpRamp() {
 }
 
 function buildBridge() {
+  // Elevated 1×2 deck supported by chunky concrete pylons at the entry,
+  // exit, and midspan. Replaces the earlier two-arch + cross-brace truss
+  // which extended past the bridge footprint and read as broken geometry.
+  // Approach is now self-contained: pylons sit ON the ground (y=0) and
+  // visually carry the deck, so the bridge reads as architecture even when
+  // placed next to a flat straight at ground level.
   const grp = new THREE.Group();
   const lengthZ = TILE * 2;
   const deckH = TILE * 0.6;
   const cz = lengthZ / 2 - TILE / 2;
-  // Elevated deck (straight)
+  // Elevated drivable deck
   const path = pathFromPoints([[0, deckH, -TILE / 2], [0, deckH, lengthZ - TILE / 2]]);
-  grp.add(extrudeRoad(path, { steps: 16 }));
+  grp.add(extrudeRoad(path, { steps: 24 }));
   grp.add(dashedPaintAlongPath(path));
   // Side guardrails (tubes + posts)
   for (const side of [-1, +1]) {
+    const x = side * (ROAD_WIDTH / 2 - 0.05);
+    const yRail = deckH + ROAD_THICK + WALL_HEIGHT * 0.55;
     const rPath = pathFromPoints([
-      [side * (ROAD_WIDTH / 2 - 0.05), deckH + ROAD_THICK + WALL_HEIGHT * 0.6, -TILE / 2],
-      [side * (ROAD_WIDTH / 2 - 0.05), deckH + ROAD_THICK + WALL_HEIGHT * 0.6, lengthZ - TILE / 2],
+      [x, yRail, -TILE / 2],
+      [x, yRail, lengthZ - TILE / 2],
     ]);
-    const tube = new THREE.TubeGeometry(rPath, 16, 0.1, 8, false);
+    const tube = new THREE.TubeGeometry(rPath, 12, 0.1, 8, false);
     grp.add(new THREE.Mesh(tube, MATS.guardrail));
-    for (let i = 0; i < 6; i++) {
-      const t = (i + 0.5) / 6;
+    for (let i = 0; i < 7; i++) {
+      const t = (i + 0.5) / 7;
       const p = rPath.getPointAt(t);
-      const post = new THREE.Mesh(new THREE.BoxGeometry(0.14, WALL_HEIGHT, 0.14), MATS.guardrail);
+      const post = new THREE.Mesh(
+        new THREE.BoxGeometry(0.14, WALL_HEIGHT, 0.14),
+        MATS.guardrail,
+      );
       post.position.set(p.x, p.y - WALL_HEIGHT * 0.4, p.z);
       grp.add(post);
     }
   }
-  // Arched truss underneath (two arches forming an X across the span)
-  const arch = (xOffset) => {
-    const archPath = new THREE.QuadraticBezierCurve3(
-      new THREE.Vector3(xOffset, 0, -TILE / 2),
-      new THREE.Vector3(xOffset, deckH * 1.05, cz),
-      new THREE.Vector3(xOffset, 0, lengthZ - TILE / 2),
+  // Pylons — one each at entry, mid, exit. Built as wide rectangular piers
+  // with a small "cap" matching the deck width so the deck reads as resting
+  // ON the pier, not floating.
+  const pylonZs = [-TILE / 2 + 0.4, cz, lengthZ - TILE / 2 - 0.4];
+  for (const pz of pylonZs) {
+    const pier = new THREE.Mesh(
+      new THREE.BoxGeometry(ROAD_WIDTH * 0.85, deckH, 1.4),
+      MATS.concrete,
     );
-    const tube = new THREE.TubeGeometry(archPath, 24, 0.18, 8, false);
-    const m = new THREE.Mesh(tube, MATS.truss);
-    m.castShadow = true; m.receiveShadow = true;
-    return m;
-  };
-  grp.add(arch(-ROAD_WIDTH / 2 + 0.3));
-  grp.add(arch(+ROAD_WIDTH / 2 - 0.3));
-  // Cross-bracing every couple meters
-  for (let i = 1; i < 6; i++) {
-    const t = i / 6;
-    const z = -TILE / 2 + lengthZ * t;
-    const yArch = deckH * 1.05 * (1 - 4 * Math.pow(t - 0.5, 2));
-    const brace = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.08, 0.08, ROAD_WIDTH - 0.4, 8),
-      MATS.truss,
+    pier.position.set(0, deckH / 2, pz);
+    pier.castShadow = true; pier.receiveShadow = true;
+    grp.add(pier);
+    // Cap (slightly wider) under the deck
+    const cap = new THREE.Mesh(
+      new THREE.BoxGeometry(ROAD_WIDTH * 1.05, 0.25, 1.7),
+      MATS.concrete,
     );
-    brace.rotation.z = Math.PI / 2;
-    brace.position.set(0, yArch, z);
-    grp.add(brace);
+    cap.position.set(0, deckH - 0.1, pz);
+    cap.castShadow = true; cap.receiveShadow = true;
+    grp.add(cap);
+  }
+  // Spandrel arches between piers (decorative, in tube form so they read
+  // as masonry arches under the deck)
+  for (let segI = 0; segI < pylonZs.length - 1; segI++) {
+    const z0 = pylonZs[segI] + 0.7;
+    const z1 = pylonZs[segI + 1] - 0.7;
+    const zMid = (z0 + z1) / 2;
+    const yPeak = deckH * 0.55;
+    for (const x of [-ROAD_WIDTH / 2 + 0.4, +ROAD_WIDTH / 2 - 0.4]) {
+      const arch = new THREE.QuadraticBezierCurve3(
+        new THREE.Vector3(x, 0.05, z0),
+        new THREE.Vector3(x, yPeak, zMid),
+        new THREE.Vector3(x, 0.05, z1),
+      );
+      const tube = new THREE.TubeGeometry(arch, 16, 0.16, 8, false);
+      const m = new THREE.Mesh(tube, MATS.concrete);
+      m.castShadow = true; m.receiveShadow = true;
+      grp.add(m);
+    }
   }
   return grp;
 }
@@ -820,48 +858,9 @@ function buildTunnel() {
 }
 
 function buildTJunction() {
-  const grp = new THREE.Group();
-  // Full-cell deck
-  const deck = new THREE.Mesh(
-    new THREE.BoxGeometry(TILE, ROAD_THICK, TILE),
-    MATS.asphalt,
-  );
-  deck.position.y = ROAD_THICK / 2;
-  deck.castShadow = false; deck.receiveShadow = true;
-  deck.userData.drivable = true;
-  grp.add(deck);
-  // Chamfered fillets at the two interior corners (-X/+Z and +X/+Z are open;
-  // -X/-Z and +X/-Z meet the entry; we close +Z edge with a curb).
-  // Add curb stripes along the closed +Z edge (warning of dead end? no, T means
-  // +Z is closed). Use yellow warning chevrons.
-  for (let i = -2; i <= 2; i++) {
-    const chev = new THREE.Mesh(
-      new THREE.BoxGeometry(1.6, 0.06, 0.3),
-      MATS.warning,
-    );
-    chev.position.set(i * 1.7, ROAD_THICK + 0.04, TILE / 2 - 0.5);
-    chev.rotation.y = (i < 0 ? -1 : 1) * Math.PI / 14;
-    grp.add(chev);
-  }
-  // Center plate
-  const center = new THREE.Mesh(
-    new THREE.CylinderGeometry(2.0, 2.0, 0.06, 24),
-    MATS.paintWhite,
-  );
-  center.position.set(0, ROAD_THICK + 0.04, 0);
-  grp.add(center);
-  // Solid back wall (low) along closed +Z edge
-  const wall = new THREE.Mesh(
-    new THREE.BoxGeometry(TILE, WALL_HEIGHT * 0.7, WALL_THICK),
-    MATS.guardrail,
-  );
-  wall.position.set(0, ROAD_THICK + WALL_HEIGHT * 0.35, TILE / 2 - WALL_THICK / 2);
-  wall.castShadow = true; wall.receiveShadow = true;
-  grp.add(wall);
-  return grp;
-}
-
-function buildCrossroads() {
+  // T — deck open on -Z, -X, +X. Closed at +Z with a guardrail+chevrons.
+  // Adds painted give-way triangles on the two side approaches and a centre
+  // road marking so it reads as a real intersection, not a flat slab.
   const grp = new THREE.Group();
   const deck = new THREE.Mesh(
     new THREE.BoxGeometry(TILE, ROAD_THICK, TILE),
@@ -871,62 +870,178 @@ function buildCrossroads() {
   deck.receiveShadow = true;
   deck.userData.drivable = true;
   grp.add(deck);
-  // Painted cross at center
-  for (const rot of [0, Math.PI / 2]) {
-    const stripe = new THREE.Mesh(
-      new THREE.BoxGeometry(TILE * 0.85, 0.05, 0.22),
+  // Centre dashed lane lines on the through axis (-X to +X)
+  for (let i = -2; i <= 2; i++) {
+    if (Math.abs(i) < 1) continue;
+    const dash = new THREE.Mesh(
+      new THREE.BoxGeometry(0.9, 0.05, 0.18),
       MATS.paintWhite,
     );
-    stripe.position.y = ROAD_THICK + 0.03;
-    stripe.rotation.y = rot;
-    grp.add(stripe);
+    dash.position.set(i * 1.6, ROAD_THICK + 0.03, 0);
+    grp.add(dash);
   }
-  // Center diamond
-  const dia = new THREE.Mesh(
-    new THREE.CylinderGeometry(1.4, 1.4, 0.06, 4),
-    MATS.warning,
+  // Stop line on the -Z approach
+  const stopLine = new THREE.Mesh(
+    new THREE.BoxGeometry(TILE * 0.8, 0.05, 0.3),
+    MATS.paintWhite,
   );
-  dia.position.set(0, ROAD_THICK + 0.04, 0);
-  dia.rotation.y = Math.PI / 4;
-  grp.add(dia);
+  stopLine.position.set(0, ROAD_THICK + 0.03, -TILE * 0.18);
+  grp.add(stopLine);
+  // Chevrons telegraphing the closed +Z edge
+  for (let i = -2; i <= 2; i++) {
+    const chev = new THREE.Mesh(
+      new THREE.BoxGeometry(1.4, 0.06, 0.28),
+      MATS.warning,
+    );
+    chev.position.set(i * 1.5, ROAD_THICK + 0.04, TILE / 2 - 0.7);
+    chev.rotation.y = (i < 0 ? -1 : 1) * Math.PI / 14;
+    grp.add(chev);
+  }
+  // Solid back guardrail at +Z
+  const wall = new THREE.Mesh(
+    new THREE.BoxGeometry(TILE, WALL_HEIGHT * 0.8, WALL_THICK),
+    MATS.guardrail,
+  );
+  wall.position.set(0, ROAD_THICK + WALL_HEIGHT * 0.4, TILE / 2 - WALL_THICK / 2);
+  wall.castShadow = true; wall.receiveShadow = true;
+  grp.add(wall);
+  // Reflector posts at the two interior corners (+X/+Z and -X/+Z)
+  for (const sx of [-1, +1]) {
+    const refl = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.1, 0.12, 0.7, 8),
+      MATS.warning,
+    );
+    refl.position.set(sx * (TILE / 2 - 0.4), ROAD_THICK + 0.35, TILE / 2 - 0.4);
+    refl.castShadow = true; refl.receiveShadow = true;
+    grp.add(refl);
+  }
+  return grp;
+}
+
+function buildCrossroads() {
+  // Four-way intersection — deck with painted crosswalks on each approach,
+  // stop lines, dashed lane lines on both axes, and a centre give-way circle.
+  const grp = new THREE.Group();
+  const deck = new THREE.Mesh(
+    new THREE.BoxGeometry(TILE, ROAD_THICK, TILE),
+    MATS.asphalt,
+  );
+  deck.position.y = ROAD_THICK / 2;
+  deck.receiveShadow = true;
+  deck.userData.drivable = true;
+  grp.add(deck);
+  // Dashed lane lines on both through axes (skipping the centre)
+  for (const rot of [0, Math.PI / 2]) {
+    const ax = new THREE.Group();
+    for (let i = -2; i <= 2; i++) {
+      if (Math.abs(i) < 1) continue;
+      const dash = new THREE.Mesh(
+        new THREE.BoxGeometry(0.18, 0.05, 0.9),
+        MATS.paintYellow,
+      );
+      dash.position.set(0, ROAD_THICK + 0.03, i * 1.5);
+      ax.add(dash);
+    }
+    ax.rotation.y = rot;
+    grp.add(ax);
+  }
+  // Stop lines on each approach
+  for (let approach = 0; approach < 4; approach++) {
+    const ang = approach * Math.PI / 2;
+    const stop = new THREE.Mesh(
+      new THREE.BoxGeometry(TILE * 0.7, 0.05, 0.28),
+      MATS.paintWhite,
+    );
+    const r = TILE * 0.22;
+    stop.position.set(Math.sin(ang) * r, ROAD_THICK + 0.03, -Math.cos(ang) * r);
+    stop.rotation.y = ang;
+    grp.add(stop);
+  }
+  // Centre give-way ring
+  const ringGeo = new THREE.RingGeometry(0.85, 1.05, 28);
+  const ring = new THREE.Mesh(ringGeo, MATS.paintYellow);
+  ring.rotation.x = -Math.PI / 2;
+  ring.position.y = ROAD_THICK + 0.05;
+  grp.add(ring);
+  // Centre dot
+  const dot = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.4, 0.4, 0.06, 16),
+    MATS.paintYellow,
+  );
+  dot.position.y = ROAD_THICK + 0.04;
+  grp.add(dot);
   return grp;
 }
 
 function buildPlaza() {
+  // 2x2 plaza — darker asphalt deck with a central roundabout island,
+  // painted lane stripes on the four cardinal openings, and slim corner
+  // bollards. Replaces the earlier concrete-square + asphalt-square +
+  // floating-pillar look that read as a billiard table.
   const grp = new THREE.Group();
   const cx = TILE / 2, cz = TILE / 2;
   const W = TILE * 2;
-  // Main concrete plaza with darker asphalt center
+  // Asphalt deck (drivable)
   const base = new THREE.Mesh(
     new THREE.BoxGeometry(W, ROAD_THICK, W),
-    MATS.concrete,
+    MATS.asphalt,
   );
   base.position.set(cx, ROAD_THICK / 2, cz);
   base.receiveShadow = true;
   base.userData.drivable = true;
   grp.add(base);
-  // Inner asphalt patch
-  const inner = new THREE.Mesh(
-    new THREE.BoxGeometry(W * 0.7, 0.06, W * 0.7),
-    MATS.asphalt,
+  // Lane lines along each cardinal opening (white dashes)
+  for (const rot of [0, Math.PI / 2]) {
+    const stripeGrp = new THREE.Group();
+    for (let i = -3; i <= 3; i++) {
+      if (Math.abs(i) < 2) continue; // skip near the centre island
+      const dash = new THREE.Mesh(
+        new THREE.BoxGeometry(0.18, 0.05, 0.9),
+        MATS.paintWhite,
+      );
+      dash.position.set(0, ROAD_THICK + 0.03, i * 1.4);
+      stripeGrp.add(dash);
+    }
+    stripeGrp.rotation.y = rot;
+    stripeGrp.position.set(cx, 0, cz);
+    grp.add(stripeGrp);
+  }
+  // Centre roundabout island — raised circular curb with grass
+  const islandR = W * 0.18;
+  const curb = new THREE.Mesh(
+    new THREE.CylinderGeometry(islandR, islandR, 0.35, 28),
+    MATS.curbWhite,
   );
-  inner.position.set(cx, ROAD_THICK + 0.03, cz);
-  grp.add(inner);
-  // Border ring (white paint)
-  const ringGeo = new THREE.RingGeometry(W * 0.36, W * 0.38, 48);
-  const ring = new THREE.Mesh(ringGeo, MATS.paintWhite);
-  ring.rotation.x = -Math.PI / 2;
-  ring.position.set(cx, ROAD_THICK + 0.05, cz);
-  grp.add(ring);
-  // Corner pillars
+  curb.position.set(cx, ROAD_THICK + 0.175, cz);
+  curb.castShadow = true; curb.receiveShadow = true;
+  grp.add(curb);
+  const grass = new THREE.Mesh(
+    new THREE.CylinderGeometry(islandR * 0.85, islandR * 0.85, 0.4, 28),
+    new THREE.MeshStandardMaterial({ color: 0x4a7a3c, roughness: 0.95, metalness: 0 }),
+  );
+  grass.position.set(cx, ROAD_THICK + 0.21, cz);
+  grp.add(grass);
+  // Centre marker pole
+  const pole = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.12, 0.12, 1.6, 12),
+    MATS.guardrail,
+  );
+  pole.position.set(cx, ROAD_THICK + 0.4 + 0.8, cz);
+  pole.castShadow = true; pole.receiveShadow = true;
+  grp.add(pole);
+  // Slim bollards at the four corners (NOT in the path of any cardinal exit)
   for (const sx of [-1, +1]) for (const sz of [-1, +1]) {
-    const pillar = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.35, 0.35, 1.6, 12),
-      MATS.guardrail,
+    const bollard = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.18, 0.22, 0.9, 10),
+      MATS.warning,
     );
-    pillar.position.set(cx + sx * (W / 2 - 0.5), ROAD_THICK + 0.8, cz + sz * (W / 2 - 0.5));
-    pillar.castShadow = true; pillar.receiveShadow = true;
-    grp.add(pillar);
+    bollard.position.set(
+      cx + sx * (W / 2 - 0.6),
+      ROAD_THICK + 0.45,
+      cz + sz * (W / 2 - 0.6),
+    );
+    bollard.castShadow = true; bollard.receiveShadow = true;
+    grp.add(bollard);
   }
   return grp;
 }
@@ -1058,30 +1173,59 @@ export const VISUAL_BUILDERS = {
   ramp_down:       () => { const g = buildRamp(TILE * 0.6, 0, 2); g.position.z = TILE / 2; return g; },
   plateau:         () => {
     const g = new THREE.Group();
-    const deck = new THREE.Mesh(new THREE.BoxGeometry(ROAD_WIDTH, ROAD_THICK, TILE), MATS.asphalt);
-    deck.position.y = TILE * 0.6 + ROAD_THICK / 2;
-    deck.userData.drivable = true; deck.castShadow = true; deck.receiveShadow = true;
-    g.add(deck);
+    const deckH = TILE * 0.6;
+    // Elevated deck
+    const path = pathFromPoints([[0, deckH, -TILE / 2], [0, deckH, TILE / 2]]);
+    g.add(extrudeRoad(path, { steps: 12 }));
+    g.add(dashedPaintAlongPath(path));
+    // Curbs along both edges of the elevated deck
+    g.add(curbAlongPath(path, +1, { count: 8 }));
+    g.add(curbAlongPath(path, -1, { count: 8 }));
     // Side guardrails
     for (const side of [-1, +1]) {
-      const tube = new THREE.TubeGeometry(
-        pathFromPoints([
-          [side * (ROAD_WIDTH / 2 - 0.05), TILE * 0.6 + ROAD_THICK + WALL_HEIGHT * 0.55, -TILE / 2],
-          [side * (ROAD_WIDTH / 2 - 0.05), TILE * 0.6 + ROAD_THICK + WALL_HEIGHT * 0.55, TILE / 2],
-        ]),
-        12, 0.08, 6, false,
-      );
+      const x = side * (ROAD_WIDTH / 2 - 0.05);
+      const yRail = deckH + ROAD_THICK + WALL_HEIGHT * 0.55;
+      const rPath = pathFromPoints([
+        [x, yRail, -TILE / 2],
+        [x, yRail, +TILE / 2],
+      ]);
+      const tube = new THREE.TubeGeometry(rPath, 8, 0.08, 6, false);
       g.add(new THREE.Mesh(tube, MATS.guardrail));
+      for (let i = 0; i < 4; i++) {
+        const t = (i + 0.5) / 4;
+        const p = rPath.getPointAt(t);
+        const post = new THREE.Mesh(
+          new THREE.BoxGeometry(0.12, WALL_HEIGHT, 0.12),
+          MATS.guardrail,
+        );
+        post.position.set(p.x, p.y - WALL_HEIGHT * 0.4, p.z);
+        g.add(post);
+      }
     }
-    // Concrete pillars
-    for (const sz of [-1, +1]) {
-      const pillar = new THREE.Mesh(
-        new THREE.BoxGeometry(ROAD_WIDTH * 0.75, TILE * 0.6, 0.5),
+    // Four columnar piers — round concrete columns at the corners under the
+    // deck, with a wide cap so the deck visibly rests on them.
+    for (const sx of [-1, +1]) for (const sz of [-1, +1]) {
+      const col = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.55, 0.7, deckH, 16),
         MATS.concrete,
       );
-      pillar.position.set(0, TILE * 0.3, sz * (TILE / 2 - 0.25));
-      pillar.castShadow = true; pillar.receiveShadow = true;
-      g.add(pillar);
+      col.position.set(
+        sx * (ROAD_WIDTH / 2 - 0.6),
+        deckH / 2,
+        sz * (TILE / 2 - 0.6),
+      );
+      col.castShadow = true; col.receiveShadow = true;
+      g.add(col);
+    }
+    // Cross-beams between front and back piers under the deck
+    for (const sx of [-1, +1]) {
+      const beam = new THREE.Mesh(
+        new THREE.BoxGeometry(0.4, 0.4, TILE - 1.2),
+        MATS.concrete,
+      );
+      beam.position.set(sx * (ROAD_WIDTH / 2 - 0.6), deckH - 0.25, 0);
+      beam.castShadow = true; beam.receiveShadow = true;
+      g.add(beam);
     }
     return g;
   },

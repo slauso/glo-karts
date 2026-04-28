@@ -113,17 +113,17 @@
   },
   {
     "key": "plateau",
-    "meshCount": 5,
-    "triCount": 324,
-    "materials": 3,
+    "meshCount": 38,
+    "triCount": 916,
+    "materials": 6,
     "bbox": {
-      "sx": 10839,
-      "sy": 8660,
-      "sz": 12000
+      "sx": 11250,
+      "sy": 8740,
+      "sz": 12200
     },
     "center": {
       "x": 0,
-      "y": 4330,
+      "y": 4370,
       "z": 0
     }
   },
@@ -161,40 +161,40 @@
   },
   {
     "key": "wide",
-    "meshCount": 7,
-    "triCount": 312,
-    "materials": 4,
+    "meshCount": 16,
+    "triCount": 540,
+    "materials": 6,
     "bbox": {
       "sx": 24000,
-      "sy": 2100,
+      "sy": 2500,
       "sz": 24000
     },
     "center": {
       "x": 6000,
-      "y": 1050,
+      "y": 1250,
       "z": 6000
     }
   },
   {
     "key": "t_junction",
-    "meshCount": 8,
-    "triCount": 180,
+    "meshCount": 14,
+    "triCount": 208,
     "materials": 4,
     "bbox": {
       "sx": 12000,
-      "sy": 1620,
+      "sy": 1780,
       "sz": 12000
     },
     "center": {
       "x": 0,
-      "y": 810,
+      "y": 890,
       "z": 0
     }
   },
   {
     "key": "crossroads",
-    "meshCount": 4,
-    "triCount": 52,
+    "meshCount": 15,
+    "triCount": 276,
     "materials": 3,
     "bbox": {
       "sx": 12000,
@@ -241,34 +241,34 @@
   },
   {
     "key": "bend_left",
-    "meshCount": 43,
-    "triCount": 824,
+    "meshCount": 48,
+    "triCount": 948,
     "materials": 4,
     "bbox": {
-      "sx": 17016,
+      "sx": 16735,
       "sy": 661,
-      "sz": 24493
+      "sz": 25621
     },
     "center": {
-      "x": -2718,
+      "x": -2516,
       "y": 330,
-      "z": 5753
+      "z": 5927
     }
   },
   {
     "key": "bend_right",
-    "meshCount": 43,
-    "triCount": 824,
+    "meshCount": 48,
+    "triCount": 948,
     "materials": 4,
     "bbox": {
-      "sx": 17016,
+      "sx": 16735,
       "sy": 661,
-      "sz": 24493
+      "sz": 25621
     },
     "center": {
-      "x": 2718,
+      "x": 2516,
       "y": 330,
-      "z": 5753
+      "z": 5927
     }
   },
   {
@@ -321,8 +321,8 @@
   },
   {
     "key": "bump_up",
-    "meshCount": 13,
-    "triCount": 384,
+    "meshCount": 19,
+    "triCount": 456,
     "materials": 3,
     "bbox": {
       "sx": 11250,
@@ -369,18 +369,18 @@
   },
   {
     "key": "bridge",
-    "meshCount": 32,
-    "triCount": 1832,
+    "meshCount": 37,
+    "triCount": 1960,
     "materials": 4,
     "bbox": {
-      "sx": 10900,
-      "sy": 8972,
-      "sz": 24542
+      "sx": 11340,
+      "sy": 8817,
+      "sz": 24900
     },
     "center": {
       "x": 0,
-      "y": 4334,
-      "z": 5831
+      "y": 4332,
+      "z": 6006
     }
   },
   {
