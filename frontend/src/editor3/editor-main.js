@@ -29,9 +29,15 @@ const STORAGE_KEY = 'gloKartsStudio.lastTrack';
 // ── Scene ─────────────────────────────────────────────────────
 const canvas = document.getElementById('canvas');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, logarithmicDepthBuffer: true });
-renderer.setPixelRatio(window.devicePixelRatio);
-renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+// Cap DPR at 1.5 — hi-DPI displays were eating up to 4× fillrate and
+// stuttering the editor whenever the camera moved. Editor visuals don't
+// need >1.5× pixel density.
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
+// Tinkercad-parity flat lit look — no real-time shadows. Previously a
+// 2048² PCFSoft shadow map was regenerated EVERY frame across every decor
+// mesh, which was the dominant cause of camera-rotation chop on busy
+// scenes. TC has no shadows; we don't either.
+renderer.shadowMap.enabled = false;
 
 const scene = new THREE.Scene();
 // Tinkercad parity: scene background tinted to match the workplane plate
@@ -68,14 +74,13 @@ controls.touches = {
   TWO: THREE.TOUCH.DOLLY_PAN,
 };
 
-// Lights
+// Lights — flat-lit Tinkercad style; sun is a directional with no shadow
+// casting (renderer.shadowMap.enabled is false above) so we keep the
+// directional contribution for material highlights without paying the
+// per-frame shadow-map cost.
 const sun = new THREE.DirectionalLight(0xffffff, 1.4);
 sun.position.set(m(60), m(120), m(40));
-sun.castShadow = true;
-sun.shadow.mapSize.set(2048, 2048);
-sun.shadow.camera.left = -m(80); sun.shadow.camera.right = m(80);
-sun.shadow.camera.top = m(80); sun.shadow.camera.bottom = -m(80);
-sun.shadow.camera.near = m(1); sun.shadow.camera.far = m(300);
+sun.castShadow = false;
 scene.add(sun);
 scene.add(new THREE.AmbientLight(0xffffff, 0.85));
 scene.add(new THREE.HemisphereLight(0xffffff, 0xe6ecf0, 0.35));
