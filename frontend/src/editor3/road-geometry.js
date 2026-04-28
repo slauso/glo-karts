@@ -746,10 +746,11 @@ function buildJumpRamp() {
 }
 
 function buildBridge() {
-  // Elevated 1×2 deck supported by chunky concrete piers at the entry,
-  // mid, and exit, plus continuous solid spandrel walls (NOT thin tubes)
-  // running between the piers along each side, so the bridge reads as a
-  // single masonry structure rather than a deck floating on toothpicks.
+  // Elevated 1×2 deck on OPEN piers — must be hollow underneath so other
+  // road segments can pass beneath it (multi-level layouts). No spandrel
+  // walls, no closed base. Deck is carried by 3 pairs of slim concrete
+  // columns at the entry, midspan, and exit. Cross-beams cap each pair so
+  // it reads as a structural bent rather than four floating sticks.
   const grp = new THREE.Group();
   const lengthZ = TILE * 2;
   const deckH = TILE * 0.6;
@@ -780,45 +781,46 @@ function buildBridge() {
       grp.add(post);
     }
   }
-  // Piers: full-width concrete walls flush with the deck width at each
-  // end and at midspan. They sit ON the ground (y=0) and visibly carry
-  // the deck — no floating toothpick look.
-  const pylonZs = [-TILE / 2 + 0.4, cz, lengthZ - TILE / 2 - 0.4];
-  for (const pz of pylonZs) {
-    const pier = new THREE.Mesh(
-      new THREE.BoxGeometry(ROAD_WIDTH * 1.02, deckH, 1.2),
-      MATS.concrete,
-    );
-    pier.position.set(0, deckH / 2, pz);
-    pier.castShadow = true; pier.receiveShadow = true;
-    grp.add(pier);
-  }
-  // Continuous spandrel wall on EACH side, running under the deck between
-  // the piers, with arched openings cut as visual recesses (rendered via
-  // a darker recessed panel instead of CSG to keep it cheap). The wall is
-  // INSET from the deck edge so the curbs above can hang slightly proud.
-  for (const side of [-1, +1]) {
-    const xWall = side * (ROAD_WIDTH / 2 - 0.25);
-    const wall = new THREE.Mesh(
-      new THREE.BoxGeometry(0.5, deckH, lengthZ - 0.4),
-      MATS.concrete,
-    );
-    wall.position.set(xWall, deckH / 2, cz);
-    wall.castShadow = true; wall.receiveShadow = true;
-    grp.add(wall);
-    // Recessed arched panels between piers (darker concrete)
-    for (let segI = 0; segI < pylonZs.length - 1; segI++) {
-      const z0 = pylonZs[segI] + 0.7;
-      const z1 = pylonZs[segI + 1] - 0.7;
-      const zMid = (z0 + z1) / 2;
-      const span = Math.abs(z1 - z0);
-      const recess = new THREE.Mesh(
-        new THREE.BoxGeometry(0.12, deckH * 0.55, span),
-        new THREE.MeshStandardMaterial({ color: 0x2a2c30, roughness: 0.95 }),
+  // Open piers: 3 bents (entry / midspan / exit). Each bent has two slim
+  // square columns straddling the road, plus a cross-beam at the top.
+  // Columns are pulled INSIDE the road footprint so they do not block
+  // adjacent tiles, and they are thin enough that a kart driving on a
+  // road segment placed UNDERNEATH passes between them with clearance.
+  const pierThk = 0.55;
+  const pierColX = ROAD_WIDTH / 2 - pierThk / 2 - 0.05;
+  const pierZs = [-TILE / 2 + pierThk / 2, cz, lengthZ - TILE / 2 - pierThk / 2];
+  const colHt = deckH; // base at y=0 → top flush with deck underside
+  for (const pz of pierZs) {
+    for (const sx of [-1, +1]) {
+      const col = new THREE.Mesh(
+        new THREE.BoxGeometry(pierThk, colHt, pierThk),
+        MATS.concrete,
       );
-      recess.position.set(xWall + (-side) * 0.22, deckH * 0.32, zMid);
-      grp.add(recess);
+      col.position.set(sx * pierColX, colHt / 2, pz);
+      col.castShadow = true; col.receiveShadow = true;
+      grp.add(col);
     }
+    // Cross-beam (bent cap) connecting the two columns just under deck.
+    const beamH = 0.45;
+    const beam = new THREE.Mesh(
+      new THREE.BoxGeometry(ROAD_WIDTH + 0.1, beamH, pierThk),
+      MATS.concrete,
+    );
+    beam.position.set(0, colHt - beamH / 2, pz);
+    beam.castShadow = true; beam.receiveShadow = true;
+    grp.add(beam);
+  }
+  // Two slim longitudinal stringers under the deck connecting the bents,
+  // hanging just below the deck slab so the underside reads as a built
+  // structure but stays open between the columns.
+  const stringerH = 0.35;
+  for (const sx of [-1, +1]) {
+    const stringer = new THREE.Mesh(
+      new THREE.BoxGeometry(0.35, stringerH, lengthZ - 0.2),
+      MATS.concrete,
+    );
+    stringer.position.set(sx * (ROAD_WIDTH / 2 - 0.25), deckH - stringerH / 2, cz);
+    grp.add(stringer);
   }
   return grp;
 }

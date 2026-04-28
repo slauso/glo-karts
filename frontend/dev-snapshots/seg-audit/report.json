@@ -369,18 +369,18 @@
   },
   {
     "key": "bridge",
-    "meshCount": 86,
-    "triCount": 1572,
-    "materials": 10,
+    "meshCount": 88,
+    "triCount": 1596,
+    "materials": 6,
     "bbox": {
-      "sx": 11016,
+      "sx": 10900,
       "sy": 8740,
-      "sz": 25202
+      "sz": 25002
     },
     "center": {
       "x": 0,
       "y": 4370,
-      "z": 5605
+      "z": 5505
     }
   },
   {
