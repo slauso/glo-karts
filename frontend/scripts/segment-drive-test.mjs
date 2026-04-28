@@ -10,7 +10,7 @@ import { chromium } from 'playwright';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
-const BASE = 'http://127.0.0.1:5173';
+const BASE = process.env.EDITOR_BASE || 'http://localhost:5173';
 const OUT = path.resolve('dev-snapshots/seg-drive');
 
 // segment-key → { spanZ, comboIntro?, comboOutro?, expectMinDeltaZ, requireYAbove }

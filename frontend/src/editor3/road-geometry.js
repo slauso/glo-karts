@@ -441,13 +441,16 @@ function buildCorner(mirror) {
   const a1 = Math.PI / 2;
   const path = arcPath3(cx, cz, r, a0, a1, 0, 18);
   grp.add(extrudeRoad(path));
-  // Outside curb: mirror→inside is +X side of arc (closer to center cx>0), outside is -X side → side = -1
-  // For L (mirror=false), center is at -TILE/2, outside is +X side → side = +1
+  // Continuous red/white curbs on BOTH sides of the arc so the corner
+  // visually butts up against neighbour straights without losing the
+  // barrier line at the inside of the bend. Inside curb is rendered at
+  // 65% width so the racing line still reads as the apex.
   grp.add(curbAlongPath(path, mirror ? -1 : +1));
-  // Inner edge gets a thin painted line instead of a curb
   const inner = curbAlongPath(path, mirror ? +1 : -1);
-  inner.children.forEach(c => { c.material = MATS.paintWhite; c.scale.set(0.4, 0.3, 1.0); c.position.y -= 0.1; });
+  inner.children.forEach(c => { c.scale.set(0.65, 0.7, 1.0); });
   grp.add(inner);
+  // Subtle racing-line dashes through the apex.
+  grp.add(dashedPaintAlongPath(path));
   return grp;
 }
 
@@ -481,10 +484,9 @@ function buildSweep(mirror) {
   grp.add(extrudeRoad(path, { steps: 36 }));
   // Outer curb (red/white barrier) on the outside of the sweep
   grp.add(curbAlongPath(path, mirror ? -1 : +1));
-  // Inner edge — thin white painted line so the kart still has a visible
-  // edge cue but doesn't get walled in on the apex.
+  // Inside curb at reduced scale so the apex still reads as the racing line.
   const inner = curbAlongPath(path, mirror ? +1 : -1);
-  inner.children.forEach(c => { c.material = MATS.paintWhite; c.scale.set(0.4, 0.3, 1.0); c.position.y -= 0.1; });
+  inner.children.forEach(c => { c.scale.set(0.65, 0.7, 1.0); });
   grp.add(inner);
   grp.add(dashedPaintAlongPath(path));
   return grp;
@@ -854,17 +856,47 @@ function buildTunnel() {
     wall.castShadow = true; wall.receiveShadow = true;
     grp.add(wall);
   }
-  // Half-cylinder roof: cylinder along Y → rotate -90° around X so axis
-  // becomes Z and the surface (which lives in the +Z hemisphere of the
-  // cylinder when thetaStart=0..PI) is rotated up to +Y, dome opening
-  // facing down.
+  // Half-cylinder roof built directly along Z — earlier we used a Y-axis
+  // CylinderGeometry rotated by -PI/2 around X, but the resulting dome
+  // rendered as half-missing under some camera/yaw combinations because
+  // the open hemisphere ended up facing sideways after the rotation
+  // composed with the parent group's yaw. Building the buffer geometry
+  // explicitly with the correct axis orientation removes the rotation
+  // chain entirely.
   const roofR = ROAD_WIDTH / 2 + 0.45;
   const roofY = ROAD_THICK + wallHt;
-  const roofGeo = new THREE.CylinderGeometry(
-    roofR, roofR, lengthZ, 32, 1, true, 0, Math.PI,
-  );
+  const ARC_SEGS = 28;
+  const LEN_SEGS = 4;
+  const positions = [];
+  const uvs = [];
+  const indices = [];
+  for (let li = 0; li <= LEN_SEGS; li++) {
+    const z = -lengthZ / 2 + (li / LEN_SEGS) * lengthZ;
+    for (let ai = 0; ai <= ARC_SEGS; ai++) {
+      const t = ai / ARC_SEGS;
+      const theta = t * Math.PI;            // 0 → π across the dome
+      const x = -roofR * Math.cos(theta);   // -roofR → +roofR
+      const y = roofR * Math.sin(theta);    // 0 → roofR → 0
+      positions.push(x, y, z);
+      uvs.push(t, li / LEN_SEGS);
+    }
+  }
+  const stride = ARC_SEGS + 1;
+  for (let li = 0; li < LEN_SEGS; li++) {
+    for (let ai = 0; ai < ARC_SEGS; ai++) {
+      const a = li * stride + ai;
+      const b = a + 1;
+      const c = a + stride;
+      const d = c + 1;
+      indices.push(a, c, b, b, c, d);
+    }
+  }
+  const roofGeo = new THREE.BufferGeometry();
+  roofGeo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  roofGeo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+  roofGeo.setIndex(indices);
+  roofGeo.computeVertexNormals();
   const roof = new THREE.Mesh(roofGeo, MATS.tunnelRoof);
-  roof.rotation.x = -Math.PI / 2;
   roof.position.set(0, roofY, cz);
   roof.castShadow = true; roof.receiveShadow = true;
   grp.add(roof);
