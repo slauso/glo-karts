@@ -1141,6 +1141,7 @@ canvas.addEventListener('mousemove', (e) => {
   if (tryMoveSelectionTo(mouseDownState.snapshot, offDx, offDz)) {
     mouseDownState.lastCell = { gx, gz };
     mouseDownState.movedSinceStart = true;
+    mouseDownState.lastBlockedToastAt = 0;
     // Refresh the snapshot ids after move (they have new ids now).
     mouseDownState.snapshot = [...selectedIds].map(id => track.getById(id)).filter(Boolean)
       .map(p => ({ id: p.id, key: p.key, gx: p.gx, gz: p.gz, rot: p.rot }));
@@ -1148,6 +1149,14 @@ canvas.addEventListener('mousemove', (e) => {
     if (anchorNow) {
       mouseDownState.anchorId = anchorNow.id;
       mouseDownState.anchorStart = { gx: anchorNow.gx - offDx, gz: anchorNow.gz - offDz };
+    }
+  } else {
+    // Throttle the "blocked" hint so dragging across an occupied region
+    // doesn't spam the toast — fire at most once per second per drag.
+    const now = performance.now();
+    if (!mouseDownState.lastBlockedToastAt || now - mouseDownState.lastBlockedToastAt > 1000) {
+      toast('Cell occupied — try a different cell or rotate (R)');
+      mouseDownState.lastBlockedToastAt = now;
     }
   }
 });
@@ -1172,6 +1181,11 @@ window.addEventListener('mouseup', (e) => {
     }
     return;
   }
+  // Any drag attempt (even one with no successful move) consumes the
+  // followup `click` event so it can't trigger the place handler with a
+  // stale activeKey, which previously surfaced as a spurious "Cell occupied"
+  // toast when dragging a piece into a position blocked by its neighbour.
+  if (mouseDownState.dragging) _lastDragConsumedAt = performance.now();
   const wasDragging = mouseDownState.dragging && mouseDownState.movedSinceStart;
   const wasDecorDrag = !!mouseDownState.decorDrag;
   mouseDownState = null;
@@ -1277,6 +1291,9 @@ canvas.addEventListener('click', (e) => {
   if (hit.gx == null || hit.gz == null) return;
   // Click on empty cell with no modifier clears the selection.
   if (!e.shiftKey && !e.ctrlKey && !e.metaKey) clearSelection();
+  // Without an active tool there is nothing to place — bail silently so
+  // we don't surface a misleading "Cell occupied" message after a clear.
+  if (!activeKey || !SEGMENTS[activeKey]) return;
   // Place
   const placement = track.place(activeKey, hit.gx, hit.gz, activeRot);
   if (placement) {
