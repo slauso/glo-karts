@@ -519,3 +519,124 @@ export function getFootprint(key) {
   }
   return cells;
 }
+
+// ── Connectors ──────────────────────────────────────────────────
+// Each segment declares which edges of which footprint cells expose a
+// drivable road opening. Sides are local (before rotation):
+//   N = +Z, S = -Z, E = +X, W = -X
+// Used by the editor's auto-orient feature: a piece being placed will
+// rotate so its connectors line up with neighbouring placements' open
+// edges, and by the upcoming validation/preview tooling to flag dead
+// ends. For pieces that don't connect to anything (decorative, spawn,
+// finish line gantries, etc) we keep simple S+N defaults so they still
+// fall in line with adjacent straights.
+//
+// Format: [ { x, z, side }, ... ]   x,z = local cell offset (0..span-1)
+
+const SN = [
+  { x: 0, z: 0, side: 'S' },
+  { x: 0, z: 0, side: 'N' },
+];
+
+const CONNECTORS = {
+  straight:        SN,
+  // L-bend: enters S, exits W (per cornerBlocks convention).
+  corner:          [{ x: 0, z: 0, side: 'S' }, { x: 0, z: 0, side: 'W' }],
+  // R-bend: enters S, exits E.
+  cornerR:         [{ x: 0, z: 0, side: 'S' }, { x: 0, z: 0, side: 'E' }],
+  // Two-cell ramps: bottom connector on -Z of (0,0), top on +Z of (0,1).
+  ramp_up:         [{ x: 0, z: 0, side: 'S' }, { x: 0, z: 1, side: 'N' }],
+  ramp_down:       [{ x: 0, z: 0, side: 'S' }, { x: 0, z: 1, side: 'N' }],
+  plateau:         SN,
+  finish:          SN,
+  spawn:           SN,
+  // Wide 2x2 plaza — open on every outer edge.
+  wide: [
+    { x: 0, z: 0, side: 'S' }, { x: 1, z: 0, side: 'S' },
+    { x: 0, z: 1, side: 'N' }, { x: 1, z: 1, side: 'N' },
+    { x: 0, z: 0, side: 'W' }, { x: 0, z: 1, side: 'W' },
+    { x: 1, z: 0, side: 'E' }, { x: 1, z: 1, side: 'E' },
+  ],
+  // T-junction: open S/N (through-road) + E (branch). Author's local frame
+  // matches tJunctionBlocks() — the stop line + arrow point E.
+  t_junction:      [
+    { x: 0, z: 0, side: 'S' },
+    { x: 0, z: 0, side: 'N' },
+    { x: 0, z: 0, side: 'E' },
+  ],
+  crossroads: [
+    { x: 0, z: 0, side: 'S' },
+    { x: 0, z: 0, side: 'N' },
+    { x: 0, z: 0, side: 'E' },
+    { x: 0, z: 0, side: 'W' },
+  ],
+  // Banked left turn — same connectivity as `corner`.
+  banked_turn:     [{ x: 0, z: 0, side: 'S' }, { x: 0, z: 0, side: 'W' }],
+  bump_up:         SN,
+  hill_complete:   [{ x: 0, z: 0, side: 'S' }, { x: 0, z: 1, side: 'N' }],
+  jump_ramp:       SN,
+  bridge:          [{ x: 0, z: 0, side: 'S' }, { x: 0, z: 1, side: 'N' }],
+  bridge_onramp:   [{ x: 0, z: 0, side: 'S' }, { x: 0, z: 1, side: 'N' }],
+  bridge_offramp:  [{ x: 0, z: 0, side: 'S' }, { x: 0, z: 1, side: 'N' }],
+  tunnel:          [{ x: 0, z: 0, side: 'S' }, { x: 0, z: 1, side: 'N' }],
+  // End cap — closed on the +Z side by a wall, only S is drivable.
+  cap_end:         [{ x: 0, z: 0, side: 'S' }],
+};
+
+const SIDE_CW = ['N', 'W', 'S', 'E']; // rotating one quarter-turn (rot=1) maps SIDE_CW[i] → SIDE_CW[(i+1)%4]
+const OPP = { N: 'S', S: 'N', E: 'W', W: 'E' };
+const SIDE_TO_DELTA = { N: [0, 1], S: [0, -1], E: [1, 0], W: [-1, 0] };
+
+function _normRot(rot) {
+  const r = Number.isFinite(rot) ? rot : 0;
+  return ((r % 4) + 4) % 4;
+}
+
+/** Rotate a side label by `rot` quarter-turns (matches mesh.rotation.y = -rot * π/2). */
+export function rotateSide(side, rot) {
+  const r = _normRot(rot);
+  const i = SIDE_CW.indexOf(side);
+  if (i < 0) return side;
+  return SIDE_CW[(i + r) % 4];
+}
+
+/** Rotate a local cell offset (fx, fz) by `rot` quarter-turns about origin. */
+export function rotateCell(fx, fz, rot) {
+  const r = _normRot(rot);
+  let ox = fx, oz = fz;
+  for (let i = 0; i < r; i++) {
+    const nx = oz; const nz = -ox;
+    ox = nx; oz = nz;
+  }
+  return [ox, oz];
+}
+
+/** Get the opposite side label. */
+export function oppositeSide(side) { return OPP[side] || side; }
+
+/** Side → (dx, dz) delta to the cell across that edge. */
+export function sideDelta(side) {
+  const d = SIDE_TO_DELTA[side];
+  return d ? [d[0], d[1]] : [0, 0];
+}
+
+/** Returns connector list for a segment in its local frame (default: S+N if none declared). */
+export function getConnectors(key) {
+  return CONNECTORS[key] || SN;
+}
+
+/**
+ * Returns world-frame connectors for a segment placement:
+ * [{ gx, gz, side }] — gx/gz is the world cell containing the connector,
+ * `side` is the world-frame edge of that cell which exposes the road.
+ */
+export function getWorldConnectors(key, gx, gz, rot) {
+  const conns = getConnectors(key);
+  const out = new Array(conns.length);
+  for (let i = 0; i < conns.length; i++) {
+    const c = conns[i];
+    const [rx, rz] = rotateCell(c.x, c.z, rot);
+    out[i] = { gx: gx + rx, gz: gz + rz, side: rotateSide(c.side, rot) };
+  }
+  return out;
+}

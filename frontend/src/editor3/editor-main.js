@@ -7,7 +7,17 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js';
-import { SEGMENTS, SEGMENT_KEYS, TILE as TILE_M } from './segments.js';
+import {
+  SEGMENTS,
+  SEGMENT_KEYS,
+  TILE as TILE_M,
+  getConnectors,
+  getWorldConnectors,
+  rotateSide,
+  rotateCell,
+  oppositeSide,
+  sideDelta,
+} from './segments.js';
 import { buildSegmentMesh } from './segment-builder.js';
 import { Track, encodeTrack, decodeTrack } from './track-data.js';
 import { KARTS, resolveSelectedKartId } from './kart-catalog.js';
@@ -171,6 +181,7 @@ let activeKey = SEGMENT_KEYS[0];
 function setActiveTool(key) {
   activeKey = key;
   activeRot = 0;
+  _userOverrodeRot = false;
   // Sync palette active state.
   try {
     document.querySelectorAll('#palette button').forEach(b => b.classList.toggle('active', key != null && b.dataset.key === key));
@@ -196,6 +207,78 @@ function setActiveTool(key) {
 let _lastCursorEvent = null;
 window.addEventListener('mousemove', (e) => { _lastCursorEvent = e; }, true);
 let activeRot = 0;       // 0..3
+// Auto-orient: when placing a road piece next to existing pieces, the editor
+// rotates the new piece so its connectors line up. Set to true the moment the
+// user manually rotates with R, so their explicit choice is respected for the
+// remainder of this tool session.
+let _userOverrodeRot = false;
+
+/**
+ * Return the rot (0..3) that maximises connector matches with already-placed
+ * neighbours of the cell at (gx, gz). Ties broken in favour of `prefer`.
+ * Returns null when the segment has no connector demand at this cell (no
+ * neighbour offers a connector that lands here).
+ */
+function autoOrientRot(key, gx, gz, prefer = 0) {
+  if (!key || !SEGMENTS[key]) return null;
+  // Build map of demand: world (cellKey, side) → 1 if a neighbouring placement
+  // exposes a connector pointing into our footprint across that edge.
+  const demand = new Map();
+  // Collect all candidate footprint cells across the four rots so we know
+  // which neighbours are relevant. For 1×1 segments this is just the anchor.
+  const def = SEGMENTS[key];
+  const sx = def.span?.x || 1;
+  const sz = def.span?.z || 1;
+  // Set of all world cells the segment could occupy at any rotation.
+  const probe = new Set();
+  for (let r = 0; r < 4; r++) {
+    for (let fz = 0; fz < sz; fz++) {
+      for (let fx = 0; fx < sx; fx++) {
+        const [rx, rz] = rotateCell(fx, fz, r);
+        probe.add(`${gx + rx},${gz + rz}`);
+      }
+    }
+  }
+  // For every existing placement, mark demand at any of its connectors that
+  // points into one of our probe cells.
+  for (const p of track.all()) {
+    if (track.isOverlay(p.key)) continue;
+    const wcs = getWorldConnectors(p.key, p.gx, p.gz, p.rot);
+    for (const c of wcs) {
+      const [dx, dz] = sideDelta(c.side);
+      const tgtX = c.gx + dx, tgtZ = c.gz + dz;
+      if (probe.has(`${tgtX},${tgtZ}`)) {
+        const opp = oppositeSide(c.side);
+        demand.set(`${tgtX},${tgtZ}|${opp}`, true);
+      }
+    }
+  }
+  if (demand.size === 0) return null;
+  // Score each rotation: +2 per matched connector, -1 per "wasted" connector
+  // (one that points at a placed piece which doesn't connect back).
+  let best = -Infinity;
+  let bestRot = prefer;
+  const orderedRots = [prefer, (prefer + 1) % 4, (prefer + 2) % 4, (prefer + 3) % 4];
+  for (const r of orderedRots) {
+    if (!track.isClear(key, gx, gz, r)) continue;
+    const myConns = getWorldConnectors(key, gx, gz, r);
+    let score = 0;
+    for (const mc of myConns) {
+      const k = `${mc.gx},${mc.gz}|${mc.side}`;
+      if (demand.has(k)) {
+        score += 2;
+      } else {
+        // Penalise pointing into a solid neighbour without a matching connector.
+        const [dx, dz] = sideDelta(mc.side);
+        const neigh = track.getAt(mc.gx + dx, mc.gz + dz);
+        if (neigh && !track.isOverlay(neigh.key)) score -= 1;
+      }
+    }
+    if (score > best) { best = score; bestRot = r; }
+  }
+  return best > 0 ? bestRot : null;
+}
+
 /** @type {Set<number>} */
 const selectedIds = new Set();
 /** Last clicked id — anchor for inspector + R/arrow operations. */
@@ -710,9 +793,16 @@ canvas.addEventListener('mousemove', (e) => {
     if (!previewMesh) return;
     previewMesh.visible = true;
     previewMesh.position.set(hit.gx * TILE, 0, hit.gz * TILE);
-    previewMesh.rotation.y = -activeRot * Math.PI / 2;
+    // Auto-orient to nearest connecting edges (unless user pressed R to override).
+    let useRot = activeRot;
+    if (!_userOverrodeRot && !isDecorKey(activeKey) && !track.isOverlay(activeKey)) {
+      const auto = autoOrientRot(activeKey, hit.gx, hit.gz, activeRot);
+      if (auto != null) useRot = auto;
+    }
+    activeRot = useRot;
+    previewMesh.rotation.y = -useRot * Math.PI / 2;
     // tint based on validity
-    const valid = track.isClear(activeKey, hit.gx, hit.gz, activeRot);
+    const valid = track.isClear(activeKey, hit.gx, hit.gz, useRot);
     previewMesh.traverse((c) => {
       if (c.isMesh) c.material.color.setHex(valid ? 0xffffff : 0xff3344);
     });
@@ -755,6 +845,11 @@ canvas.addEventListener('dragover', (e) => {
     if (previewMesh) {
       previewMesh.visible = true;
       previewMesh.position.set(hit.gx * TILE, 0, hit.gz * TILE);
+      if (!_userOverrodeRot && !track.isOverlay(_paletteDragKey)) {
+        const auto = autoOrientRot(_paletteDragKey, hit.gx, hit.gz, activeRot);
+        if (auto != null) activeRot = auto;
+      }
+      previewMesh.rotation.y = -activeRot * Math.PI / 2;
     }
   }
 });
@@ -1593,7 +1688,8 @@ window.addEventListener('keydown', (e) => {
     if (selectedIds.size > 0) {
       rotateSelection(e.shiftKey ? -1 : 1);
     } else {
-      activeRot = (activeRot + 1) % 4;
+      activeRot = (activeRot + (e.shiftKey ? 3 : 1)) % 4;
+      _userOverrodeRot = true;
       if (previewMesh) previewMesh.rotation.y = -activeRot * Math.PI / 2;
     }
     return;
@@ -3631,4 +3727,4 @@ function _setRightTab(name) {
 document.getElementById('tabShapes')?.addEventListener('click', () => _setRightTab('shapes'));
 document.getElementById('tabWorkplane')?.addEventListener('click', () => _setRightTab('workplane'));
 
-window.__studio = { track, decor, scene, camera, renderer, rebuildAll, rebuildAllDecor, refreshHud, refreshPlayButton, selectDecor, rebuildAllCSG, rebuildCSGForGroup, csgMeshByGid, decorMeshById, groupSelection, ungroupSelection, setActiveTool, selectedIds, selectedDecorIds, THREE, SEGMENTS, SEGMENT_KEYS };
+window.__studio = { track, decor, scene, camera, renderer, rebuildAll, rebuildAllDecor, refreshHud, refreshPlayButton, selectDecor, rebuildAllCSG, rebuildCSGForGroup, csgMeshByGid, decorMeshById, groupSelection, ungroupSelection, setActiveTool, selectedIds, selectedDecorIds, THREE, SEGMENTS, SEGMENT_KEYS, autoOrientRot };
