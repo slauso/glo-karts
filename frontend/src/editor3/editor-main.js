@@ -1028,8 +1028,15 @@ canvas.addEventListener('mousedown', (e) => {
     if (anchor) {
       mouseDownState.snapshot = list.map(p => ({ id: p.id, key: p.key, gx: p.gx, gz: p.gz, rot: p.rot }));
       mouseDownState.anchorId = anchor.id;
-      mouseDownState.anchorStart = { gx: anchor.gx, gz: anchor.gz };
-      mouseDownState.lastCell = { gx: anchor.gx, gz: anchor.gz };
+      // Use the cell actually under the cursor as the drag anchor — NOT the
+      // segment's stored origin cell. For multi-cell pieces (1×2 tunnel,
+      // 2×2 plaza, etc.) the user may have clicked any of the occupied
+      // cells, and the drag offset must be measured from that exact cell
+      // so the piece tracks the cursor 1:1.
+      const anchorGx = (typeof hit.gx === 'number') ? hit.gx : anchor.gx;
+      const anchorGz = (typeof hit.gz === 'number') ? hit.gz : anchor.gz;
+      mouseDownState.anchorStart = { gx: anchorGx, gz: anchorGz };
+      mouseDownState.lastCell = { gx: anchorGx, gz: anchorGz };
     }
   }
   // Tinkercad-style on-body drag for decor: clicking the shape itself
@@ -1146,10 +1153,12 @@ canvas.addEventListener('mousemove', (e) => {
     mouseDownState.snapshot = [...selectedIds].map(id => track.getById(id)).filter(Boolean)
       .map(p => ({ id: p.id, key: p.key, gx: p.gx, gz: p.gz, rot: p.rot }));
     const anchorNow = mouseDownState.snapshot.find(p => p.id === lastSelectedId) || mouseDownState.snapshot[0];
-    if (anchorNow) {
-      mouseDownState.anchorId = anchorNow.id;
-      mouseDownState.anchorStart = { gx: anchorNow.gx - offDx, gz: anchorNow.gz - offDz };
-    }
+    if (anchorNow) mouseDownState.anchorId = anchorNow.id;
+    // Re-base anchorStart to the cursor's current cell so the next
+    // iteration's delta is computed incrementally against the freshly-
+    // moved snapshot (otherwise total-delta would overshoot on multi-hop
+    // drags). The cursor's "handle" on the piece moves with the piece.
+    mouseDownState.anchorStart = { gx, gz };
   } else {
     // Throttle the "blocked" hint so dragging across an occupied region
     // doesn't spam the toast — fire at most once per second per drag.
