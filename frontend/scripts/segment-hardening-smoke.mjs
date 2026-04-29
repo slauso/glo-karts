@@ -93,11 +93,25 @@ const adj = await p.evaluate(() => {
         const expectedSide = oppositeSide(c0.side);
         for (const b of interesting) {
           if (b === a) continue;
+          // Only expect a connection when SOME rotation of B placed at tgt
+          // would actually land a connector at (tgt, expectedSide,
+          // matching tier). Pairs that geometrically can't fit (e.g.
+          // bridge_offramp deck-end → bridge_onramp deck-end on adjacent
+          // cells — both want their deck on the FAR cell from anchor) are
+          // skipped: they require an intermediate piece.
+          let canFit = false;
+          for (let testRot = 0; testRot < 4; testRot++) {
+            const wcB = getWorldConnectors(b, tgtGx, tgtGz, testRot);
+            if (wcB.some(c => c.gx === tgtGx && c.gz === tgtGz && c.side === expectedSide && (c.tier|0) === (c0.tier|0))) {
+              canFit = true; break;
+            }
+          }
+          if (!canFit) continue;
           const r = autoOrientRot(b, tgtGx, tgtGz, 0);
           let ok = false;
           if (r != null && track.isClear(b, tgtGx, tgtGz, r)) {
             const wcB = getWorldConnectors(b, tgtGx, tgtGz, r);
-            ok = wcB.some(c => c.gx === tgtGx && c.gz === tgtGz && c.side === expectedSide);
+            ok = wcB.some(c => c.gx === tgtGx && c.gz === tgtGz && c.side === expectedSide && (c.tier|0) === (c0.tier|0));
           }
           out.push({ a: `${a}@${aRot}`, b, rot: r, ok, expectedSide, tgt: `(${tgtGx},${tgtGz})` });
         }
@@ -125,22 +139,21 @@ const multiKeys = await p.evaluate(() => {
 });
 const hitCheck = await p.evaluate(({ keys }) => {
   const { track, SEGMENTS } = window.__studio;
-  const out = [];
-  for (const key of keys) {
-    track.clear();
-    const pl = track.place(key, 50, 50, 0);
-    if (!pl) { out.push({ key, ok: false, reason: 'place failed' }); continue; }
-    const def = SEGMENTS[key];
-    const cells = [];
-    for (let fx = 0; fx < def.span.x; fx++) for (let fz = 0; fz < def.span.z; fz++) {
-      cells.push([50 + fx, 50 + fz]);
+  return import('/src/editor3/segments.js').then(({ getCellTiers, getFootprint }) => {
+    const out = [];
+    for (const key of keys) {
+      track.clear();
+      const pl = track.place(key, 50, 50, 0);
+      if (!pl) { out.push({ key, ok: false, reason: 'place failed' }); continue; }
+      const fp = getFootprint(key);
+      const tiers = getCellTiers(key);
+      const ids = fp.map(([fx, fz], i) => track.getAt(50 + fx, 50 + fz, tiers[i] || 0)?.id);
+      const allSameId = ids.every(id => id === pl.id);
+      out.push({ key, ok: allSameId, ids });
+      track.remove(pl.id);
     }
-    const ids = cells.map(([gx, gz]) => track.getAt(gx, gz)?.id);
-    const allSameId = ids.every(id => id === pl.id);
-    out.push({ key, ok: allSameId, ids });
-    track.remove(pl.id);
-  }
-  return out;
+    return out;
+  });
 }, { keys: multiKeys });
 for (const r of hitCheck) log(r.ok, `${r.key.padEnd(18)} ${r.ok ? 'all cells resolve to placement' : 'cells: '+JSON.stringify(r.ids)}`);
 

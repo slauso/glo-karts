@@ -240,7 +240,8 @@ function autoOrientRot(key, gx, gz, prefer = 0) {
     }
   }
   // For every existing placement, mark demand at any of its connectors that
-  // points into one of our probe cells.
+  // points into one of our probe cells. Connector tier is preserved so a
+  // ground piece doesn't try to "connect" to a bridge deck above it.
   for (const p of track.all()) {
     if (track.isOverlay(p.key)) continue;
     const wcs = getWorldConnectors(p.key, p.gx, p.gz, p.rot);
@@ -249,7 +250,7 @@ function autoOrientRot(key, gx, gz, prefer = 0) {
       const tgtX = c.gx + dx, tgtZ = c.gz + dz;
       if (probe.has(`${tgtX},${tgtZ}`)) {
         const opp = oppositeSide(c.side);
-        demand.set(`${tgtX},${tgtZ}|${opp}`, true);
+        demand.set(`${tgtX},${tgtZ}|${opp}|t${c.tier|0}`, true);
       }
     }
   }
@@ -264,13 +265,14 @@ function autoOrientRot(key, gx, gz, prefer = 0) {
     const myConns = getWorldConnectors(key, gx, gz, r);
     let score = 0;
     for (const mc of myConns) {
-      const k = `${mc.gx},${mc.gz}|${mc.side}`;
+      const k = `${mc.gx},${mc.gz}|${mc.side}|t${mc.tier|0}`;
       if (demand.has(k)) {
         score += 2;
       } else {
         // Penalise pointing into a solid neighbour without a matching connector.
+        // Tier-aware: only consider neighbours sharing this connector's tier.
         const [dx, dz] = sideDelta(mc.side);
-        const neigh = track.getAt(mc.gx + dx, mc.gz + dz);
+        const neigh = track.getAt(mc.gx + dx, mc.gz + dz, mc.tier|0);
         if (neigh && !track.isOverlay(neigh.key)) score -= 1;
       }
     }

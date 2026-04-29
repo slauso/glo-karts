@@ -7,7 +7,7 @@
  * Serialized to compact JSON, then base64url-encoded for URL sharing.
  */
 
-import { TILE as TILE_M, SEGMENTS, getFootprint } from './segments.js';
+import { TILE as TILE_M, SEGMENTS, getFootprint, getCellTiers } from './segments.js';
 import { WORLD_UNITS_PER_M } from './units.js';
 
 // Re-export TILE in WORLD units so any consumer (playtest, tests) gets the
@@ -25,22 +25,26 @@ export class Track {
     this.cells = new Map();
   }
 
-  cellKey(gx, gz) { return `${gx},${gz}`; }
+  // Cell key includes the vertical tier so two placements in different
+  // tiers (e.g. ground road under a bridge deck) do NOT collide.
+  cellKey(gx, gz, tier = 0) { return `${gx},${gz}:${tier | 0}`; }
 
-  /** Compute world cell coords occupied by a placement (after rotation). */
+  /** Compute world cells occupied by a placement (after rotation), as
+   *  [gx, gz, tier] triples. */
   occupiedCells(key, gx, gz, rot) {
     const cells = getFootprint(key);
+    const tiers = getCellTiers(key);
     const safeRot = Number.isFinite(rot) ? rot : 0;
-    return cells.map(([fx, fz]) => {
+    const r = ((safeRot % 4) + 4) % 4;
+    return cells.map(([fx, fz], i) => {
       // rotate footprint offset around (0,0). Sign matches mesh.rotation.y =
       // -rot * π/2: R_y(-π/2) sends (0,0,1) → (-1,0,0), so (fx,fz) → (-fz, fx).
-      const r = ((safeRot % 4) + 4) % 4;
       let ox = fx, oz = fz;
-      for (let i = 0; i < r; i++) {
+      for (let k = 0; k < r; k++) {
         const nx = -oz; const nz = ox;
         ox = nx; oz = nz;
       }
-      return [gx + ox, gz + oz];
+      return [gx + ox, gz + oz, tiers[i] || 0];
     });
   }
 
@@ -55,8 +59,8 @@ export class Track {
 
   isClear(key, gx, gz, rot, ignoreId = null) {
     if (this.isOverlay(key)) return true;
-    for (const [cx, cz] of this.occupiedCells(key, gx, gz, rot)) {
-      const occ = this.cells.get(this.cellKey(cx, cz));
+    for (const [cx, cz, tier] of this.occupiedCells(key, gx, gz, rot)) {
+      const occ = this.cells.get(this.cellKey(cx, cz, tier));
       if (occ != null && occ !== ignoreId) return false;
     }
     return true;
@@ -77,8 +81,8 @@ export class Track {
     const placement = { id, key, gx, gz, rot: ((safeRot % 4) + 4) % 4 };
     this.placements.set(id, placement);
     if (!overlay) {
-      for (const [cx, cz] of this.occupiedCells(key, gx, gz, rot)) {
-        this.cells.set(this.cellKey(cx, cz), id);
+      for (const [cx, cz, tier] of this.occupiedCells(key, gx, gz, rot)) {
+        this.cells.set(this.cellKey(cx, cz, tier), id);
       }
     }
     return placement;
@@ -88,11 +92,10 @@ export class Track {
     const p = this.placements.get(id);
     if (!p) return false;
     if (!this.isOverlay(p.key)) {
-      for (const [cx, cz] of this.occupiedCells(p.key, p.gx, p.gz, p.rot)) {
+      for (const [cx, cz, tier] of this.occupiedCells(p.key, p.gx, p.gz, p.rot)) {
         // Defensive: only clear the cell if it still belongs to this id.
-        if (this.cells.get(this.cellKey(cx, cz)) === id) {
-          this.cells.delete(this.cellKey(cx, cz));
-        }
+        const k = this.cellKey(cx, cz, tier);
+        if (this.cells.get(k) === id) this.cells.delete(k);
       }
     }
     this.placements.delete(id);
@@ -101,8 +104,10 @@ export class Track {
 
   getById(id) { return this.placements.get(id) || null; }
 
-  getAt(gx, gz) {
-    const id = this.cells.get(this.cellKey(gx, gz));
+  /** Resolve placement at a world cell. Defaults to ground tier (0) for
+   *  backwards compatibility — pass `tier` explicitly to query a deck cell. */
+  getAt(gx, gz, tier = 0) {
+    const id = this.cells.get(this.cellKey(gx, gz, tier));
     return id != null ? this.placements.get(id) : null;
   }
 

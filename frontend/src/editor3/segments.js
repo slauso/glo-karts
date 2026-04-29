@@ -520,6 +520,28 @@ export function getFootprint(key) {
   return cells;
 }
 
+// ── Vertical tiers ──────────────────────────────────────────────
+// Each segment's footprint cell occupies a vertical "tier" (0 = ground,
+// 1 = elevated / bridge deck). Two placements in different tiers do NOT
+// collide, which is what lets a road run UNDER a bridge deck. Per-cell
+// tiers are listed in the same order as `getFootprint`. Default = all 0.
+const CELL_TIERS = {
+  // Bridge deck spans cells (0,0)+(0,1) entirely on the upper tier.
+  bridge:         [1, 1],
+  // bridge_onramp goes from ground at (0,0) up to deck at (0,1).
+  bridge_onramp:  [0, 1],
+  // bridge_offramp goes from deck at (0,0) down to ground at (0,1).
+  bridge_offramp: [1, 0],
+};
+
+/** Per-footprint-cell tier list (parallel to `getFootprint(key)`). */
+export function getCellTiers(key) {
+  const fp = getFootprint(key);
+  const t = CELL_TIERS[key];
+  if (Array.isArray(t) && t.length === fp.length) return t.slice();
+  return new Array(fp.length).fill(0);
+}
+
 // ── Connectors ──────────────────────────────────────────────────
 // Each segment declares which edges of which footprint cells expose a
 // drivable road opening. Sides are local (before rotation):
@@ -631,16 +653,26 @@ export function getConnectors(key) {
 
 /**
  * Returns world-frame connectors for a segment placement:
- * [{ gx, gz, side }] — gx/gz is the world cell containing the connector,
- * `side` is the world-frame edge of that cell which exposes the road.
+ * [{ gx, gz, side, tier }] — gx/gz is the world cell containing the connector,
+ * `side` is the world-frame edge of that cell which exposes the road,
+ * `tier` is the vertical layer of that cell (0 = ground, 1 = bridge deck).
  */
 export function getWorldConnectors(key, gx, gz, rot) {
   const conns = getConnectors(key);
+  // Build a (localX,localZ) → tier lookup so each connector inherits the
+  // tier of the footprint cell that owns it.
+  const fp = getFootprint(key);
+  const tiers = getCellTiers(key);
+  const tierByLocal = new Map();
+  for (let i = 0; i < fp.length; i++) {
+    tierByLocal.set(`${fp[i][0]},${fp[i][1]}`, tiers[i] || 0);
+  }
   const out = new Array(conns.length);
   for (let i = 0; i < conns.length; i++) {
     const c = conns[i];
     const [rx, rz] = rotateCell(c.x, c.z, rot);
-    out[i] = { gx: gx + rx, gz: gz + rz, side: rotateSide(c.side, rot) };
+    const tier = tierByLocal.get(`${c.x},${c.z}`) || 0;
+    out[i] = { gx: gx + rx, gz: gz + rz, side: rotateSide(c.side, rot), tier };
   }
   return out;
 }
