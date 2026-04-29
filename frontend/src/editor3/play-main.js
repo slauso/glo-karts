@@ -169,6 +169,11 @@ const WHEEL_RADIUS = M(0.4);
 const chassisShape = new CANNON.Box(new CANNON.Vec3(CHASSIS_HX, CHASSIS_HY, CHASSIS_HZ));
 const chassisBody = new CANNON.Body({ mass: KART_MASS });
 chassisBody.addShape(chassisShape);
+// Linear damping helps reverse-glide stop quickly; angular damping kills
+// residual yaw spin so the chassis settles instead of weather-vaning,
+// which is what made the third-person camera feel "swimmy".
+chassisBody.linearDamping = 0.05;
+chassisBody.angularDamping = 0.6;
 
 // Spawn position: center of spawn cell, slightly above
 const spawnPlacement = track.spawn();
@@ -191,16 +196,23 @@ const vehicle = new CANNON.RaycastVehicle({
 const wheelOptions = {
   radius: WHEEL_RADIUS,
   directionLocal: new CANNON.Vec3(0, -1, 0),
-  suspensionStiffness: 30,
-  suspensionRestLength: M(0.35),
-  frictionSlip: 2.5,
-  dampingRelaxation: 2.3,
-  dampingCompression: 4.5,
+  // Stiffer suspension + matched damping → less body roll/pitch wobble that
+  // the camera was over-compensating for. Mario-Kart-feel comes from a
+  // chassis that *barely* tilts even on cornering, so we crank these up.
+  suspensionStiffness: 55,
+  suspensionRestLength: M(0.32),
+  // Higher slip = more grip = less drifty. We pair this with manual
+  // lateral-velocity damping so the kart feels planted, not on rails.
+  frictionSlip: 4.5,
+  dampingRelaxation: 3.2,
+  dampingCompression: 5.5,
   maxSuspensionForce: M(100000),
-  rollInfluence: 0.01,
+  // Almost zero roll influence so the chassis doesn't lean into corners
+  // (which fed back into the camera and made it sway).
+  rollInfluence: 0.0,
   axleLocal: new CANNON.Vec3(-1, 0, 0),
   chassisConnectionPointLocal: new CANNON.Vec3(),
-  maxSuspensionTravel: M(0.3),
+  maxSuspensionTravel: M(0.28),
   customSlidingRotationalSpeed: -30,
   useCustomSlidingRotationalSpeed: true,
 };
@@ -274,13 +286,14 @@ for (let i = 0; i < 4; i++) {
 }
 
 // ── Input ─────────────────────────────────────────────────────
-const keys = { w: false, a: false, s: false, d: false, space: false };
+const keys = { w: false, a: false, s: false, d: false, space: false, drift: false };
 const KEYMAP = {
   KeyW: 'w', ArrowUp: 'w',
   KeyS: 's', ArrowDown: 's',
   KeyA: 'a', ArrowLeft: 'a',
   KeyD: 'd', ArrowRight: 'd',
   Space: 'space',
+  ShiftLeft: 'drift', ShiftRight: 'drift',
 };
 window.addEventListener('keydown', (e) => {
   if (KEYMAP[e.code]) { keys[KEYMAP[e.code]] = true; e.preventDefault(); }
@@ -296,66 +309,270 @@ function respawn() {
   chassisBody.angularVelocity.set(0, 0, 0);
   chassisBody.position.set(spawnPos.x, spawnPos.y, spawnPos.z);
   chassisBody.quaternion.setFromAxisAngle(new CANNON.Vec3(0, 1, 0), spawnRot);
+  controlState.steer = 0;
+  controlState.throttle = 0;
+  controlState.driftHopCooldown = 0;
 }
 
-const MAX_ENGINE = M(1500);
-const MAX_BRAKE = M(50);
-const MAX_STEER = 0.55;
+// ── Handling tunables (Mario-Kart-flavoured arcade) ───────────
+// Engine force scales with current speed so acceleration is punchy at
+// low speeds and tapers at top end (gives the classic arcade snap).
+const MAX_ENGINE = M(2200);          // peak forward force
+const REVERSE_ENGINE = M(900);       // reverse is weaker, like every kart racer
+const MAX_BRAKE = M(80);
+const HANDBRAKE_FORCE = M(160);
+// Top speed is enforced by tapering engine force, not by clamping velocity
+// (clamping fights the physics solver and feels rubbery).
+const TOP_SPEED_MS = M(38);          // ≈ 137 km/h after WORLD_UNITS conversion
+const REVERSE_TOP_SPEED_MS = M(14);
+// Steering: full lock at low speed, ~40% lock at top speed. This single
+// curve eliminates 90% of the "loose at speed / sluggish in pits" feeling.
+const STEER_LOCK_LOW = 0.62;         // radians at standstill
+const STEER_LOCK_HIGH = 0.24;        // radians at TOP_SPEED_MS
+// Steering ramps in/out instead of snapping, so taps don't yaw-flick the
+// camera. ~150ms full-press → full-lock.
+const STEER_RAMP_IN_PER_S = 7.0;
+const STEER_RAMP_OUT_PER_S = 12.0;
+// Lateral grip: kill sideways velocity each frame. 0 = ice, 1 = on-rails.
+// 0.85 gives a Mario Kart "cling-to-corner" feel without preventing drifts.
+const LATERAL_GRIP = 0.88;
+const LATERAL_GRIP_DRIFT = 0.55;     // looser when drift held
+// Constant downforce keeps wheels planted on jumps/crests.
+const DOWNFORCE_PER_MS = M(1.4);     // applied per m/s of forward speed
+// Drift hop pulse — small upward impulse when shift is tapped while moving.
+const DRIFT_HOP_VY = M(7.5);
+const DRIFT_HOP_COOLDOWN_S = 0.5;
 
-function applyControls() {
-  // intent: +1 = drive forward (along chassis +Z, where the visible kart
-  // nose and camera trail are aligned), -1 = reverse.
-  const accel = (keys.w ? 1 : 0) + (keys.s ? -1 : 0);
-  // cannon-es RaycastVehicle convention: applyEngineForce(+v) drives the
-  // chassis in the −forward-axis direction. Negate so positive intent
-  // (W) actually pushes the chassis along +Z toward the track.
-  // Combat overlays modulate engine force: boost pads multiply, slow
-  // strips divide, oil slicks zero out steering torque temporarily.
+const controlState = {
+  steer: 0,           // smoothed steering -1..+1
+  throttle: 0,        // smoothed throttle -1..+1
+  driftHopCooldown: 0,
+  lastDriftPress: false,
+};
+
+// Reusable scratch vectors (avoid GC churn in tick loop).
+const _fwd = new CANNON.Vec3();
+const _right = new CANNON.Vec3();
+const _up = new CANNON.Vec3();
+const _vel = new CANNON.Vec3();
+
+function applyControls(dt) {
   const now = performance.now();
+  // ── Resolve raw input (-1..+1)
+  const rawAccel = (keys.w ? 1 : 0) + (keys.s ? -1 : 0);
+  const rawSteer = (keys.a ? 1 : 0) + (keys.d ? -1 : 0);
+  const braking = keys.space;
+  const drifting = keys.drift && Math.abs(controlState.throttle) > 0.1;
+
+  // ── Smooth throttle (instant response on press, gentle decay on release
+  // so the chassis doesn't lurch when you tap-drive).
+  const throttleTarget = rawAccel;
+  const throttleRate = (throttleTarget !== 0) ? 6.0 : 3.0;
+  controlState.throttle += (throttleTarget - controlState.throttle) * Math.min(1, throttleRate * dt);
+
+  // ── Smooth steering with separate ramp-in / ramp-out rates.
+  const steerTarget = rawSteer;
+  const ramping = (Math.sign(steerTarget) === Math.sign(controlState.steer) && steerTarget !== 0);
+  const steerRate = ramping ? STEER_RAMP_IN_PER_S : STEER_RAMP_OUT_PER_S;
+  controlState.steer += (steerTarget - controlState.steer) * Math.min(1, steerRate * dt);
+
+  // ── Compute current forward speed (signed, in m/s of world units).
+  chassisBody.quaternion.vmult(new CANNON.Vec3(0, 0, 1), _fwd);
+  chassisBody.quaternion.vmult(new CANNON.Vec3(1, 0, 0), _right);
+  chassisBody.quaternion.vmult(new CANNON.Vec3(0, 1, 0), _up);
+  const v = chassisBody.velocity;
+  const speedFwd = v.dot(_fwd);          // signed forward speed (world u/s)
+  const speedAbs = Math.abs(speedFwd);
+  const speedRatio = Math.min(1, speedAbs / TOP_SPEED_MS);
+
+  // ── Engine force with top-speed taper + boost/slow modulation.
+  // Forward intent (W) drives chassis along +Z (handled by the −sign below
+  // for cannon-es RaycastVehicle's convention).
   let mult = 1.0;
   if (now < playerCombat.boostUntil) mult *= (1 + playerCombat.boostStrength);
   if (now < playerCombat.slowUntil) mult *= (1 - playerCombat.slowStrength);
-  const force = -accel * MAX_ENGINE * mult;
+  const intent = controlState.throttle;
+  let engineMag;
+  if (intent >= 0) {
+    // Tapered curve: full force until 70% top speed, then ramp to 0 at 100%.
+    const taper = (speedFwd >= 0) ? Math.max(0, 1 - Math.max(0, (speedFwd - TOP_SPEED_MS * 0.7) / (TOP_SPEED_MS * 0.3))) : 1;
+    engineMag = intent * MAX_ENGINE * taper * mult;
+  } else {
+    const taper = (speedFwd <= 0) ? Math.max(0, 1 - Math.max(0, (-speedFwd - REVERSE_TOP_SPEED_MS * 0.7) / (REVERSE_TOP_SPEED_MS * 0.3))) : 1;
+    engineMag = intent * REVERSE_ENGINE * taper * mult;
+  }
+  const force = -engineMag;            // cannon-es convention (see comment above)
+
+  // ── Speed-sensitive steering lock.
+  const steerLock = STEER_LOCK_LOW + (STEER_LOCK_HIGH - STEER_LOCK_LOW) * speedRatio;
   // Steering inverts on reverse so left/right feels natural backing up.
-  const steerSign = accel < 0 ? -1 : 1;
+  const steerSign = (speedFwd < -M(0.5)) ? -1 : 1;
   const oilNow = now < playerCombat.oilUntil;
-  // Oil slick: random ±jitter to steering input so the kart wobbles.
-  const oilJitter = oilNow ? (Math.random() * 2 - 1) * 0.5 : 0;
-  const steer = (((keys.a ? 1 : 0) + (keys.d ? -1 : 0)) * steerSign) + oilJitter;
-  const braking = keys.space;
+  const oilJitter = oilNow ? (Math.random() * 2 - 1) * 0.4 : 0;
+  const steerCmd = (controlState.steer * steerSign + oilJitter) * steerLock;
+  vehicle.setSteeringValue(steerCmd, 2);
+  vehicle.setSteeringValue(steerCmd, 3);
 
-  // Front wheels steer (indices 2, 3)
-  vehicle.setSteeringValue(steer * MAX_STEER, 2);
-  vehicle.setSteeringValue(steer * MAX_STEER, 3);
-
-  // All wheels drive
+  // ── All-wheel drive: engine force on every wheel keeps acceleration
+  // consistent regardless of which wheels are loaded over crests.
   vehicle.applyEngineForce(force, 0);
   vehicle.applyEngineForce(force, 1);
   vehicle.applyEngineForce(force, 2);
   vehicle.applyEngineForce(force, 3);
 
-  const brake = braking ? MAX_BRAKE : 0;
-  for (let i = 0; i < 4; i++) vehicle.setBrake(brake, i);
+  // ── Brake / handbrake. Space = service brake (all wheels). Drift +
+  // brake = handbrake on rear axle for tight rotation.
+  let brakeRear = braking ? MAX_BRAKE : 0;
+  let brakeFront = braking ? MAX_BRAKE : 0;
+  if (drifting && braking) brakeRear = HANDBRAKE_FORCE;
+  vehicle.setBrake(brakeRear, 0);
+  vehicle.setBrake(brakeRear, 1);
+  vehicle.setBrake(brakeFront, 2);
+  vehicle.setBrake(brakeFront, 3);
+
+  // ── Drift hop (Shift tap). Provides the visual/feel cue that drift
+  // mode just engaged. Must press, not hold.
+  controlState.driftHopCooldown = Math.max(0, controlState.driftHopCooldown - dt);
+  if (keys.drift && !controlState.lastDriftPress
+      && controlState.driftHopCooldown <= 0
+      && (speedAbs > M(0.5) || Math.abs(intent) > 0.05)) {
+    // Bump vy AND fire an impulse so the wheel suspension can't instantly
+    // reel the chassis back to the road plane.
+    chassisBody.velocity.y = Math.max(chassisBody.velocity.y, DRIFT_HOP_VY);
+    chassisBody.applyImpulse(new CANNON.Vec3(0, KART_MASS * DRIFT_HOP_VY * 0.5, 0), new CANNON.Vec3(0, 0, 0));
+    controlState.driftHopCooldown = DRIFT_HOP_COOLDOWN_S;
+  }
+  controlState.lastDriftPress = keys.drift;
+
+  // ── Lateral grip: damp the sideways component of chassis velocity each
+  // frame. This is the single biggest fix for the "loose" feel — the
+  // RaycastVehicle's built-in friction cone alone isn't enough at this
+  // mass + scale.
+  const grip = drifting ? LATERAL_GRIP_DRIFT : LATERAL_GRIP;
+  const lateralSpeed = v.dot(_right);
+  const dampingFactor = 1 - Math.min(1, grip * dt * 12);  // exponential-ish
+  // Subtract the right-vector component scaled by (1 - dampingFactor).
+  const cut = lateralSpeed * (1 - dampingFactor);
+  v.x -= _right.x * cut;
+  v.y -= _right.y * cut;
+  v.z -= _right.z * cut;
+
+  // ── Downforce so jumps don't drift forever and high-speed cornering
+  // doesn't lift the inside wheels.
+  const df = DOWNFORCE_PER_MS * speedAbs;
+  chassisBody.force.y -= df * KART_MASS;
+
+  // ── Auto-righting: when airborne (no wheels on ground) gently rotate
+  // chassis upright so we land on wheels, not on the roof. Mario Kart
+  // does this aggressively; we keep it subtle.
+  let onGround = 0;
+  for (let i = 0; i < vehicle.wheelInfos.length; i++) {
+    if (vehicle.wheelInfos[i].isInContact) onGround++;
+  }
+  if (onGround === 0) {
+    // Cross product (chassisUp × worldUp(0,1,0)) gives the axis to torque
+    // around to align the kart upright. Result = (upZ, 0, -upX).
+    chassisBody.torque.x += _up.z * KART_MASS * M(8);
+    chassisBody.torque.z += -_up.x * KART_MASS * M(8);
+  }
 }
 
-// ── Camera follow ─────────────────────────────────────────────
-// Vehicle forward is +Z, so "behind the kart" = -Z relative to its facing.
-// Camera sits ~2 car-lengths back and slightly above; look-ahead points
-// forward (+Z) so the player sees where they're going.
-const camOffset = new THREE.Vector3(0, M(5.5), -M(11));
-const camLookAhead = new THREE.Vector3(0, M(1.2), M(4));
-const tmpV = new THREE.Vector3();
-const tmpQ = new THREE.Quaternion();
+// ── Camera follow (Mario-Kart-style) ──────────────────────────
+// Key principles to fix the "over-compensating" feel:
+//   1. Camera tracks a SMOOTHED yaw, not the raw chassis quaternion. The
+//      chassis can wobble within the suspension; the camera shouldn't.
+//   2. Pitch + roll are NEVER copied from the chassis — camera always
+//      stays roughly horizontal regardless of slopes/jumps.
+//   3. Look-ahead extends with forward speed so fast cornering feels
+//      readable instead of "behind the action".
+//   4. Position lerp uses a critically-damped spring, frame-rate
+//      independent (1 - exp(-k·dt)), not a fixed alpha.
+//   5. FOV stretches mildly with speed for the arcade speed sensation.
+const CAM_DIST = M(11);
+const CAM_HEIGHT = M(5.0);
+const CAM_LOOK_HEIGHT = M(1.4);
+const CAM_LOOK_AHEAD_BASE = M(4);
+const CAM_LOOK_AHEAD_PER_MS = 0.18;     // adds metres per m/s of speed
+const CAM_POS_SPRING = 6.5;             // higher = snappier
+const CAM_YAW_SPRING = 5.5;             // separate so yaw can be slower than position
+const CAM_LOOK_SPRING = 9.0;
+const CAM_FOV_BASE = 70;
+const CAM_FOV_BOOST = 14;               // +14° at top speed
+const CAM_FOV_BOOST_BONUS = 6;          // extra +6° while a boost pad is active
 
-function updateCamera() {
-  // Position camera behind the chassis along its forward axis
-  tmpQ.set(chassisBody.quaternion.x, chassisBody.quaternion.y, chassisBody.quaternion.z, chassisBody.quaternion.w);
-  const offset = camOffset.clone().applyQuaternion(tmpQ);
-  const target = new THREE.Vector3(chassisBody.position.x, chassisBody.position.y, chassisBody.position.z);
-  const desired = target.clone().add(offset);
-  camera.position.lerp(desired, 0.12);
-  const lookAt = target.clone().add(camLookAhead.clone().applyQuaternion(tmpQ));
-  camera.lookAt(lookAt);
+camera.fov = CAM_FOV_BASE;
+
+const camSmoothed = {
+  yaw: 0,                               // smoothed chassis yaw (radians)
+  initialised: false,
+};
+const camPos = new THREE.Vector3();
+const camLook = new THREE.Vector3();
+
+const _camTmp = new THREE.Vector3();
+const _camOrigin = new THREE.Vector3();
+const _camForward = new THREE.Vector3();
+
+function shortestAngleDelta(a, b) {
+  // Returns shortest signed angle from a → b in [-π, π].
+  let d = (b - a) % (Math.PI * 2);
+  if (d > Math.PI) d -= Math.PI * 2;
+  if (d < -Math.PI) d += Math.PI * 2;
+  return d;
+}
+
+function updateCamera(dt) {
+  // Extract chassis yaw from quaternion (rotation around world-Y).
+  // yaw = atan2(2(wy + xz), 1 - 2(y² + z²))   ← standard quat-to-yaw
+  const q = chassisBody.quaternion;
+  const sinyCosp = 2 * (q.w * q.y + q.x * q.z);
+  const cosyCosp = 1 - 2 * (q.y * q.y + q.x * q.x);
+  const chassisYaw = Math.atan2(sinyCosp, cosyCosp);
+
+  // Lazy-init: snap on first frame so we don't fly in from origin.
+  if (!camSmoothed.initialised) {
+    camSmoothed.yaw = chassisYaw;
+    camSmoothed.initialised = true;
+  }
+
+  // Velocity-aware yaw smoothing: when nearly stopped, freeze the camera
+  // yaw so spinning the wheels in place doesn't whip the camera around.
+  const speedAbs = chassisBody.velocity.length();
+  const yawAuthority = Math.min(1, speedAbs / M(2));   // 0 below 2 m/s
+  const yawDelta = shortestAngleDelta(camSmoothed.yaw, chassisYaw);
+  // Frame-rate independent exponential smoothing.
+  const yawAlpha = 1 - Math.exp(-CAM_YAW_SPRING * yawAuthority * dt);
+  camSmoothed.yaw += yawDelta * yawAlpha;
+
+  // Build desired camera position from smoothed yaw only (no roll/pitch).
+  // Forward vector (yaw only) = (sin(yaw), 0, cos(yaw)). Behind = -forward.
+  _camOrigin.set(chassisBody.position.x, chassisBody.position.y, chassisBody.position.z);
+  _camForward.set(Math.sin(camSmoothed.yaw), 0, Math.cos(camSmoothed.yaw));
+  _camTmp.copy(_camForward).multiplyScalar(-CAM_DIST);
+  _camTmp.y += CAM_HEIGHT;
+  const desired = _camOrigin.clone().add(_camTmp);
+
+  // Spring-damp camera position toward desired (frame-rate independent).
+  const posAlpha = 1 - Math.exp(-CAM_POS_SPRING * dt);
+  camPos.lerp(desired, posAlpha);
+  camera.position.copy(camPos);
+
+  // Look target: in front of the kart, height-locked, with speed-based
+  // look-ahead so fast cornering shows the upcoming track.
+  const lookAhead = CAM_LOOK_AHEAD_BASE + CAM_LOOK_AHEAD_PER_MS * speedAbs;
+  const desiredLook = _camOrigin.clone()
+    .add(_camForward.clone().multiplyScalar(lookAhead));
+  desiredLook.y += CAM_LOOK_HEIGHT;
+  const lookAlpha = 1 - Math.exp(-CAM_LOOK_SPRING * dt);
+  camLook.lerp(desiredLook, lookAlpha);
+  camera.lookAt(camLook);
+
+  // FOV stretch with speed + extra kick during a boost pickup.
+  const speedRatio = Math.min(1, speedAbs / TOP_SPEED_MS);
+  let targetFov = CAM_FOV_BASE + CAM_FOV_BOOST * speedRatio;
+  if (performance.now() < playerCombat.boostUntil) targetFov += CAM_FOV_BOOST_BONUS;
+  camera.fov += (targetFov - camera.fov) * (1 - Math.exp(-4.0 * dt));
+  camera.updateProjectionMatrix();
 }
 
 // ── Render loop ───────────────────────────────────────────────
@@ -518,7 +735,7 @@ function tick() {
   lastTime = now;
 
   if (!paused) {
-    applyControls();
+    applyControls(dt);
     world.step(1 / 60, dt, 3);
   }
 
@@ -534,7 +751,7 @@ function tick() {
     wheelMeshes[i].quaternion.copy(t.quaternion);
   }
 
-  updateCamera();
+  updateCamera(dt);
 
   // HUD
   // velocity is in world units (mm) per second; convert mm/s → km/h.
@@ -600,4 +817,4 @@ if (roomCode) {
 
 requestAnimationFrame(tick);
 
-window.__play = { world, vehicle, chassisBody, scene, camera, renderer, track, combatState, playerCombat };
+window.__play = { world, vehicle, chassisBody, scene, camera, renderer, track, combatState, playerCombat, controlState, keys };
