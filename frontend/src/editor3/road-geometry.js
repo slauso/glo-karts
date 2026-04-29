@@ -366,6 +366,158 @@ const CURB_STRIPE_LEN = 1.0;
 const CURB_STRIPE_HEIGHT = 0.45;
 const CURB_STRIPE_WIDTH = 0.55;
 
+// Concave-bowl variant of extrudeRoad. Cross-section parameter u ∈ [-1,+1]
+// where u=-1 is the inner edge and u=+1 is the outer edge of the bend.
+// Top-surface height: y(t,u) = liftAmpFn(t) · shapeFn(u). For a bowl,
+// shapeFn(-1)=0 and shapeFn(+1)=1 with positive second derivative
+// (concave-up). Bottom of the cross-section sits flat on ground (y=0),
+// filling the volume so the bowl appears solid (no floating, no truss).
+// `outerSign` is the sign of the outward perpendicular relative to
+// (-tan.z, tan.x) — same convention as extrudeRoadBanked.
+function extrudeRoadConcave(path, liftAmpFn, shapeFn, outerSign, opts = {}) {
+  const width = opts.width ?? ROAD_WIDTH;
+  const halfW = width / 2;
+  const segments = opts.steps || Math.max(24, Math.ceil(path.getLength() / 0.6));
+  const lateralSegs = opts.lateralSegs || 12;     // cross-section subdivisions
+  const NL = lateralSegs + 1;                     // verts per cross-section row
+  const N = segments + 1;
+  // Top-surface vertices laid out as a (segments+1) × (lateralSegs+1) grid.
+  const topPos = [];
+  const topUV = [];
+  for (let i = 0; i < N; i++) {
+    const t = i / segments;
+    const p = path.getPointAt(t);
+    const tan = path.getTangentAt(t);
+    // Outward perpendicular in XZ
+    const ppx = -tan.z * outerSign, ppz = tan.x * outerSign;
+    const plen = Math.hypot(ppx, ppz) || 1;
+    const ox = ppx / plen, oz = ppz / plen;
+    const liftAmp = liftAmpFn(t);
+    for (let j = 0; j < NL; j++) {
+      // u maps from -1 (inner edge) to +1 (outer edge).
+      const u = (j / lateralSegs) * 2 - 1;
+      const y = (p.y || 0) + ROAD_THICK + liftAmp * shapeFn(u);
+      const x = p.x + ox * (u * halfW);
+      const z = p.z + oz * (u * halfW);
+      topPos.push(x, y, z);
+      const sUV = TEX_SCALE;
+      topUV.push(x / sUV, z / sUV);
+    }
+  }
+  const positions = [...topPos];
+  const uvs = [...topUV];
+  const indices = [];
+  // Top-surface triangles (drivable face). Wind so normal points +Y at flat.
+  for (let i = 0; i < segments; i++) {
+    for (let j = 0; j < lateralSegs; j++) {
+      const a = i * NL + j;
+      const b = a + 1;
+      const c = (i + 1) * NL + j;
+      const d = c + 1;
+      // Determine winding so top normal points outward+up. The sign depends
+      // on outerSign (which flips perp). For outerSign=-1 (mirror=false, L
+      // bend) the natural winding is reversed; for outerSign=+1 it's
+      // direct. We flip indices accordingly.
+      if (outerSign === +1) {
+        indices.push(a, c, b);
+        indices.push(b, c, d);
+      } else {
+        indices.push(a, b, c);
+        indices.push(b, d, c);
+      }
+    }
+  }
+  // Append a bottom polyline (inner-bot to outer-bot, flat at y=0) per
+  // section so we can close the inner side, outer side, underside, and
+  // end caps cleanly. Two extra verts per section: BL = (inner edge, y=0),
+  // BR = (outer edge, y=0).
+  const bottomBase = positions.length / 3;
+  for (let i = 0; i < N; i++) {
+    const t = i / segments;
+    const p = path.getPointAt(t);
+    const tan = path.getTangentAt(t);
+    const ppx = -tan.z * outerSign, ppz = tan.x * outerSign;
+    const plen = Math.hypot(ppx, ppz) || 1;
+    const ox = ppx / plen, oz = ppz / plen;
+    const yBase = p.y || 0;
+    const ix = p.x - ox * halfW, iz = p.z - oz * halfW;
+    const obx = p.x + ox * halfW, obz = p.z + oz * halfW;
+    positions.push(ix, yBase, iz);    // BL = inner-bot
+    positions.push(obx, yBase, obz);  // BR = outer-bot
+    const sUV = TEX_SCALE;
+    uvs.push(ix / sUV, iz / sUV);
+    uvs.push(obx / sUV, obz / sUV);
+  }
+  // Underside (y=0 face). Wind reversed.
+  for (let i = 0; i < segments; i++) {
+    const k = bottomBase + i * 2;
+    const j = bottomBase + (i + 1) * 2;
+    if (outerSign === +1) {
+      indices.push(k, j, k + 1);
+      indices.push(k + 1, j, j + 1);
+    } else {
+      indices.push(k, k + 1, j);
+      indices.push(k + 1, j + 1, j);
+    }
+  }
+  // Inner side wall (between top inner-edge column j=0 and BL).
+  for (let i = 0; i < segments; i++) {
+    const tA = i * NL + 0;          // top inner this section
+    const tB = (i + 1) * NL + 0;    // top inner next section
+    const bA = bottomBase + i * 2;       // BL this section
+    const bB = bottomBase + (i + 1) * 2; // BL next section
+    if (outerSign === +1) {
+      indices.push(bA, bB, tA);
+      indices.push(tA, bB, tB);
+    } else {
+      indices.push(bA, tA, bB);
+      indices.push(tA, tB, bB);
+    }
+  }
+  // Outer side wall (between top outer-edge column j=lateralSegs and BR).
+  for (let i = 0; i < segments; i++) {
+    const tA = i * NL + lateralSegs;
+    const tB = (i + 1) * NL + lateralSegs;
+    const bA = bottomBase + i * 2 + 1;       // BR this section
+    const bB = bottomBase + (i + 1) * 2 + 1; // BR next section
+    if (outerSign === +1) {
+      indices.push(bA, tA, bB);
+      indices.push(tA, tB, bB);
+    } else {
+      indices.push(bA, bB, tA);
+      indices.push(tA, bB, tB);
+    }
+  }
+  // End caps (start at i=0 and end at i=N-1). Triangulate each cap as a
+  // fan from BL across the top row to BR then back to BL via the underside.
+  function emitCap(i, reverse) {
+    const baseTop = i * NL;
+    const bL = bottomBase + i * 2;
+    const bR = bottomBase + i * 2 + 1;
+    // Triangles BL → top[j] → top[j+1]
+    for (let j = 0; j < lateralSegs; j++) {
+      const a = baseTop + j;
+      const b = baseTop + j + 1;
+      if (reverse) indices.push(bL, b, a); else indices.push(bL, a, b);
+    }
+    // Triangle BL → top[last] → BR
+    const last = baseTop + lateralSegs;
+    if (reverse) indices.push(bL, bR, last); else indices.push(bL, last, bR);
+  }
+  // Start cap faces -tangent direction; end cap faces +tangent.
+  emitCap(0, outerSign === +1);
+  emitCap(N - 1, outerSign === -1);
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+  geo.setIndex(indices);
+  geo.computeVertexNormals();
+  const mesh = new THREE.Mesh(geo, opts.material || MATS.asphalt);
+  mesh.castShadow = true; mesh.receiveShadow = true;
+  mesh.userData.drivable = true;
+  return mesh;
+}
+
 // Banked-aware curb placement. Curbs follow the same lifted edges as the
 // banked extrusion. `sideSign` is the side of the path (+1 or -1).
 // `bankFn` returns the roll angle. `outerSign` is which side is outside.
@@ -571,15 +723,21 @@ function buildCorner(mirror) {
 }
 
 function buildBanked(mirror) {
-  // Single-cell 90° banked corner. Same arc as buildCorner but the deck
-  // tilts up on the OUTSIDE edge of the bend so karts can carry more
-  // speed through the apex. The bank is baked into the geometry via
-  // extrudeRoadBanked using a wedge cross-section: the underside is flat
-  // at ground level (no floating, no buttress required) and the top deck
-  // tilts about the inner-edge axis. The bank EASES smoothly to zero at
-  // both endpoints (bankFn(0)=bankFn(1)=0), so the cross-section
-  // degenerates to the same flat ribbon used by `straight` and `corner`
-  // — guaranteeing perfect edge-to-edge alignment with adjacent tiles.
+  // Single-cell 90° banked corner with a CONCAVE BOWL cross-section.
+  // Instead of a flat tilted deck plus an outer barrier, the deck itself
+  // curves up smoothly toward the outside of the arc — the asphalt acts
+  // as the wall, like a velodrome / NASCAR oval. Karts travelling fast
+  // ride higher up the bowl; slow karts settle near the inner edge.
+  // No outer curb is rendered (the bowl IS the barrier).
+  //
+  // Cross-section parameter u ∈ [-1, +1]:
+  //   u=-1 → inner edge of arc (low, flat)
+  //   u=+1 → outer edge of arc (lifted by liftAmp(t))
+  //   y(t,u) = liftAmp(t) · ((u+1)/2)²   (quadratic, concave-up bowl)
+  // Bottom of the cross-section sits flat on ground (y=0). The drivable
+  // top surface is the curved bowl. liftAmp(0)=liftAmp(1)=0 ⇒ the
+  // cross-section degenerates to a flat ribbon at both seams, matching
+  // straight/corner exactly.
   const grp = new THREE.Group();
   const cx = mirror ? +TILE / 2 : -TILE / 2;
   const cz = -TILE / 2;
@@ -587,28 +745,34 @@ function buildBanked(mirror) {
   const a0 = mirror ? Math.PI : 0;
   const a1 = Math.PI / 2;
   const path = arcPath3(cx, cz, r, a0, a1, 0, 24);
-  const BANK_MAX = Math.PI / 9; // ~20° at apex
-  // Smooth ease in/out via sin(t·π): zero at t=0 and t=1, peak at t=0.5.
-  const bankFn = (t) => {
-    const tt = Math.max(0, Math.min(1, t));
-    return Math.sin(tt * Math.PI) * BANK_MAX;
-  };
   // Outward direction = away from arc center.
-  // perp+ = (-tan.z, tan.x); at start of arc this points TOWARD the center
-  // (i.e. inward), so outerSign must FLIP perp to point outward.
   // For mirror=false (CCW arc, center at -X, outside is +X): perp+=(-X) →
-  //   outerSign=-1 makes outward = +X. ✓
+  //   outerSign=-1 makes outward = +X.
   // For mirror=true (CW arc, center at +X, outside is -X): perp+=(-X) →
-  //   outerSign=+1 keeps outward = -X. ✓
+  //   outerSign=+1 keeps outward = -X.
   const outerSign = mirror ? +1 : -1;
-  grp.add(extrudeRoadBanked(path, bankFn, outerSign, { steps: 48 }));
-  // Outer (lifted) curb at full size; inner curb shrunk so the apex still
-  // reads as the racing line.
-  grp.add(curbAlongPathBanked(path, +outerSign, bankFn, outerSign));
-  const inner = curbAlongPathBanked(path, -outerSign, bankFn, outerSign);
+  // Peak lift at apex: half the road width, giving a ~22° rise at the
+  // outer edge (atan(2*lift/W) for the secant slope; instantaneous slope
+  // at the rim is 2x that = ~45°, plenty of "wall" for fast karts).
+  const LIFT_MAX = ROAD_WIDTH * 0.5;
+  const liftAmpFn = (t) => {
+    const tt = Math.max(0, Math.min(1, t));
+    return Math.sin(tt * Math.PI) * LIFT_MAX;
+  };
+  // Quadratic concave-up bowl shape function: y(u)/liftAmp = ((u+1)/2)²
+  const bowlShape = (u) => {
+    const s = (u + 1) * 0.5;
+    return s * s;
+  };
+  grp.add(extrudeRoadConcave(path, liftAmpFn, bowlShape, outerSign, { steps: 48, lateralSegs: 12 }));
+  // INNER curb only — the bowl itself is the outer barrier. Keep the inner
+  // curb at reduced size so the racing line still reads as the apex.
+  const innerSide = -outerSign;
+  const inner = curbAlongPath(path, innerSide);
   inner.children.forEach(c => { c.scale.set(0.65, 0.7, 1.0); });
   grp.add(inner);
-  // Subtle racing-line dashes through the apex.
+  // Racing-line dashes hugging the inside (apex). Shift the dashed paint
+  // toward the inner edge so it visually emphasises the racing line.
   grp.add(dashedPaintAlongPath(path));
   return grp;
 }
