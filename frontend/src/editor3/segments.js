@@ -416,14 +416,28 @@ function curvedPlateauBlocks(mirror) {
       solid: false,
     });
   }
-  // Slim corner support columns (visual only) so a road placed UNDER
-  // the curved plateau on tier 0 has clearance. Four columns hugging
-  // the cell corners.
-  for (const sx of [-1, +1]) for (const sz of [-1, +1]) {
+  // Slim support columns under the arc deck. Four pillars sit AT the
+  // tile-edge seams of the arc (two at the entry seam z=-TILE/2 along
+  // the road edges, two at the exit seam at x=±TILE/2 along the road
+  // edges) so each pillar lands directly under the visible deck rather
+  // than floating in empty cell corners. Marked solid:false so a ground
+  // road on tier 0 still has clearance through the cell.
+  const halfW = ROAD_WIDTH / 2;
+  const inset = 0.2;
+  const exitX = mirror ? +TILE / 2 - inset : -TILE / 2 + inset;
+  const entryPositions = [
+    [-halfW + inset, -TILE / 2 + inset],   // entry road-edge -X
+    [+halfW - inset, -TILE / 2 + inset],   // entry road-edge +X
+  ];
+  const exitPositions = [
+    [exitX, -halfW + inset],               // exit road-edge -Z
+    [exitX, +halfW - inset],               // exit road-edge +Z
+  ];
+  for (const [px, pz] of [...entryPositions, ...exitPositions]) {
     blocks.push({
       kind: 'box',
       size: [0.4, deckH, 0.4],
-      pos: [sx * (TILE / 2 - 0.2), deckH / 2, sz * (TILE / 2 - 0.2)],
+      pos: [px, deckH / 2, pz],
       color: WALL_COLOR,
       solid: false,
     });
@@ -439,7 +453,7 @@ function rampBlocks(yStart, yEnd, lengthZ) {
   const angle = Math.atan2(dy, dz);              // pitch around X
   const cy = (yStart + yEnd) / 2 + ROAD_THICK / 2;
   const cz = lengthZ / 2 - TILE / 2;             // ramp's first cell anchor at -TILE/2
-  return [
+  const blocks = [
     {
       kind: 'box',
       size: [ROAD_WIDTH, ROAD_THICK, length],
@@ -464,6 +478,31 @@ function rampBlocks(yStart, yEnd, lengthZ) {
       color: WALL_COLOR,
     },
   ];
+  // Slim under-deck support pillars. Place one pair per cell-boundary
+  // crossing along the ramp (excluding the foot which is already at
+  // ground level). Pillar height tracks the ramp profile so each one
+  // visibly meets the deck underside. solid:false keeps clearance for
+  // any ground road that passes beneath the elevated portion.
+  const cellCount = Math.max(1, Math.round(lengthZ / TILE));
+  const halfWP = ROAD_WIDTH / 2;
+  const insetP = 0.25;
+  for (let i = 1; i < cellCount; i++) {
+    const z = -TILE / 2 + i * TILE;          // pillar z (cell boundary)
+    const t = (z + TILE / 2) / lengthZ;      // [0..1] along ramp
+    const e = t * t * (3 - 2 * t);           // smooth-step profile
+    const yDeck = yStart + (yEnd - yStart) * e;
+    if (yDeck < 0.4) continue;                // skip if too short to read
+    for (const sx of [-1, +1]) {
+      blocks.push({
+        kind: 'box',
+        size: [0.4, yDeck, 0.4],
+        pos: [sx * (halfWP - insetP), yDeck / 2, z],
+        color: WALL_COLOR,
+        solid: false,
+      });
+    }
+  }
+  return blocks;
 }
 
 // ── Phase 1A new helpers ──────────────────────────────────────

@@ -785,20 +785,27 @@ function buildCurvedPlateau(mirror) {
       grp.add(post);
     }
   }
-  // Slim concrete piers under the deck. Four corner piers (matching
-  // plateau's slim pier language) so a ground road placed UNDER the
-  // curved plateau has clearance to pass through. Apex pier dropped —
-  // it would land in the middle of the underdeck lane.
-  for (const sx of [-1, +1]) for (const sz of [-1, +1]) {
+  // Slim concrete piers under the deck. Four pillars positioned at the
+  // arc's tile-edge seams (two along the entry edge z=-TILE/2 at the
+  // road's left/right rail line, two along the exit edge at the road's
+  // entry/exit rail line). This puts every pier DIRECTLY under the
+  // visible curved deck rather than floating in empty corners outside
+  // the arc footprint.
+  const halfWidth = ROAD_WIDTH / 2;
+  const insetCP = 0.25;
+  const exitXCP = mirror ? +TILE / 2 - insetCP : -TILE / 2 + insetCP;
+  const pierSpots = [
+    [-halfWidth + insetCP, -TILE / 2 + insetCP],
+    [+halfWidth - insetCP, -TILE / 2 + insetCP],
+    [exitXCP, -halfWidth + insetCP],
+    [exitXCP, +halfWidth - insetCP],
+  ];
+  for (const [px, pz] of pierSpots) {
     const col = new THREE.Mesh(
       new THREE.CylinderGeometry(0.18, 0.22, deckH, 12),
       MATS.concrete,
     );
-    col.position.set(
-      sx * (TILE / 2 - 0.25),
-      deckH / 2,
-      sz * (TILE / 2 - 0.25),
-    );
+    col.position.set(px, deckH / 2, pz);
     col.castShadow = true; col.receiveShadow = true;
     grp.add(col);
   }
@@ -941,6 +948,29 @@ function buildRamp(yStart, yEnd, lengthZcells = 2) {
     }
   }
   grp.add(curbsBothSides(path));
+  // Slim under-deck concrete piers — one pair per cell-boundary crossing
+  // along the ramp, with each pier's height tracking the ramp profile so
+  // it visibly meets the deck underside (no floating columns, no missing
+  // supports). The very foot is skipped (deck is at y=0 there).
+  const cellCount = Math.max(1, Math.round(lengthZcells));
+  const halfWramp = ROAD_WIDTH / 2;
+  const insetRamp = 0.25;
+  for (let i = 1; i < cellCount; i++) {
+    const z = -TILE / 2 + i * TILE;
+    const tCell = (z + TILE / 2) / totalZ;
+    const eCell = tCell * tCell * (3 - 2 * tCell);
+    const yDeck = yStart + (yEnd - yStart) * eCell;
+    if (yDeck < 0.4) continue;
+    for (const sx of [-1, +1]) {
+      const col = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.18, 0.22, yDeck, 12),
+        MATS.concrete,
+      );
+      col.position.set(sx * (halfWramp - insetRamp), yDeck / 2, z);
+      col.castShadow = true; col.receiveShadow = true;
+      grp.add(col);
+    }
+  }
   return grp;
 }
 
