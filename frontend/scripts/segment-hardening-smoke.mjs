@@ -132,9 +132,14 @@ log(failsAdj.length === 0, `pairwise adjacency: ${totalAdj - failsAdj.length}/${
 // ── Multi-cell hit-test: clicking any footprint cell resolves to the same id.
 console.log('\n[3] Multi-cell hit-test');
 const multiKeys = await p.evaluate(() => {
-  const { SEGMENTS, SEGMENT_KEYS } = window.__studio;
+  const { SEGMENTS, SEGMENT_KEYS, track } = window.__studio;
   return SEGMENT_KEYS.filter(k => {
-    const s = SEGMENTS[k]?.span; return s && (s.x > 1 || s.z > 1);
+    const s = SEGMENTS[k]?.span;
+    if (!s || (s.x <= 1 && s.z <= 1)) return false;
+    // Overlays don't claim grid cells, so they are not addressable via
+    // `track.getAt`. Skip them here — overlay-stacking is covered by its
+    // own smoke (overlay-placement-smoke.mjs).
+    return !track.isOverlay(k);
   });
 });
 const hitCheck = await p.evaluate(({ keys }) => {

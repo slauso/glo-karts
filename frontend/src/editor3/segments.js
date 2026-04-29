@@ -319,6 +319,87 @@ export const SEGMENTS = {
       { kind: 'box', size: [TILE, WALL_HEIGHT, WALL_THICK], pos: [0, ROAD_THICK + WALL_HEIGHT / 2, TILE / 2 - WALL_THICK / 2], color: WALL_COLOR },
     ],
   },
+
+  // ── Combat overlays (Phase 1 — drop-in PvP segments) ─────────
+  // All combat overlays share three properties:
+  //   - overlay: true  → does not claim a grid cell; stacks on roads
+  //   - category: 'pickup' | 'modifier' | 'hazard'
+  //   - runtime: { kind, ... }  → consumed by playtest + StudioRoom to
+  //     spawn pickup/effect logic at the placement's world position.
+  // Visual blocks are all marked solid:false so they never push karts.
+  // The runtime layer handles every gameplay interaction.
+  item_box: {
+    label: 'Item Box',
+    category: 'pickup',
+    span: { x: 1, z: 1 },
+    overlay: true,
+    blocks: itemBoxBlocks(0xffd400, 1.4),
+    runtime: { kind: 'pickup', payload: 'weapon_random', respawnMs: 4000, radius: TILE * 0.45 },
+  },
+  weapon_crate_heavy: {
+    label: 'Heavy Crate',
+    category: 'pickup',
+    span: { x: 1, z: 1 },
+    overlay: true,
+    blocks: itemBoxBlocks(0xff5a3a, 1.6, true),
+    runtime: { kind: 'pickup', payload: 'weapon_heavy', respawnMs: 8000, radius: TILE * 0.45 },
+  },
+  health_orb: {
+    label: 'Health Orb',
+    category: 'pickup',
+    span: { x: 1, z: 1 },
+    overlay: true,
+    blocks: orbBlocks(0x55ff88),
+    runtime: { kind: 'pickup', payload: 'health', amount: 50, respawnMs: 6000, radius: TILE * 0.4 },
+  },
+  coin_pickup: {
+    label: 'Coin',
+    category: 'pickup',
+    span: { x: 1, z: 1 },
+    overlay: true,
+    blocks: orbBlocks(0xffe066, 0.7),
+    runtime: { kind: 'pickup', payload: 'coin', amount: 1, respawnMs: 3000, radius: TILE * 0.3 },
+  },
+  boost_pad: {
+    label: 'Boost Pad',
+    category: 'modifier',
+    span: { x: 1, z: 1 },
+    overlay: true,
+    blocks: boostPadBlocks(0xffa500, 1),
+    runtime: { kind: 'effect', effect: 'boost', strength: 0.30, durationMs: 1000 },
+  },
+  super_boost_pad: {
+    label: 'Super Boost',
+    category: 'modifier',
+    span: { x: 1, z: 2 },
+    overlay: true,
+    blocks: boostPadBlocks(0x4ad6ff, 2),
+    runtime: { kind: 'effect', effect: 'boost', strength: 0.60, durationMs: 2000 },
+  },
+  oil_slick: {
+    label: 'Oil Slick',
+    category: 'hazard',
+    span: { x: 1, z: 1 },
+    overlay: true,
+    blocks: paintPatchBlocks(0x111418, 0.85),
+    runtime: { kind: 'effect', effect: 'oil', durationMs: 800, radius: TILE * 0.45 },
+  },
+  slow_strip: {
+    label: 'Slow Strip',
+    category: 'modifier',
+    span: { x: 1, z: 1 },
+    overlay: true,
+    blocks: paintPatchBlocks(0x4caf50, 0.75),
+    runtime: { kind: 'effect', effect: 'slow', strength: 0.40, durationMs: 600 },
+  },
+  repair_strip: {
+    label: 'Repair Strip',
+    category: 'modifier',
+    span: { x: 1, z: 1 },
+    overlay: true,
+    blocks: paintPatchBlocks(0x00e5ff, 0.7),
+    runtime: { kind: 'effect', effect: 'repair', amountPerSec: 8 },
+  },
 };
 
 // ── helpers for parametric pieces ──────────────────────────────
@@ -638,6 +719,89 @@ function tunnelBlocks(lengthZ) {
   ];
 }
 
+// ── Combat overlay helpers (Phase 1) ───────────────────────────
+
+/** Floating glowing cube — the classic "?" item box look. The cube is a
+ *  standalone block tagged so the editor + visual builder can spin it for
+ *  feedback. solid:false everywhere — runtime layer handles collection. */
+function itemBoxBlocks(color, size = 1.4, heavy = false) {
+  const half = size / 2;
+  const baseY = ROAD_THICK + 0.6 + half;
+  const blocks = [
+    { kind: 'box', size: [size, size, size], pos: [0, baseY, 0], color, solid: false, isPickupCube: true },
+  ];
+  if (heavy) {
+    // Reinforcement bands for the heavy crate variant — purely cosmetic.
+    blocks.push(
+      { kind: 'box', size: [size * 1.05, 0.12, 0.12], pos: [0, baseY, half - 0.06], color: 0x222428, solid: false },
+      { kind: 'box', size: [size * 1.05, 0.12, 0.12], pos: [0, baseY, -half + 0.06], color: 0x222428, solid: false },
+      { kind: 'box', size: [0.12, 0.12, size * 1.05], pos: [half - 0.06, baseY, 0], color: 0x222428, solid: false },
+      { kind: 'box', size: [0.12, 0.12, size * 1.05], pos: [-half + 0.06, baseY, 0], color: 0x222428, solid: false },
+    );
+  } else {
+    // Bright marker stripe (faux ?) so the cube reads at a glance.
+    blocks.push(
+      { kind: 'box', size: [size * 0.4, 0.05, size * 0.4], pos: [0, baseY + half + 0.01, 0], color: 0xffffff, solid: false },
+    );
+  }
+  // Glowing base disc on the road so the spawn point is obvious even
+  // while the cube is in respawn cooldown.
+  blocks.push(
+    { kind: 'box', size: [size * 1.6, 0.04, size * 1.6], pos: [0, ROAD_THICK + 0.02, 0], color, solid: false },
+  );
+  return blocks;
+}
+
+/** Floating sphere-ish marker rendered as a small octagonal stack of
+ *  thin slabs. Used by health orbs and coins. */
+function orbBlocks(color, size = 1.0) {
+  const baseY = ROAD_THICK + 0.5 + size * 0.5;
+  return [
+    { kind: 'box', size: [size, size * 0.3, size], pos: [0, baseY, 0], color, solid: false, isPickupCube: true },
+    { kind: 'box', size: [size * 0.7, size * 0.3, size * 0.7], pos: [0, baseY + size * 0.25, 0], color, solid: false },
+    { kind: 'box', size: [size * 0.7, size * 0.3, size * 0.7], pos: [0, baseY - size * 0.25, 0], color, solid: false },
+    // Halo on the road so it remains visible during respawn cooldown.
+    { kind: 'box', size: [size * 1.4, 0.04, size * 1.4], pos: [0, ROAD_THICK + 0.02, 0], color, solid: false },
+  ];
+}
+
+/** Painted boost-pad chevrons. Length in cells (1 or 2). The chevron
+ *  arrow points along local +Z so the rotation logic naturally aligns
+ *  pad direction with kart travel direction. */
+function boostPadBlocks(color, lengthCells) {
+  const lz = TILE * lengthCells;
+  const cz = lz / 2 - TILE / 2;
+  const blocks = [
+    // Base paint patch — a darker rectangle along the racing line.
+    { kind: 'box', size: [ROAD_WIDTH * 0.85, 0.03, lz * 0.95], pos: [0, ROAD_THICK + 0.02, cz], color: 0x1a1d22, solid: false },
+  ];
+  // Chevron count scales with length so the arrow density looks right.
+  const CHEVRONS = lengthCells === 2 ? 8 : 4;
+  const startZ = -TILE / 2 + lz / (CHEVRONS + 1);
+  const stepZ = lz / (CHEVRONS + 1);
+  for (let i = 0; i < CHEVRONS; i++) {
+    const zc = startZ + stepZ * i;
+    // Two diagonal segments forming a forward-pointing > shape.
+    blocks.push(
+      { kind: 'box', size: [ROAD_WIDTH * 0.5, 0.05, 0.18], pos: [-ROAD_WIDTH * 0.18, ROAD_THICK + 0.04, zc], rotY: -0.6, color, solid: false },
+      { kind: 'box', size: [ROAD_WIDTH * 0.5, 0.05, 0.18], pos: [ ROAD_WIDTH * 0.18, ROAD_THICK + 0.04, zc], rotY:  0.6, color, solid: false },
+    );
+  }
+  return blocks;
+}
+
+/** Flat painted patch covering most of a cell. Used by oil slick, slow
+ *  strip, repair strip — only the colour and a subtle accent change. */
+function paintPatchBlocks(color, scale = 0.85) {
+  const w = ROAD_WIDTH * scale;
+  return [
+    { kind: 'box', size: [w, 0.04, w], pos: [0, ROAD_THICK + 0.02, 0], color, solid: false },
+    // Cross-hatch accent so the patch reads as deliberate paint, not dirt.
+    { kind: 'box', size: [w * 0.95, 0.05, 0.18], pos: [0, ROAD_THICK + 0.04, 0], color: 0xffffff, solid: false },
+    { kind: 'box', size: [0.18, 0.05, w * 0.95], pos: [0, ROAD_THICK + 0.04, 0], color: 0xffffff, solid: false },
+  ];
+}
+
 export const SEGMENT_KEYS = Object.keys(SEGMENTS);
 
 /** Get span footprint cells for a segment, in local grid coords. */
@@ -754,6 +918,17 @@ const CONNECTORS = {
   tunnel:          [{ x: 0, z: 0, side: 'S' }, { x: 0, z: 1, side: 'N' }],
   // End cap — closed on the +Z side by a wall, only S is drivable.
   cap_end:         [{ x: 0, z: 0, side: 'S' }],
+  // Combat overlays — declare S+N so auto-orient aligns chevrons /
+  // markers along the same axis as the underlying road.
+  item_box:           SN,
+  weapon_crate_heavy: SN,
+  health_orb:         SN,
+  coin_pickup:        SN,
+  boost_pad:          SN,
+  super_boost_pad:    [{ x: 0, z: 0, side: 'S' }, { x: 0, z: 1, side: 'N' }],
+  oil_slick:          SN,
+  slow_strip:         SN,
+  repair_strip:       SN,
 };
 
 const SIDE_CW = ['N', 'W', 'S', 'E']; // rotating one quarter-turn (rot=1) maps SIDE_CW[i] → SIDE_CW[(i+1)%4]
@@ -824,6 +999,49 @@ export function getWorldConnectors(key, gx, gz, rot) {
     const [rx, rz] = rotateCell(c.x, c.z, rot);
     const tier = tierByLocal.get(`${c.x},${c.z}`) || 0;
     out[i] = { gx: gx + rx, gz: gz + rz, side: rotateSide(c.side, rot), tier };
+  }
+  return out;
+}
+
+// ── Runtime metadata (Phase 1 combat overlays) ──────────────────
+
+/** Returns the runtime descriptor for a segment, or null if it has none.
+ *  Both the playtest layer and StudioRoom call this to discover which
+ *  placements should spawn pickups / fire effects. */
+export function getRuntime(key) {
+  return SEGMENTS[key]?.runtime || null;
+}
+
+/** Returns true if the segment is an overlay (does not claim a grid cell).
+ *  Mirrors `Track.isOverlay` so server-side code can use the same rule
+ *  without importing the Track class. */
+export function isOverlaySegment(key) {
+  const def = SEGMENTS[key];
+  return !!(def?.isSpawn || def?.overlay);
+}
+
+/**
+ * Walk a list of placements and return a flat array of runtime instances:
+ *   { id, key, kind, payload, effect, gx, gz, rot, worldX, worldZ, ...meta }
+ * `tileSize` defaults to TILE so the result is in segment-local units;
+ * pass the world TILE (m × WORLD_UNITS_PER_M) when calling from the
+ * playtest runtime.
+ */
+export function buildRuntimeRegistry(placements, tileSize = TILE) {
+  const out = [];
+  for (const p of placements) {
+    const rt = getRuntime(p.key);
+    if (!rt) continue;
+    out.push({
+      id: p.id ?? out.length + 1,
+      key: p.key,
+      gx: p.gx | 0,
+      gz: p.gz | 0,
+      rot: ((p.rot | 0) % 4 + 4) % 4,
+      worldX: (p.gx | 0) * tileSize,
+      worldZ: (p.gz | 0) * tileSize,
+      ...rt,
+    });
   }
   return out;
 }

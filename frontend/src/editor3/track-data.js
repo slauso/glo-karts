@@ -49,12 +49,15 @@ export class Track {
   }
 
   /**
-   * Spawn (and any future overlay segments) sits on top of road pieces.
-   * It does not claim grid cells, so it is never blocked by — and does not
-   * block — other placements.
+   * Spawn and combat-overlay segments (item boxes, boost pads, oil
+   * slicks, repair strips, etc.) sit on top of road pieces. They do not
+   * claim grid cells, so they are never blocked by — and do not block —
+   * other placements. Detected via either `isSpawn` (legacy) or
+   * `overlay: true` on the SEGMENTS entry.
    */
   isOverlay(key) {
-    return !!SEGMENTS[key]?.isSpawn;
+    const def = SEGMENTS[key];
+    return !!(def?.isSpawn || def?.overlay);
   }
 
   isClear(key, gx, gz, rot, ignoreId = null) {

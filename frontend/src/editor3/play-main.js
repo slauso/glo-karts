@@ -13,6 +13,7 @@ import { cloneKart } from './kart-loader.js';
 import { resolveSelectedKartId, getKart } from './kart-catalog.js';
 import { DecorStore, buildDecorMesh } from './decor.js';
 import { WORLD_UNITS_PER_M, m as M, mm as MM } from './units.js';
+import { buildCombatState, sweepKart, tickRespawns } from './combat-runtime.js';
 
 // Playtest runs in world units where 1 unit = 1 mm.
 // (TILE arrives from track-data already in world units.)
@@ -124,6 +125,11 @@ const placedBodies = [];
 // Collect finish-line placements so we can detect lap completion.
 /** @type {{gx:number,gz:number,rot:number,forward:THREE.Vector3,center:THREE.Vector3}[]} */
 const finishLines = [];
+// Map placement id → THREE.Group containing the overlay's pickup cube /
+// orb / paint patch. Used to hide the cube while the pickup is on
+// respawn cooldown and show it again when re-armed.
+/** @type {Map<number, THREE.Group>} */
+const overlayMeshById = new Map();
 for (const p of track.all()) {
   const mesh = buildSegmentMesh(p.key);
   mesh.position.set(p.gx * TILE, 0, p.gz * TILE);
@@ -140,6 +146,8 @@ for (const p of track.all()) {
     world.addBody(body);
     placedBodies.push(body);
   }
+
+  if (SEGMENTS[p.key]?.runtime) overlayMeshById.set(p.id, mesh);
 
   if (SEGMENTS[p.key]?.isFinish) {
     const rotY = -p.rot * Math.PI / 2;
@@ -301,10 +309,19 @@ function applyControls() {
   // cannon-es RaycastVehicle convention: applyEngineForce(+v) drives the
   // chassis in the −forward-axis direction. Negate so positive intent
   // (W) actually pushes the chassis along +Z toward the track.
-  const force = -accel * MAX_ENGINE;
+  // Combat overlays modulate engine force: boost pads multiply, slow
+  // strips divide, oil slicks zero out steering torque temporarily.
+  const now = performance.now();
+  let mult = 1.0;
+  if (now < playerCombat.boostUntil) mult *= (1 + playerCombat.boostStrength);
+  if (now < playerCombat.slowUntil) mult *= (1 - playerCombat.slowStrength);
+  const force = -accel * MAX_ENGINE * mult;
   // Steering inverts on reverse so left/right feels natural backing up.
   const steerSign = accel < 0 ? -1 : 1;
-  const steer = ((keys.a ? 1 : 0) + (keys.d ? -1 : 0)) * steerSign;
+  const oilNow = now < playerCombat.oilUntil;
+  // Oil slick: random ±jitter to steering input so the kart wobbles.
+  const oilJitter = oilNow ? (Math.random() * 2 - 1) * 0.5 : 0;
+  const steer = (((keys.a ? 1 : 0) + (keys.d ? -1 : 0)) * steerSign) + oilJitter;
   const braking = keys.space;
 
   // Front wheels steer (indices 2, 3)
@@ -352,6 +369,105 @@ const lapEl = document.getElementById('lap');
 /** @type {{lap:number, lastSide:number|null, lapStartedAt:number, bestLap:number|null}} */
 const lapState = { lap: 0, lastSide: null, lapStartedAt: performance.now(), bestLap: null };
 const LAP_NEAR_RADIUS = TILE * 1.4; // only sample when near the line
+
+// ── Combat overlays (Phase 1) ──────────────────────────────────
+// Build a per-overlay state map, install a per-tick sweep that fires
+// pickup/effect events, and project them onto a tiny HUD ticker. The
+// kart's "active boost" timer feeds back into engine force so a freshly
+// touched boost pad actually accelerates the chassis.
+const combatState = buildCombatState(track.all());
+const HUD_TICKER_MAX = 5;
+const hudTickerEl = document.getElementById('combatTicker');
+let hudTicker = [];
+function pushTicker(text) {
+  hudTicker.push({ text, until: performance.now() + 2200 });
+  if (hudTicker.length > HUD_TICKER_MAX) hudTicker.shift();
+}
+function renderTicker(now) {
+  if (!hudTickerEl) return;
+  hudTicker = hudTicker.filter(t => t.until > now);
+  hudTickerEl.textContent = hudTicker.map(t => t.text).join('  ·  ');
+}
+/** @type {{boostUntil:number, slowUntil:number, oilUntil:number, repairUntil:number, coins:number, hp:number, weapon:string|null, lastTouchedById:Map<number,number>}} */
+const playerCombat = {
+  boostUntil: 0, boostStrength: 0,
+  slowUntil: 0, slowStrength: 0,
+  oilUntil: 0,
+  repairUntil: 0,
+  coins: 0,
+  hp: 100,
+  weapon: null,
+  lastTouchedById: new Map(),  // debounce: don't re-fire same effect every frame
+};
+// E2E hook — exposes the live combat state so smoke tests can assert
+// against pickups without scraping the DOM. Read-only contract.
+if (typeof window !== 'undefined') {
+  window.__play = window.__play || {};
+  window.__play.playerCombat = playerCombat;
+  window.__play.combatState = combatState;
+}
+const EFFECT_DEBOUNCE_MS = 250;
+function applyCombatEvents(events, now) {
+  for (const ev of events) {
+    if (ev.type === 'pickup') {
+      const ent = combatState.get(ev.id);
+      if (ent && overlayMeshById.has(ev.id)) {
+        // Hide the floating pickup cube (cosmetic — the road disc on the
+        // ground stays visible as a respawn marker).
+        const grp = overlayMeshById.get(ev.id);
+        grp.traverse(o => { if (o.isMesh && o.userData?.__pickupCube) o.visible = false; });
+      }
+      if (ev.payload === 'coin') {
+        playerCombat.coins += ev.amount || 1;
+        pushTicker(`+${ev.amount || 1} coin (${playerCombat.coins})`);
+      } else if (ev.payload === 'health') {
+        playerCombat.hp = Math.min(100, playerCombat.hp + (ev.amount || 25));
+        pushTicker(`+${ev.amount || 25} HP (${playerCombat.hp})`);
+      } else if (ev.payload === 'weapon_random' || ev.payload === 'weapon_heavy') {
+        const pool = ev.payload === 'weapon_heavy'
+          ? ['rocket', 'mine', 'mortar']
+          : ['rocket', 'mine', 'shield', 'banana', 'boost_token'];
+        const w = pool[(Math.random() * pool.length) | 0];
+        playerCombat.weapon = w;
+        pushTicker(`got ${w}`);
+      }
+    } else if (ev.type === 'effect') {
+      const last = playerCombat.lastTouchedById.get(ev.id) || 0;
+      if (now - last < EFFECT_DEBOUNCE_MS && ev.effect !== 'repair') continue;
+      playerCombat.lastTouchedById.set(ev.id, now);
+      if (ev.effect === 'boost') {
+        playerCombat.boostUntil = now + (ev.durationMs || 1000);
+        playerCombat.boostStrength = ev.strength || 0.3;
+        pushTicker(`BOOST ×${(1 + playerCombat.boostStrength).toFixed(2)}`);
+      } else if (ev.effect === 'slow') {
+        playerCombat.slowUntil = now + (ev.durationMs || 600);
+        playerCombat.slowStrength = ev.strength || 0.4;
+        pushTicker(`SLOW ×${(1 - playerCombat.slowStrength).toFixed(2)}`);
+      } else if (ev.effect === 'oil') {
+        playerCombat.oilUntil = now + (ev.durationMs || 800);
+        pushTicker(`OIL!`);
+      } else if (ev.effect === 'repair') {
+        // Continuous trickle while standing on the strip.
+        const dt = 1 / 60;
+        const gain = (ev.amountPerSec || 5) * dt;
+        playerCombat.hp = Math.min(100, playerCombat.hp + gain);
+      }
+    }
+  }
+}
+
+function tickCombat(now) {
+  // Sweep against current kart position.
+  const events = sweepKart(combatState, chassisBody.position.x, chassisBody.position.z, now);
+  if (events.length) applyCombatEvents(events, now);
+  // Re-arm cooled-down pickups + restore their cube visibility.
+  const respawned = tickRespawns(combatState, now);
+  for (const r of respawned) {
+    const grp = overlayMeshById.get(r.id);
+    if (grp) grp.traverse(o => { if (o.isMesh && o.userData?.__pickupCube) o.visible = true; });
+  }
+  renderTicker(now);
+}
 
 function updateLapTracking() {
   if (!finishLines.length) {
@@ -425,6 +541,7 @@ function tick() {
   const speed = Math.round(chassisBody.velocity.length() * 3.6 / WORLD_UNITS_PER_M);
   speedEl.textContent = speed;
   if (!paused) updateLapTracking();
+  if (!paused) tickCombat(now);
 
   // Auto-respawn if fallen off the world
   if (chassisBody.position.y < -M(20)) respawn();
@@ -483,4 +600,4 @@ if (roomCode) {
 
 requestAnimationFrame(tick);
 
-window.__play = { world, vehicle, chassisBody, scene, camera, renderer, track };
+window.__play = { world, vehicle, chassisBody, scene, camera, renderer, track, combatState, playerCombat };

@@ -74,6 +74,7 @@ export function buildSegmentMesh(key) {
     mesh.castShadow = true;
     mesh.receiveShadow = true;
     mesh.userData.drivable = !!block.drivable;
+    if (block.isPickupCube) mesh.userData.__pickupCube = true;
     group.add(mesh);
   }
   return group;
