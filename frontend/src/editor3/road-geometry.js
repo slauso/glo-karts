@@ -785,25 +785,20 @@ function buildCurvedPlateau(mirror) {
       grp.add(post);
     }
   }
-  // Concrete piers under the deck. Place one at the entry edge (-Z) and
-  // one at the exit edge (-X for L, +X for R), plus an apex pier under
-  // the middle of the arc, matching plateau's columnar pier language.
-  const exitX = mirror ? +1 : -1;
-  const pierPositions = [
-    [0, -TILE / 2 + 0.6],                  // entry mid-edge
-    [exitX * (TILE / 2 - 0.6), 0],         // exit mid-edge
-    // Apex pier — point on arc at midway angle
-    [
-      cx + Math.cos((a0 + a1) / 2) * r * 0.65,
-      cz + Math.sin((a0 + a1) / 2) * r * 0.65,
-    ],
-  ];
-  for (const [px, pz] of pierPositions) {
+  // Slim concrete piers under the deck. Four corner piers (matching
+  // plateau's slim pier language) so a ground road placed UNDER the
+  // curved plateau has clearance to pass through. Apex pier dropped —
+  // it would land in the middle of the underdeck lane.
+  for (const sx of [-1, +1]) for (const sz of [-1, +1]) {
     const col = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.55, 0.7, deckH, 16),
+      new THREE.CylinderGeometry(0.18, 0.22, deckH, 12),
       MATS.concrete,
     );
-    col.position.set(px, deckH / 2, pz);
+    col.position.set(
+      sx * (TILE / 2 - 0.25),
+      deckH / 2,
+      sz * (TILE / 2 - 0.25),
+    );
     col.castShadow = true; col.receiveShadow = true;
     grp.add(col);
   }
@@ -1540,30 +1535,22 @@ export const VISUAL_BUILDERS = {
         g.add(post);
       }
     }
-    // Four columnar piers — round concrete columns at the corners under the
-    // deck, with a wide cap so the deck visibly rests on them.
+    // Four slim columnar piers — narrow concrete columns at the corners
+    // under the deck so a road placed UNDER the plateau on tier 0 has
+    // clearance to pass through. No cross-beams (they would block the
+    // underdeck lane).
     for (const sx of [-1, +1]) for (const sz of [-1, +1]) {
       const col = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.55, 0.7, deckH, 16),
+        new THREE.CylinderGeometry(0.18, 0.22, deckH, 12),
         MATS.concrete,
       );
       col.position.set(
-        sx * (ROAD_WIDTH / 2 - 0.6),
+        sx * (ROAD_WIDTH / 2 - 0.25),
         deckH / 2,
-        sz * (TILE / 2 - 0.6),
+        sz * (TILE / 2 - 0.25),
       );
       col.castShadow = true; col.receiveShadow = true;
       g.add(col);
-    }
-    // Cross-beams between front and back piers under the deck
-    for (const sx of [-1, +1]) {
-      const beam = new THREE.Mesh(
-        new THREE.BoxGeometry(0.4, 0.4, TILE - 1.2),
-        MATS.concrete,
-      );
-      beam.position.set(sx * (ROAD_WIDTH / 2 - 0.6), deckH - 0.25, 0);
-      beam.castShadow = true; beam.receiveShadow = true;
-      g.add(beam);
     }
     return g;
   },

@@ -156,9 +156,12 @@ export const SEGMENTS = {
     span: { x: 1, z: 1 },
     blocks: [
       { kind: 'box', size: [ROAD_WIDTH, ROAD_THICK, TILE], pos: [0, TILE * 0.6 + ROAD_THICK / 2, 0], color: ROAD_COLOR, drivable: true },
-      // support pillars (visual only)
-      { kind: 'box', size: [ROAD_WIDTH * 0.8, TILE * 0.6, 0.3], pos: [0, TILE * 0.3, -TILE / 2 + 0.15], color: WALL_COLOR },
-      { kind: 'box', size: [ROAD_WIDTH * 0.8, TILE * 0.6, 0.3], pos: [0, TILE * 0.3, TILE / 2 - 0.15], color: WALL_COLOR },
+      // Slim corner support columns (visual only, non-solid) so a road
+      // placed UNDER the plateau on tier 0 has clearance.
+      { kind: 'box', size: [0.4, TILE * 0.6, 0.4], pos: [-ROAD_WIDTH / 2 + 0.2, TILE * 0.3, -TILE / 2 + 0.2], color: WALL_COLOR, solid: false },
+      { kind: 'box', size: [0.4, TILE * 0.6, 0.4], pos: [ ROAD_WIDTH / 2 - 0.2, TILE * 0.3, -TILE / 2 + 0.2], color: WALL_COLOR, solid: false },
+      { kind: 'box', size: [0.4, TILE * 0.6, 0.4], pos: [-ROAD_WIDTH / 2 + 0.2, TILE * 0.3,  TILE / 2 - 0.2], color: WALL_COLOR, solid: false },
+      { kind: 'box', size: [0.4, TILE * 0.6, 0.4], pos: [ ROAD_WIDTH / 2 - 0.2, TILE * 0.3,  TILE / 2 - 0.2], color: WALL_COLOR, solid: false },
     ],
   },
 
@@ -413,22 +416,18 @@ function curvedPlateauBlocks(mirror) {
       solid: false,
     });
   }
-  // Two pier walls under the deck along the entry edge (-Z) and the exit
-  // edge (-X for L, +X for R). Same pillar style as `plateau`.
-  blocks.push({
-    kind: 'box',
-    size: [ROAD_WIDTH * 0.8, deckH, 0.3],
-    pos: [0, deckH / 2, -TILE / 2 + 0.15],
-    color: WALL_COLOR,
-  });
-  // Exit-edge pier (rotated 90° to lie along the X-aligned cell edge)
-  const exitX = mirror ? +TILE / 2 - 0.15 : -TILE / 2 + 0.15;
-  blocks.push({
-    kind: 'box',
-    size: [0.3, deckH, ROAD_WIDTH * 0.8],
-    pos: [exitX, deckH / 2, 0],
-    color: WALL_COLOR,
-  });
+  // Slim corner support columns (visual only) so a road placed UNDER
+  // the curved plateau on tier 0 has clearance. Four columns hugging
+  // the cell corners.
+  for (const sx of [-1, +1]) for (const sz of [-1, +1]) {
+    blocks.push({
+      kind: 'box',
+      size: [0.4, deckH, 0.4],
+      pos: [sx * (TILE / 2 - 0.2), deckH / 2, sz * (TILE / 2 - 0.2)],
+      color: WALL_COLOR,
+      solid: false,
+    });
+  }
   return blocks;
 }
 
@@ -621,6 +620,15 @@ export function getFootprint(key) {
 // collide, which is what lets a road run UNDER a bridge deck. Per-cell
 // tiers are listed in the same order as `getFootprint`. Default = all 0.
 const CELL_TIERS = {
+  // Plateau-family decks sit on the MID tier (1) so a ground road can
+  // pass beneath them (mirrors the bridge → ground tier system).
+  plateau:         [1],
+  curved_plateau:  [1],
+  curved_plateauR: [1],
+  // Ramp_up climbs ground (cell 0) → plateau (cell 1). Cell 1 is on the
+  // upper tier so a straight road can pass beneath the elevated end.
+  ramp_up:         [0, 1],
+  ramp_down:       [1, 0],
   // Bridge deck spans cells (0,0)+(0,1) entirely on the TOP tier (2).
   bridge:         [2, 2],
   // bridge_onramp climbs ground → top across BRIDGE_RAMP_CELLS cells:
