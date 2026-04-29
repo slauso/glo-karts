@@ -32,11 +32,12 @@ export class Track {
     const cells = getFootprint(key);
     const safeRot = Number.isFinite(rot) ? rot : 0;
     return cells.map(([fx, fz]) => {
-      // rotate footprint offset around (0,0)
+      // rotate footprint offset around (0,0). Sign matches mesh.rotation.y =
+      // -rot * π/2: R_y(-π/2) sends (0,0,1) → (-1,0,0), so (fx,fz) → (-fz, fx).
       const r = ((safeRot % 4) + 4) % 4;
       let ox = fx, oz = fz;
       for (let i = 0; i < r; i++) {
-        const nx = oz; const nz = -ox;
+        const nx = -oz; const nz = ox;
         ox = nx; oz = nz;
       }
       return [gx + ox, gz + oz];

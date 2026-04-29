@@ -600,12 +600,16 @@ export function rotateSide(side, rot) {
   return SIDE_CW[(i + r) % 4];
 }
 
-/** Rotate a local cell offset (fx, fz) by `rot` quarter-turns about origin. */
+/** Rotate a local cell offset (fx, fz) by `rot` quarter-turns about origin.
+ *  Matches the actual mesh rotation `mesh.rotation.y = -rot * π/2`, so that
+ *  the cells claimed by a rotated multi-cell footprint coincide with the
+ *  world position of its rendered geometry. R_y(-π/2) sends (0,0,1) →
+ *  (-1,0,0), so per quarter-turn (fx,fz) → (-fz, fx). */
 export function rotateCell(fx, fz, rot) {
   const r = _normRot(rot);
   let ox = fx, oz = fz;
   for (let i = 0; i < r; i++) {
-    const nx = oz; const nz = -ox;
+    const nx = -oz; const nz = ox;
     ox = nx; oz = nz;
   }
   return [ox, oz];
