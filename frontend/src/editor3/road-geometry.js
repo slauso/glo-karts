@@ -632,14 +632,28 @@ function curbAlongPath(path, sideSign, opts = {}) {
     const cy = (pA.y + pB.y) / 2;
     const cz = (pA.z + pB.z) / 2;
     const dx = pB.x - pA.x;
+    const dy = pB.y - pA.y;
     const dz = pB.z - pA.z;
-    const chordLen = Math.hypot(dx, dz);
+    const horizLen = Math.hypot(dx, dz);
+    // Full 3D chord length so stones butt continuously up/down hills with
+    // no visual gap. Pitch the stone around its local X axis so it lies
+    // flush against the road's vertical slope (positive pitch tips the
+    // +Z end of the box down to match a descending road, etc.).
+    const chordLen = Math.hypot(horizLen, dy);
     if (chordLen < 1e-6) continue;
     const yaw = Math.atan2(dx, dz);
+    const pitch = Math.atan2(-dy, horizLen || 1);
     const stone = new THREE.BoxGeometry(CURB_STRIPE_WIDTH, CURB_STRIPE_HEIGHT, chordLen);
     const m = new THREE.Mesh(stone, i % 2 === 0 ? MATS.curbRed : MATS.curbWhite);
-    m.position.set(cx, ROAD_THICK + cy + CURB_STRIPE_HEIGHT / 2, cz);
-    m.rotation.y = yaw;
+    // Lift the stone perpendicular to the deck surface so the bottom face
+    // rides ON the curve top (not buried into nor floating above it). The
+    // chord midpoint cy already tracks the centerline; add ROAD_THICK to
+    // reach the deck top, then halfH·cos(pitch) along the deck's local up
+    // (whose world-y component is cos(pitch)).
+    const halfH = CURB_STRIPE_HEIGHT / 2;
+    const liftY = ROAD_THICK + halfH * Math.cos(pitch);
+    m.position.set(cx, cy + liftY, cz);
+    m.rotation.set(pitch, yaw, 0, 'YXZ');
     m.castShadow = true; m.receiveShadow = true;
     grp.add(m);
   }
@@ -791,20 +805,6 @@ function buildBump() {
   const path = pathFromPoints(pts);
   grp.add(extrudeRoad(path, { steps: 30 }));
   grp.add(curbsBothSides(path));
-  // Red/white speed-bump warning stripes across the apex
-  const stripeCount = 6;
-  for (let i = 0; i < stripeCount; i++) {
-    const stripe = new THREE.Mesh(
-      new THREE.BoxGeometry(ROAD_WIDTH / stripeCount * 0.92, 0.04, 0.6),
-      i % 2 === 0 ? MATS.curbRed : MATS.curbWhite,
-    );
-    stripe.position.set(
-      -ROAD_WIDTH / 2 + (i + 0.5) * (ROAD_WIDTH / stripeCount),
-      0.45 + ROAD_THICK + 0.03,
-      0,
-    );
-    grp.add(stripe);
-  }
   return grp;
 }
 
