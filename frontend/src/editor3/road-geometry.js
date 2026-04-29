@@ -736,6 +736,80 @@ function buildCorner(mirror) {
   return grp;
 }
 
+function buildCurvedPlateau(mirror) {
+  // Raised L-bend at plateau height (TILE * 0.6). Same arc as
+  // buildCorner, lifted onto piers and railed like the straight
+  // plateau visual so the two pieces tile together visually.
+  const grp = new THREE.Group();
+  const deckH = TILE * 0.6;
+  const cx = mirror ? +TILE / 2 : -TILE / 2;
+  const cz = -TILE / 2;
+  const r = TILE / 2;
+  const a0 = mirror ? Math.PI : 0;
+  const a1 = Math.PI / 2;
+  const path = arcPath3(cx, cz, r, a0, a1, deckH, 18);
+  grp.add(extrudeRoad(path, { steps: 18 }));
+  grp.add(curbAlongPath(path, mirror ? -1 : +1));
+  const inner = curbAlongPath(path, mirror ? +1 : -1);
+  inner.children.forEach(c => { c.scale.set(0.65, 0.7, 1.0); });
+  grp.add(inner);
+  grp.add(dashedPaintAlongPath(path));
+  // Side guardrails along inner & outer edges of the curve — the inner
+  // side has the smaller radius (r - halfWidth), the outer side larger.
+  const halfW = ROAD_WIDTH / 2 - 0.05;
+  const yRail = deckH + ROAD_THICK + WALL_HEIGHT * 0.55;
+  for (const sign of [-1, +1]) {
+    const railR = r + sign * halfW;
+    if (railR <= 0.1) continue;
+    // Build a CatmullRom curve sampled along the arc — TubeGeometry
+    // requires Frenet frames which arcPath3's custom curve doesn't
+    // expose, so we resample as a CatmullRomCurve3 instead.
+    const samples = 14;
+    const pts = [];
+    for (let i = 0; i <= samples; i++) {
+      const t = i / samples;
+      const a = a0 + (a1 - a0) * t;
+      pts.push([cx + Math.cos(a) * railR, yRail, cz + Math.sin(a) * railR]);
+    }
+    const railPath = pathFromPoints(pts);
+    const tube = new THREE.TubeGeometry(railPath, samples, 0.08, 6, false);
+    grp.add(new THREE.Mesh(tube, MATS.guardrail));
+    for (let i = 0; i < 5; i++) {
+      const t = (i + 0.5) / 5;
+      const p = railPath.getPointAt(t);
+      const post = new THREE.Mesh(
+        new THREE.BoxGeometry(0.12, WALL_HEIGHT, 0.12),
+        MATS.guardrail,
+      );
+      post.position.set(p.x, p.y - WALL_HEIGHT * 0.4, p.z);
+      grp.add(post);
+    }
+  }
+  // Concrete piers under the deck. Place one at the entry edge (-Z) and
+  // one at the exit edge (-X for L, +X for R), plus an apex pier under
+  // the middle of the arc, matching plateau's columnar pier language.
+  const exitX = mirror ? +1 : -1;
+  const pierPositions = [
+    [0, -TILE / 2 + 0.6],                  // entry mid-edge
+    [exitX * (TILE / 2 - 0.6), 0],         // exit mid-edge
+    // Apex pier — point on arc at midway angle
+    [
+      cx + Math.cos((a0 + a1) / 2) * r * 0.65,
+      cz + Math.sin((a0 + a1) / 2) * r * 0.65,
+    ],
+  ];
+  for (const [px, pz] of pierPositions) {
+    const col = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.55, 0.7, deckH, 16),
+      MATS.concrete,
+    );
+    col.position.set(px, deckH / 2, pz);
+    col.castShadow = true; col.receiveShadow = true;
+    grp.add(col);
+  }
+  return grp;
+}
+
 function buildBanked(mirror) {
   // Single-cell 90° banked corner with a CONCAVE BOWL cross-section.
   // Instead of a flat tilted deck plus an outer barrier, the deck itself
@@ -1492,6 +1566,8 @@ export const VISUAL_BUILDERS = {
     }
     return g;
   },
+  curved_plateau:  () => buildCurvedPlateau(false),
+  curved_plateauR: () => buildCurvedPlateau(true),
   bridge:          () => { const g = buildBridge(); g.position.z = TILE / 2; return g; },
   bridge_onramp:   () => { const g = buildBridgeRamp('up'); g.position.z = TILE / 2; return g; },
   bridge_offramp:  () => { const g = buildBridgeRamp('down'); g.position.z = TILE / 2; return g; },

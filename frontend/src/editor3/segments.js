@@ -152,6 +152,24 @@ export const SEGMENTS = {
     ],
   },
 
+  // Raised L-bend curve at the same height as `plateau` so the two pieces
+  // tile together to form elevated road circuits. Same connector layout
+  // as `corner` (S→W) lifted by TILE*0.6. The drivable deck is a full-cell
+  // box matching plateau's footprint so karts transition smoothly between
+  // straight plateau tiles and curved plateau tiles.
+  curved_plateau: {
+    label: 'Curved Plateau L',
+    category: 'height',
+    span: { x: 1, z: 1 },
+    blocks: curvedPlateauBlocks(false),
+  },
+  curved_plateauR: {
+    label: 'Curved Plateau R',
+    category: 'height',
+    span: { x: 1, z: 1 },
+    blocks: curvedPlateauBlocks(true),
+  },
+
   finish: {
     label: 'Finish',
     category: 'special',
@@ -336,8 +354,69 @@ function cornerBlocks(mirror) {
   return blocks;
 }
 
+function curvedPlateauBlocks(mirror) {
+  // Raised L-bend at the same height as `plateau` (TILE*0.6). Drivable
+  // deck fills the whole cell so it tiles seamlessly with adjacent
+  // plateau / curved_plateau tiles. Inside-edge curb stripes telegraph
+  // turn direction, mirroring `cornerBlocks`. Two pier columns under the
+  // -X/+X edges (or +X/-X for R) so the deck visibly rests on supports
+  // matching plateau's pillar language.
+  const blocks = [];
+  const deckH = TILE * 0.6;
+  // Elevated full-cell deck
+  blocks.push({
+    kind: 'box',
+    size: [TILE, ROAD_THICK, TILE],
+    pos: [0, deckH + ROAD_THICK / 2, 0],
+    color: ROAD_COLOR,
+    drivable: true,
+  });
+  // Inside-edge curb (telegraph the turn). For L (mirror=false): inside
+  // corner at (-TILE/2, -TILE/2). For R (mirror=true): inside at
+  // (+TILE/2, -TILE/2).
+  const insideX = mirror ? +TILE / 2 : -TILE / 2;
+  const insideZ = -TILE / 2;
+  const STRIPES = 5;
+  const stripeLen = 0.55;
+  for (let i = 0; i < STRIPES; i++) {
+    const t = (i + 0.5) / STRIPES;
+    // Arc center at the OUTSIDE corner; sample stripes along the inside
+    // arc of radius TILE * 0.15 from the inside corner.
+    const angle = mirror
+      ? -(Math.PI / 2) * t                  // R: inside arc from -Z to +X
+      : Math.PI + (Math.PI / 2) * t;        // L: inside arc from -Z to -X
+    const R = TILE * 0.15;
+    const px = insideX + Math.cos(angle) * R;
+    const pz = insideZ + Math.sin(angle) * R;
+    blocks.push({
+      kind: 'box',
+      size: [0.18, 0.06, stripeLen],
+      pos: [px, deckH + ROAD_THICK + 0.03, pz],
+      rotY: angle + Math.PI / 2,
+      color: i % 2 === 0 ? CURB_R : CURB_W,
+      solid: false,
+    });
+  }
+  // Two pier walls under the deck along the entry edge (-Z) and the exit
+  // edge (-X for L, +X for R). Same pillar style as `plateau`.
+  blocks.push({
+    kind: 'box',
+    size: [ROAD_WIDTH * 0.8, deckH, 0.3],
+    pos: [0, deckH / 2, -TILE / 2 + 0.15],
+    color: WALL_COLOR,
+  });
+  // Exit-edge pier (rotated 90° to lie along the X-aligned cell edge)
+  const exitX = mirror ? +TILE / 2 - 0.15 : -TILE / 2 + 0.15;
+  blocks.push({
+    kind: 'box',
+    size: [0.3, deckH, ROAD_WIDTH * 0.8],
+    pos: [exitX, deckH / 2, 0],
+    color: WALL_COLOR,
+  });
+  return blocks;
+}
+
 function rampBlocks(yStart, yEnd, lengthZ) {
-  // Single tilted box bridging start->end heights along Z.
   // The kart drives on its top face.
   const dy = yEnd - yStart;
   const dz = lengthZ;
@@ -570,6 +649,10 @@ const CONNECTORS = {
   ramp_up:         [{ x: 0, z: 0, side: 'S' }, { x: 0, z: 1, side: 'N' }],
   ramp_down:       [{ x: 0, z: 0, side: 'S' }, { x: 0, z: 1, side: 'N' }],
   plateau:         SN,
+  // Curved plateaus mirror the corner connectors so they tile with both
+  // straight plateau pieces (entry/exit S+N) and other curved plateaus.
+  curved_plateau:  [{ x: 0, z: 0, side: 'S' }, { x: 0, z: 0, side: 'W' }],
+  curved_plateauR: [{ x: 0, z: 0, side: 'S' }, { x: 0, z: 0, side: 'E' }],
   finish:          SN,
   spawn:           SN,
   // Wide 2x2 plaza — open on every outer edge.
