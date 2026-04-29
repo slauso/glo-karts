@@ -271,57 +271,81 @@ const TEX_SCALE = 4.0;
 // Banked variant of extrudeRoad. `bankFn(t)` returns a roll angle (radians)
 // at parameter t in [0,1] along the path. `outerSign` is +1 if the outside
 // of the bank is on the +perp side of the path tangent, -1 otherwise.
-// The cross-section is rolled around the local tangent axis so the outside
-// edge lifts and the inside edge stays at deck level.
+//
+// Cross-section (in the perp/y plane, with origin at the inner edge at
+// ground level, perp pointing toward the outer side of the bank):
+//   A = inner-bottom : (0, 0)
+//   B = outer-bottom : (W, 0)                    — kept FLAT on ground
+//   C = outer-top    : (W·cos(b), t + W·sin(b))  — lifts with bank
+//   D = inner-top    : (0, t)                    — stays at deck height
+// The TOP face A→D→C→B (D-C is the drivable deck) tilts up on the outer
+// side. The bottom rests on the ground so nothing floats. At b=0 the
+// section degenerates to the flat extrudeRoad rectangle (perfect edge-
+// to-edge alignment with adjacent straights/corners).
 function extrudeRoadBanked(path, bankFn, outerSign, opts = {}) {
   const width = opts.width ?? ROAD_WIDTH;
-  const halfW = width / 2;
+  const W = width;
   const thickness = opts.thickness ?? ROAD_THICK;
   const segments = opts.steps || Math.max(24, Math.ceil(path.getLength() / 0.6));
   const N = segments + 1;
   const positions = [];
   const uvs = [];
   const indices = [];
+  // Vertex ordering per cross-section: 0=A inner-bot, 1=B outer-bot,
+  // 2=C outer-top, 3=D inner-top. We extrude these 4 vertices along the path
+  // and stitch triangles between consecutive sections.
   for (let i = 0; i < N; i++) {
     const t = i / segments;
     const p = path.getPointAt(t);
     const tan = path.getTangentAt(t);
-    // Perpendicular in XZ
-    const px = -tan.z, pz = tan.x;
-    const plen = Math.hypot(px, pz) || 1;
-    const nx = px / plen, nz = pz / plen;
+    // Perpendicular in XZ pointing OUTWARD (toward the lifted edge)
+    const ppx = -tan.z * outerSign, ppz = tan.x * outerSign;
+    const plen = Math.hypot(ppx, ppz) || 1;
+    const ox = ppx / plen, oz = ppz / plen;
     const bank = bankFn(t);
-    // Offsets for left/right edges, with outside edge raised
-    // Edge along +perp gets sign = +1; edge along -perp gets sign = -1.
-    // Outside edge lifts; inside edge stays at deck level.
-    const liftPlus = (outerSign === +1) ? halfW * Math.sin(bank) : 0;
-    const liftMinus = (outerSign === -1) ? halfW * Math.sin(bank) : 0;
+    const cosB = Math.cos(bank);
+    const sinB = Math.sin(bank);
     const yBase = p.y || 0;
-    const lx = p.x - nx * halfW, lz = p.z - nz * halfW;
-    const rx = p.x + nx * halfW, rz = p.z + nz * halfW;
-    const yL = yBase + liftMinus;
-    const yR = yBase + liftPlus;
-    positions.push(lx, yL + thickness, lz);
-    positions.push(rx, yR + thickness, rz);
-    positions.push(lx, yL, lz);
-    positions.push(rx, yR, rz);
+    // Inner edge (origin of local frame)
+    const ix = p.x - ox * (W / 2);
+    const iz = p.z - oz * (W / 2);
+    // Outer edge — bottom kept on ground; top rotated about inner-top axis.
+    const obX = ix + ox * W, obZ = iz + oz * W;        // B outer-bot
+    const otX = ix + ox * (W * cosB), otZ = iz + oz * (W * cosB); // C outer-top XZ
+    const yA = yBase, yB = yBase, yC = yBase + thickness + W * sinB, yD = yBase + thickness;
+    positions.push(ix, yA, iz);  // A inner-bot
+    positions.push(obX, yB, obZ); // B outer-bot
+    positions.push(otX, yC, otZ); // C outer-top
+    positions.push(ix, yD, iz);   // D inner-top
     const sUV = TEX_SCALE;
-    uvs.push(lx / sUV, lz / sUV);
-    uvs.push(rx / sUV, rz / sUV);
-    uvs.push(lx / sUV, lz / sUV);
-    uvs.push(rx / sUV, rz / sUV);
+    uvs.push(ix / sUV, iz / sUV);
+    uvs.push(obX / sUV, obZ / sUV);
+    uvs.push(otX / sUV, otZ / sUV);
+    uvs.push(ix / sUV, iz / sUV);
   }
   for (let i = 0; i < segments; i++) {
-    const a = i * 4, b = (i + 1) * 4;
-    indices.push(a, b, a + 1);
-    indices.push(a + 1, b, b + 1);
-    indices.push(a + 2, a + 3, b + 2);
-    indices.push(a + 3, b + 3, b + 2);
-    indices.push(a, a + 2, b);
-    indices.push(a + 2, b + 2, b);
-    indices.push(a + 1, b + 1, a + 3);
-    indices.push(b + 1, b + 3, a + 3);
+    const k = i * 4, j = (i + 1) * 4;
+    // Top face (drivable): D→C, between sections k & j
+    indices.push(k + 3, j + 3, k + 2);
+    indices.push(k + 2, j + 3, j + 2);
+    // Bottom face (under): A→B (reversed winding)
+    indices.push(k + 0, k + 1, j + 0);
+    indices.push(k + 1, j + 1, j + 0);
+    // Inner side: A→D
+    indices.push(k + 0, j + 0, k + 3);
+    indices.push(k + 3, j + 0, j + 3);
+    // Outer slope: B→C
+    indices.push(k + 1, k + 2, j + 1);
+    indices.push(k + 2, j + 2, j + 1);
   }
+  // Cap the open ends so daylight isn't visible through the cross-section.
+  const lastBase = (N - 1) * 4;
+  // Start cap (winding so outward-facing normal points along -tangent):
+  indices.push(0, 2, 1);
+  indices.push(0, 3, 2);
+  // End cap (opposite winding):
+  indices.push(lastBase + 0, lastBase + 1, lastBase + 2);
+  indices.push(lastBase + 0, lastBase + 2, lastBase + 3);
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
   geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
@@ -347,36 +371,46 @@ const CURB_STRIPE_WIDTH = 0.55;
 // `bankFn` returns the roll angle. `outerSign` is which side is outside.
 //
 // Stripe length is computed from the path length so adjacent stripes touch
-// → continuous red/white barrier (no gaps). Outer-side stripes lift with
-// the deck bank.
+// → continuous red/white barrier (no gaps). Outer-side stripes ride the
+// tilted top edge of the wedge cross-section (radius shrinks to W·cos(b),
+// height rises to (W/2)·sin(b)). Inner-side stripes stay flat.
 function curbAlongPathBanked(path, sideSign, bankFn, outerSign, opts = {}) {
   const grp = new THREE.Group();
   const total = path.getLength();
   const count = Math.max(2, Math.round(total / CURB_STRIPE_LEN));
   const stripeLen = total / count;
-  const offset = (ROAD_WIDTH / 2) - CURB_STRIPE_WIDTH / 2;
   const halfW = ROAD_WIDTH / 2;
+  const curbHalf = CURB_STRIPE_WIDTH / 2;
   const stone = new THREE.BoxGeometry(CURB_STRIPE_WIDTH, CURB_STRIPE_HEIGHT, stripeLen);
+  const isOuter = (sideSign === outerSign);
   for (let i = 0; i < count; i++) {
     const t = (i + 0.5) / count;
     const p = path.getPointAt(t);
     const tan = path.getTangentAt(t);
     const yaw = Math.atan2(tan.x, tan.z);
-    const nx = Math.cos(yaw) * sideSign;
-    const nz = -Math.sin(yaw) * sideSign;
+    // Outward-facing perpendicular in XZ (toward the lifted edge)
+    const perpLen = Math.hypot(-tan.z, tan.x) || 1;
+    const ox = (-tan.z / perpLen) * outerSign;
+    const oz = ( tan.x / perpLen) * outerSign;
     const bank = bankFn(t);
-    const lift = (sideSign === outerSign) ? halfW * Math.sin(bank) : 0;
+    const cosB = Math.cos(bank);
+    const sinB = Math.sin(bank);
+    // Outer edge top sits at radius halfW·cos(b) and height halfW·sin(b)
+    // above the deck. Inner edge stays flat at radius halfW.
+    const radial = isOuter ? (halfW * cosB - curbHalf) : -(halfW - curbHalf);
+    const lift   = isOuter ? (halfW * sinB) : 0;
+    const cx = p.x + ox * radial;
+    const cz = p.z + oz * radial;
     const mat = opts.paint
       ? MATS.paintWhite
       : (i % 2 === 0 ? MATS.curbRed : MATS.curbWhite);
     const m = new THREE.Mesh(stone, mat);
-    m.position.set(
-      p.x + nx * offset,
-      ROAD_THICK + (p.y || 0) + CURB_STRIPE_HEIGHT / 2 + lift,
-      p.z + nz * offset,
-    );
+    m.position.set(cx, ROAD_THICK + (p.y || 0) + CURB_STRIPE_HEIGHT / 2 + lift, cz);
     m.rotation.y = yaw;
-    if (sideSign === outerSign) m.rotation.z = -bank;
+    // Tilt the outer stripe so its long axis lies flush against the
+    // tilted deck face. The roll axis is the path tangent (local Z after
+    // the yaw rotation), so we rotate about local Z by the bank angle.
+    if (isOuter) m.rotation.z = -bank;
     if (opts.paint) m.scale.set(0.4, 0.3, 1.0);
     m.castShadow = true; m.receiveShadow = true;
     grp.add(m);
@@ -537,11 +571,15 @@ function buildCorner(mirror) {
 }
 
 function buildBanked(mirror) {
-  // Single-cell 90° banked corner. Same arc as buildCorner but the deck is
-  // tilted so the OUTSIDE edge of the arc is lifted. The bank is baked into
-  // the geometry via extrudeRoadBanked — no concrete plinth or buttress is
-  // parked underneath, so nothing floats. Bank eases in/out so the entry
-  // and exit lie flat against neighbouring straights.
+  // Single-cell 90° banked corner. Same arc as buildCorner but the deck
+  // tilts up on the OUTSIDE edge of the bend so karts can carry more
+  // speed through the apex. The bank is baked into the geometry via
+  // extrudeRoadBanked using a wedge cross-section: the underside is flat
+  // at ground level (no floating, no buttress required) and the top deck
+  // tilts about the inner-edge axis. The bank EASES smoothly to zero at
+  // both endpoints (bankFn(0)=bankFn(1)=0), so the cross-section
+  // degenerates to the same flat ribbon used by `straight` and `corner`
+  // — guaranteeing perfect edge-to-edge alignment with adjacent tiles.
   const grp = new THREE.Group();
   const cx = mirror ? +TILE / 2 : -TILE / 2;
   const cz = -TILE / 2;
@@ -549,18 +587,29 @@ function buildBanked(mirror) {
   const a0 = mirror ? Math.PI : 0;
   const a1 = Math.PI / 2;
   const path = arcPath3(cx, cz, r, a0, a1, 0, 24);
-  const BANK = Math.PI / 9; // ~20° at apex
-  const bankFn = (t) => Math.sin(Math.min(1, Math.max(0, t)) * Math.PI) * BANK;
-  // Outside-of-arc direction: opposite to the side the arc center is on.
-  // mirror=false → center at -X → outside is +X; mirror=true → outside is -X.
-  const outerSign = mirror ? -1 : +1;
-  grp.add(extrudeRoadBanked(path, bankFn, outerSign, { steps: 40 }));
+  const BANK_MAX = Math.PI / 9; // ~20° at apex
+  // Smooth ease in/out via sin(t·π): zero at t=0 and t=1, peak at t=0.5.
+  const bankFn = (t) => {
+    const tt = Math.max(0, Math.min(1, t));
+    return Math.sin(tt * Math.PI) * BANK_MAX;
+  };
+  // Outward direction = away from arc center.
+  // perp+ = (-tan.z, tan.x); at start of arc this points TOWARD the center
+  // (i.e. inward), so outerSign must FLIP perp to point outward.
+  // For mirror=false (CCW arc, center at -X, outside is +X): perp+=(-X) →
+  //   outerSign=-1 makes outward = +X. ✓
+  // For mirror=true (CW arc, center at +X, outside is -X): perp+=(-X) →
+  //   outerSign=+1 keeps outward = -X. ✓
+  const outerSign = mirror ? +1 : -1;
+  grp.add(extrudeRoadBanked(path, bankFn, outerSign, { steps: 48 }));
   // Outer (lifted) curb at full size; inner curb shrunk so the apex still
   // reads as the racing line.
   grp.add(curbAlongPathBanked(path, +outerSign, bankFn, outerSign));
   const inner = curbAlongPathBanked(path, -outerSign, bankFn, outerSign);
   inner.children.forEach(c => { c.scale.set(0.65, 0.7, 1.0); });
   grp.add(inner);
+  // Subtle racing-line dashes through the apex.
+  grp.add(dashedPaintAlongPath(path));
   return grp;
 }
 
