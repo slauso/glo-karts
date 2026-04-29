@@ -7,7 +7,7 @@
  * segments.js (which still use axis-aligned boxes).
  */
 import * as THREE from 'three';
-import { TILE, ROAD_WIDTH, ROAD_THICK, WALL_HEIGHT, WALL_THICK } from './segments.js';
+import { TILE, ROAD_WIDTH, ROAD_THICK, WALL_HEIGHT, WALL_THICK, PLATEAU_HEIGHT, BRIDGE_DECK_HEIGHT, BRIDGE_RAMP_CELLS } from './segments.js';
 
 // ── Materials (cached, shared) ────────────────────────────────────
 const TEX = (() => {
@@ -1016,13 +1016,12 @@ function buildJumpRamp() {
 
 function buildBridge() {
   // Elevated 1×2 deck on OPEN piers — must be hollow underneath so other
-  // road segments can pass beneath it (multi-level layouts). No spandrel
-  // walls, no closed base. Deck is carried by 3 pairs of slim concrete
-  // columns at the entry, midspan, and exit. Cross-beams cap each pair so
-  // it reads as a structural bent rather than four floating sticks.
+  // road segments (including plateau roads on the middle tier) can pass
+  // beneath it. No spandrel walls, no closed base. Deck is carried by 3
+  // pairs of slim concrete columns at the entry, midspan, and exit.
   const grp = new THREE.Group();
   const lengthZ = TILE * 2;
-  const deckH = TILE * 0.6;
+  const deckH = BRIDGE_DECK_HEIGHT;
   const cz = lengthZ / 2 - TILE / 2;
   // Elevated drivable deck + curbs (continuous red/white barrier)
   const path = linePath([0, deckH, -TILE / 2], [0, deckH, lengthZ - TILE / 2]);
@@ -1095,9 +1094,11 @@ function buildBridge() {
 }
 
 function buildBridgeRamp(direction) {
-  // direction: 'up' => 0 → deckH, 'down' => deckH → 0
-  const deckH = TILE * 0.6;
-  return direction === 'up' ? buildRamp(0, deckH, 2) : buildRamp(deckH, 0, 2);
+  // direction: 'up' => 0 → BRIDGE_DECK_HEIGHT, 'down' => reversed.
+  // Spans BRIDGE_RAMP_CELLS cells so the climb stays gradual.
+  const deckH = BRIDGE_DECK_HEIGHT;
+  const cells = BRIDGE_RAMP_CELLS;
+  return direction === 'up' ? buildRamp(0, deckH, cells) : buildRamp(deckH, 0, cells);
 }
 
 function buildTunnel() {

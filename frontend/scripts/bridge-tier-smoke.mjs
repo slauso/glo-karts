@@ -46,37 +46,40 @@ const cases = await p.evaluate(() => {
     ok: !!a && !b2,
   });
 
-  // Case 4: bridge_onramp at (0,0..0,1): cell (0,1) is deck → another deck
-  // piece at (0,1) must be blocked, but a ground straight at (0,0) (under
-  // the on-ramp's foot which IS ground) is itself blocked. A ground
-  // straight at (0,1) however IS allowed (under the elevated end).
+  // Case 4: bridge_onramp spans BRIDGE_RAMP_CELLS cells (0,0)..(0,3).
+  //   cell (0,0) = ground tier (foot)
+  //   cells (0,1)+(0,2) = mid tier (1)
+  //   cell (0,3) = top tier (2) (deck end)
+  // A ground straight at (0,0) collides with the ramp foot. A ground
+  // straight at (0,3) is allowed (under the elevated deck end).
   track.clear();
-  track.place('bridge_onramp', 0, 0, 0); // ground at z=0, deck at z=1
+  track.place('bridge_onramp', 0, 0, 0);
   const groundAtFoot = track.place('straight', 0, 0, 0); // foot is ground → conflict
-  const groundAtTopFoot = track.place('straight', 0, 1, 0); // under elevated end → ok
+  const groundAtTopFoot = track.place('straight', 0, 3, 0); // under elevated end → ok
   out.push({
     name: 'bridge_onramp foot blocks ground at z=0',
     ok: !groundAtFoot,
   });
   out.push({
-    name: 'bridge_onramp elevated end clear at ground z=1',
+    name: 'bridge_onramp elevated end clear at ground z=3',
     ok: !!groundAtTopFoot,
   });
 
-  // Case 5: bridge chain — onramp(0,0) → bridge(0,2) → offramp(0,4),
-  // all rotated so they line up south→north along Z. Confirm none collide.
+  // Case 5: bridge chain — onramp(0,0..3) → bridge(0,4..5) →
+  // offramp(0,6..9), all rotated so they line up south→north along Z.
+  // Confirm none collide.
   track.clear();
   const r1 = track.place('bridge_onramp',  0, 0, 0);
-  const r2 = track.place('bridge',         0, 2, 0);
-  const r3 = track.place('bridge_offramp', 0, 4, 0);
+  const r2 = track.place('bridge',         0, 4, 0);
+  const r3 = track.place('bridge_offramp', 0, 6, 0);
   out.push({
     name: 'onramp → bridge → offramp chain places cleanly',
     ok: !!r1 && !!r2 && !!r3,
   });
 
-  // Case 6: a road UNDER the entire bridge span (0,2)+(0,3) at ground.
-  const under1 = track.place('straight', 0, 2, 0);
-  const under2 = track.place('straight', 0, 3, 0);
+  // Case 6: a road UNDER the entire bridge span (0,4)+(0,5) at ground.
+  const under1 = track.place('straight', 0, 4, 0);
+  const under2 = track.place('straight', 0, 5, 0);
   out.push({
     name: 'straights pass under bridge span at ground tier',
     ok: !!under1 && !!under2,

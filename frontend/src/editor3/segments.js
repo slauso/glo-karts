@@ -25,6 +25,16 @@ export const ROAD_WIDTH = TILE * 0.9;
 export const ROAD_THICK = 0.5;
 export const WALL_HEIGHT = 1.6;
 export const WALL_THICK = 0.5;
+// Vertical tier heights — used by bridge / plateau / ramps so the three
+// drivable levels stay in sync between collision blocks and visuals.
+//   tier 0 = ground (y = 0)
+//   tier 1 = plateau (y = PLATEAU_HEIGHT)
+//   tier 2 = bridge deck (y = BRIDGE_DECK_HEIGHT)
+export const PLATEAU_HEIGHT = TILE * 0.6;
+export const BRIDGE_DECK_HEIGHT = TILE * 1.2;
+// Bridge on/off ramps span this many cells so the climb stays gradual
+// (rise / run = BRIDGE_DECK_HEIGHT / (BRIDGE_RAMP_CELLS * TILE) ≈ 0.30).
+export const BRIDGE_RAMP_CELLS = 4;
 
 /**
  * @typedef {Object} Block
@@ -260,24 +270,30 @@ export const SEGMENTS = {
     })),
   },
 
-  // ── Bridge (deck spans 1×2 elevated) ─────────────────────────
+  // ── Bridge (deck spans 1×2 elevated, top tier) ───────────────
+  // Bridge deck sits at BRIDGE_DECK_HEIGHT (= 2× plateau height) so a
+  // plateau road can pass UNDER the bridge while the bridge itself
+  // remains the highest drivable level on the track.
   bridge: {
     label: 'Bridge',
     category: 'height',
     span: { x: 1, z: 2 },
-    blocks: bridgeBlocks(TILE * 0.6, TILE * 2),
+    blocks: bridgeBlocks(BRIDGE_DECK_HEIGHT, TILE * 2),
   },
+  // Bridge ramps stretch across BRIDGE_RAMP_CELLS cells (default 4) so
+  // the climb to the upper deck is gradual enough for karts to traverse
+  // without losing speed at the lip.
   bridge_onramp: {
     label: 'Bridge On-Ramp',
     category: 'height',
-    span: { x: 1, z: 2 },
-    blocks: rampBlocks(0, TILE * 0.6, TILE * 2),
+    span: { x: 1, z: BRIDGE_RAMP_CELLS },
+    blocks: rampBlocks(0, BRIDGE_DECK_HEIGHT, TILE * BRIDGE_RAMP_CELLS),
   },
   bridge_offramp: {
     label: 'Bridge Off-Ramp',
     category: 'height',
-    span: { x: 1, z: 2 },
-    blocks: rampBlocks(TILE * 0.6, 0, TILE * 2),
+    span: { x: 1, z: BRIDGE_RAMP_CELLS },
+    blocks: rampBlocks(BRIDGE_DECK_HEIGHT, 0, TILE * BRIDGE_RAMP_CELLS),
   },
 
   // ── Tunnel (straight + arched roof) ──────────────────────────
@@ -605,12 +621,15 @@ export function getFootprint(key) {
 // collide, which is what lets a road run UNDER a bridge deck. Per-cell
 // tiers are listed in the same order as `getFootprint`. Default = all 0.
 const CELL_TIERS = {
-  // Bridge deck spans cells (0,0)+(0,1) entirely on the upper tier.
-  bridge:         [1, 1],
-  // bridge_onramp goes from ground at (0,0) up to deck at (0,1).
-  bridge_onramp:  [0, 1],
-  // bridge_offramp goes from deck at (0,0) down to ground at (0,1).
-  bridge_offramp: [1, 0],
+  // Bridge deck spans cells (0,0)+(0,1) entirely on the TOP tier (2).
+  bridge:         [2, 2],
+  // bridge_onramp climbs ground → top across BRIDGE_RAMP_CELLS cells:
+  //   cell 0 = ground entry, cell 1-2 = mid (plateau tier), cell N = deck.
+  // The intermediate cells sit at tier 1 so a ground road can still pass
+  // beneath the upper half of the ramp.
+  bridge_onramp:  [0, 1, 1, 2],
+  // bridge_offramp = on-ramp reversed.
+  bridge_offramp: [2, 1, 1, 0],
 };
 
 /** Per-footprint-cell tier list (parallel to `getFootprint(key)`). */
@@ -681,8 +700,10 @@ const CONNECTORS = {
   hill_complete:   [{ x: 0, z: 0, side: 'S' }, { x: 0, z: 1, side: 'N' }],
   jump_ramp:       SN,
   bridge:          [{ x: 0, z: 0, side: 'S' }, { x: 0, z: 1, side: 'N' }],
-  bridge_onramp:   [{ x: 0, z: 0, side: 'S' }, { x: 0, z: 1, side: 'N' }],
-  bridge_offramp:  [{ x: 0, z: 0, side: 'S' }, { x: 0, z: 1, side: 'N' }],
+  // Bridge ramps now span BRIDGE_RAMP_CELLS cells; exit connector lives
+  // on the +Z side of the LAST cell (z = BRIDGE_RAMP_CELLS - 1).
+  bridge_onramp:   [{ x: 0, z: 0, side: 'S' }, { x: 0, z: BRIDGE_RAMP_CELLS - 1, side: 'N' }],
+  bridge_offramp:  [{ x: 0, z: 0, side: 'S' }, { x: 0, z: BRIDGE_RAMP_CELLS - 1, side: 'N' }],
   tunnel:          [{ x: 0, z: 0, side: 'S' }, { x: 0, z: 1, side: 'N' }],
   // End cap — closed on the +Z side by a wall, only S is drivable.
   cap_end:         [{ x: 0, z: 0, side: 'S' }],
