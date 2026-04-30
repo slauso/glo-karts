@@ -33,11 +33,17 @@ const data = await page.evaluate(async () => {
     const base = SEGMENTS[baseKey];
     const seg = SEGMENTS[k];
     const baseBlocks = base ? base.blocks : [];
-    // Only inspect the APPENDED wall blocks — base may already contain
-    // grey pillars/rails (plateau supports, bridge piers) that share the
-    // wall colour but aren't the new contour barriers.
-    const addedBlocks = seg.blocks.slice(baseBlocks.length);
-    const wallBlocks = addedBlocks.filter((b) => b.color === W);
+    // Walls = WALL_COLOR blocks present in walled but NOT in base. We
+    // can't slice by base length because the walled copy strips curb
+    // stripes, so we match on position triple instead.
+    const baseWallKeys = new Set(
+      baseBlocks
+        .filter((b) => b.color === W)
+        .map((b) => `${b.pos[0]},${b.pos[1]},${b.pos[2]}`)
+    );
+    const wallBlocks = seg.blocks.filter(
+      (b) => b.color === W && !baseWallKeys.has(`${b.pos[0]},${b.pos[1]},${b.pos[2]}`)
+    );
     const tilted = wallBlocks.filter((b) => Math.abs(b.rotX || 0) > 1e-4).length;
     // Lowest wall-block bottom Y
     let minWallBottom = Infinity;
@@ -51,11 +57,16 @@ const data = await page.evaluate(async () => {
       const top = b.pos[1] + b.size[1] / 2;
       if (top > maxWallTop) maxWallTop = top;
     }
+    const baseNonCurbCount = baseBlocks.filter(
+      (b) => b.color !== 0xd0312d && b.color !== 0xf0f0f0
+    ).length;
     out.push({
       key: k, baseKey,
       total: seg.blocks.length,
       baseCount: baseBlocks.length,
-      preservesBase: seg.blocks.length >= baseBlocks.length,
+      // Walled strips red/white curb stripes from the base copy, so the
+      // preservation check is against the curb-less subset.
+      preservesBase: seg.blocks.length >= baseNonCurbCount,
       wallCount: wallBlocks.length,
       tilted,
       minWallBottom,

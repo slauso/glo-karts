@@ -656,35 +656,39 @@ function bumpBlocks(height, lengthZcells) {
 
 function rollingHillBlocks(peakHeight, lengthZ) {
   // Up-and-over hill modelled as two opposing ramps meeting at the peak.
-  const halfL = lengthZ / 2;
-  const dy = peakHeight;
-  const len = Math.sqrt(dy * dy + halfL * halfL);
-  const angle = Math.atan2(dy, halfL);
+  // Each slope's HORIZONTAL projection equals one cell (TILE), so the two
+  // slopes together fill the full 2-cell footprint with no middle gap.
+  // Cell 0 spans local z=-TILE/2..+TILE/2 (up-slope centred at 0); cell 1
+  // spans +TILE/2..+3*TILE/2 (down-slope centred at +TILE). Peak filler
+  // sits at the seam between the two cells (z = TILE/2).
+  const cellLen = lengthZ / 2;                      // = TILE per slope
+  const slopeLen = Math.sqrt(peakHeight * peakHeight + cellLen * cellLen);
+  const angle = Math.atan2(peakHeight, cellLen);
   const cy = (peakHeight / 2) + ROAD_THICK / 2;
   return [
-    // up-slope (anchor cell, centred at -TILE/2 along ramp axis)
+    // up-slope (cell 0, centred at z=0)
     {
       kind: 'box',
-      size: [ROAD_WIDTH, ROAD_THICK, len],
-      pos: [0, cy, -halfL / 2],
+      size: [ROAD_WIDTH, ROAD_THICK, slopeLen],
+      pos: [0, cy, 0],
       rotX: -angle,
       color: ROAD_COLOR,
       drivable: true,
     },
-    // down-slope (centred at +TILE/2)
+    // down-slope (cell 1, centred at z=+cellLen)
     {
       kind: 'box',
-      size: [ROAD_WIDTH, ROAD_THICK, len],
-      pos: [0, cy, halfL / 2 + halfL],
+      size: [ROAD_WIDTH, ROAD_THICK, slopeLen],
+      pos: [0, cy, cellLen],
       rotX: angle,
       color: ROAD_COLOR,
       drivable: true,
     },
-    // peak filler so the meeting line isn't a sharp seam
+    // small peak filler bridging the seam between the two slopes
     {
       kind: 'box',
       size: [ROAD_WIDTH, ROAD_THICK * 1.5, TILE * 0.4],
-      pos: [0, peakHeight + ROAD_THICK / 2, halfL],
+      pos: [0, peakHeight + ROAD_THICK / 2, cellLen / 2],
       color: ROAD_COLOR,
       drivable: true,
     },
@@ -1113,28 +1117,27 @@ function buildWalls(key) {
     case 'hill_complete': {
       const peakHeight = T * 0.25;
       const lengthZ = T * 2;
-      const halfL = lengthZ / 2;
-      const dy = peakHeight;
-      const len = Math.sqrt(dy * dy + halfL * halfL);
-      const angle = Math.atan2(dy, halfL);
+      const cellLen = lengthZ / 2;                       // one slope per cell
+      const len = Math.sqrt(peakHeight * peakHeight + cellLen * cellLen);
+      const angle = Math.atan2(peakHeight, cellLen);
       const cyDeckCenter = (peakHeight / 2) + ROAD_THICK / 2;
       const yDeckTop = cyDeckCenter + ROAD_THICK / 2;
       const out = [];
       for (const sx of [-1, +1]) {
         const cx = sx * halfEdge;
-        // Up-slope (centred at z = -halfL/2, mirrors rollingHillBlocks)
+        // Up-slope wall (cell 0, centred at z=0)
         out.push(
           { kind: 'box', size: [W2_FOOT_T, W2_FOOT_H, len],
-            pos: [cx, yDeckTop + W2_FOOT_H / 2, -halfL / 2], rotX: -angle, color: WALL_COLOR },
+            pos: [cx, yDeckTop + W2_FOOT_H / 2, 0], rotX: -angle, color: WALL_COLOR },
           { kind: 'box', size: [W2_TOP_T,  W2_TOP_H,  len],
-            pos: [cx, yDeckTop + W2_FOOT_H + W2_TOP_H / 2, -halfL / 2], rotX: -angle, color: WALL_COLOR },
+            pos: [cx, yDeckTop + W2_FOOT_H + W2_TOP_H / 2, 0], rotX: -angle, color: WALL_COLOR },
         );
-        // Down-slope (centred at z = halfL/2 + halfL)
+        // Down-slope wall (cell 1, centred at z=+cellLen)
         out.push(
           { kind: 'box', size: [W2_FOOT_T, W2_FOOT_H, len],
-            pos: [cx, yDeckTop + W2_FOOT_H / 2, halfL / 2 + halfL], rotX: angle, color: WALL_COLOR },
+            pos: [cx, yDeckTop + W2_FOOT_H / 2, cellLen], rotX: angle, color: WALL_COLOR },
           { kind: 'box', size: [W2_TOP_T,  W2_TOP_H,  len],
-            pos: [cx, yDeckTop + W2_FOOT_H + W2_TOP_H / 2, halfL / 2 + halfL], rotX: angle, color: WALL_COLOR },
+            pos: [cx, yDeckTop + W2_FOOT_H + W2_TOP_H / 2, cellLen], rotX: angle, color: WALL_COLOR },
         );
       }
       return out;
@@ -1163,13 +1166,23 @@ function buildWalls(key) {
     const wallBlocks = buildWalls(baseKey);
     if (!wallBlocks || wallBlocks.length === 0) continue;
 
+    // Strip the small red/white curb stripes from the base when building
+    // the walled copy. The tall grey barriers already mark every closed
+    // edge, and a few of the base curb generators (notably corner /
+    // curved-plateau outer-arc stripes) place blocks slightly outside
+    // the cell footprint — harmless on the base segment but visible as
+    // floating debris next to the much taller walls. Drop them.
+    const baseSansCurbs = base.blocks.filter(
+      (b) => b.color !== CURB_R && b.color !== CURB_W
+    );
+
     const walledKey = `${baseKey}_walled`;
     SEGMENTS[walledKey] = {
       label: `${base.label} (Walled)`,
       category: 'walled',
       span: { x: base.span.x, z: base.span.z },
-      // Exact copy of the base segment + contour-matching tall barriers.
-      blocks: [...base.blocks, ...wallBlocks],
+      // Base geometry (decks, pillars, gantries) + contour-matching walls.
+      blocks: [...baseSansCurbs, ...wallBlocks],
     };
     if (base.isFinish) SEGMENTS[walledKey].isFinish = true;
     if (base.runtime) SEGMENTS[walledKey].runtime = base.runtime;
