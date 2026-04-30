@@ -938,37 +938,219 @@ const CONNECTORS = {
 
 // ── Walled variants ─────────────────────────────────────────────
 // Each non-overlay base segment is duplicated into a `${key}_walled`
-// twin. The variant is an EXACT copy of the base geometry except that
-// every red/white curb stripe is RAISED into a tall grey wall — same
-// position, same length, same orientation, just taller and recoloured.
-// Everything else (deck, connectors, runtime, tier, pillars, finish
-// gantry, etc.) is preserved verbatim, so a walled variant tiles
-// identically with its plain twin and drives identically as well.
-const WALLED_HEIGHT = 1.5;          // raised wall height (m)
-const WALLED_THICK_MIN = 0.5;       // minimum wall thickness (m)
+// twin. The variant is an EXACT copy of the base geometry (deck,
+// curbs, pillars, gantries — everything is preserved verbatim so the
+// walled twin drives identically) PLUS tall realistic barrier walls
+// that follow the contour of the segment:
+//
+//   - flat segments (straight, plateau, bridge, finish, bump, banked):
+//     vertical walls along every CLOSED cell edge
+//   - corners / curved plateaus: walls hugging the two perpendicular
+//     closed edges where the road bends
+//   - ramps + bridge on/off-ramps + jump ramp: tilted walls that
+//     follow the deck pitch end-to-end
+//   - rolling hill: two opposing tilted walls per side, meeting at
+//     the peak so the silhouette traces the up-and-over profile
+//   - tunnel / wide plaza / crossroads: skipped (already enclosed
+//     OR open on every side — no closed edge to wall)
+//
+// Each barrier is a two-tier concrete-style profile: a 0.8 m × 0.7 m
+// foundation block topped by a 2.4 m × 0.45 m wall, total ≈3.2 m —
+// tall enough to contain a hopping kart at full speed.
+const W2_FOOT_H = 0.8;
+const W2_FOOT_T = 0.7;
+const W2_TOP_H  = 2.4;
+const W2_TOP_T  = 0.45;
+const W2_INSET  = W2_FOOT_T / 2;     // wall sits flush with the cell edge
 
-function curbToWall(block) {
-  if (block.color !== CURB_R && block.color !== CURB_W) return block;
-  // Keep the bottom of the block anchored where the curb sat (= top of
-  // deck) so the wall grows UP from the curb's existing footprint.
-  const origH = block.size[1];
-  const origBottomY = block.pos[1] - origH / 2;
-  // Determine which axis is the stripe's LONG axis (= along the road
-  // edge) and widen ONLY the SHORT axis. Works for axis-aligned curbs
-  // as well as `rotY`-rotated corner stripes, since `size` is always in
-  // the block's local frame.
-  const sx = block.size[0];
-  const sz = block.size[2];
-  const longIsZ = sz >= sx;
-  const newSize = longIsZ
-    ? [Math.max(sx, WALLED_THICK_MIN), WALLED_HEIGHT, sz]
-    : [sx, WALLED_HEIGHT, Math.max(sz, WALLED_THICK_MIN)];
-  return {
-    ...block,
-    size: newSize,
-    pos: [block.pos[0], origBottomY + WALLED_HEIGHT / 2, block.pos[2]],
-    color: WALL_COLOR,
-  };
+/** Two-tier vertical wall. `length` runs along the wall axis, thickness
+ *  along the perpendicular axis. `axis` is 'z' (length along Z, thick
+ *  along X) or 'x' (length along X, thick along Z). `baseY` is the
+ *  TOP-OF-DECK Y the foundation rests on. */
+function tallWallStraight(length, cx, cz, baseY, axis) {
+  const out = [];
+  if (axis === 'z') {
+    out.push(
+      { kind: 'box', size: [W2_FOOT_T, W2_FOOT_H, length],
+        pos: [cx, baseY + W2_FOOT_H / 2, cz], color: WALL_COLOR },
+      { kind: 'box', size: [W2_TOP_T,  W2_TOP_H,  length],
+        pos: [cx, baseY + W2_FOOT_H + W2_TOP_H / 2, cz], color: WALL_COLOR },
+    );
+  } else {
+    out.push(
+      { kind: 'box', size: [length, W2_FOOT_H, W2_FOOT_T],
+        pos: [cx, baseY + W2_FOOT_H / 2, cz], color: WALL_COLOR },
+      { kind: 'box', size: [length, W2_TOP_H,  W2_TOP_T],
+        pos: [cx, baseY + W2_FOOT_H + W2_TOP_H / 2, cz], color: WALL_COLOR },
+    );
+  }
+  return out;
+}
+
+/** Tilted wall hugging a ramp deck. `sideX` is +1 or -1 selecting the
+ *  +X or -X long edge. The wall axis runs along Z, thickness along X,
+ *  and the whole stack tips by the ramp pitch via rotX so it stays
+ *  flush with the (tilted) deck surface across the full ramp length. */
+function tallWallRamp(yStart, yEnd, lengthZ, sideX) {
+  const dy = yEnd - yStart;
+  const length = Math.sqrt(dy * dy + lengthZ * lengthZ);
+  const angle = Math.atan2(dy, lengthZ);
+  // Same Y/Z anchor as the ramp deck itself (mirrors rampBlocks).
+  const cyDeckCenter = (yStart + yEnd) / 2 + ROAD_THICK / 2;
+  const yDeckTop = cyDeckCenter + ROAD_THICK / 2;
+  const cz = lengthZ / 2 - TILE / 2;
+  const cx = sideX * (TILE / 2 - W2_INSET);
+  return [
+    { kind: 'box', size: [W2_FOOT_T, W2_FOOT_H, length],
+      pos: [cx, yDeckTop + W2_FOOT_H / 2, cz], rotX: -angle, color: WALL_COLOR },
+    { kind: 'box', size: [W2_TOP_T,  W2_TOP_H,  length],
+      pos: [cx, yDeckTop + W2_FOOT_H + W2_TOP_H / 2, cz], rotX: -angle, color: WALL_COLOR },
+  ];
+}
+
+/** Build the wall set for one base segment. Returns `null` for segments
+ *  that should NOT have a walled variant (open-on-all-sides plazas,
+ *  already-enclosed tunnels, pickup/overlay, spawn). */
+function buildWalls(key) {
+  const T = TILE;
+  const halfEdge = T / 2 - W2_INSET;     // wall centre offset from cell centre
+  const groundDeckTop = ROAD_THICK;      // top of ground-tier deck
+
+  switch (key) {
+    // ── Flat single-cell straights ─────────────────────────────
+    case 'straight':
+    case 'finish':
+    case 'bump_up':
+    case 'banked_turn':
+      return [
+        ...tallWallStraight(T, +halfEdge, 0, groundDeckTop, 'z'),
+        ...tallWallStraight(T, -halfEdge, 0, groundDeckTop, 'z'),
+      ];
+
+    // End cap already has a +Z wall; add the two long sides.
+    case 'cap_end':
+      return [
+        ...tallWallStraight(T, +halfEdge, 0, groundDeckTop, 'z'),
+        ...tallWallStraight(T, -halfEdge, 0, groundDeckTop, 'z'),
+      ];
+
+    // ── Corners (closed edges = perpendicular outside L) ────────
+    // corner L: connectors S, W → closed N (+Z) and E (+X).
+    case 'corner':
+      return [
+        ...tallWallStraight(T, +halfEdge, 0, groundDeckTop, 'z'),  // E
+        ...tallWallStraight(T, 0, +halfEdge, groundDeckTop, 'x'),  // N
+      ];
+    // corner R: connectors S, E → closed N (+Z) and W (-X).
+    case 'cornerR':
+      return [
+        ...tallWallStraight(T, -halfEdge, 0, groundDeckTop, 'z'),  // W
+        ...tallWallStraight(T, 0, +halfEdge, groundDeckTop, 'x'),  // N
+      ];
+
+    // ── Plateau family (mid-tier deck) ─────────────────────────
+    case 'plateau': {
+      const yTop = PLATEAU_HEIGHT + ROAD_THICK;
+      return [
+        ...tallWallStraight(T, +halfEdge, 0, yTop, 'z'),
+        ...tallWallStraight(T, -halfEdge, 0, yTop, 'z'),
+      ];
+    }
+    case 'curved_plateau': {
+      const yTop = PLATEAU_HEIGHT + ROAD_THICK;
+      return [
+        ...tallWallStraight(T, +halfEdge, 0, yTop, 'z'),
+        ...tallWallStraight(T, 0, +halfEdge, yTop, 'x'),
+      ];
+    }
+    case 'curved_plateauR': {
+      const yTop = PLATEAU_HEIGHT + ROAD_THICK;
+      return [
+        ...tallWallStraight(T, -halfEdge, 0, yTop, 'z'),
+        ...tallWallStraight(T, 0, +halfEdge, yTop, 'x'),
+      ];
+    }
+
+    // ── Ramps (tilted walls following the deck pitch) ──────────
+    case 'ramp_up':
+      return [
+        ...tallWallRamp(0, T * 0.6, T * 2, +1),
+        ...tallWallRamp(0, T * 0.6, T * 2, -1),
+      ];
+    case 'ramp_down':
+      return [
+        ...tallWallRamp(T * 0.6, 0, T * 2, +1),
+        ...tallWallRamp(T * 0.6, 0, T * 2, -1),
+      ];
+    case 'jump_ramp':
+      return [
+        ...tallWallRamp(0, 1.2, T, +1),
+        ...tallWallRamp(0, 1.2, T, -1),
+      ];
+    case 'bridge_onramp':
+      return [
+        ...tallWallRamp(0, BRIDGE_DECK_HEIGHT, T * BRIDGE_RAMP_CELLS, +1),
+        ...tallWallRamp(0, BRIDGE_DECK_HEIGHT, T * BRIDGE_RAMP_CELLS, -1),
+      ];
+    case 'bridge_offramp':
+      return [
+        ...tallWallRamp(BRIDGE_DECK_HEIGHT, 0, T * BRIDGE_RAMP_CELLS, +1),
+        ...tallWallRamp(BRIDGE_DECK_HEIGHT, 0, T * BRIDGE_RAMP_CELLS, -1),
+      ];
+
+    // ── Bridge deck (top tier, two cells along Z) ──────────────
+    case 'bridge': {
+      const yTop = BRIDGE_DECK_HEIGHT + ROAD_THICK;
+      const length = T * 2;
+      const cz = length / 2 - T / 2;
+      return [
+        ...tallWallStraight(length, +halfEdge, cz, yTop, 'z'),
+        ...tallWallStraight(length, -halfEdge, cz, yTop, 'z'),
+      ];
+    }
+
+    // ── Rolling hill (up + down slope per side) ────────────────
+    case 'hill_complete': {
+      const peakHeight = T * 0.25;
+      const lengthZ = T * 2;
+      const halfL = lengthZ / 2;
+      const dy = peakHeight;
+      const len = Math.sqrt(dy * dy + halfL * halfL);
+      const angle = Math.atan2(dy, halfL);
+      const cyDeckCenter = (peakHeight / 2) + ROAD_THICK / 2;
+      const yDeckTop = cyDeckCenter + ROAD_THICK / 2;
+      const out = [];
+      for (const sx of [-1, +1]) {
+        const cx = sx * halfEdge;
+        // Up-slope (centred at z = -halfL/2, mirrors rollingHillBlocks)
+        out.push(
+          { kind: 'box', size: [W2_FOOT_T, W2_FOOT_H, len],
+            pos: [cx, yDeckTop + W2_FOOT_H / 2, -halfL / 2], rotX: -angle, color: WALL_COLOR },
+          { kind: 'box', size: [W2_TOP_T,  W2_TOP_H,  len],
+            pos: [cx, yDeckTop + W2_FOOT_H + W2_TOP_H / 2, -halfL / 2], rotX: -angle, color: WALL_COLOR },
+        );
+        // Down-slope (centred at z = halfL/2 + halfL)
+        out.push(
+          { kind: 'box', size: [W2_FOOT_T, W2_FOOT_H, len],
+            pos: [cx, yDeckTop + W2_FOOT_H / 2, halfL / 2 + halfL], rotX: angle, color: WALL_COLOR },
+          { kind: 'box', size: [W2_TOP_T,  W2_TOP_H,  len],
+            pos: [cx, yDeckTop + W2_FOOT_H + W2_TOP_H / 2, halfL / 2 + halfL], rotX: angle, color: WALL_COLOR },
+        );
+      }
+      return out;
+    }
+
+    // ── Open / pre-enclosed segments — no walled variant ───────
+    case 'tunnel':
+    case 'wide':
+    case 't_junction':
+    case 'crossroads':
+    case 'spawn':
+      return null;
+
+    default:
+      return null;
+  }
 }
 
 {
@@ -978,19 +1160,16 @@ function curbToWall(block) {
     if (!base) continue;
     if (base.overlay || base.isSpawn) continue;   // skip pickups / spawn
 
-    const newBlocks = base.blocks.map(curbToWall);
-    // If no curb stripes existed (e.g. ramp/bridge/tunnel which already
-    // ship full-height grey rails), the variant is geometrically
-    // identical to the base — skip to avoid palette clutter.
-    const hasChange = newBlocks.some((b, i) => b !== base.blocks[i]);
-    if (!hasChange) continue;
+    const wallBlocks = buildWalls(baseKey);
+    if (!wallBlocks || wallBlocks.length === 0) continue;
 
     const walledKey = `${baseKey}_walled`;
     SEGMENTS[walledKey] = {
       label: `${base.label} (Walled)`,
       category: 'walled',
       span: { x: base.span.x, z: base.span.z },
-      blocks: newBlocks,
+      // Exact copy of the base segment + contour-matching tall barriers.
+      blocks: [...base.blocks, ...wallBlocks],
     };
     if (base.isFinish) SEGMENTS[walledKey].isFinish = true;
     if (base.runtime) SEGMENTS[walledKey].runtime = base.runtime;
