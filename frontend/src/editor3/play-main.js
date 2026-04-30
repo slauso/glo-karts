@@ -169,11 +169,6 @@ const WHEEL_RADIUS = M(0.4);
 const chassisShape = new CANNON.Box(new CANNON.Vec3(CHASSIS_HX, CHASSIS_HY, CHASSIS_HZ));
 const chassisBody = new CANNON.Body({ mass: KART_MASS });
 chassisBody.addShape(chassisShape);
-// Linear damping helps reverse-glide stop quickly; angular damping kills
-// residual yaw spin so the chassis settles instead of weather-vaning,
-// which is what made the third-person camera feel "swimmy".
-chassisBody.linearDamping = 0.05;
-chassisBody.angularDamping = 0.6;
 
 // Spawn position: center of spawn cell, slightly above
 const spawnPlacement = track.spawn();
@@ -196,23 +191,16 @@ const vehicle = new CANNON.RaycastVehicle({
 const wheelOptions = {
   radius: WHEEL_RADIUS,
   directionLocal: new CANNON.Vec3(0, -1, 0),
-  // Stiffer suspension + matched damping → less body roll/pitch wobble that
-  // the camera was over-compensating for. Mario-Kart-feel comes from a
-  // chassis that *barely* tilts even on cornering, so we crank these up.
-  suspensionStiffness: 55,
-  suspensionRestLength: M(0.32),
-  // Higher slip = more grip = less drifty. We pair this with manual
-  // lateral-velocity damping so the kart feels planted, not on rails.
-  frictionSlip: 4.5,
-  dampingRelaxation: 3.2,
-  dampingCompression: 5.5,
+  suspensionStiffness: 45,
+  suspensionRestLength: M(0.3),
+  frictionSlip: 3.0,
+  dampingRelaxation: 3.0,
+  dampingCompression: 5.0,
   maxSuspensionForce: M(100000),
-  // Almost zero roll influence so the chassis doesn't lean into corners
-  // (which fed back into the camera and made it sway).
-  rollInfluence: 0.0,
+  rollInfluence: 0.01,
   axleLocal: new CANNON.Vec3(-1, 0, 0),
   chassisConnectionPointLocal: new CANNON.Vec3(),
-  maxSuspensionTravel: M(0.28),
+  maxSuspensionTravel: M(0.3),
   customSlidingRotationalSpeed: -30,
   useCustomSlidingRotationalSpeed: true,
 };
@@ -317,10 +305,10 @@ function respawn() {
 // ── Handling tunables (Mario-Kart-flavoured arcade) ───────────
 // Engine force scales with current speed so acceleration is punchy at
 // low speeds and tapers at top end (gives the classic arcade snap).
-const MAX_ENGINE = M(2200);          // peak forward force
-const REVERSE_ENGINE = M(900);       // reverse is weaker, like every kart racer
-const MAX_BRAKE = M(80);
-const HANDBRAKE_FORCE = M(160);
+const MAX_ENGINE = M(1500);          // peak forward force (matches pre-overhaul)
+const REVERSE_ENGINE = M(700);       // reverse is weaker
+const MAX_BRAKE = M(50);
+const HANDBRAKE_FORCE = M(120);
 // Top speed is enforced by tapering engine force, not by clamping velocity
 // (clamping fights the physics solver and feels rubbery).
 const TOP_SPEED_MS = M(38);          // ≈ 137 km/h after WORLD_UNITS conversion
@@ -337,8 +325,14 @@ const STEER_RAMP_OUT_PER_S = 12.0;
 // 0.85 gives a Mario Kart "cling-to-corner" feel without preventing drifts.
 const LATERAL_GRIP = 0.88;
 const LATERAL_GRIP_DRIFT = 0.55;     // looser when drift held
-// Constant downforce keeps wheels planted on jumps/crests.
-const DOWNFORCE_PER_MS = M(1.4);     // applied per m/s of forward speed
+// Downforce keeps wheels planted on crests/curves. CRITICAL: this is a
+// per-frame *acceleration* in world-units/s², NOT a force-per-mass-per-speed.
+// The previous formulation multiplied raw mm/s velocity by a huge
+// constant and again by mass, producing forces 1000× gravity that
+// launched the chassis straight through the road. We now apply a small
+// *acceleration* (mm/s²) capped to ~30% of gravity at top speed and
+// only when the kart is actually grounded.
+const DOWNFORCE_PEAK_ACCEL = M(8);   // ≈ 32% of gravity at top speed
 // Drift hop pulse — small upward impulse when shift is tapped while moving.
 const DRIFT_HOP_VY = M(7.5);
 const DRIFT_HOP_COOLDOWN_S = 0.5;
@@ -364,10 +358,9 @@ function applyControls(dt) {
   const braking = keys.space;
   const drifting = keys.drift && Math.abs(controlState.throttle) > 0.1;
 
-  // ── Smooth throttle (instant response on press, gentle decay on release
-  // so the chassis doesn't lurch when you tap-drive).
+  // ── Smooth throttle (light response shaping, no force shaping).
   const throttleTarget = rawAccel;
-  const throttleRate = (throttleTarget !== 0) ? 6.0 : 3.0;
+  const throttleRate = (throttleTarget !== 0) ? 8.0 : 4.0;
   controlState.throttle += (throttleTarget - controlState.throttle) * Math.min(1, throttleRate * dt);
 
   // ── Smooth steering with separate ramp-in / ramp-out rates.
@@ -376,36 +369,24 @@ function applyControls(dt) {
   const steerRate = ramping ? STEER_RAMP_IN_PER_S : STEER_RAMP_OUT_PER_S;
   controlState.steer += (steerTarget - controlState.steer) * Math.min(1, steerRate * dt);
 
-  // ── Compute current forward speed (signed, in m/s of world units).
+  // ── Forward speed (used only for steering-lock curve + hop gate).
   chassisBody.quaternion.vmult(new CANNON.Vec3(0, 0, 1), _fwd);
-  chassisBody.quaternion.vmult(new CANNON.Vec3(1, 0, 0), _right);
-  chassisBody.quaternion.vmult(new CANNON.Vec3(0, 1, 0), _up);
   const v = chassisBody.velocity;
-  const speedFwd = v.dot(_fwd);          // signed forward speed (world u/s)
+  const speedFwd = v.dot(_fwd);
   const speedAbs = Math.abs(speedFwd);
   const speedRatio = Math.min(1, speedAbs / TOP_SPEED_MS);
 
-  // ── Engine force with top-speed taper + boost/slow modulation.
-  // Forward intent (W) drives chassis along +Z (handled by the −sign below
-  // for cannon-es RaycastVehicle's convention).
+  // ── Engine force (combat-modulated). cannon-es convention: positive
+  // intent → negative engineForce drives chassis along +Z.
   let mult = 1.0;
   if (now < playerCombat.boostUntil) mult *= (1 + playerCombat.boostStrength);
   if (now < playerCombat.slowUntil) mult *= (1 - playerCombat.slowStrength);
   const intent = controlState.throttle;
-  let engineMag;
-  if (intent >= 0) {
-    // Tapered curve: full force until 70% top speed, then ramp to 0 at 100%.
-    const taper = (speedFwd >= 0) ? Math.max(0, 1 - Math.max(0, (speedFwd - TOP_SPEED_MS * 0.7) / (TOP_SPEED_MS * 0.3))) : 1;
-    engineMag = intent * MAX_ENGINE * taper * mult;
-  } else {
-    const taper = (speedFwd <= 0) ? Math.max(0, 1 - Math.max(0, (-speedFwd - REVERSE_TOP_SPEED_MS * 0.7) / (REVERSE_TOP_SPEED_MS * 0.3))) : 1;
-    engineMag = intent * REVERSE_ENGINE * taper * mult;
-  }
-  const force = -engineMag;            // cannon-es convention (see comment above)
+  const engineMag = intent * (intent >= 0 ? MAX_ENGINE : REVERSE_ENGINE) * mult;
+  const force = -engineMag;
 
   // ── Speed-sensitive steering lock.
   const steerLock = STEER_LOCK_LOW + (STEER_LOCK_HIGH - STEER_LOCK_LOW) * speedRatio;
-  // Steering inverts on reverse so left/right feels natural backing up.
   const steerSign = (speedFwd < -M(0.5)) ? -1 : 1;
   const oilNow = now < playerCombat.oilUntil;
   const oilJitter = oilNow ? (Math.random() * 2 - 1) * 0.4 : 0;
@@ -413,15 +394,12 @@ function applyControls(dt) {
   vehicle.setSteeringValue(steerCmd, 2);
   vehicle.setSteeringValue(steerCmd, 3);
 
-  // ── All-wheel drive: engine force on every wheel keeps acceleration
-  // consistent regardless of which wheels are loaded over crests.
   vehicle.applyEngineForce(force, 0);
   vehicle.applyEngineForce(force, 1);
   vehicle.applyEngineForce(force, 2);
   vehicle.applyEngineForce(force, 3);
 
-  // ── Brake / handbrake. Space = service brake (all wheels). Drift +
-  // brake = handbrake on rear axle for tight rotation.
+  // ── Brake / handbrake.
   let brakeRear = braking ? MAX_BRAKE : 0;
   let brakeFront = braking ? MAX_BRAKE : 0;
   if (drifting && braking) brakeRear = HANDBRAKE_FORCE;
@@ -430,51 +408,16 @@ function applyControls(dt) {
   vehicle.setBrake(brakeFront, 2);
   vehicle.setBrake(brakeFront, 3);
 
-  // ── Drift hop (Shift tap). Provides the visual/feel cue that drift
-  // mode just engaged. Must press, not hold.
+  // ── Drift hop (Shift tap).
   controlState.driftHopCooldown = Math.max(0, controlState.driftHopCooldown - dt);
   if (keys.drift && !controlState.lastDriftPress
       && controlState.driftHopCooldown <= 0
       && (speedAbs > M(0.5) || Math.abs(intent) > 0.05)) {
-    // Bump vy AND fire an impulse so the wheel suspension can't instantly
-    // reel the chassis back to the road plane.
     chassisBody.velocity.y = Math.max(chassisBody.velocity.y, DRIFT_HOP_VY);
     chassisBody.applyImpulse(new CANNON.Vec3(0, KART_MASS * DRIFT_HOP_VY * 0.5, 0), new CANNON.Vec3(0, 0, 0));
     controlState.driftHopCooldown = DRIFT_HOP_COOLDOWN_S;
   }
   controlState.lastDriftPress = keys.drift;
-
-  // ── Lateral grip: damp the sideways component of chassis velocity each
-  // frame. This is the single biggest fix for the "loose" feel — the
-  // RaycastVehicle's built-in friction cone alone isn't enough at this
-  // mass + scale.
-  const grip = drifting ? LATERAL_GRIP_DRIFT : LATERAL_GRIP;
-  const lateralSpeed = v.dot(_right);
-  const dampingFactor = 1 - Math.min(1, grip * dt * 12);  // exponential-ish
-  // Subtract the right-vector component scaled by (1 - dampingFactor).
-  const cut = lateralSpeed * (1 - dampingFactor);
-  v.x -= _right.x * cut;
-  v.y -= _right.y * cut;
-  v.z -= _right.z * cut;
-
-  // ── Downforce so jumps don't drift forever and high-speed cornering
-  // doesn't lift the inside wheels.
-  const df = DOWNFORCE_PER_MS * speedAbs;
-  chassisBody.force.y -= df * KART_MASS;
-
-  // ── Auto-righting: when airborne (no wheels on ground) gently rotate
-  // chassis upright so we land on wheels, not on the roof. Mario Kart
-  // does this aggressively; we keep it subtle.
-  let onGround = 0;
-  for (let i = 0; i < vehicle.wheelInfos.length; i++) {
-    if (vehicle.wheelInfos[i].isInContact) onGround++;
-  }
-  if (onGround === 0) {
-    // Cross product (chassisUp × worldUp(0,1,0)) gives the axis to torque
-    // around to align the kart upright. Result = (upZ, 0, -upX).
-    chassisBody.torque.x += _up.z * KART_MASS * M(8);
-    chassisBody.torque.z += -_up.x * KART_MASS * M(8);
-  }
 }
 
 // ── Camera follow (Mario-Kart-style) ──────────────────────────
