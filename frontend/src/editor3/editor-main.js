@@ -512,12 +512,13 @@ function makeThumb(key) {
 const paletteEl = document.getElementById('palette');
 const paletteSearchEl = document.getElementById('paletteSearch');
 let paletteFilter = '';
-const CATEGORY_ORDER = ['road', 'junction', 'height', 'special', ...DECOR_CATEGORY_ORDER];
+const CATEGORY_ORDER = ['road', 'junction', 'height', 'special', 'walled', ...DECOR_CATEGORY_ORDER];
 const CATEGORY_LABELS = {
   road: 'Road',
   junction: 'Junctions',
   height: 'Vertical',
   special: 'Special',
+  walled: 'High Walled Track',
   ...DECOR_CATEGORY_LABELS,
 };
 function buildPalette() {
@@ -528,7 +529,7 @@ function buildPalette() {
   // Group keys by category (preserving insertion order within a group).
   const groups = new Map();
   const addKey = (key, def) => {
-    if (catFilter && (def.category || 'special') !== catFilter && !(catFilter === 'road' && ['road','junction','height','special'].includes(def.category))) return;
+    if (catFilter && (def.category || 'special') !== catFilter && !(catFilter === 'road' && ['road','junction','height','special','walled'].includes(def.category))) return;
     if (textFilter && !def.label.toLowerCase().includes(textFilter) && !key.toLowerCase().includes(textFilter)) return;
     const cat = def.category || 'special';
     if (!groups.has(cat)) groups.set(cat, []);

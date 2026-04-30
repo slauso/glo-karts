@@ -66,9 +66,13 @@ function deck(extentZ = TILE) {
 }
 
 function curbStripes(extentZ = TILE) {
-  // Red/white curbs along both long edges
+  // FUNCTIONAL alternating red/white curbs along both long edges. The
+  // stripes are SOLID low bumps (height 0.25 m) so a kart that strays
+  // off the racing line clatters over them — the rumble destabilises
+  // the chassis enough to encourage drivers to stay inside the road.
   const out = [];
-  const stripeW = 0.18;
+  const stripeW = 0.32;
+  const stripeH = 0.25;
   const stripeLen = extentZ / 5;
   for (let side = -1; side <= 1; side += 2) {
     const x = side * (ROAD_WIDTH / 2 - stripeW / 2);
@@ -76,10 +80,10 @@ function curbStripes(extentZ = TILE) {
       const z = -extentZ / 2 + stripeLen * (i + 0.5);
       out.push({
         kind: 'box',
-        size: [stripeW, 0.06, stripeLen * 0.95],
-        pos: [x, ROAD_THICK + 0.03, z],
+        size: [stripeW, stripeH, stripeLen * 0.95],
+        pos: [x, ROAD_THICK + stripeH / 2, z],
         color: i % 2 === 0 ? CURB_R : CURB_W,
-        solid: false,
+        // solid:true → wheels physically bump over the curb.
       });
     }
   }
@@ -444,11 +448,11 @@ function cornerBlocks(mirror) {
     const tan = angle + Math.PI / 2;
     blocks.push({
       kind: 'box',
-      size: [0.18, 0.06, stripeLen],
-      pos: [px, ROAD_THICK + 0.03, pz],
+      size: [0.32, 0.25, stripeLen],
+      pos: [px, ROAD_THICK + 0.125, pz],
       rotY: tan,
       color: i % 2 === 0 ? CURB_R : CURB_W,
-      solid: false,
+      // solid:true (default) so the kart bumps over a wide-line curb.
     });
   }
   return blocks;
@@ -490,11 +494,10 @@ function curvedPlateauBlocks(mirror) {
     const pz = insideZ + Math.sin(angle) * R;
     blocks.push({
       kind: 'box',
-      size: [0.18, 0.06, stripeLen],
-      pos: [px, deckH + ROAD_THICK + 0.03, pz],
+      size: [0.32, 0.25, stripeLen],
+      pos: [px, deckH + ROAD_THICK + 0.125, pz],
       rotY: angle + Math.PI / 2,
       color: i % 2 === 0 ? CURB_R : CURB_W,
-      solid: false,
     });
   }
   // Slim support columns under the arc deck. Four pillars sit AT the
@@ -802,7 +805,9 @@ function paintPatchBlocks(color, scale = 0.85) {
   ];
 }
 
-export const SEGMENT_KEYS = Object.keys(SEGMENTS);
+// NOTE: `SEGMENT_KEYS` is exported AFTER the walled-variant injector
+// runs further down — that block clones every base segment into a new
+// `${key}_walled` entry, and SEGMENT_KEYS must include them.
 
 /** Get span footprint cells for a segment, in local grid coords. */
 export function getFootprint(key) {
@@ -930,6 +935,88 @@ const CONNECTORS = {
   slow_strip:         SN,
   repair_strip:       SN,
 };
+
+// ── High-Walled variants ────────────────────────────────────────
+// Every non-overlay base segment is duplicated into a `${key}_walled`
+// twin that carries tall solid grey walls along every cell-edge that
+// (a) is NOT a declared connector AND (b) is NOT shared with another
+// cell of the same footprint (interior seams). The walls keep karts
+// confined to the racing surface — designed for sandbox / drift maps
+// where falling off the deck is undesirable. Connector edges remain
+// open so walled variants tile with both their plain twin and other
+// walled pieces.
+{
+  const HIGH_WALL_HEIGHT = 3.0;            // metres — clears kart hops
+  const SIDE_DIRS = { N: [0, 1], S: [0, -1], E: [1, 0], W: [-1, 0] };
+  const tierY = (t) =>
+    t === 2 ? BRIDGE_DECK_HEIGHT : (t === 1 ? PLATEAU_HEIGHT : 0);
+
+  const baseKeysSnapshot = Object.keys(SEGMENTS);
+  for (const baseKey of baseKeysSnapshot) {
+    const base = SEGMENTS[baseKey];
+    if (!base) continue;
+    if (base.overlay || base.isSpawn) continue;   // skip pickups / spawn
+
+    const conns = CONNECTORS[baseKey] || SN;
+    const fp = [];
+    for (let x = 0; x < base.span.x; x++) {
+      for (let z = 0; z < base.span.z; z++) fp.push([x, z]);
+    }
+    const tiers = (CELL_TIERS[baseKey] && CELL_TIERS[baseKey].length === fp.length)
+      ? CELL_TIERS[baseKey]
+      : new Array(fp.length).fill(0);
+
+    const openSet = new Set();
+    for (const c of conns) openSet.add(`${c.x},${c.z}|${c.side}`);
+    const fpSet = new Set(fp.map(([x, z]) => `${x},${z}`));
+
+    const wallBlocks = [];
+    for (let i = 0; i < fp.length; i++) {
+      const [cx, cz] = fp[i];
+      const baseY = tierY(tiers[i] || 0);
+      const yMid = baseY + ROAD_THICK + HIGH_WALL_HEIGHT / 2;
+      const cellX = cx * TILE;
+      const cellZ = cz * TILE;
+      for (const side of ['N', 'S', 'E', 'W']) {
+        if (openSet.has(`${cx},${cz}|${side}`)) continue;
+        const [dx, dz] = SIDE_DIRS[side];
+        if (fpSet.has(`${cx + dx},${cz + dz}`)) continue;   // interior seam
+
+        let size, pos;
+        if (side === 'N') {
+          size = [TILE, HIGH_WALL_HEIGHT, WALL_THICK];
+          pos = [cellX, yMid, cellZ + TILE / 2 - WALL_THICK / 2];
+        } else if (side === 'S') {
+          size = [TILE, HIGH_WALL_HEIGHT, WALL_THICK];
+          pos = [cellX, yMid, cellZ - TILE / 2 + WALL_THICK / 2];
+        } else if (side === 'E') {
+          size = [WALL_THICK, HIGH_WALL_HEIGHT, TILE];
+          pos = [cellX + TILE / 2 - WALL_THICK / 2, yMid, cellZ];
+        } else {
+          size = [WALL_THICK, HIGH_WALL_HEIGHT, TILE];
+          pos = [cellX - TILE / 2 + WALL_THICK / 2, yMid, cellZ];
+        }
+        wallBlocks.push({ kind: 'box', size, pos, color: WALL_COLOR });
+      }
+    }
+    if (wallBlocks.length === 0) continue;        // nothing to confine
+
+    const walledKey = `${baseKey}_walled`;
+    SEGMENTS[walledKey] = {
+      label: `${base.label} (Walled)`,
+      category: 'walled',
+      span: { x: base.span.x, z: base.span.z },
+      blocks: [...base.blocks, ...wallBlocks],
+    };
+    if (base.isFinish) SEGMENTS[walledKey].isFinish = true;
+    if (base.runtime) SEGMENTS[walledKey].runtime = base.runtime;
+
+    CONNECTORS[walledKey] = conns.map((c) => ({ ...c }));
+    if (CELL_TIERS[baseKey]) CELL_TIERS[walledKey] = CELL_TIERS[baseKey].slice();
+  }
+}
+
+export const SEGMENT_KEYS = Object.keys(SEGMENTS);
 
 const SIDE_CW = ['N', 'W', 'S', 'E']; // rotating one quarter-turn (rot=1) maps SIDE_CW[i] → SIDE_CW[(i+1)%4]
 const OPP = { N: 'S', S: 'N', E: 'W', W: 'E' };
