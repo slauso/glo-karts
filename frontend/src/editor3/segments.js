@@ -936,82 +936,66 @@ const CONNECTORS = {
   repair_strip:       SN,
 };
 
-// ── High-Walled variants ────────────────────────────────────────
-// Every non-overlay base segment is duplicated into a `${key}_walled`
-// twin that carries tall solid grey walls along every cell-edge that
-// (a) is NOT a declared connector AND (b) is NOT shared with another
-// cell of the same footprint (interior seams). The walls keep karts
-// confined to the racing surface — designed for sandbox / drift maps
-// where falling off the deck is undesirable. Connector edges remain
-// open so walled variants tile with both their plain twin and other
-// walled pieces.
-{
-  const HIGH_WALL_HEIGHT = 3.0;            // metres — clears kart hops
-  const SIDE_DIRS = { N: [0, 1], S: [0, -1], E: [1, 0], W: [-1, 0] };
-  const tierY = (t) =>
-    t === 2 ? BRIDGE_DECK_HEIGHT : (t === 1 ? PLATEAU_HEIGHT : 0);
+// ── Walled variants ─────────────────────────────────────────────
+// Each non-overlay base segment is duplicated into a `${key}_walled`
+// twin. The variant is an EXACT copy of the base geometry except that
+// every red/white curb stripe is RAISED into a tall grey wall — same
+// position, same length, same orientation, just taller and recoloured.
+// Everything else (deck, connectors, runtime, tier, pillars, finish
+// gantry, etc.) is preserved verbatim, so a walled variant tiles
+// identically with its plain twin and drives identically as well.
+const WALLED_HEIGHT = 1.5;          // raised wall height (m)
+const WALLED_THICK_MIN = 0.5;       // minimum wall thickness (m)
 
+function curbToWall(block) {
+  if (block.color !== CURB_R && block.color !== CURB_W) return block;
+  // Keep the bottom of the block anchored where the curb sat (= top of
+  // deck) so the wall grows UP from the curb's existing footprint.
+  const origH = block.size[1];
+  const origBottomY = block.pos[1] - origH / 2;
+  // Determine which axis is the stripe's LONG axis (= along the road
+  // edge) and widen ONLY the SHORT axis. Works for axis-aligned curbs
+  // as well as `rotY`-rotated corner stripes, since `size` is always in
+  // the block's local frame.
+  const sx = block.size[0];
+  const sz = block.size[2];
+  const longIsZ = sz >= sx;
+  const newSize = longIsZ
+    ? [Math.max(sx, WALLED_THICK_MIN), WALLED_HEIGHT, sz]
+    : [sx, WALLED_HEIGHT, Math.max(sz, WALLED_THICK_MIN)];
+  return {
+    ...block,
+    size: newSize,
+    pos: [block.pos[0], origBottomY + WALLED_HEIGHT / 2, block.pos[2]],
+    color: WALL_COLOR,
+  };
+}
+
+{
   const baseKeysSnapshot = Object.keys(SEGMENTS);
   for (const baseKey of baseKeysSnapshot) {
     const base = SEGMENTS[baseKey];
     if (!base) continue;
     if (base.overlay || base.isSpawn) continue;   // skip pickups / spawn
 
-    const conns = CONNECTORS[baseKey] || SN;
-    const fp = [];
-    for (let x = 0; x < base.span.x; x++) {
-      for (let z = 0; z < base.span.z; z++) fp.push([x, z]);
-    }
-    const tiers = (CELL_TIERS[baseKey] && CELL_TIERS[baseKey].length === fp.length)
-      ? CELL_TIERS[baseKey]
-      : new Array(fp.length).fill(0);
-
-    const openSet = new Set();
-    for (const c of conns) openSet.add(`${c.x},${c.z}|${c.side}`);
-    const fpSet = new Set(fp.map(([x, z]) => `${x},${z}`));
-
-    const wallBlocks = [];
-    for (let i = 0; i < fp.length; i++) {
-      const [cx, cz] = fp[i];
-      const baseY = tierY(tiers[i] || 0);
-      const yMid = baseY + ROAD_THICK + HIGH_WALL_HEIGHT / 2;
-      const cellX = cx * TILE;
-      const cellZ = cz * TILE;
-      for (const side of ['N', 'S', 'E', 'W']) {
-        if (openSet.has(`${cx},${cz}|${side}`)) continue;
-        const [dx, dz] = SIDE_DIRS[side];
-        if (fpSet.has(`${cx + dx},${cz + dz}`)) continue;   // interior seam
-
-        let size, pos;
-        if (side === 'N') {
-          size = [TILE, HIGH_WALL_HEIGHT, WALL_THICK];
-          pos = [cellX, yMid, cellZ + TILE / 2 - WALL_THICK / 2];
-        } else if (side === 'S') {
-          size = [TILE, HIGH_WALL_HEIGHT, WALL_THICK];
-          pos = [cellX, yMid, cellZ - TILE / 2 + WALL_THICK / 2];
-        } else if (side === 'E') {
-          size = [WALL_THICK, HIGH_WALL_HEIGHT, TILE];
-          pos = [cellX + TILE / 2 - WALL_THICK / 2, yMid, cellZ];
-        } else {
-          size = [WALL_THICK, HIGH_WALL_HEIGHT, TILE];
-          pos = [cellX - TILE / 2 + WALL_THICK / 2, yMid, cellZ];
-        }
-        wallBlocks.push({ kind: 'box', size, pos, color: WALL_COLOR });
-      }
-    }
-    if (wallBlocks.length === 0) continue;        // nothing to confine
+    const newBlocks = base.blocks.map(curbToWall);
+    // If no curb stripes existed (e.g. ramp/bridge/tunnel which already
+    // ship full-height grey rails), the variant is geometrically
+    // identical to the base — skip to avoid palette clutter.
+    const hasChange = newBlocks.some((b, i) => b !== base.blocks[i]);
+    if (!hasChange) continue;
 
     const walledKey = `${baseKey}_walled`;
     SEGMENTS[walledKey] = {
       label: `${base.label} (Walled)`,
       category: 'walled',
       span: { x: base.span.x, z: base.span.z },
-      blocks: [...base.blocks, ...wallBlocks],
+      blocks: newBlocks,
     };
     if (base.isFinish) SEGMENTS[walledKey].isFinish = true;
     if (base.runtime) SEGMENTS[walledKey].runtime = base.runtime;
 
-    CONNECTORS[walledKey] = conns.map((c) => ({ ...c }));
+    CONNECTORS[walledKey] = (CONNECTORS[baseKey] || SN).map((c) => ({ ...c }));
     if (CELL_TIERS[baseKey]) CELL_TIERS[walledKey] = CELL_TIERS[baseKey].slice();
   }
 }

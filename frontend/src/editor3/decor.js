@@ -338,6 +338,29 @@ function _arch(opts) {
   return g;
 }
 
+// Jersey concrete safety barrier — classic highway profile with a wide
+// foot tapering to a narrower top. Cross-section lives in the XY plane
+// (X = thickness, Y = height, both ∈ unit-1 box) and is extruded along
+// Z (length). After extrusion we rotate so the LONG axis runs along X,
+// matching the convention used by other "long" decor props (e.g. wall,
+// banner) where defaultScale[0] is the length the user grabs to extend.
+function _jerseyBarrier() {
+  const s = new THREE.Shape();
+  s.moveTo(-0.50, 0.00);
+  s.lineTo( 0.50, 0.00);
+  s.lineTo( 0.50, 0.18);          // top of bottom flange
+  s.lineTo( 0.30, 0.34);          // taper transition
+  s.lineTo( 0.18, 1.00);          // top corner (right)
+  s.lineTo(-0.18, 1.00);          // top corner (left)
+  s.lineTo(-0.30, 0.34);
+  s.lineTo(-0.50, 0.18);
+  s.closePath();
+  const g = new THREE.ExtrudeGeometry(s, { depth: 1, bevelEnabled: false });
+  g.translate(0, 0, -0.5);        // centre extrusion on Z
+  g.rotateY(Math.PI / 2);         // length now runs along +X
+  return g;
+}
+
 // "Nature" presets are just primitives with built-in non-uniform default scale
 // + a themed colour. Their geometry is still the base primitive so the gizmo
 // scaling continues to work intuitively.
@@ -451,6 +474,10 @@ export const DECOR = {
                 defaultScale: [6.0, 0.6, 0.2], defaultY: 4.0 },
   ramp_block: { label: 'Ramp',       category: 'urban', color: 0x6c7a89, build: () => geom('wed', _wedge),
                 defaultScale: [3.0, 1.5, 4.0] },
+  jersey_barrier: { label: 'Jersey Barrier', category: 'urban', color: 0xb0b6bf,
+                    build: () => geom('jersey_barrier', _jerseyBarrier),
+                    // Long, low concrete barrier. Length × height × thickness.
+                    defaultScale: [6.0, 1.1, 0.6] },
 };
 
 // ── Kenney CC0 GLB props (registered programmatically) ──────────────
