@@ -25,7 +25,7 @@ import { preloadAllKarts, cloneKart } from './kart-loader.js';
 import {
   DECOR, DECOR_KEYS, DECOR_CATEGORY_ORDER, DECOR_CATEGORY_LABELS,
   isDecorKey, DecorStore, buildDecorMesh, syncDecorMesh, getDecorMaterial,
-  getParamSchema, preloadKenneyKit,
+  getParamSchema,
 } from './decor.js';
 import { onGlbLoaded, instanceGLB } from './glb-cache.js';
 import { buildGroupMesh } from './csg.js';
@@ -2600,10 +2600,9 @@ function positionKartPreview() {
 preloadAllKarts([activeKartId]);
 updateKartPreview(activeKartId);
 
-// Kick off Kenney CC0 GLB prop preload. Once each GLB resolves, invalidate
-// the cached palette thumbnail and rebuild any placeholder decor instances
-// in the scene so they swap to the real model.
-preloadKenneyKit();
+// (Kenney racing-kit preload removed along with the 'kit' palette
+// category. The onGlbLoaded hook below is kept for any future GLB-backed
+// decor entries; with no `def.glb` keys present today it is a no-op.)
 onGlbLoaded((path) => {
   // Invalidate any palette tile whose def.glb matches this path.
   for (const key of DECOR_KEYS) {
