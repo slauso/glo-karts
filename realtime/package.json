@@ -17,6 +17,7 @@
     "@colyseus/monitor": "^0.16.7",
     "@colyseus/schema": "^3.0.76",
     "@colyseus/ws-transport": "^0.16.5",
+    "cannon-es": "^0.20.0",
     "colyseus.js": "^0.16.22",
     "cors": "^2.8.5",
     "express": "^4.19.2",
