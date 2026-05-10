@@ -23,10 +23,15 @@ import { WORLD_UNITS_PER_M } from './editor3/units.js';
 import { cloneKart } from './editor3/kart-loader.js';
 import { DEFAULT_KART_ID } from './editor3/kart-catalog.js';
 import { KartFxRig, spawnPickupBurst } from './editor3/kart-fx-rig.js';
+
+// Match the shared physics module so the visual offset for the cloned
+// kart GLB places the wheels on the contact patch instead of leaving
+// the chassis hovering above the road. Mirrors SP play-main.js.
+const CHASSIS_HY_MM = 0.3 * WORLD_UNITS_PER_M;
 import { createKartAudio, STD_KIT } from './editor3/kart-audio.js';
 
 const S = WORLD_UNITS_PER_M;
-const SEND_HZ = 30;
+const SEND_HZ = 60;
 const TUTORIAL_LOOP_ID = '11111111-1111-1111-1111-111111111111';
 const PEER_COLORS = [0xff3aa1, 0x00e5ff, 0xffd166, 0x06d6a0, 0xff8c42, 0x9d4edd, 0x118ab2, 0xef476f];
 
@@ -144,19 +149,23 @@ function ensureGhost(sid, idx) {
   if (ghosts.has(sid)) return ghosts.get(sid);
   const color = pickColor(idx);
   const group = new THREE.Group();
-  // placeholder while GLB loads
+  // placeholder while GLB loads — sit at chassis center (y = 0 in
+  // group-local) so the swap to the GLB model doesn't pop visually.
   const placeholder = new THREE.Mesh(
     new THREE.BoxGeometry(1.2 * S, 0.6 * S, 2.0 * S),
     new THREE.MeshStandardMaterial({ color, transparent: true, opacity: 0.55 }),
   );
   placeholder.castShadow = true;
-  placeholder.position.y = 0.3 * S;
+  placeholder.position.y = 0;
   group.add(placeholder);
   scene.add(group);
   cloneKart(DEFAULT_KART_ID, color).then((kart) => {
-    // cloneKart already returns the model auto-scaled to mm-units
-    // (KART_TARGET_LENGTH = 2000mm). Do NOT multiply by S again — that
-    // produced a 2km-long kart that swallowed the camera.
+    // Drop the GLB so the kart's wheels sit on the contact patch.
+    // The kart template has y = 0 at the chassis bottom, so shifting
+    // by -CHASSIS_HY puts the chassis bottom at the cannon body's
+    // bottom (where the wheel rays originate). Without this offset
+    // the kart visually floats ~30 cm above the road. Mirrors SP.
+    kart.position.y = -CHASSIS_HY_MM;
     group.remove(placeholder);
     placeholder.geometry.dispose();
     placeholder.material.dispose();
@@ -392,7 +401,11 @@ function pollInput() {
 let mySid = null;
 let lastFrame = performance.now();
 let lastPing = 0;
-const LERP = 0.25; // per-frame interpolation factor
+// Snappier interpolation so the local kart's response to control input
+// feels closer to SP playtest. With the 30Hz snapshot stream, an LERP
+// factor of 0.45 catches 95% in ~5 frames (≈83ms) instead of the
+// previous 200ms. Matches roughly the network RTT for nearby peers.
+const LERP = 0.45;
 
 function tick(now) {
   const dt = Math.min((now - lastFrame) / 1000, 0.05);

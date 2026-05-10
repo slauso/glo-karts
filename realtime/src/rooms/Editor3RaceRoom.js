@@ -44,7 +44,7 @@ import {
 } from "../physics/kart-physics.js";
 
 const TICK_HZ = 60;
-const SNAPSHOT_HZ = 20;
+const SNAPSHOT_HZ = 30;
 // Kart constants live in the shared kart-physics module so SP playtest
 // and the online race room use the exact same handling values. Only
 // room-level constants stay here.
