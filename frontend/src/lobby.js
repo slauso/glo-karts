@@ -28,6 +28,8 @@ import {
   usesStudioTracks,
   getSelectableContentList,
   loadStudioTracks,
+  LOCAL_DRAFT_TRACK_ID,
+  readLocalDraftTrack,
   pickRandom,
   normalizeLobbyCode,
   generateLobbyCode,
@@ -827,8 +829,8 @@ class RacingLobby {
   }
 
   buildSettingsPayload() {
-    const customTrackData = this.selectedMap === CUSTOM_TRACK_ID
-      ? sessionStorage.getItem('customTrackData') || ''
+    const customTrackData = (this.selectedMap === CUSTOM_TRACK_ID || this.selectedMap === LOCAL_DRAFT_TRACK_ID)
+      ? (sessionStorage.getItem('customTrackData') || readLocalDraftTrack()?.raw || '')
       : '';
 
     const matchLength = document.getElementById('battle-match-length')?.value || '8';
@@ -1236,7 +1238,16 @@ class RacingLobby {
     // Attach event listeners only once
     dropdownButton?.addEventListener('click', (event) => {
       event.stopPropagation();
+      const willOpen = !mapDropdown?.classList.contains('open');
       mapDropdown?.classList.toggle('open');
+      // Phase 2.5: re-fetch Studio tracks every time the dropdown opens so
+      // the host sees their freshest cloud saves / community publishes
+      // without reloading the lobby tab.
+      if (willOpen && usesStudioTracks(this.selectedModeId)) {
+        loadStudioTracks({ force: true })
+          .then(() => this._rebuildMapDropdown())
+          .catch(() => { /* offline */ });
+      }
     });
 
     document.addEventListener('click', () => mapDropdown?.classList.remove('open'));
@@ -1247,6 +1258,16 @@ class RacingLobby {
 
       const mapId = option.getAttribute('data-map-id');
       this.selectedMap = mapId;
+      // Phase 2.5: if user picked their local browser draft, push the
+      // raw editor JSON into sessionStorage so buildSettingsPayload's
+      // customTrackData branch (CUSTOM_TRACK_ID || LOCAL_DRAFT_TRACK_ID)
+      // ships it to the LobbyRoom and downstream Editor3RaceRoom.
+      if (mapId === LOCAL_DRAFT_TRACK_ID) {
+        const draft = readLocalDraftTrack();
+        if (draft?.raw) sessionStorage.setItem('customTrackData', draft.raw);
+      } else if (mapId !== CUSTOM_TRACK_ID) {
+        sessionStorage.removeItem('customTrackData');
+      }
       document.querySelectorAll('.dropdown-option').forEach((opt) => opt.classList.toggle('selected', opt === option));
       const selectedMapName = document.querySelector('.selected-map-name');
       if (selectedMapName) selectedMapName.textContent = option.textContent;
@@ -1266,23 +1287,32 @@ class RacingLobby {
     const selectedMapName = document.querySelector('.selected-map-name');
     const dropdownContent = document.getElementById('track-dropdown-options');
 
+    const items = getSelectableContentList(this.selectedModeId);
     if (dropdownContent) {
       dropdownContent.innerHTML = '';
-      const items = getSelectableContentList(this.selectedModeId);
       items.forEach((track, index) => {
         const option = document.createElement('div');
-        option.className = `dropdown-option${index === 0 ? ' selected' : ''}`;
-        option.setAttribute('data-map-id', track.id);
-        option.textContent = track.name;
+        if (track.header) {
+          option.className = 'dropdown-section-header';
+          option.style.cssText = 'padding:6px 12px;font-size:11px;letter-spacing:.08em;color:#ff3aa1;text-transform:uppercase;pointer-events:none;opacity:.85;';
+          option.textContent = track.name;
+        } else {
+          const isSelected = track.id === this.selectedMap || (!this.selectedMap && index === 0);
+          option.className = `dropdown-option${isSelected ? ' selected' : ''}`;
+          option.setAttribute('data-map-id', track.id);
+          option.textContent = track.name;
+        }
         dropdownContent.appendChild(option);
       });
     }
 
-    const items = getSelectableContentList(this.selectedModeId);
-    const firstItem = items[0];
-    if (firstItem) {
-      this.selectedMap = firstItem.id;
-      if (selectedMapName) selectedMapName.textContent = firstItem.name;
+    const firstSelectable = items.find((t) => !t.header);
+    if (firstSelectable && !items.some((t) => !t.header && t.id === this.selectedMap)) {
+      this.selectedMap = firstSelectable.id;
+      if (selectedMapName) selectedMapName.textContent = firstSelectable.name;
+    } else if (firstSelectable && selectedMapName) {
+      const cur = items.find((t) => !t.header && t.id === this.selectedMap);
+      selectedMapName.textContent = cur?.name || firstSelectable.name;
     }
   }
 

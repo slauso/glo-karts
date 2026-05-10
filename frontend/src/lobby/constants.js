@@ -5,6 +5,25 @@ import { getMode, getLegacyModeFamily as canonicalGetLegacyModeFamily } from '..
 import { ALL_ARENAS, ALL_TRACKS, CUSTOM_TRACK_ID } from '../modules/content-registry.js';
 import { StudioAPI } from '../editor3/studio-api.js';
 
+// Phase 2.5: id used for the local browser draft (gloKartsStudio.lastTrack)
+// surfaced inside the lobby dropdown so a host can broadcast their unsaved
+// editor draft to peers via customTrackData (LobbyRoom already supports it).
+export const LOCAL_DRAFT_TRACK_ID = '__local_draft__';
+const LOCAL_DRAFT_STORAGE_KEY = 'gloKartsStudio.lastTrack';
+
+export function readLocalDraftTrack() {
+  try {
+    const raw = localStorage.getItem(LOCAL_DRAFT_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    const placements = parsed?.track?.placements || parsed?.placements || [];
+    if (!placements.length) return null;
+    return { raw, name: parsed?.track?.name || parsed?.name || 'Local draft', placements: placements.length };
+  } catch {
+    return null;
+  }
+}
+
 // ── Studio track cache ──────────────────────────────────────────────
 // Phase 2.4: the unified `online_arena` mode pulls courses from the
 // Track Studio backend (templates / community / mine). We cache the
@@ -180,16 +199,40 @@ export function usesStudioTracks(modeId) {
 
 export function getSelectableContentList(modeId) {
   if (usesStudioTracks(modeId)) {
-    // Phase 2.4: pull from the Track Studio cache (loadStudioTracks()).
-    // While the first fetch is in flight we return whatever seed entries
-    // are present (Tutorial Loop) so the dropdown is never empty.
-    const formatted = _studioTrackCache.map((t) => ({
-      id: t.id,
-      name: t.source === 'mine'
-        ? `${t.name}  ·  yours`
-        : (t.source === 'community' ? `${t.name}  ·  community` : t.name),
-    }));
-    return formatted;
+    // Phase 2.4/2.5: show backend-saved Studio tracks, grouped by source
+    // (Templates / Community / My Saves), plus the host's local browser
+    // draft if one exists. Group headers are emitted as non-selectable
+    // entries with `header: true`.
+    const out = [];
+    const draft = readLocalDraftTrack();
+    if (draft) {
+      out.push({ id: 'hdr-local', name: '— Your draft —', header: true });
+      out.push({
+        id: LOCAL_DRAFT_TRACK_ID,
+        name: `${draft.name} (browser draft, ${draft.placements} pieces)`,
+        source: 'local',
+      });
+    }
+    const grouped = { mine: [], template: [], community: [] };
+    for (const t of _studioTrackCache) {
+      (grouped[t.source] || grouped.template).push(t);
+    }
+    if (grouped.mine.length) {
+      out.push({ id: 'hdr-mine', name: '— My saves —', header: true });
+      for (const t of grouped.mine) out.push({ id: t.id, name: t.name, source: 'mine' });
+    }
+    if (grouped.template.length) {
+      out.push({ id: 'hdr-templates', name: '— Templates —', header: true });
+      for (const t of grouped.template) out.push({ id: t.id, name: t.name, source: 'template' });
+    }
+    if (grouped.community.length) {
+      out.push({ id: 'hdr-community', name: '— Remix community —', header: true });
+      for (const t of grouped.community) {
+        const suffix = t.author ? `  ·  by ${t.author}` : '';
+        out.push({ id: t.id, name: `${t.name}${suffix}`, source: 'community' });
+      }
+    }
+    return out;
   }
   if (usesArenaSelection(modeId)) {
     return Object.values(ALL_ARENAS).map((entry) => ({ id: entry.id, name: entry.label }));
