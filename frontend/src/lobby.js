@@ -25,7 +25,9 @@ import {
   getLegacyModeFamily,
   usesArenaSelection,
   usesTrackSelection,
+  usesStudioTracks,
   getSelectableContentList,
+  loadStudioTracks,
   pickRandom,
   normalizeLobbyCode,
   generateLobbyCode,
@@ -80,6 +82,15 @@ class RacingLobby {
     this.refreshBattleControls();
     this._initLensEngine();
     this._consumeBuilderLaunchIntent();
+
+    // Phase 2.4: kick off Track Studio course fetch for the unified online
+    // mode. The dropdown is seeded with Tutorial Loop synchronously and
+    // re-rendered once the full template/community/mine list resolves.
+    loadStudioTracks().then(() => {
+      try {
+        if (usesStudioTracks(this.selectedModeId)) this._rebuildMapDropdown();
+      } catch { /* ignore */ }
+    }).catch(() => { /* offline / backend down — keep seed */ });
   }
 
   initUIElements() {
@@ -363,7 +374,7 @@ class RacingLobby {
       sessionStorage.setItem('customTrackData', serialized);
     }
 
-    this._selectMode(intent.modeId || 'battle_online');
+    this._selectMode(intent.modeId || 'online_arena');
 
     this.selectedBattleType = intent.battleType || this.selectedBattleType;
     this.selectedMaxPlayers = Math.max(1, Math.min(12, Number(intent.maxPlayers || this.selectedMaxPlayers || DEFAULTS.maxPlayers)));
@@ -1047,6 +1058,10 @@ class RacingLobby {
     }
 
     switch (this.selectedModeId) {
+      case 'online_arena':
+        icon = 'fa-globe'; label = 'HOST ONLINE LOBBY';
+        indicator = 'Click to host on a Track Studio course';
+        break;
       case 'battle_online':
         icon = 'fa-crosshairs'; label = 'CREATE BATTLE LOBBY';
         indicator = 'Click to host an online battle';
@@ -1131,13 +1146,19 @@ class RacingLobby {
   }
 
   applyStateToUI(state) {
-    // Sync selectedModeId from server gameMode (battle / gloflux)
+    // Sync selectedModeId from server gameMode (battle / gloflux / race)
     const serverIsBattle = state.gameMode === 'battle';
-    // If we're in a lobby, derive the modeId from server state
+    // If we're in a lobby, derive the modeId from server state. Prefer the
+    // explicit state.modeId if it's a known mode (Phase 2.4: online_arena);
+    // otherwise fall back to legacy gameMode mapping.
     if (this.room) {
-      this.selectedModeId = state.gameMode === 'gloflux'
-        ? (state.modeId || 'gloflux')
-        : 'battle_online';
+      if (state.modeId && getMode(state.modeId)) {
+        this.selectedModeId = state.modeId;
+      } else {
+        this.selectedModeId = state.gameMode === 'gloflux'
+          ? (state.modeId || 'gloflux')
+          : (state.gameMode === 'race' ? 'online_arena' : 'battle_online');
+      }
       this.selectedMode = state.gameMode || 'battle';
     }
 
@@ -1377,6 +1398,7 @@ class RacingLobby {
     const MODE_TAGLINES = {};
 
     const MODE_SHORT_LABELS = {
+      online_arena: 'ONLINE',
       battle_online: 'ONLINE',
       track_builder: 'STUDIO',
     };

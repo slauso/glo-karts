@@ -3,6 +3,59 @@
 
 import { getMode, getLegacyModeFamily as canonicalGetLegacyModeFamily } from '../game-modes.js';
 import { ALL_ARENAS, ALL_TRACKS, CUSTOM_TRACK_ID } from '../modules/content-registry.js';
+import { StudioAPI } from '../editor3/studio-api.js';
+
+// ── Studio track cache ──────────────────────────────────────────────
+// Phase 2.4: the unified `online_arena` mode pulls courses from the
+// Track Studio backend (templates / community / mine). We cache the
+// flattened list here so getSelectableContentList can stay synchronous
+// (the lobby UI re-renders the dropdown after loadStudioTracks resolves).
+let _studioTrackCache = [
+  { id: '11111111-1111-1111-1111-111111111111', name: 'Tutorial Loop', source: 'template' },
+];
+let _studioTracksLoaded = false;
+let _studioLoadPromise = null;
+
+export function getStudioTrackCache() {
+  return _studioTrackCache.slice();
+}
+
+export function isStudioTracksLoaded() {
+  return _studioTracksLoaded;
+}
+
+/** Fetch templates + community + mine; dedupe and cache. Returns the cache. */
+export async function loadStudioTracks({ force = false } = {}) {
+  if (_studioLoadPromise && !force) return _studioLoadPromise;
+  _studioLoadPromise = (async () => {
+    const seen = new Map();
+    const ingest = (rows, source) => {
+      for (const row of rows || []) {
+        if (!row || !row.id) continue;
+        if (seen.has(row.id)) continue;
+        seen.set(row.id, {
+          id: row.id,
+          name: row.name || '(untitled)',
+          source,
+          author: row.author_name || '',
+        });
+      }
+    };
+    const safe = (p) => p.then((r) => r?.results || r || []).catch(() => []);
+    const [templates, community, mine] = await Promise.all([
+      safe(StudioAPI.templates({ page: 1 })),
+      safe(StudioAPI.community({ page: 1, sort: 'popular' })),
+      safe(StudioAPI.mine({ page: 1 })),
+    ]);
+    ingest(mine, 'mine');
+    ingest(templates, 'template');
+    ingest(community, 'community');
+    _studioTrackCache = Array.from(seen.values());
+    _studioTracksLoaded = true;
+    return _studioTrackCache;
+  })();
+  return _studioLoadPromise;
+}
 
 export const DEFAULTS = {
   mode: 'battle',
@@ -121,7 +174,23 @@ export function usesTrackSelection(modeId) {
   return !!getMode(modeId)?.selectors?.track;
 }
 
+export function usesStudioTracks(modeId) {
+  return !!getMode(modeId)?.selectors?.studioTracks;
+}
+
 export function getSelectableContentList(modeId) {
+  if (usesStudioTracks(modeId)) {
+    // Phase 2.4: pull from the Track Studio cache (loadStudioTracks()).
+    // While the first fetch is in flight we return whatever seed entries
+    // are present (Tutorial Loop) so the dropdown is never empty.
+    const formatted = _studioTrackCache.map((t) => ({
+      id: t.id,
+      name: t.source === 'mine'
+        ? `${t.name}  ·  yours`
+        : (t.source === 'community' ? `${t.name}  ·  community` : t.name),
+    }));
+    return formatted;
+  }
   if (usesArenaSelection(modeId)) {
     return Object.values(ALL_ARENAS).map((entry) => ({ id: entry.id, name: entry.label }));
   }

@@ -51,11 +51,11 @@ export const MODE_REGISTRY = {
   battle_online: {
     id: 'battle_online',
     category: 'online',
-    label: 'Online',
-    desc: 'Create or join a realtime arena battle with friends.',
+    label: 'Online (legacy)',
+    desc: 'Legacy realtime arena battle. Replaced by Online Arena.',
     icon: 'fa-crosshairs',
     page: 'realtime.html',
-    status: MODE_STATUS.READY,
+    status: MODE_STATUS.HIDDEN,
     selectors: { track: false, arena: true, battleSettings: true },
     requiresLobby: true,
     legacyFamily: 'battle',
@@ -184,6 +184,36 @@ export const MODE_REGISTRY = {
     },
   },
 
+  // Phase 2.4: Unified online mode. Pulls Track Studio courses
+  // (templates + remix community + mine) as the lobby map list, then runs
+  // the chosen course through the cannon-es Editor3RaceRoom. Replaces
+  // the legacy `battle_online` and `race_editor3` entries in the lobby UI.
+  online_arena: {
+    id: 'online_arena',
+    category: 'online',
+    label: 'Online Arena',
+    desc: 'Host or join a PvP race on any Track Studio course — yours, the templates, or the community remix pool.',
+    icon: 'fa-globe',
+    page: 'multiplayer-editor3.html',
+    status: MODE_STATUS.READY,
+    selectors: { track: true, arena: false, battleSettings: true, studioTracks: true },
+    requiresLobby: true,
+    legacyFamily: 'race',
+    roomName: 'editor3_race_room',
+    buildConfig(lobby) {
+      return {
+        gameMode: 'race',
+        modeId: 'online_arena',
+        trackId: lobby?.selectedMap,
+        multiplayer: true,
+        multiplayerProvider: 'colyseus',
+        maxPlayers: lobby?.selectedMaxPlayers || 8,
+        loadoutId: lobby?.selectedLoadout || 'random-all',
+        scoreLimit: parseInt(document.getElementById('battle-score-limit')?.value || '5', 10) || 5,
+      };
+    },
+  },
+
   // Phase 2: Editor3-driven online race. Uses the cannon-es server room
   // (Editor3RaceRoom) and the Track Studio's segment renderer end-to-end.
   // Hidden from the lobby grid for now — addressable via launch URL or
@@ -195,8 +225,8 @@ export const MODE_REGISTRY = {
     desc: 'Online race driven by the Track Studio engine end-to-end.',
     icon: 'fa-flag-checkered',
     page: 'multiplayer-editor3.html',
-    status: MODE_STATUS.BETA,
-    selectors: { track: true, arena: false, battleSettings: false },
+    status: MODE_STATUS.HIDDEN,
+    selectors: { track: true, arena: false, battleSettings: false, studioTracks: true },
     requiresLobby: true,
     legacyFamily: 'race',
     roomName: 'editor3_race_room',
@@ -212,7 +242,7 @@ export const MODE_REGISTRY = {
   },
 };
 
-const VISIBLE_MODE_IDS = ['battle_online', 'race_editor3', 'track_builder'];
+const VISIBLE_MODE_IDS = ['online_arena', 'track_builder'];
 
 export function getVisibleModes() {
   return VISIBLE_MODE_IDS.map((id) => MODE_REGISTRY[id]).filter(Boolean);

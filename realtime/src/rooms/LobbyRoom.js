@@ -301,7 +301,7 @@ export class LobbyRoom extends Room {
       };
 
       let roomName;
-      if (this.state.modeId === "race_editor3") {
+      if (this.state.modeId === "race_editor3" || this.state.modeId === "online_arena") {
         roomName = "editor3_race_room";
       } else if (this.state.gameMode === "gloflux") {
         roomName = "gloflux";
