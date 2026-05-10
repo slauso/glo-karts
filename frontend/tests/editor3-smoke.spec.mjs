@@ -193,4 +193,34 @@ test.describe('Track Studio (editor3) — Smoke', () => {
     const lapText = await page.locator('#lap').textContent();
     expect(lapText).toMatch(/^1/);
   });
+
+  test('9 — playtest physics stays finite after 5s of driving (NaN guard)', async ({ page }) => {
+    await page.goto(`${BASE}/editor.html`, { waitUntil: 'networkidle' });
+    await waitForEditor(page);
+    await Promise.all([
+      page.waitForURL(/\/play\.html/, { timeout: 10000 }),
+      page.click('#playBtn'),
+    ]);
+    await waitForPlaytest(page);
+
+    await page.locator('body').click();
+    await page.keyboard.down('KeyW');
+    await page.waitForTimeout(5000);
+    await page.keyboard.up('KeyW');
+
+    const state = await page.evaluate(() => {
+      const b = window.__play.chassisBody;
+      return {
+        px: b.position.x, py: b.position.y, pz: b.position.z,
+        vx: b.velocity.x, vy: b.velocity.y, vz: b.velocity.z,
+      };
+    });
+
+    for (const [k, v] of Object.entries(state)) {
+      expect(Number.isFinite(v), `chassisBody.${k} must be finite, got ${v}`).toBe(true);
+    }
+    // Sanity: kart should have travelled some distance (not stuck)
+    const dist = Math.hypot(state.px, state.pz);
+    expect(dist).toBeGreaterThan(1);
+  });
 });

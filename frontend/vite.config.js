@@ -15,7 +15,7 @@ export default defineConfig({
       input: {
         main: 'index.html',
         game: 'game.html',
-        battle: 'battle.html',
+        // battle.html retired 2026-05-10 — local Ammo battle superseded by realtime.html (Havok PvP).
         realtime: 'realtime.html',
         editor: 'editor.html',
         play: 'play.html'
