@@ -13,6 +13,7 @@ import {
   CUSTOM_TRACK_ID,
 } from './modules/content-registry.js';
 import { initPageTransitions, navigateWithTransition } from './ui/page-transition.js';
+import { mountLobbyStudioPicker, getLobbyStudioPicker } from './lobby-studio-picker.js';
 import {
   DEFAULTS,
   BUILDER_LAUNCH_INTENT_KEY,
@@ -95,6 +96,7 @@ class RacingLobby {
           this._rebuildMapDropdown();
           window.__trackPreview?.refreshStudioList?.();
           if (this.selectedMap) window.__trackPreview?.setById?.(this.selectedMap);
+          getLobbyStudioPicker()?.refresh();
         }
       } catch { /* ignore */ }
     }).catch(() => { /* offline / backend down — keep seed */ });
@@ -159,6 +161,11 @@ class RacingLobby {
     }, 2800);
 
     this._syncPerformanceModeUI();
+
+    // Phase 2.5e: condensed Studio picker (templates / community / mine)
+    // for online_arena. Visibility is toggled by _selectMode/applyStateToUI.
+    const studioPickerRoot = document.getElementById('lobby-studio-picker');
+    if (studioPickerRoot) mountLobbyStudioPicker(studioPickerRoot);
   }
 
   attachEventListeners() {
@@ -246,6 +253,7 @@ class RacingLobby {
       document.querySelectorAll('.dropdown-option').forEach((opt) =>
         opt.classList.toggle('selected', opt.getAttribute('data-map-id') === trackId)
       );
+      getLobbyStudioPicker()?.setSelectedId(trackId);
       this.sendSettingsUpdate();
     });
 
@@ -1113,6 +1121,26 @@ class RacingLobby {
     this.playBtn.classList.add('play-attention');
   }
 
+  /** Phase 2.5e: show the condensed Studio picker for online_arena-class
+   * modes and hide the legacy carousel/dropdown so the user gets the same
+   * tabbed Templates / Remix / My Saves browser they have in the Studio
+   * landing. Hides the picker (and restores carousel) for arena/race modes.
+   */
+  _syncStudioPickerVisibility() {
+    const picker = getLobbyStudioPicker();
+    const usesStudio = usesStudioTracks(this.selectedModeId);
+    const carousel = document.querySelector('.track-carousel');
+    if (picker) {
+      if (usesStudio) {
+        picker.show();
+        if (this.selectedMap) picker.setSelectedId(this.selectedMap);
+      } else {
+        picker.hide();
+      }
+    }
+    if (carousel) carousel.style.display = usesStudio ? 'none' : '';
+  }
+
   _getLeftSetupState() {
     const modeEntry = getMode(this.selectedModeId);
     const showBattle = !!(modeEntry?.selectors?.battleSettings);
@@ -1239,6 +1267,7 @@ class RacingLobby {
     if (this.partyCodeDisplay) {
       this.partyCodeDisplay.textContent = state.lobbyCode || this.currentLobbyCode || '------';
     }
+    this._syncStudioPickerVisibility();
   }
 
   initMapSelector() {
@@ -1408,6 +1437,7 @@ class RacingLobby {
     if (window.__trackPreview && this.selectedMap) {
       window.__trackPreview.setById(this.selectedMap);
     }
+    this._syncStudioPickerVisibility();
     this.refreshBattleControls();
     this._renderModeCards();
     if (this.playBtn) {

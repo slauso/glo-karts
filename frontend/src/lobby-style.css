@@ -4046,6 +4046,186 @@ input::placeholder { color: var(--text-muted); font-size: 0.88rem; }
   letter-spacing: 2px;
 }
 
+/* ===================================================
+   LOBBY STUDIO PICKER  (condensed track studio landing)
+   Phase 2.5e — tabbed templates/community/mine browser
+   inside the lobby's left card for online_arena modes.
+   =================================================== */
+.lobby-studio-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  margin-top: 8px;
+}
+.lobby-studio-picker.hidden { display: none; }
+
+.lsp-tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--lg-border);
+  padding-bottom: 4px;
+}
+.lsp-tab {
+  flex: 1;
+  background: transparent;
+  border: 0;
+  color: var(--text-muted);
+  font-family: var(--font-ui);
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  padding: 6px 4px;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+.lsp-tab:hover { color: #fff; }
+.lsp-tab.active {
+  color: #fff;
+  border-bottom-color: var(--accent, #ff0080);
+}
+
+.lsp-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 360px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+.lsp-list::-webkit-scrollbar { width: 6px; }
+.lsp-list::-webkit-scrollbar-thumb {
+  background: rgba(255, 0, 128, 0.35);
+  border-radius: 3px;
+}
+
+.lsp-empty {
+  padding: 14px 8px;
+  font-family: var(--font-ui);
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  text-align: center;
+  line-height: 1.4;
+}
+
+.lsp-tile {
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 auto;
+  background: rgba(10, 10, 24, 0.6);
+  border: 1px solid var(--lg-border);
+  border-radius: 8px;
+  overflow: hidden;
+  transition: border-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
+}
+.lsp-tile:hover {
+  border-color: rgba(255, 0, 128, 0.5);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(255, 0, 128, 0.15);
+}
+.lsp-tile.active {
+  border-color: var(--accent, #ff0080);
+  box-shadow: 0 0 0 1px var(--accent, #ff0080), 0 4px 18px rgba(255, 0, 128, 0.35);
+}
+
+.lsp-thumb {
+  width: 100%;
+  aspect-ratio: 2 / 1;
+  min-height: 100px;
+  background: #07070f;
+  display: block;
+  overflow: hidden;
+}
+.lsp-thumb svg, .lsp-thumb img {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.lsp-thumb svg { object-fit: contain; }
+.lsp-thumb img { object-fit: cover; }
+.lsp-thumb-empty {
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(135deg, #1a1a2e, #07070f);
+}
+
+.lsp-body {
+  padding: 8px 10px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.lsp-name {
+  font-family: var(--font-display);
+  font-size: 0.78rem;
+  font-weight: 400;
+  letter-spacing: 1px;
+  color: #fff;
+  text-transform: uppercase;
+  margin: 0;
+  line-height: 1.15;
+}
+.lsp-meta {
+  font-family: var(--font-ui);
+  font-size: 0.6rem;
+  color: var(--text-muted);
+  margin: 0;
+  letter-spacing: 0.5px;
+}
+.lsp-desc {
+  font-family: var(--font-ui);
+  font-size: 0.65rem;
+  color: rgba(255, 255, 255, 0.65);
+  margin: 2px 0 0;
+  line-height: 1.35;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.lsp-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 2px;
+}
+.lsp-tag {
+  font-family: var(--font-ui);
+  font-size: 0.55rem;
+  font-weight: 600;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  color: var(--accent, #ff0080);
+  background: rgba(255, 0, 128, 0.12);
+  border: 1px solid rgba(255, 0, 128, 0.3);
+  border-radius: 999px;
+  padding: 2px 7px;
+}
+.lsp-use {
+  margin-top: 6px;
+  width: 100%;
+  background: linear-gradient(135deg, var(--accent, #ff0080), #ff3aa3);
+  color: #fff;
+  border: 0;
+  border-radius: 6px;
+  font-family: var(--font-ui);
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  padding: 7px;
+  cursor: pointer;
+  transition: filter 0.15s ease;
+}
+.lsp-use:hover { filter: brightness(1.1); }
+.lsp-tile.active .lsp-use {
+  background: rgba(0, 200, 120, 0.25);
+  color: #5dffb0;
+  border: 1px solid rgba(0, 255, 150, 0.5);
+}
+
 /* Player list items — liquid glass micro-cells */
 .players-container { flex: 1; overflow-y: auto; max-height: 260px; margin-bottom: 10px; }
 
