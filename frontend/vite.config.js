@@ -18,7 +18,9 @@ export default defineConfig({
         // battle.html retired 2026-05-10 — local Ammo battle superseded by realtime.html (Havok PvP).
         realtime: 'realtime.html',
         editor: 'editor.html',
-        play: 'play.html'
+        play: 'play.html',
+        // Phase 2 — online race driven by editor3 stack (Three.js + cannon-es server).
+        multiplayerEditor3: 'multiplayer-editor3.html'
       }
     }
   }

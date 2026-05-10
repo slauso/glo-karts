@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GLO KARTS — Online (editor3)</title>
+  <link rel="icon" href="data:," />
+  <style>
+    html, body { margin: 0; height: 100%; background: #0a0d12; color: #e6edf3; font-family: 'Inter', system-ui, sans-serif; overflow: hidden; }
+    canvas { display: block; width: 100%; height: 100%; }
+    .hud {
+      position: fixed; left: 16px; top: 16px;
+      background: rgba(20,24,30,0.88); padding: 10px 14px; border-radius: 6px;
+      font-size: 13px; min-width: 220px;
+    }
+    .hud b { color: #ff3aa1; }
+    .hud .row { display:flex; justify-content: space-between; gap: 12px; }
+    .hud .ok { color: #00e5ff; }
+    .hud .warn { color: #ffd166; }
+    .hud .err { color: #ff4d6d; }
+    .controls {
+      position: fixed; left: 16px; bottom: 16px;
+      background: rgba(20,24,30,0.85); padding: 10px 14px; border-radius: 6px;
+      font-size: 12px; color: #8b96a3;
+    }
+    .controls b { color: #e6edf3; }
+  </style>
+</head>
+<body>
+  <canvas id="canvas"></canvas>
+  <div class="hud">
+    <div><b>GLO KARTS Online</b> <span style="color:#8b96a3">(editor3)</span></div>
+    <div class="row"><span>Track:</span><span id="hud-track">…</span></div>
+    <div class="row"><span>Status:</span><span id="hud-status" class="warn">connecting…</span></div>
+    <div class="row"><span>Players:</span><span id="hud-players">0</span></div>
+    <div class="row"><span>Ping:</span><span id="hud-ping">— ms</span></div>
+  </div>
+  <div class="controls">
+    <b>WASD</b> / <b>Arrows</b> drive · <b>Space</b> brake
+  </div>
+  <script type="module" src="/src/multiplayer-editor3-main.js"></script>
+</body>
+</html>

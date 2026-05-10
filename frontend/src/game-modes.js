@@ -183,6 +183,33 @@ export const MODE_REGISTRY = {
       };
     },
   },
+
+  // Phase 2: Editor3-driven online race. Uses the cannon-es server room
+  // (Editor3RaceRoom) and the Track Studio's segment renderer end-to-end.
+  // Hidden from the lobby grid for now — addressable via launch URL or
+  // the Track Studio "Play Online" button (wired in a follow-up).
+  race_editor3: {
+    id: 'race_editor3',
+    category: 'online',
+    label: 'Race Online (editor3)',
+    desc: 'Online race driven by the Track Studio engine end-to-end.',
+    icon: 'fa-flag-checkered',
+    page: 'multiplayer-editor3.html',
+    status: MODE_STATUS.HIDDEN,
+    selectors: { track: true, arena: false, battleSettings: false },
+    requiresLobby: false,
+    legacyFamily: 'race',
+    roomName: 'editor3_race_room',
+    buildConfig(lobby) {
+      return {
+        gameMode: 'race',
+        trackId: lobby?.selectedMap,
+        multiplayer: true,
+        multiplayerProvider: 'colyseus',
+        maxPlayers: lobby?.selectedMaxPlayers || 8,
+      };
+    },
+  },
 };
 
 const VISIBLE_MODE_IDS = ['battle_online', 'track_builder'];
