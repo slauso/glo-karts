@@ -950,15 +950,10 @@ class RacingLobby {
   copyCode() {
     const code = this.currentLobbyCode || this.partyCodeDisplay?.textContent || '';
     if (!code) return;
-    // Build a full invite URL so the recipient lands on the lobby page with
-    // the code (and chosen mode) pre-filled. Falls back to bare code text on
-    // very old browsers that lack window.location.origin.
-    const origin = window.location.origin || '';
-    const modeQ = this.selectedModeId ? `&mode=${encodeURIComponent(this.selectedModeId)}` : '';
-    const inviteUrl = origin
-      ? `${origin}${window.location.pathname || '/'}?code=${encodeURIComponent(code)}${modeQ}`
-      : code;
-    navigator.clipboard.writeText(inviteUrl).then(() => {
+    // Copy the bare three-word lobby phrase so users can paste it into
+    // chat / voice without the recipient also picking up the URL. The
+    // invite-URL form lives on the dedicated Share button instead.
+    navigator.clipboard.writeText(code).then(() => {
       this.copyCodeBtn.textContent = 'Copied!';
       setTimeout(() => { this.copyCodeBtn.textContent = 'Copy'; }, 1500);
     }).catch(() => {
