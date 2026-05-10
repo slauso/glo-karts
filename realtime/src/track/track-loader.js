@@ -30,14 +30,21 @@ function extractPlacements(input) {
  * Build static collider bodies for every placement and add them to `world`.
  * @param {CANNON.World} world
  * @param {*} trackData See module doc for accepted shapes.
- * @returns {{ bodies: CANNON.Body[], spawns: Array<{x:number,y:number,z:number,heading:number}>, finish: object|null }}
+ * @returns {{
+ *   bodies: CANNON.Body[],
+ *   spawns: Array<{x:number,y:number,z:number,heading:number}>,
+ *   finish: { x:number, y:number, z:number, heading:number }|null,
+ *   pickups: Array<{ id:string, x:number, y:number, z:number, kind:string, radius:number, respawnMs:number, payload:string }>,
+ * }}
  */
 export function buildWorldFromTrackData(world, trackData) {
   const placements = extractPlacements(trackData);
   const bodies = [];
   const spawns = [];
+  const pickups = [];
   let finish = null;
 
+  let pickupSeq = 0;
   for (const p of placements) {
     if (!p || typeof p.k !== 'string') continue;
     const def = SEGMENTS[p.k];
@@ -64,6 +71,20 @@ export function buildWorldFromTrackData(world, trackData) {
     if (def.isFinish && !finish) {
       finish = { x: worldPos.x, y: worldPos.y, z: worldPos.z, heading: worldRotY };
     }
+    // Combat overlays — item boxes / pickups defined in segments.js as
+    // `runtime: { kind: 'pickup', payload, respawnMs, radius }`.
+    if (def.runtime?.kind === 'pickup') {
+      pickups.push({
+        id: `pickup_${pickupSeq++}`,
+        x: worldPos.x,
+        y: getDrivableTopY(p.k) + 1.0 * S,
+        z: worldPos.z,
+        kind: p.k,
+        payload: def.runtime.payload || 'weapon_random',
+        radius: (def.runtime.radius || 14) * S,
+        respawnMs: def.runtime.respawnMs || 5000,
+      });
+    }
   }
 
   // Fallback: no explicit spawn — drop karts on the first placement.
@@ -77,7 +98,7 @@ export function buildWorldFromTrackData(world, trackData) {
     });
   }
 
-  return { bodies, spawns, finish };
+  return { bodies, spawns, finish, pickups };
 }
 
 /**
@@ -94,5 +115,6 @@ export function buildDefaultArena(world) {
     bodies: [ground],
     spawns: [{ x: 0, y: 1.5 * S, z: 0, heading: 0 }],
     finish: null,
+    pickups: [],
   };
 }

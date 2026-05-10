@@ -86,6 +86,7 @@ export class LobbyRoom extends Room {
     state.loadoutId = initialLoadoutId;
     state.performanceMode = normalizePerformanceMode(options.performanceMode);
     state.scoreLimit = Math.min(Math.max(Number(options.scoreLimit) || 5, 1), 50);
+    state.totalLaps = Math.min(Math.max(Number(options.totalLaps) || 3, 1), 10);
     state.botCount = Math.min(Math.max(Number(options.botCount) || 0, 0), 10);
     initialWeaponPool.forEach((weaponId) => state.weaponPool.push(weaponId));
     state.status = "waiting";
@@ -125,6 +126,7 @@ export class LobbyRoom extends Room {
       this.state.loadoutId = String(data.loadoutId || this.state.loadoutId || "random-all");
       this.state.performanceMode = normalizePerformanceMode(data.performanceMode || this.state.performanceMode);
       this.state.scoreLimit = Math.min(Math.max(Number(data.scoreLimit) || this.state.scoreLimit || 5, 1), 50);
+      this.state.totalLaps = Math.min(Math.max(Number(data.totalLaps) || this.state.totalLaps || 3, 1), 10);
       this.state.botCount = Math.min(Math.max(Number(data.botCount) || this.state.botCount || 0, 0), 10);
       this.state.maxPlayers = Math.min(Math.max(Number(data.maxPlayers) || this.state.maxPlayers || DEFAULT_MAX_PLAYERS, 1), 12);
       this.maxClients = this.state.maxPlayers;
@@ -288,6 +290,7 @@ export class LobbyRoom extends Room {
         performanceMode: this.state.performanceMode,
         weaponPool: Array.from(this.state.weaponPool),
         scoreLimit: this.state.scoreLimit,
+        totalLaps: this.state.totalLaps,
         botCount: this.state.botCount,
         maxPlayers: this.state.maxPlayers,
         lobbyCode: this.state.lobbyCode,
@@ -297,9 +300,16 @@ export class LobbyRoom extends Room {
         multiplayerProvider: "colyseus",
       };
 
-      const roomName = this.state.gameMode === "gloflux"
-        ? "gloflux"
-        : (this.state.gameMode === "battle" ? "battle_room" : "race_room");
+      let roomName;
+      if (this.state.modeId === "race_editor3") {
+        roomName = "editor3_race_room";
+      } else if (this.state.gameMode === "gloflux") {
+        roomName = "gloflux";
+      } else if (this.state.gameMode === "battle") {
+        roomName = "battle_room";
+      } else {
+        roomName = "race_room";
+      }
       console.log(
         `[lobby_room] matchStart roomId=${this.roomId} mode=${this.state.gameMode} trackId=${gameConfig.trackId} arenaId=${gameConfig.arenaId} customTrackBytes=${gameConfig.customTrackData?.length || 0}`
       );

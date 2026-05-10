@@ -15,6 +15,7 @@ export class LobbyState extends Schema {
     this.loadoutId = "random-all";
     this.performanceMode = "auto";
     this.scoreLimit = 5;
+    this.totalLaps = 3;
     this.botCount = 0;
     this.maxPlayers = 12;
     this.status = "waiting";
@@ -36,6 +37,7 @@ type("string")(LobbyState.prototype, "battleType");
 type("string")(LobbyState.prototype, "loadoutId");
 type("string")(LobbyState.prototype, "performanceMode");
 type("number")(LobbyState.prototype, "scoreLimit");
+type("number")(LobbyState.prototype, "totalLaps");
 type("number")(LobbyState.prototype, "botCount");
 type("number")(LobbyState.prototype, "maxPlayers");
 type("string")(LobbyState.prototype, "status");

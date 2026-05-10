@@ -160,6 +160,19 @@ class RacingLobby {
       if (event.key === 'Enter') this.joinLobbyByCode();
     });
 
+    // Auto-fill from URL invite link: ?code=ABCD&mode=race_editor3
+    try {
+      const urlParams = new URLSearchParams(window.location.search);
+      const inviteCode = urlParams.get('code');
+      if (inviteCode && this.joinCodeInput) {
+        this.joinCodeInput.value = inviteCode;
+        const inviteMode = urlParams.get('mode');
+        if (inviteMode) this.selectedModeId = inviteMode;
+        // Defer one tick so the rest of the lobby UI has finished wiring up.
+        setTimeout(() => { try { this.joinLobbyByCode(); } catch {} }, 250);
+      }
+    } catch { /* ignore */ }
+
     this.playerNameInput?.addEventListener('input', () => {
       this.playerName = this.playerNameInput.value.trim() || this.playerName;
       this.sendPlayerUpdate();
@@ -635,6 +648,18 @@ class RacingLobby {
         selectedMap: this.selectedMap || null,
       });
       sessionStorage.setItem('gameConfig', JSON.stringify(gameConfig));
+      // Carry the local player's identity so multiplayer pages (e.g.
+      // multiplayer-editor3) can pass it as joinOrCreate options.
+      try {
+        const mySid = this.room?.sessionId;
+        const me = (gameConfig.players || []).find((p) => p.id === mySid);
+        if (me) {
+          gameConfig.localPlayerName = me.name;
+          gameConfig.localPlayerColor = me.playerColor;
+          gameConfig.localPlayerKart = me.playerKart;
+          sessionStorage.setItem('gameConfig', JSON.stringify(gameConfig));
+        }
+      } catch { /* best-effort */ }
       // If host set a custom track, store it so game pages can load it
       if (gameConfig.customTrackData) {
         sessionStorage.setItem('customTrackData', gameConfig.customTrackData);
@@ -888,7 +913,15 @@ class RacingLobby {
   copyCode() {
     const code = this.currentLobbyCode || this.partyCodeDisplay?.textContent || '';
     if (!code) return;
-    navigator.clipboard.writeText(code).then(() => {
+    // Build a full invite URL so the recipient lands on the lobby page with
+    // the code (and chosen mode) pre-filled. Falls back to bare code text on
+    // very old browsers that lack window.location.origin.
+    const origin = window.location.origin || '';
+    const modeQ = this.selectedModeId ? `&mode=${encodeURIComponent(this.selectedModeId)}` : '';
+    const inviteUrl = origin
+      ? `${origin}${window.location.pathname || '/'}?code=${encodeURIComponent(code)}${modeQ}`
+      : code;
+    navigator.clipboard.writeText(inviteUrl).then(() => {
       this.copyCodeBtn.textContent = 'Copied!';
       setTimeout(() => { this.copyCodeBtn.textContent = 'Copy'; }, 1500);
     }).catch(() => {

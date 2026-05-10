@@ -195,9 +195,9 @@ export const MODE_REGISTRY = {
     desc: 'Online race driven by the Track Studio engine end-to-end.',
     icon: 'fa-flag-checkered',
     page: 'multiplayer-editor3.html',
-    status: MODE_STATUS.HIDDEN,
+    status: MODE_STATUS.BETA,
     selectors: { track: true, arena: false, battleSettings: false },
-    requiresLobby: false,
+    requiresLobby: true,
     legacyFamily: 'race',
     roomName: 'editor3_race_room',
     buildConfig(lobby) {
@@ -212,7 +212,7 @@ export const MODE_REGISTRY = {
   },
 };
 
-const VISIBLE_MODE_IDS = ['battle_online', 'track_builder'];
+const VISIBLE_MODE_IDS = ['battle_online', 'race_editor3', 'track_builder'];
 
 export function getVisibleModes() {
   return VISIBLE_MODE_IDS.map((id) => MODE_REGISTRY[id]).filter(Boolean);
