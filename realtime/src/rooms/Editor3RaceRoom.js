@@ -37,25 +37,17 @@ import { buildWorldFromTrackData, buildDefaultArena } from "../track/track-loade
 import { fetchTrack } from "../track/backend-client.js";
 import { RACE_WEAPON_POOL, WEAPONS, grantWeapon, swapSecondaryWeapon } from "../combat.js";
 import { log } from "../logger.js";
+import {
+  SCALE, M,
+  createKartVehicle, createControlState, createPlayerCombat,
+  applyKartControls, inputsToKeys,
+} from "../physics/kart-physics.js";
 
 const TICK_HZ = 60;
 const SNAPSHOT_HZ = 20;
-const SCALE = 1000; // mm/m — must match SEGMENT_SCALE in segment-physics.js.
-                    // The track world is built in mm-units (1 unit = 1 mm),
-                    // so kart bodies, wheel radii, gravity, and engine forces
-                    // must all be expressed in mm to interact correctly.
-const M = (n) => n * SCALE; // metres → world units (mm)
-
-// Kart geometry/mass — scaled to mm to match the track world. These mirror
-// the SP playtest physics in `frontend/src/editor3/physics-worker.js` so
-// online_arena drives identically to single-player playtest.
-const KART_MASS = 150;
-const CHASSIS_HX = M(0.6), CHASSIS_HY = M(0.3), CHASSIS_HZ = M(1.0);
-const WHEEL_RADIUS = M(0.4);
-// Engine force is applied in world-units · mass / s² → scale by SCALE so the
-// resulting acceleration in m/s² stays the same as in metres-space.
-const MAX_ENGINE = 1700 * SCALE;
-const MAX_BRAKE = 28 * SCALE;
+// Kart constants live in the shared kart-physics module so SP playtest
+// and the online race room use the exact same handling values. Only
+// room-level constants stay here.
 const MAX_PLAYERS = 8;
 const FINISH_TRIGGER_RADIUS_MM = 18 * SCALE;
 const HALF_TRACK_FAR_RADIUS_MM = 30 * SCALE;
@@ -141,53 +133,10 @@ function makeWorld() {
 }
 
 function spawnVehicle(world, pose) {
-  const chassis = new CANNON.Body({ mass: KART_MASS });
-  chassis.addShape(new CANNON.Box(new CANNON.Vec3(CHASSIS_HX, CHASSIS_HY, CHASSIS_HZ)));
-  chassis.position.set(pose.x, pose.y, pose.z);
-  chassis.quaternion.setFromAxisAngle(new CANNON.Vec3(0, 1, 0), pose.heading || 0);
-  // Damping mirrors SP playtest — bleeds residual lateral velocity / yaw
-  // wobble so corrections settle quickly (arcade-feel responsiveness).
-  chassis.linearDamping = 0.06;
-  chassis.angularDamping = 0.55;
-  world.addBody(chassis);
-
-  const vehicle = new CANNON.RaycastVehicle({
-    chassisBody: chassis,
-    indexRightAxis: 0,
-    indexUpAxis: 1,
-    indexForwardAxis: 2,
-  });
-  // Suspension tuning copied from SP playtest (`physics-worker.js`). The
-  // previous defaults (stiffness 30, force 1e5) were tuned for metres-space
-  // and resulted in karts falling through the deck on first contact.
-  const wheelOpts = {
-    radius: WHEEL_RADIUS,
-    directionLocal: new CANNON.Vec3(0, -1, 0),
-    suspensionStiffness: 60,
-    suspensionRestLength: M(0.3),
-    frictionSlip: 4.6,
-    dampingRelaxation: 4.4,
-    dampingCompression: 4.6,
-    maxSuspensionForce: M(150000),
-    rollInfluence: 0.012,
-    axleLocal: new CANNON.Vec3(-1, 0, 0),
-    chassisConnectionPointLocal: new CANNON.Vec3(),
-    maxSuspensionTravel: M(0.45),
-    customSlidingRotationalSpeed: -30,
-    useCustomSlidingRotationalSpeed: true,
-  };
-  // Wheel placement matches SP playtest so weight transfer + raycast
-  // origin are identical between online and SP.
-  const WX = CHASSIS_HX + M(0.05);
-  const WZ = CHASSIS_HZ * 0.75;
-  const WY = -CHASSIS_HY * 0.5;
-  for (const [px, pz] of [[-WX, -WZ], [WX, -WZ], [-WX, WZ], [WX, WZ]]) {
-    wheelOpts.chassisConnectionPointLocal = new CANNON.Vec3(px, WY, pz);
-    vehicle.addWheel({ ...wheelOpts });
-  }
-  vehicle.addToWorld(world);
-  // Tag wheels with the wheelMat so the ground/wheel contact material
-  // applies (otherwise we get the default friction = 0.4 instead of 0.65).
+  const { vehicle } = createKartVehicle(world, pose);
+  // Tag wheels with the world's wheelMat so the ground/wheel contact
+  // material (friction 0.65) applies. Without this they fall back to
+  // the default 0.4 friction and karts feel oddly slippery.
   for (const w of vehicle.wheelInfos) {
     w.material = world.__wheelMat;
   }
@@ -271,6 +220,7 @@ export class Editor3RaceRoom extends Room {
         throttle: clamp01(msg?.throttle ?? 0),
         brake: clamp01(msg?.brake ?? 0),
         steer: clampSym(msg?.steer ?? 0),
+        drift: !!msg?.drift,
       });
     });
 
@@ -369,6 +319,14 @@ export class Editor3RaceRoom extends Room {
     this.spawnCursor++;
     const vehicle = spawnVehicle(this.world, pose);
     this.vehicles.set(client.sessionId, vehicle);
+    // Per-kart control + combat state for the shared physics core.
+    // Without this the drift state machine and boost timers would be
+    // shared across players (or simply absent), and online karts
+    // wouldn't feel like SP playtest.
+    if (!this.controlStates) this.controlStates = new Map();
+    if (!this.playerCombats) this.playerCombats = new Map();
+    this.controlStates.set(client.sessionId, createControlState());
+    this.playerCombats.set(client.sessionId, createPlayerCombat());
 
     const ks = new KartState();
     ks.x = pose.x; ks.y = pose.y; ks.z = pose.z;
@@ -386,7 +344,7 @@ export class Editor3RaceRoom extends Room {
     ks.weapon3 = ""; ks.ammo3 = 0;
     this.state.karts.set(client.sessionId, ks);
 
-    this.inputs.set(client.sessionId, { seq: 0, throttle: 0, brake: 0, steer: 0 });
+    this.inputs.set(client.sessionId, { seq: 0, throttle: 0, brake: 0, steer: 0, drift: false });
     this.kartMeta.set(client.sessionId, { lastLapAt: Date.now(), farReached: !this.finish });
     log("info", "editor3_room_join", {
       roomId: this.roomId, sessionId: client.sessionId, name: ks.name, total: this.vehicles.size,
@@ -402,6 +360,8 @@ export class Editor3RaceRoom extends Room {
     this.vehicles.delete(client.sessionId);
     this.inputs.delete(client.sessionId);
     this.kartMeta.delete(client.sessionId);
+    this.controlStates?.delete(client.sessionId);
+    this.playerCombats?.delete(client.sessionId);
     this.state.karts.delete(client.sessionId);
     log("info", "editor3_room_leave", { roomId: this.roomId, sessionId: client.sessionId, remaining: this.vehicles.size });
   }
@@ -436,23 +396,24 @@ export class Editor3RaceRoom extends Room {
   }
 
   _tick() {
+    // Drive each kart through the SHARED physics core so handling is
+    // exactly identical to SP playtest. The core handles engine force,
+    // braking, steering, drift hop/commit/exit, mini-turbo boost and
+    // anti-pitch. Server only converts {throttle,brake,steer,drift}
+    // input messages into the keyboard-shape the core expects.
     for (const [sid, input] of this.inputs.entries()) {
       const v = this.vehicles.get(sid);
       if (!v) continue;
-      // Engine force is NEGATED to match SP playtest (`physics-worker.js`):
-      // with axleLocal = (-1,0,0) and directionLocal = (0,-1,0) the wheel
-      // tangent under positive engine force drives the chassis in +Z local,
-      // but the spawn segment is authored "forward = -Z" so the kart
-      // would drive backwards along the track. SP fixes this by negating
-      // the engine force; we mirror.
-      const eng = -(input.throttle * MAX_ENGINE - input.brake * MAX_BRAKE * 50);
-      v.applyEngineForce(eng * 0.25, 0); // rear assist (matches SP 25% split)
-      v.applyEngineForce(eng * 0.25, 1);
-      v.applyEngineForce(eng, 2);        // front drive (FWD bias to curb wheelies)
-      v.applyEngineForce(eng, 3);
-      v.setSteeringValue(input.steer * 0.5, 0);
-      v.setSteeringValue(input.steer * 0.5, 1);
-      for (let w = 0; w < 4; w++) v.setBrake(input.brake * MAX_BRAKE, w);
+      const cs = this.controlStates.get(sid);
+      const pc = this.playerCombats.get(sid);
+      if (!cs || !pc) continue;
+      applyKartControls({
+        chassisBody: v.chassisBody,
+        vehicle: v,
+        controlState: cs,
+        keys: inputsToKeys(input),
+        playerCombat: pc,
+      }, this.tickDt);
     }
     const t0 = process.hrtime.bigint();
     this.world.step(this.tickDt, this.tickDt, 3);

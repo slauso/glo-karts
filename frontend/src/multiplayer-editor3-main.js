@@ -215,7 +215,7 @@ function spawnProjectileFx(x, y, z, color) {
 let roomRef = null; // populated once room joined
 const PICKUP_PROXIMITY_MM = 16 * S; // client-side trigger to send pickupItem
 
-const input = { throttle: 0, brake: 0, steer: 0, seq: 0 };
+const input = { throttle: 0, brake: 0, steer: 0, drift: false, seq: 0 };
 const keys = new Set();
 window.addEventListener('keydown', (e) => {
   keys.add(e.code);
@@ -230,9 +230,13 @@ function pollInput() {
   const left = keys.has('KeyA') || keys.has('ArrowLeft');
   const right = keys.has('KeyD') || keys.has('ArrowRight');
   const brake = keys.has('Space');
+  // Drift = Shift (ShiftLeft / ShiftRight). Mirrors SP playtest binding
+  // so hop→commit→slide works identically online.
+  const drift = keys.has('ShiftLeft') || keys.has('ShiftRight');
   input.throttle = fwd ? 1 : 0;
   input.brake = brake ? 1 : (back ? 0.4 : 0);
   input.steer = (left ? -1 : 0) + (right ? 1 : 0);
+  input.drift = drift;
 }
 
 // ── Render loop ─────────────────────────────────────────────────────
@@ -400,7 +404,7 @@ async function connect() {
     pollInput();
     input.seq++;
     try {
-      room.send('input', { seq: input.seq, throttle: input.throttle, brake: input.brake, steer: input.steer });
+      room.send('input', { seq: input.seq, throttle: input.throttle, brake: input.brake, steer: input.steer, drift: input.drift });
     } catch { /* dropped frame */ }
   }, 1000 / SEND_HZ);
 
