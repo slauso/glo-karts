@@ -46,8 +46,9 @@ export function isStudioTracksLoaded() {
 /** Fetch templates + community + mine; dedupe and cache. Returns the cache. */
 export async function loadStudioTracks({ force = false } = {}) {
   if (_studioLoadPromise && !force) return _studioLoadPromise;
-  _studioLoadPromise = (async () => {
+  const promise = (async () => {
     const seen = new Map();
+    let anyFetchOk = false;
     const ingest = (rows, source) => {
       for (const row of rows || []) {
         if (!row || !row.id) continue;
@@ -60,7 +61,9 @@ export async function loadStudioTracks({ force = false } = {}) {
         });
       }
     };
-    const safe = (p) => p.then((r) => r?.results || r || []).catch(() => []);
+    const safe = (p) => p
+      .then((r) => { anyFetchOk = true; return r?.results || r || []; })
+      .catch(() => []);
     const [templates, community, mine] = await Promise.all([
       safe(StudioAPI.templates({ page: 1 })),
       safe(StudioAPI.community({ page: 1, sort: 'popular' })),
@@ -69,11 +72,21 @@ export async function loadStudioTracks({ force = false } = {}) {
     ingest(mine, 'mine');
     ingest(templates, 'template');
     ingest(community, 'community');
-    _studioTrackCache = Array.from(seen.values());
-    _studioTracksLoaded = true;
+    // Phase 2.5b: only commit the new cache when the backend actually
+    // responded. If every fetch threw (e.g. Django not running) keep the
+    // existing seed so the carousel/dropdown still has Tutorial Loop to
+    // show instead of going blank.
+    if (anyFetchOk && seen.size > 0) {
+      _studioTrackCache = Array.from(seen.values());
+      _studioTracksLoaded = true;
+    } else {
+      // Allow a future force-refresh to try again once the backend is up.
+      _studioLoadPromise = null;
+    }
     return _studioTrackCache;
   })();
-  return _studioLoadPromise;
+  _studioLoadPromise = promise;
+  return promise;
 }
 
 export const DEFAULTS = {
