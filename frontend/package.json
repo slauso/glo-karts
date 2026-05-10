@@ -20,7 +20,8 @@
     "test:e2e:postgame-host": "node scripts/postgame-host-settings-regression.mjs",
     "test:e2e:builder-parity": "node scripts/builder-live-parity-audit.mjs",
     "test:e2e:builder-direct-playtest": "node scripts/builder-direct-playtest-smoke.mjs",
-    "test:e2e:builder-direct-playtest:ci": "node scripts/builder-direct-playtest-ci.mjs"
+    "test:e2e:builder-direct-playtest:ci": "node scripts/builder-direct-playtest-ci.mjs",
+    "test:e2e:playtest-perf": "node scripts/playtest-perf-smoke.mjs"
   },
   "devDependencies": {
     "@playwright/test": "^1.58.2",

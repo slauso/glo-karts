@@ -51,7 +51,7 @@ export const MODE_REGISTRY = {
   battle_online: {
     id: 'battle_online',
     category: 'online',
-    label: 'Online Battle',
+    label: 'Online',
     desc: 'Create or join a realtime arena battle with friends.',
     icon: 'fa-crosshairs',
     page: 'realtime.html',
@@ -74,36 +74,14 @@ export const MODE_REGISTRY = {
     },
   },
 
-  race_online: {
-    id: 'race_online',
-    category: 'online',
-    label: 'Online Race',
-    desc: 'Lap-based realtime race lobby. Pick a built track or one of the bundled circuits.',
-    icon: 'fa-flag-checkered',
-    page: 'realtime.html',
-    status: MODE_STATUS.READY,
-    selectors: { track: true, arena: false, battleSettings: false },
-    requiresLobby: true,
-    buildConfig(lobby) {
-      return {
-        gameMode: 'race',
-        trackId: lobby.selectedMap,
-        multiplayer: true,
-        multiplayerProvider: 'colyseus',
-        maxPlayers: lobby.selectedMaxPlayers || 8,
-        totalLaps: parseInt(lobby?.selectedLaps || '3', 10) || 3,
-      };
-    },
-  },
-
   track_builder: {
     id: 'track_builder',
     category: 'tools',
     label: 'Track Studio',
     desc: 'Build custom tracks and playtest them instantly.',
-    icon: 'fa-road',
+    icon: 'fa-cubes',
     page: 'editor.html',
-    status: MODE_STATUS.READY,
+    status: MODE_STATUS.BETA,
     selectors: { track: false, arena: false, battleSettings: false },
     requiresLobby: false,
     buildConfig() {
@@ -145,7 +123,7 @@ export const MODE_REGISTRY = {
         maxPlayers: lobby?.selectedMaxPlayers || 8,
         multiplayer: true,
         multiplayerProvider: 'colyseus',
-        selectedKart: sessionStorage.getItem('selectedKart') || 'tux',
+        selectedKart: sessionStorage.getItem('selectedKart') || 'amanda',
       };
     },
   },
@@ -169,13 +147,13 @@ export const MODE_REGISTRY = {
         maxPlayers: lobby?.selectedMaxPlayers || 8,
         multiplayer: true,
         multiplayerProvider: 'colyseus',
-        selectedKart: sessionStorage.getItem('selectedKart') || 'tux',
+        selectedKart: sessionStorage.getItem('selectedKart') || 'amanda',
       };
     },
   },
 };
 
-const VISIBLE_MODE_IDS = ['battle_online', 'race_online', 'track_builder'];
+const VISIBLE_MODE_IDS = ['battle_online', 'track_builder'];
 
 export function getVisibleModes() {
   return VISIBLE_MODE_IDS.map((id) => MODE_REGISTRY[id]).filter(Boolean);

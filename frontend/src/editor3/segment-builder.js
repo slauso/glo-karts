@@ -64,6 +64,10 @@ export function buildSegmentMesh(key) {
   const group = new THREE.Group();
   group.name = `seg:${key}`;
   for (const block of def.blocks) {
+    // Trimesh blocks never reach here in practice (they're paired with
+    // a polished VISUAL_BUILDERS entry). Skip defensively to avoid
+    // dereferencing missing size/pos arrays in the fallback path.
+    if (block.kind === 'trimesh') continue;
     const sx = block.size[0] * S, sy = block.size[1] * S, sz = block.size[2] * S;
     const px = block.pos[0] * S,  py = block.pos[1] * S,  pz = block.pos[2] * S;
     const mesh = new THREE.Mesh(getBoxGeo(sx, sy, sz), getMaterial(block.color));
@@ -95,12 +99,11 @@ export function buildSegmentBody(key, worldPos, worldRotY) {
 
   for (const block of def.blocks) {
     if (block.solid === false) continue;
-    const halfExtents = new CANNON.Vec3(
-      (block.size[0] * S) / 2, (block.size[1] * S) / 2, (block.size[2] * S) / 2,
+    const offset = new CANNON.Vec3(
+      (block.pos?.[0] || 0) * S,
+      (block.pos?.[1] || 0) * S,
+      (block.pos?.[2] || 0) * S,
     );
-    const shape = new CANNON.Box(halfExtents);
-    const offset = new CANNON.Vec3(block.pos[0] * S, block.pos[1] * S, block.pos[2] * S);
-    // Compose local rotation (rotX then rotY then rotZ)
     const localQuat = new CANNON.Quaternion();
     if (block.rotX || block.rotY || block.rotZ) {
       const qx = new CANNON.Quaternion();
@@ -113,6 +116,20 @@ export function buildSegmentBody(key, worldPos, worldRotY) {
       qy.mult(qx, tmp);
       tmp.mult(qz, localQuat);
     }
+    if (block.kind === 'trimesh') {
+      // Curved surfaces (banked-turn bowl) where a discrete box mesh
+      // can't seal the lateral seams without gaps. Vertices are stored
+      // in segment-local *segment units* and scaled here to world (mm).
+      const verts = new Float32Array(block.vertices.length);
+      for (let i = 0; i < block.vertices.length; i++) verts[i] = block.vertices[i] * S;
+      const shape = new CANNON.Trimesh(verts, block.indices);
+      body.addShape(shape, offset, localQuat);
+      continue;
+    }
+    const halfExtents = new CANNON.Vec3(
+      (block.size[0] * S) / 2, (block.size[1] * S) / 2, (block.size[2] * S) / 2,
+    );
+    const shape = new CANNON.Box(halfExtents);
     body.addShape(shape, offset, localQuat);
   }
   return body;
@@ -125,6 +142,14 @@ export function getDrivableTopY(key) {
   let maxY = 0;
   for (const b of def.blocks) {
     if (!b.drivable) continue;
+    if (b.kind === 'trimesh') {
+      // Top is the highest vertex y in segment-local units.
+      const verts = b.vertices;
+      for (let i = 1; i < verts.length; i += 3) {
+        if (verts[i] > maxY) maxY = verts[i];
+      }
+      continue;
+    }
     const top = b.pos[1] + b.size[1] / 2;
     if (top > maxY) maxY = top;
   }

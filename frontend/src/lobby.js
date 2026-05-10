@@ -988,7 +988,7 @@ class RacingLobby {
     return {
       playerName: this.playerName,
       playerColor: sessionStorage.getItem('carColor') || 'red',
-      playerKart: sessionStorage.getItem('selectedKart') || 'tux',
+      playerKart: sessionStorage.getItem('selectedKart') || 'amanda',
       gloEffect: glo.gloEffect,
       gloColor: glo.gloColor,
       gloColor2: glo.gloColor2,
@@ -1304,14 +1304,14 @@ class RacingLobby {
   }
 
   applyStateToUI(state) {
-    // Sync selectedModeId from server gameMode (race/battle)
+    // Sync selectedModeId from server gameMode (battle / gloflux)
     const serverIsBattle = state.gameMode === 'battle';
     // If we're in a lobby, derive the modeId from server state
     if (this.room) {
       this.selectedModeId = state.gameMode === 'gloflux'
         ? (state.modeId || 'gloflux')
-        : (serverIsBattle ? 'battle_online' : 'race_online');
-      this.selectedMode = state.gameMode || (serverIsBattle ? 'battle' : 'race');
+        : 'battle_online';
+      this.selectedMode = state.gameMode || 'battle';
     }
 
     // Re-render mode selector UI
@@ -1547,25 +1547,42 @@ class RacingLobby {
     const leftPanel = document.querySelector('.simplified-left-panel');
     const isInitial = leftPanel?.classList.contains('mode-initial');
 
+    const MODE_TAGLINES = {};
+
+    const MODE_SHORT_LABELS = {
+      battle_online: 'ONLINE',
+      track_builder: 'STUDIO',
+    };
+
     cardsContainer.innerHTML = '';
     modes.forEach((mode) => {
       const card = document.createElement('div');
       card.className = 'mode-card';
       if (mode.id === this.selectedModeId) card.classList.add('active');
+      if (mode.id === 'track_builder') card.classList.add('mode-card-studio');
       card.setAttribute('data-mode-id', mode.id);
-      const isBattleOnlineCard = mode.id === 'battle_online';
 
       let badgeHTML = '';
       if (mode.status === MODE_STATUS.BETA) {
         badgeHTML = '<span class="mode-card-badge beta">BETA</span>';
       }
 
+      const tagline = MODE_TAGLINES[mode.id] || '';
+      const taglineHTML = tagline
+        ? `<div class="mode-card-tagline">${tagline}</div>`
+        : '';
+      const shortLabel = MODE_SHORT_LABELS[mode.id] || mode.label;
+
       card.innerHTML = `
         <div class="mode-card-icon"><i class="fas ${mode.icon}"></i></div>
         <div class="mode-card-info">
-          <div class="mode-card-label">${mode.label}</div>
+          <div class="mode-card-label">${shortLabel}</div>
+          ${taglineHTML}
         </div>
         ${badgeHTML}
+        <div class="mode-card-arrow" aria-hidden="true"><i class="fas fa-chevron-right"></i></div>
+        <span class="mode-card-tap-ring" aria-hidden="true"></span>
+        <span class="mode-card-tap-ring mode-card-tap-ring--2" aria-hidden="true"></span>
       `;
 
       if (mode.page && mode.category === 'tools') {
@@ -1574,24 +1591,34 @@ class RacingLobby {
         card.addEventListener('click', () => this._selectMode(mode.id));
       }
 
-      if (isBattleOnlineCard) {
-        const cardStack = document.createElement('div');
-        cardStack.className = 'mode-card-stack mode-card-stack-battle';
-        const builderWrap = document.createElement('div');
-        builderWrap.className = 'mode-card-builder-wrap';
-        const builderButton = document.createElement('button');
-        builderButton.className = 'mode-card-builder-link mode-card-builder-separate';
-        builderButton.type = 'button';
-        builderButton.textContent = 'Track Studio';
-        builderButton.addEventListener('click', () => this._openBuilder());
-        cardStack.appendChild(card);
-        builderWrap.appendChild(builderButton);
-        cardStack.appendChild(builderWrap);
-        cardsContainer.appendChild(cardStack);
-      } else {
-        cardsContainer.appendChild(card);
-      }
+      cardsContainer.appendChild(card);
     });
+
+    this._installModeAttractLoop(cardsContainer);
+  }
+
+  _installModeAttractLoop(cardsContainer) {
+    if (!cardsContainer) return;
+    let alreadyOnboarded = false;
+    try { alreadyOnboarded = localStorage.getItem('gloKarts.firstModeChosen') === '1'; } catch {}
+    if (alreadyOnboarded) return;
+    if (this._modeAttractInstalled) {
+      // Re-render of cards: keep class in sync but don't double-bind listeners
+      cardsContainer.classList.add('is-attracting');
+      return;
+    }
+    this._modeAttractInstalled = true;
+    cardsContainer.classList.add('is-attracting');
+    const dismiss = () => {
+      cardsContainer.classList.remove('is-attracting');
+      try { localStorage.setItem('gloKarts.firstModeChosen', '1'); } catch {}
+      cardsContainer.removeEventListener('pointerenter', dismiss);
+      cardsContainer.removeEventListener('pointerdown',  dismiss);
+      cardsContainer.removeEventListener('focusin',      dismiss);
+    };
+    cardsContainer.addEventListener('pointerenter', dismiss, { once: true });
+    cardsContainer.addEventListener('pointerdown',  dismiss, { once: true });
+    cardsContainer.addEventListener('focusin',      dismiss, { once: true });
   }
 
   initRaceSettings() {

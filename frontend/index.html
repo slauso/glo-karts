@@ -20,26 +20,9 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Funnel+Sans:ital,wght@0,300..800;1,300..800&family=Poppins:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900&display=swap" rel="stylesheet">
-  <script type="module">
-    import LobbyBackground from '/src/lobby-background.js';
-    document.addEventListener('DOMContentLoaded', () => {
-      new LobbyBackground();
-    });
-  </script>
+  <script type="module" src="/src/lobby-background-init.js"></script>
 </head>
 <body>
-
-  <!-- Track Studio (new editor) discoverability link -->
-  <a href="/editor.html" id="studioLink" style="
-       position:fixed;top:14px;right:14px;z-index:9999;
-       padding:10px 16px;border-radius:10px;
-       background:linear-gradient(135deg,#ff3aa1,#9d2bff);
-       color:#fff;font:600 13px/1 system-ui,sans-serif;
-       text-decoration:none;letter-spacing:.5px;text-transform:uppercase;
-       box-shadow:0 6px 20px rgba(255,58,161,.45);
-       border:1px solid rgba(255,255,255,.15);">
-    🎨 Track Studio (Beta)
-  </a>
 
   <!-- ╔══════════════════════════════════════════════════╗
        ║  LIQUID GLASS — hidden SVG displacement filters  ║
@@ -404,91 +387,112 @@
   <!-- Background music (STK menu theme) -->
   <audio id="menu-music" src="/audio/music/music%202/main%20menu.mp3" loop preload="auto"></audio>
 
-  <!-- Info popup -->
-  <div id="info-popup" class="info-popup hidden">
-    <div class="info-overlay"></div>
-    <div class="info-content">
-      <h2>GLO KARTS</h2>
-      
-      <div class="info-section">
-        <h3>About the Game</h3>
-        <p>GLO KARTS is a multiplayer 3D kart racing game featuring characters, tracks, and arenas from <strong>SuperTuxKart</strong>. Race across 18 unique courses or battle it out in 9 dedicated arenas — solo or with friends.</p>
-      </div>
-      
-      <div class="info-section">
-        <h3>Controls</h3>
-        <ul>
-          <li><strong>W / ↑</strong> — Accelerate</li>
-          <li><strong>S / ↓</strong> — Brake / Reverse</li>
-          <li><strong>A / ←</strong> — Steer Left</li>
-          <li><strong>D / →</strong> — Steer Right</li>
-          <li><strong>Space</strong> — Use Item / Drift</li>
-          <li><strong>R</strong> — Reset Kart (if stuck)</li>
-        </ul>
-      </div>
-
-      <div class="info-section">
-        <h3>Multiplayer</h3>
-        <p>Create private or open lobbies, share the lobby code with friends, or use Quick Match for public queues. The host controls mode/settings and starts the match countdown.</p>
-      </div>
-
-      <div class="info-section">
-        <h3>Asset Credits</h3>
-        <p>Kart characters, tracks, arenas, music, and sound effects are from <strong>SuperTuxKart</strong> (supertuxkart.net), released under GPL v3 / Creative Commons licenses. GLO KARTS is a fan project and is not affiliated with the STK team.</p>
-      </div>
-      
-      <button id="close-info-btn" class="icon-btn">Close</button>
-    </div>
-  </div>
+  <!-- (Legacy info popup consolidated into Settings panel — see #performance-settings-panel below.) -->
 
 
   <!-- Conditional Vercel analytics to prevent local 404 errors -->
-  <script type="module">
-    const onVercel = /\.vercel\.app$/i.test(location.hostname);
-    if (onVercel) {
-      import('https://esm.sh/@vercel/analytics').then(({ inject }) => inject()).catch(e => console.warn('Vercel analytics failed', e));
-    }
-  </script>
+  <script type="module" src="/src/vercel-analytics-init.js"></script>
 </body>
-  <button id="performance-settings-btn" class="floating-settings-btn" type="button" aria-haspopup="dialog" aria-controls="performance-settings-panel" aria-expanded="false">
-    <span class="floating-settings-icon"><i class="fas fa-sliders"></i></span>
-    <span class="floating-settings-copy">
-      <span class="floating-settings-label">Device Mode</span>
-      <span id="performance-settings-summary" class="floating-settings-summary">Auto Detect</span>
-    </span>
+  <button id="performance-settings-btn" class="settings-btn" type="button" aria-haspopup="dialog" aria-controls="performance-settings-panel" aria-expanded="false" aria-label="Open settings">
+    <i class="fas fa-cog" id="settings-icon"></i>
   </button>
 
   <div id="performance-settings-panel" class="performance-settings-panel hidden" aria-hidden="true">
-    <button id="performance-settings-backdrop" class="performance-settings-backdrop" type="button" aria-label="Close device settings"></button>
+    <button id="performance-settings-backdrop" class="performance-settings-backdrop" type="button" aria-label="Close settings"></button>
     <section class="performance-settings-sheet" role="dialog" aria-modal="true" aria-labelledby="performance-settings-title">
       <div class="performance-settings-head">
         <div>
-          <p class="performance-settings-kicker">Performance</p>
-          <h2 id="performance-settings-title">Device Settings</h2>
+          <p class="performance-settings-kicker">Game</p>
+          <h2 id="performance-settings-title">Settings</h2>
         </div>
-        <button id="performance-settings-close" class="performance-settings-close" type="button" aria-label="Close device settings">
+        <button id="performance-settings-close" class="performance-settings-close" type="button" aria-label="Close settings">
           <i class="fas fa-times"></i>
         </button>
       </div>
 
-      <p class="performance-settings-copy-block">Choose how hard realtime battles push graphics. Ultra-Low is tuned for Chromebooks, older iPads, and weaker mobile GPUs.</p>
-
-      <div id="performance-mode-options" class="performance-mode-options" role="radiogroup" aria-label="Performance mode">
-        <button class="performance-mode-card" type="button" data-performance-mode="auto" role="radio" aria-checked="true">
-          <span class="performance-mode-eyebrow">Recommended</span>
-          <span class="performance-mode-title">Auto Detect</span>
-          <span class="performance-mode-desc">Uses the normal device check and only drops quality when the match gets busy.</span>
+      <div class="settings-tabs" role="tablist" aria-label="Settings sections">
+        <button class="settings-tab is-active" type="button" data-settings-tab="device" role="tab" aria-selected="true">
+          <i class="fas fa-sliders"></i><span>Device</span>
         </button>
-        <button class="performance-mode-card" type="button" data-performance-mode="ultra_low" role="radio" aria-checked="false">
-          <span class="performance-mode-eyebrow">Weak Device</span>
-          <span class="performance-mode-title">Ultra-Low</span>
-          <span class="performance-mode-desc">Forces stripped-down visuals, aggressive resolution scaling, and minimal effects for mobile and Chromebook play.</span>
+        <button class="settings-tab" type="button" data-settings-tab="controls" role="tab" aria-selected="false">
+          <i class="fas fa-gamepad"></i><span>Controls</span>
+        </button>
+        <button class="settings-tab" type="button" data-settings-tab="about" role="tab" aria-selected="false">
+          <i class="fas fa-circle-info"></i><span>About</span>
         </button>
       </div>
 
-      <p id="performance-mode-note" class="performance-mode-note">Auto Detect is active.</p>
+      <!-- DEVICE PANE -->
+      <div class="settings-pane" data-settings-pane="device" role="tabpanel">
+        <p class="performance-settings-copy-block">Choose how hard realtime battles push graphics. Ultra-Low is tuned for Chromebooks, older iPads, and weaker mobile GPUs.</p>
+
+        <div id="performance-mode-options" class="performance-mode-options" role="radiogroup" aria-label="Performance mode">
+          <button class="performance-mode-card" type="button" data-performance-mode="auto" role="radio" aria-checked="true">
+            <span class="performance-mode-eyebrow">Recommended</span>
+            <span class="performance-mode-title">Auto Detect</span>
+            <span class="performance-mode-desc">Uses the normal device check and only drops quality when the match gets busy.</span>
+          </button>
+          <button class="performance-mode-card" type="button" data-performance-mode="ultra_low" role="radio" aria-checked="false">
+            <span class="performance-mode-eyebrow">Weak Device</span>
+            <span class="performance-mode-title">Ultra-Low</span>
+            <span class="performance-mode-desc">Forces stripped-down visuals, aggressive resolution scaling, and minimal effects for mobile and Chromebook play.</span>
+          </button>
+        </div>
+
+        <p id="performance-mode-note" class="performance-mode-note">Auto Detect is active.</p>
+        <p class="performance-mode-status">Currently active: <strong id="performance-settings-summary">Auto Detect</strong></p>
+      </div>
+
+      <!-- CONTROLS PANE -->
+      <div class="settings-pane hidden" data-settings-pane="controls" role="tabpanel">
+        <h3 class="settings-pane-title">Keyboard</h3>
+        <ul class="settings-key-list">
+          <li><span class="settings-keys"><kbd>W</kbd><kbd>↑</kbd></span><span class="settings-key-label">Accelerate</span></li>
+          <li><span class="settings-keys"><kbd>S</kbd><kbd>↓</kbd></span><span class="settings-key-label">Brake / Reverse</span></li>
+          <li><span class="settings-keys"><kbd>A</kbd><kbd>←</kbd></span><span class="settings-key-label">Steer Left</span></li>
+          <li><span class="settings-keys"><kbd>D</kbd><kbd>→</kbd></span><span class="settings-key-label">Steer Right</span></li>
+          <li><span class="settings-keys"><kbd>Space</kbd></span><span class="settings-key-label">Use Item / Drift</span></li>
+          <li><span class="settings-keys"><kbd>R</kbd></span><span class="settings-key-label">Reset Kart (if stuck)</span></li>
+        </ul>
+        <p class="settings-pane-hint">Splitscreen player 2 uses Arrow Keys.</p>
+      </div>
+
+      <!-- ABOUT PANE -->
+      <div class="settings-pane hidden" data-settings-pane="about" role="tabpanel">
+        <h3 class="settings-pane-title">About GLO KARTS</h3>
+        <p class="settings-pane-body">Multiplayer 3D kart racing featuring characters, tracks, and arenas from <strong>SuperTuxKart</strong>. Race across 18+ courses or battle in dedicated arenas — solo or with friends.</p>
+
+        <h3 class="settings-pane-title">Multiplayer</h3>
+        <p class="settings-pane-body">Create private lobbies, share the three-word party code with friends, or use Quick Match for public queues. The host controls mode/settings and starts the match countdown.</p>
+
+        <h3 class="settings-pane-title">Credits</h3>
+        <p class="settings-pane-body">Kart characters, tracks, arenas, music, and sound effects are from <strong>SuperTuxKart</strong> (supertuxkart.net), released under GPL v3 / Creative Commons licenses. GLO KARTS is a fan project and is not affiliated with the STK team.</p>
+      </div>
     </section>
   </div>
+
+  <script>
+    // Settings panel — tab switching
+    (function () {
+      const panel = document.getElementById('performance-settings-panel');
+      if (!panel) return;
+      const tabs = Array.from(panel.querySelectorAll('.settings-tab'));
+      const panes = Array.from(panel.querySelectorAll('.settings-pane'));
+      tabs.forEach((tab) => {
+        tab.addEventListener('click', () => {
+          const target = tab.getAttribute('data-settings-tab');
+          tabs.forEach((t) => {
+            const active = t === tab;
+            t.classList.toggle('is-active', active);
+            t.setAttribute('aria-selected', active ? 'true' : 'false');
+          });
+          panes.forEach((p) => {
+            p.classList.toggle('hidden', p.getAttribute('data-settings-pane') !== target);
+          });
+        });
+      });
+    })();
+  </script>
 
 </html>
 

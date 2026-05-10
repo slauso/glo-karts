@@ -7,7 +7,7 @@
  * segments.js (which still use axis-aligned boxes).
  */
 import * as THREE from 'three';
-import { TILE, ROAD_WIDTH, ROAD_THICK, WALL_HEIGHT, WALL_THICK, PLATEAU_HEIGHT, BRIDGE_DECK_HEIGHT, BRIDGE_RAMP_CELLS } from './segments.js';
+import { TILE, ROAD_WIDTH, ROAD_THICK, WALL_HEIGHT, WALL_THICK, PLATEAU_HEIGHT, BRIDGE_DECK_HEIGHT, BRIDGE_RAMP_CELLS, SEGMENTS } from './segments.js';
 
 // ── Materials (cached, shared) ────────────────────────────────────
 const TEX = (() => {
@@ -813,56 +813,44 @@ function buildCurvedPlateau(mirror) {
 }
 
 function buildBanked(mirror) {
-  // Single-cell 90° banked corner with a CONCAVE BOWL cross-section.
-  // Instead of a flat tilted deck plus an outer barrier, the deck itself
-  // curves up smoothly toward the outside of the arc — the asphalt acts
-  // as the wall, like a velodrome / NASCAR oval. Karts travelling fast
-  // ride higher up the bowl; slow karts settle near the inner edge.
-  // No outer curb is rendered (the bowl IS the barrier).
+  // 90° banked corner over a 2×2 footprint with a SYMMETRIC concave
+  // bowl cross-section. Both inner and outer rims rise to `liftAmp(t)`,
+  // and the centerline (u=0) sits flat — karts drift outward as they
+  // gain speed and ride the bowl's outer wall through the apex, like a
+  // velodrome. Bowl walls double as the segment's barriers, so no
+  // separate guardrail is rendered.
   //
   // Cross-section parameter u ∈ [-1, +1]:
-  //   u=-1 → inner edge of arc (low, flat)
-  //   u=+1 → outer edge of arc (lifted by liftAmp(t))
-  //   y(t,u) = liftAmp(t) · ((u+1)/2)²   (quadratic, concave-up bowl)
-  // Bottom of the cross-section sits flat on ground (y=0). The drivable
-  // top surface is the curved bowl. liftAmp(0)=liftAmp(1)=0 ⇒ the
-  // cross-section degenerates to a flat ribbon at both seams, matching
-  // straight/corner exactly.
+  //   u = -1 → inner edge of arc (lifted)
+  //   u =  0 → racing-line / centerline (flat)
+  //   u = +1 → outer edge of arc (lifted)
+  //   y(t,u) = liftAmp(t) · u²       (symmetric quadratic bowl)
   const grp = new THREE.Group();
+  // Arc centre at the inside corner of the 2×2 footprint, radius
+  // 1.5·TILE so the road centerline meets the S-edge midpoint of cell
+  // (1,0) and the W-edge midpoint of cell (0,1).
   const cx = mirror ? +TILE / 2 : -TILE / 2;
   const cz = -TILE / 2;
-  const r = TILE / 2;
+  const r = 1.5 * TILE;
   const a0 = mirror ? Math.PI : 0;
   const a1 = Math.PI / 2;
-  const path = arcPath3(cx, cz, r, a0, a1, 0, 24);
+  // Longer arc ⇒ more samples so the surface stays smooth.
+  const path = arcPath3(cx, cz, r, a0, a1, 0, 36);
   // Outward direction = away from arc center.
-  // For mirror=false (CCW arc, center at -X, outside is +X): perp+=(-X) →
-  //   outerSign=-1 makes outward = +X.
-  // For mirror=true (CW arc, center at +X, outside is -X): perp+=(-X) →
-  //   outerSign=+1 keeps outward = -X.
   const outerSign = mirror ? +1 : -1;
-  // Peak lift at apex: half the road width, giving a ~22° rise at the
-  // outer edge (atan(2*lift/W) for the secant slope; instantaneous slope
-  // at the rim is 2x that = ~45°, plenty of "wall" for fast karts).
-  const LIFT_MAX = ROAD_WIDTH * 0.5;
+  // Peak lift at apex: must match `bankedTurnBlocks` in segments.js
+  // (collider + visual share the same shape). 0.20·ROAD gives a ~39°
+  // outer rim and ~22° mid-bank, comfortable for high-speed lines.
+  const LIFT_MAX = ROAD_WIDTH * 0.20;
   const liftAmpFn = (t) => {
     const tt = Math.max(0, Math.min(1, t));
     return Math.sin(tt * Math.PI) * LIFT_MAX;
   };
-  // Quadratic concave-up bowl shape function: y(u)/liftAmp = ((u+1)/2)²
-  const bowlShape = (u) => {
-    const s = (u + 1) * 0.5;
-    return s * s;
-  };
-  grp.add(extrudeRoadConcave(path, liftAmpFn, bowlShape, outerSign, { steps: 48, lateralSegs: 12 }));
-  // INNER curb only — the bowl itself is the outer barrier. Keep the inner
-  // curb at reduced size so the racing line still reads as the apex.
-  const innerSide = -outerSign;
-  const inner = curbAlongPath(path, innerSide);
-  inner.children.forEach(c => { c.scale.set(0.65, 0.7, 1.0); });
-  grp.add(inner);
-  // Racing-line dashes hugging the inside (apex). Shift the dashed paint
-  // toward the inner edge so it visually emphasises the racing line.
+  // Symmetric concave-up bowl: y(u)/liftAmp = u²
+  const bowlShape = (u) => u * u;
+  grp.add(extrudeRoadConcave(path, liftAmpFn, bowlShape, outerSign, { steps: 64, lateralSegs: 16 }));
+  // Centerline racing-line dashes — the bowl is its own barrier on both
+  // sides, so we skip curbs and let the rising rims do the visual work.
   grp.add(dashedPaintAlongPath(path));
   return grp;
 }
@@ -1597,3 +1585,408 @@ export const VISUAL_BUILDERS = {
   finish:          () => buildFinish(),
   spawn:           () => buildSpawn(),
 };
+
+// ────────────────────────────────────────────────────────────────
+// Walled-variant visuals
+//
+// Polished tall barrier walls overlay the polished base segment from
+// VISUAL_BUILDERS. Collision blocks are still defined in segments.js
+// (`buildWalls`) — these meshes are visuals only, but their positions
+// stay in lock-step with the collider geometry.
+// ────────────────────────────────────────────────────────────────
+
+// Wall profile constants (mirror segments.js — keep in sync).
+const W2_FOOT_H = 0.8;
+const W2_FOOT_T = 0.7;
+const W2_TOP_H  = 2.4;
+const W2_TOP_T  = 0.45;
+const W2_INSET  = W2_FOOT_T / 2;
+const W2_CAP_H  = 0.18;
+
+MATS.wallConcrete = new THREE.MeshStandardMaterial({
+  color: 0x9aa0a8, map: TEX.concrete, roughness: 0.85, metalness: 0.04,
+});
+MATS.wallCap = new THREE.MeshStandardMaterial({
+  color: 0x40464e, roughness: 0.7, metalness: 0.18,
+});
+MATS.wallReflector = new THREE.MeshStandardMaterial({
+  color: 0xfbbf24, emissive: 0xfbbf24, emissiveIntensity: 0.85,
+  roughness: 0.45, metalness: 0.1,
+});
+
+/** Build a polished segmented-concrete wall section.
+ *  - `length` runs along Z (axis='z') or X (axis='x').
+ *  - `baseY` is the world Y the foot BOTTOM rests on (deck top).
+ *  - foot block, top block, dark cap rail, vertical joint grooves
+ *    every ~3 m, and bright reflector studs along the top. */
+function wallStraightVisual(length, axis, baseY) {
+  const grp = new THREE.Group();
+  const horiz = (depth, l) => axis === 'z' ? [depth, l] : [l, depth];
+
+  // Foot
+  {
+    const [sx, sz] = horiz(W2_FOOT_T, length);
+    const m = new THREE.Mesh(
+      new THREE.BoxGeometry(sx, W2_FOOT_H, sz), MATS.wallConcrete,
+    );
+    m.position.y = baseY + W2_FOOT_H / 2;
+    m.castShadow = true; m.receiveShadow = true;
+    grp.add(m);
+  }
+  // Top wall
+  {
+    const [sx, sz] = horiz(W2_TOP_T, length);
+    const m = new THREE.Mesh(
+      new THREE.BoxGeometry(sx, W2_TOP_H, sz), MATS.wallConcrete,
+    );
+    m.position.y = baseY + W2_FOOT_H + W2_TOP_H / 2;
+    m.castShadow = true; m.receiveShadow = true;
+    grp.add(m);
+  }
+  // Cap rail (slightly wider, darker)
+  {
+    const [sx, sz] = horiz(W2_TOP_T * 1.45, length);
+    const m = new THREE.Mesh(
+      new THREE.BoxGeometry(sx, W2_CAP_H, sz), MATS.wallCap,
+    );
+    m.position.y = baseY + W2_FOOT_H + W2_TOP_H + W2_CAP_H / 2;
+    m.castShadow = true; m.receiveShadow = true;
+    grp.add(m);
+  }
+  // Vertical joint grooves — dark slim slabs every ~3 m mark precast
+  // segment seams. Skip endpoints so adjacent tiles read continuously.
+  const segCount = Math.max(2, Math.round(length / 3));
+  const totalH = W2_FOOT_H + W2_TOP_H;
+  for (let i = 1; i < segCount; i++) {
+    const along = -length / 2 + (i * length) / segCount;
+    const [sx, sz] = horiz(W2_TOP_T * 1.06, 0.07);
+    const m = new THREE.Mesh(
+      new THREE.BoxGeometry(sx, totalH, sz), MATS.wallCap,
+    );
+    if (axis === 'z') m.position.set(0, baseY + totalH / 2, along);
+    else              m.position.set(along, baseY + totalH / 2, 0);
+    grp.add(m);
+  }
+  // Yellow reflector studs along the cap, between joints.
+  const refCount = Math.max(2, Math.round(length / 3));
+  for (let i = 0; i < refCount; i++) {
+    const t = (i + 0.5) / refCount;
+    const along = -length / 2 + t * length;
+    const [sx, sz] = horiz(W2_TOP_T * 1.55, 0.22);
+    const m = new THREE.Mesh(
+      new THREE.BoxGeometry(sx, 0.18, sz), MATS.wallReflector,
+    );
+    const y = baseY + W2_FOOT_H + W2_TOP_H * 0.78;
+    if (axis === 'z') m.position.set(0, y, along);
+    else              m.position.set(along, y, 0);
+    grp.add(m);
+  }
+  return grp;
+}
+
+/** Tilted wall hugging a ramp deck. Built as a CHAIN of short tilted
+ *  boxes that follow the smoothstep deck profile (same approach the
+ *  collider uses, just at higher density for a smooth silhouette).
+ *
+ *  Earlier versions tried ExtrudeGeometry along a CatmullRomCurve3 path
+ *  through the deck top — but ExtrudeGeometry uses Frenet frames whose
+ *  principal normal flips at the smoothstep inflection point (t=0.5),
+ *  rotating the cross-section through ±90° and dropping the wall below
+ *  the road surface on one half of the S-curve. Per-segment tilted
+ *  boxes keep world-up as world-up at every step, so the foot bottom
+ *  always sits exactly on the deck top.
+ *
+ *  Each segment carries: foot tier, top tier, cap rail. Reflector studs
+ *  are sampled along the same curve at the cap-rail height. */
+function wallRampVisual(yStart, yEnd, lengthZ, sideX) {
+  const grp = new THREE.Group();
+  const cx = sideX * (ROAD_WIDTH / 2 + W2_INSET);
+  const SEGMENTS_RAMP = 32;       // dense enough that chord kinks are < 2cm
+  const profile = (t) => {
+    const e = t * t * (3 - 2 * t);
+    return yStart + (yEnd - yStart) * e;
+  };
+  for (let i = 0; i < SEGMENTS_RAMP; i++) {
+    const t0 = i / SEGMENTS_RAMP;
+    const t1 = (i + 1) / SEGMENTS_RAMP;
+    const z0 = -TILE / 2 + lengthZ * t0;
+    const z1 = -TILE / 2 + lengthZ * t1;
+    const y0 = profile(t0);
+    const y1 = profile(t1);
+    const dz = z1 - z0;
+    const dy = y1 - y0;
+    const len = Math.sqrt(dy * dy + dz * dz);
+    const angle = Math.atan2(dy, dz);
+    // Top of deck at this segment's chord midpoint.
+    const yDeckTop = (y0 + y1) * 0.5 + ROAD_THICK;
+    const cz = (z0 + z1) * 0.5;
+    // Foot tier
+    {
+      const m = new THREE.Mesh(
+        new THREE.BoxGeometry(W2_FOOT_T, W2_FOOT_H, len), MATS.wallConcrete,
+      );
+      m.position.set(cx, yDeckTop + W2_FOOT_H / 2, cz);
+      m.rotation.x = -angle;
+      m.castShadow = true; m.receiveShadow = true;
+      grp.add(m);
+    }
+    // Top tier
+    {
+      const m = new THREE.Mesh(
+        new THREE.BoxGeometry(W2_TOP_T, W2_TOP_H, len), MATS.wallConcrete,
+      );
+      m.position.set(cx, yDeckTop + W2_FOOT_H + W2_TOP_H / 2, cz);
+      m.rotation.x = -angle;
+      m.castShadow = true; m.receiveShadow = true;
+      grp.add(m);
+    }
+    // Cap rail
+    {
+      const m = new THREE.Mesh(
+        new THREE.BoxGeometry(W2_TOP_T * 1.45, W2_CAP_H, len), MATS.wallCap,
+      );
+      m.position.set(cx, yDeckTop + W2_FOOT_H + W2_TOP_H + W2_CAP_H / 2, cz);
+      m.rotation.x = -angle;
+      m.castShadow = true; m.receiveShadow = true;
+      grp.add(m);
+    }
+  }
+
+  // Yellow reflector studs along the cap rail (sparser than the box chain)
+  // — sampled along the same smoothstep so they sit on the cap and tilt
+  // with the slope at every position.
+  const refCount = Math.max(3, Math.round(lengthZ / 3));
+  for (let i = 0; i < refCount; i++) {
+    const t = (i + 0.5) / refCount;
+    const z = -TILE / 2 + lengthZ * t;
+    // Local slope from the analytic derivative of smoothstep.
+    const dEdt = 6 * t * (1 - t);
+    const dy = (yEnd - yStart) * dEdt / lengthZ;       // dY/dZ
+    const pitch = Math.atan2(dy, 1);
+    const yDeckTop = profile(t) + ROAD_THICK;
+    const studYOffset = W2_FOOT_H + W2_TOP_H * 0.78;
+    const stud = new THREE.Mesh(
+      new THREE.BoxGeometry(W2_TOP_T * 1.55, 0.18, 0.22), MATS.wallReflector,
+    );
+    stud.position.set(
+      cx,
+      yDeckTop + studYOffset * Math.cos(pitch),
+      z          - studYOffset * Math.sin(pitch),
+    );
+    stud.rotation.x = -pitch;
+    stud.castShadow = false; stud.receiveShadow = true;
+    grp.add(stud);
+  }
+
+  return grp;
+}
+
+/**
+ * Curved wall hugging an L-bend's outer cell perimeter. Mirrors the
+ * collider geometry built by `tallWallArc` in segments.js so the visible
+ * mesh and the kart-collision body line up exactly.
+ *
+ * Construction: a chain of `segments` short polished wall chords on an
+ * arc of radius R = TILE - W2_INSET centred at the bend's INSIDE corner.
+ * Each chord is a `wallStraightVisual` placed at the chord midpoint and
+ * yawed so its length axis is the arc tangent there. R is chosen so the
+ * arc endpoints land exactly at the adjacent straight neighbour's wall
+ * positions (±halfEdge along the connector seams) — mating without a
+ * step. Chord length = 2R sin(dθ/2) + a tiny W2_TOP_T overshoot which
+ * fills the small triangular outer-side gap caused by adjacent chords
+ * having different yaws (interior road-side face stays solid).
+ */
+function wallArcVisual(insideCorner, thetaStart, thetaEnd, baseY, segments = 12) {
+  const grp = new THREE.Group();
+  // Mirror the collider radius in segments.js tallWallArc — places wall
+  // foot inner face flush with the road outer edge so the curb arc and
+  // wall meet without a gap.
+  const R = TILE / 2 + ROAD_WIDTH / 2 + W2_INSET;
+  const dTheta = (thetaEnd - thetaStart) / segments;
+  const halfDTheta = Math.abs(dTheta) / 2;
+  const rMid = R * Math.cos(halfDTheta);
+  const chordLen = 2 * R * Math.sin(halfDTheta) + W2_TOP_T * 0.5;
+  for (let i = 0; i < segments; i++) {
+    const tMid = thetaStart + dTheta * (i + 0.5);
+    const cx = insideCorner[0] + rMid * Math.cos(tMid);
+    const cz = insideCorner[1] + rMid * Math.sin(tMid);
+    const chord = wallStraightVisual(chordLen, 'z', baseY);
+    chord.position.set(cx, 0, cz);
+    // Tangent direction at arc angle t (with arc point = centre +
+    // R*(cos t, sin t)) is (-sin t, cos t). Three.js rotY(θ) sends local
+    // +Z=(0,0,1) to world (sin θ, 0, cos θ). To align +Z with the tangent
+    // we need (sin θ, cos θ) = (-sin t, cos t) → θ = -t. The previous
+    // formula (t + π/2) rotated chords radially instead of tangentially,
+    // making them flare outward like spokes (visible in editor preview).
+    chord.rotation.y = -tMid;
+    grp.add(chord);
+  }
+  return grp;
+}
+
+/** Concrete corner pillar — closes the visual gap where two perpendicular
+ *  walls meet at the outer corner of an L-bend / curved plateau. */
+function cornerPillarVisual(x, z, baseY) {
+  const grp = new THREE.Group();
+  const h = W2_FOOT_H + W2_TOP_H;
+  const r = W2_FOOT_T * 0.7;
+  const col = new THREE.Mesh(
+    new THREE.CylinderGeometry(r, r * 1.05, h, 18), MATS.wallConcrete,
+  );
+  col.position.set(x, baseY + h / 2, z);
+  col.castShadow = true; col.receiveShadow = true;
+  grp.add(col);
+  const cap = new THREE.Mesh(
+    new THREE.CylinderGeometry(r * 1.25, r * 1.25, W2_CAP_H, 18), MATS.wallCap,
+  );
+  cap.position.set(x, baseY + h + W2_CAP_H / 2, z);
+  grp.add(cap);
+  // Reflector ring just under the cap.
+  const ring = new THREE.Mesh(
+    new THREE.TorusGeometry(r * 1.18, 0.06, 6, 18), MATS.wallReflector,
+  );
+  ring.rotation.x = Math.PI / 2;
+  ring.position.set(x, baseY + h - 0.18, z);
+  grp.add(ring);
+  return grp;
+}
+
+/** Append polished tall walls (and corner pillars / peak caps) for a
+ *  given base segment to an already-built mesh group. */
+function addWallOverlay(group, baseKey) {
+  const T = TILE;
+  // Walls hug the road outer edge (foot inner face at ±ROAD_WIDTH/2).
+  // See segments.js buildWalls for the rationale — keep this in sync.
+  const halfEdge = ROAD_WIDTH / 2 + W2_INSET;
+  const groundY = ROAD_THICK;
+
+  const placeStraight = (length, axis, baseY, cx, cz) => {
+    const m = wallStraightVisual(length, axis, baseY);
+    m.position.x += cx; m.position.z += cz;
+    group.add(m);
+  };
+
+  switch (baseKey) {
+    case 'straight':
+    case 'finish':
+    case 'bump_up':
+    case 'cap_end':
+      placeStraight(T, 'z', groundY, +halfEdge, 0);
+      placeStraight(T, 'z', groundY, -halfEdge, 0);
+      break;
+
+    case 'corner':
+      // Curved wall along the bend's outer arc, mating with adjacent
+      // straight neighbours' walls at the seam endpoints. No corner
+      // pillar needed — the arc is continuous from seam to seam.
+      group.add(wallArcVisual([-T / 2, -T / 2], 0, Math.PI / 2, groundY));
+      break;
+    case 'cornerR':
+      group.add(wallArcVisual([+T / 2, -T / 2], Math.PI, Math.PI / 2, groundY));
+      break;
+
+    case 'plateau': {
+      const yTop = PLATEAU_HEIGHT + ROAD_THICK;
+      placeStraight(T, 'z', yTop, +halfEdge, 0);
+      placeStraight(T, 'z', yTop, -halfEdge, 0);
+      break;
+    }
+    case 'curved_plateau': {
+      const yTop = PLATEAU_HEIGHT + ROAD_THICK;
+      group.add(wallArcVisual([-T / 2, -T / 2], 0, Math.PI / 2, yTop));
+      break;
+    }
+    case 'curved_plateauR': {
+      const yTop = PLATEAU_HEIGHT + ROAD_THICK;
+      group.add(wallArcVisual([+T / 2, -T / 2], Math.PI, Math.PI / 2, yTop));
+      break;
+    }
+
+    case 'ramp_up':
+      group.add(wallRampVisual(0, T * 0.6, T * 2, +1));
+      group.add(wallRampVisual(0, T * 0.6, T * 2, -1));
+      break;
+    case 'ramp_down':
+      group.add(wallRampVisual(T * 0.6, 0, T * 2, +1));
+      group.add(wallRampVisual(T * 0.6, 0, T * 2, -1));
+      break;
+    case 'jump_ramp':
+      group.add(wallRampVisual(0, 1.2, T, +1));
+      group.add(wallRampVisual(0, 1.2, T, -1));
+      break;
+    case 'bridge_onramp':
+      group.add(wallRampVisual(0, BRIDGE_DECK_HEIGHT, T * BRIDGE_RAMP_CELLS, +1));
+      group.add(wallRampVisual(0, BRIDGE_DECK_HEIGHT, T * BRIDGE_RAMP_CELLS, -1));
+      break;
+    case 'bridge_offramp':
+      group.add(wallRampVisual(BRIDGE_DECK_HEIGHT, 0, T * BRIDGE_RAMP_CELLS, +1));
+      group.add(wallRampVisual(BRIDGE_DECK_HEIGHT, 0, T * BRIDGE_RAMP_CELLS, -1));
+      break;
+
+    case 'bridge': {
+      const yTop = BRIDGE_DECK_HEIGHT + ROAD_THICK;
+      const length = T * 2;
+      const cz = length / 2 - T / 2;
+      placeStraight(length, 'z', yTop, +halfEdge, cz);
+      placeStraight(length, 'z', yTop, -halfEdge, cz);
+      break;
+    }
+
+    case 'hill_complete': {
+      const peak = T * 0.25;
+      const cellLen = T;
+      // Up-slope walls (cell 0; wallRampVisual centres them at cz=0)
+      group.add(wallRampVisual(0, peak, cellLen, -1));
+      group.add(wallRampVisual(0, peak, cellLen, +1));
+      // Down-slope walls (cell 1; shift by +cellLen)
+      const dnL = wallRampVisual(peak, 0, cellLen, -1);
+      const dnR = wallRampVisual(peak, 0, cellLen, +1);
+      dnL.position.z += cellLen; dnR.position.z += cellLen;
+      group.add(dnL); group.add(dnR);
+      // Peak cap — short upright slab bridging the two opposing tilted
+      // walls at the apex so the silhouette reads as a continuous ridge.
+      for (const sx of [-1, +1]) {
+        const cap = new THREE.Mesh(
+          new THREE.BoxGeometry(W2_TOP_T * 1.45, W2_TOP_H * 1.05, T * 0.42),
+          MATS.wallConcrete,
+        );
+        const yMid = peak + ROAD_THICK + W2_FOOT_H + (W2_TOP_H * 1.05) / 2;
+        cap.position.set(sx * halfEdge, yMid, cellLen / 2);
+        cap.castShadow = true; cap.receiveShadow = true;
+        group.add(cap);
+        const capTop = new THREE.Mesh(
+          new THREE.BoxGeometry(W2_TOP_T * 2.0, W2_CAP_H, T * 0.5),
+          MATS.wallCap,
+        );
+        capTop.position.set(
+          sx * halfEdge,
+          peak + ROAD_THICK + W2_FOOT_H + W2_TOP_H * 1.05 + W2_CAP_H / 2,
+          cellLen / 2,
+        );
+        group.add(capTop);
+      }
+      break;
+    }
+
+    default:
+      // tunnel / wide / t_junction / crossroads / spawn — no walled twin.
+      break;
+  }
+}
+
+// Wrap each base VISUAL_BUILDERS entry into a `${key}_walled` builder
+// that calls the polished base + adds the tall-wall overlay. SEGMENTS
+// from segments.js gates which keys actually have a walled twin.
+{
+  const baseKeys = Object.keys(VISUAL_BUILDERS);
+  for (const baseKey of baseKeys) {
+    const walledKey = `${baseKey}_walled`;
+    if (!SEGMENTS[walledKey]) continue;
+    const baseFn = VISUAL_BUILDERS[baseKey];
+    VISUAL_BUILDERS[walledKey] = () => {
+      const g = baseFn();
+      addWallOverlay(g, baseKey);
+      return g;
+    };
+  }
+}

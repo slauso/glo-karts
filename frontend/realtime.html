@@ -288,8 +288,8 @@
         if (builderName) builderName.textContent = builderPlaytestMeta?.name || 'Untitled Track';
         if (builderShell) builderShell.textContent = roomName.replace('_', ' ').toUpperCase();
         if (exitButton) {
-          exitButton.href = 'builder.html';
-          exitButton.setAttribute('aria-label', 'Return to builder');
+          exitButton.href = 'editor.html';
+          exitButton.setAttribute('aria-label', 'Return to editor');
         }
         formatPlaytestStats();
       };
@@ -398,7 +398,7 @@
           console.error('[Realtime] Full error:', err);
           emitPlaytestStage({ phase: 'error', label: 'Connection failed', detail: msg.slice(0, 140), progress: 1, state: 'warning' });
           if (loadingText) loadingText.textContent = msg.slice(0, 120);
-          setTimeout(() => { window.location.href = isBuilderPlaytest ? 'builder.html' : 'index.html'; }, 5000);
+          setTimeout(() => { window.location.href = isBuilderPlaytest ? 'editor.html' : 'index.html'; }, 5000);
         }
       })();
 

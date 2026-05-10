@@ -10,3 +10,6 @@ python manage.py collectstatic --no-input
 
 # Run migrations
 python manage.py migrate
+
+# Seed/refresh built-in track templates (idempotent)
+python manage.py seed_templates

@@ -152,7 +152,7 @@ async function bootRealtime() {
   const smokeMode = sessionStorage.getItem('realtimeSmokeMode') || localStorage.getItem('realtimeSmokeMode') || '';
   const playerInfo = config?.players?.find((player) => player.id === myPlayerId) || {};
   const joinCustomization = {
-    kartId: playerInfo.playerKart || config?.selectedKart || sessionStorage.getItem('selectedKart') || localStorage.getItem('selectedKart') || 'tux',
+    kartId: playerInfo.playerKart || config?.selectedKart || sessionStorage.getItem('selectedKart') || localStorage.getItem('selectedKart') || 'amanda',
     playerColor: playerInfo.playerColor || sessionStorage.getItem('carColor') || localStorage.getItem('carColor') || 'red',
     gloEffect: playerInfo.gloEffect || sessionStorage.getItem('gloEffect') || localStorage.getItem('gloEffect') || 'solid',
     gloColor: playerInfo.gloColor || sessionStorage.getItem('gloColor') || localStorage.getItem('gloColor') || '#ff0080',

@@ -16,6 +16,7 @@ import {
 } from './modules/multiplayer.js';
 import { initPhysics, updatePhysics, FIXED_PHYSICS_STEP } from './modules/physics-ammo.js';
 import { createMinimap, extractTrackData, updateMinimapPlayers } from './modules/minimap-three.js';
+import { initSkidTrails, updateSkidTrails, clearSkidTrails } from './modules/skid-trails.js';
 import { initPageTransitions, navigateWithTransition } from './ui/page-transition.js';
 
 initPageTransitions();
@@ -1044,7 +1045,11 @@ function init() {
       currentSteeringAngle = loadedComponents.currentSteeringAngle;
       
       console.log("Car model loaded and global variables set:", carModel);
-      
+
+      // Skid trail ribbons — must init AFTER carModel exists so the trail
+      // group is part of the same scene the renderer is using.
+      initSkidTrails(scene, vehicle.getNumWheels());
+
       // Update car reference in multiplayer state
       multiplayerState.carModel = carModel;
       
@@ -1292,6 +1297,14 @@ function animate() {
     // Send car data as before - only in multiplayer
     if (raceState.isMultiplayer) {
       sendCarData({carModel});
+    }
+
+    // Skid trails: update once per render frame (not per physics sub-step)
+    // so emission rate is independent of how many fixed steps ran. Uses
+    // wall-clock deltaTime so fades stay smooth even if physics catches up
+    // multiple steps after a stall.
+    if (vehicle && carModel) {
+      updateSkidTrails(window.Ammo, vehicle, carModel, deltaTime);
     }
 
     // Check if all players are connected in multiplayer

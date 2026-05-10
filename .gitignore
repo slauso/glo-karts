@@ -43,4 +43,7 @@ frontend/.codex-logs/
 frontend/.tmp-*
 frontend/*-screenshot.png
 frontend/scripts/_debug-*
+frontend/dev-snapshots/
+frontend/playwright-report/
+frontend/screenshots/
 

@@ -22,6 +22,7 @@ import { buildSegmentMesh } from './segment-builder.js';
 import { Track, encodeTrack, decodeTrack } from './track-data.js';
 import { KARTS, resolveSelectedKartId } from './kart-catalog.js';
 import { preloadAllKarts, cloneKart } from './kart-loader.js';
+import { renderKartThumbnail } from './kart-thumbnails.js';
 import {
   DECOR, DECOR_KEYS, DECOR_CATEGORY_ORDER, DECOR_CATEGORY_LABELS,
   isDecorKey, DecorStore, buildDecorMesh, syncDecorMesh, getDecorMaterial,
@@ -30,6 +31,8 @@ import {
 import { onGlbLoaded, instanceGLB } from './glb-cache.js';
 import { buildGroupMesh } from './csg.js';
 import { WORLD_UNITS_PER_M, m, mm } from './units.js';
+import { StudioAPI } from './studio-api.js';
+import { showStudioLanding } from './studio-landing.js';
 
 // Editor runs in world units where 1 unit = 1 mm. Segments are authored in
 // metres, so convert TILE here for placement math (TILE = 12 m → 12000 mm).
@@ -99,22 +102,37 @@ scene.add(new THREE.HemisphereLight(0xffffff, 0xe6ecf0, 0.35));
 // Ground plane (raycast target for placement). Painted to match the
 // workplane plate color so beyond the bordered work area there's no
 // visible horizon — the cyan reads as infinite.
+//
+// `depthWrite = false` so the ground does not deposit a depth value at
+// y=0 across the entire 2 km × 2 km plate. Without this, the workplane
+// plate (mm(-2)) and grid layers (mm(-4..-6)) below sit only a few mm
+// behind the ground in world space — at typical view distances of
+// 20–100 m the depth-buffer can't resolve a millimetre and the grid
+// lines flicker on every camera rotation as fragments randomly win/lose
+// the depth comparison. Suppressing the ground's depth write removes
+// the false comparand entirely; placed road segments at y > 0 still
+// write depth normally and continue to occlude the grids beneath them.
 const groundGeo = new THREE.PlaneGeometry(m(2000), m(2000));
-const groundMat = new THREE.MeshBasicMaterial({ color: 0xdcecf2 });
+const groundMat = new THREE.MeshBasicMaterial({ color: 0xdcecf2, depthWrite: false });
 const ground = new THREE.Mesh(groundGeo, groundMat);
 ground.rotation.x = -Math.PI / 2;
 ground.receiveShadow = false;
 ground.name = 'ground';
+ground.renderOrder = -10;          // draw before anything else
 scene.add(ground);
 
 // Tinkercad-style bounded workplane plate. Sized large enough that the
 // camera can tilt to its max polar angle without ever exposing the white
 // ground past the plate edge. The thin accent border still reads at the
 // outer perimeter when the user zooms out.
-const _plateSize = m(200);
+// (4× the original 200 m so larger custom builds fit on the workplane.)
+const _plateSize = m(800);
 const _plate = new THREE.Mesh(
   new THREE.PlaneGeometry(_plateSize, _plateSize),
-  new THREE.MeshBasicMaterial({ color: 0xdcecf2, transparent: true, opacity: 0.95 })
+  // depthWrite: false for the same reason as `ground` above — the
+  // plate must not deposit depth at y=mm(-2) where the grid layers
+  // immediately beneath would otherwise flicker against it.
+  new THREE.MeshBasicMaterial({ color: 0xdcecf2, transparent: true, opacity: 0.95, depthWrite: false })
 );
 _plate.rotation.x = -Math.PI / 2;
 // Park plate slightly BELOW the workplane (y=0). Decor and road segments
@@ -126,33 +144,43 @@ _plate.rotation.x = -Math.PI / 2;
 // tiles but ensures any opaque object sitting on y=0 fully occludes them.
 _plate.position.y = mm(-2);
 _plate.name = 'workplane-plate';
+_plate.renderOrder = -9;
 scene.add(_plate);
 const _plateEdge = new THREE.LineSegments(
   new THREE.EdgesGeometry(new THREE.PlaneGeometry(_plateSize, _plateSize)),
-  new THREE.LineBasicMaterial({ color: 0x1faaf2, transparent: true, opacity: 0.7 })
+  new THREE.LineBasicMaterial({ color: 0x1faaf2, transparent: true, opacity: 0.7, depthWrite: false })
 );
 _plateEdge.rotation.x = -Math.PI / 2;
 _plateEdge.position.y = mm(-1);
+_plateEdge.renderOrder = -8;
 scene.add(_plateEdge);
 
 // Dual-density base-10 grid in world units (1 unit = 1 mm). Fine lines
 // every 1 m, major every 10 m. Bounded to the workplane plate so the area
-// outside reads as flat white (Tinkercad). Generous Y separation between
-// layers prevents z-fighting/flicker when the camera moves. All grid
-// layers live BELOW y=0 so they never clip the bases of placed objects.
-const _gridSpan = m(200);
+// outside reads as flat white (Tinkercad). All grid layers live BELOW
+// y=0 so they never clip the bases of placed objects, AND they sit on
+// well-separated Y planes (≥10 mm apart) so the GridHelper line shaders
+// never z-fight against each other when the camera rotates. Earlier
+// values of mm(-4)/mm(-6) were only 2 units apart — at editor view
+// distances even the logarithmic depth buffer cannot reliably distinguish
+// 2 mm of separation across the 800 m × 800 m workplane span, which
+// presented as the blue grid flickering during orbit.
+// (Span matches _plateSize — bumped 4× from 200 m → 800 m for larger builds.)
+const _gridSpan = m(800);
 const _gridFineDivs = Math.max(2, Math.round(_gridSpan / m(1)));
 const _gridFine = new THREE.GridHelper(_gridSpan, _gridFineDivs, 0x9fc8d8, 0x9fc8d8);
 _gridFine.material.opacity = 0.32;
 _gridFine.material.transparent = true;
 _gridFine.material.depthWrite = false;
-_gridFine.position.y = mm(-4);
+_gridFine.position.y = mm(-20);
+_gridFine.renderOrder = -7;
 scene.add(_gridFine);
 const grid = new THREE.GridHelper(_gridSpan, Math.max(2, Math.round(_gridFineDivs / 10)), 0x1faaf2, 0x4cb8e8);
 grid.material.opacity = 0.6;
 grid.material.transparent = true;
 grid.material.depthWrite = false;
-grid.position.y = mm(-6);
+grid.position.y = mm(-40);
+grid.renderOrder = -6;
 scene.add(grid);
 
 // ── Editor state ──────────────────────────────────────────────
@@ -2446,8 +2474,12 @@ function toast(msg) {
 }
 
 // ── Save / load / share / play ────────────────────────────────
+// `tile` records the TILE size (in metres) used when this track was authored.
+// On load, if the current TILE differs we scale decor positions by the ratio so
+// scenery stays anchored relative to the (now-resized) road segments. Track
+// placements use dimensionless cell coords and do not need migration.
 function saveJSON() {
-  return { track: track.toJSON(), decor: decor.toJSON() };
+  return { tile: TILE_M, track: track.toJSON(), decor: decor.toJSON() };
 }
 const trackNameEl = document.getElementById('trackName');
 trackNameEl.addEventListener('change', () => { track.name = trackNameEl.value || 'Untitled Track'; });
@@ -2455,9 +2487,11 @@ trackNameEl.addEventListener('change', () => { track.name = trackNameEl.value ||
 function loadFromJSON(json, snapshot = true) {
   let trackJson = json;
   let decorJson = null;
+  let savedTile = null;
   if (json && !Array.isArray(json) && (json.track || json.decor)) {
     trackJson = json.track;
     decorJson = json.decor;
+    if (typeof json.tile === 'number' && json.tile > 0) savedTile = json.tile;
   }
   const t = Track.fromJSON(trackJson);
   track.clear();
@@ -2467,7 +2501,21 @@ function loadFromJSON(json, snapshot = true) {
     track.place(p.key, p.gx, p.gz, p.rot);
   }
   decor.clear();
-  if (decorJson) decor.fromJSON(decorJson);
+  if (decorJson) {
+    // Migrate decor placed under a different TILE size so it stays anchored
+    // relative to the (now resized) track. Scale both world positions and
+    // intrinsic sizes so the visual proportion to road width is preserved.
+    if (savedTile && Math.abs(savedTile - TILE_M) > 1e-6 && Array.isArray(decorJson)) {
+      const ratio = TILE_M / savedTile;
+      decorJson = decorJson.map(d => {
+        const out = { ...d };
+        if (Array.isArray(d.p)) out.p = [d.p[0] * ratio, d.p[1] * ratio, d.p[2] * ratio];
+        if (Array.isArray(d.s)) out.s = [d.s[0] * ratio, d.s[1] * ratio, d.s[2] * ratio];
+        return out;
+      });
+    }
+    decor.fromJSON(decorJson);
+  }
   rebuildAll();
   rebuildAllDecor();
   clearSelection();
@@ -2514,6 +2562,16 @@ document.getElementById('playBtn').addEventListener('click', () => {
   }
   const code = encodeTrack(track);
   sessionStorage.setItem('gloKartsStudio.playtest', code);
+  // Persist the full design (track + decor + name) under STORAGE_KEY so
+  // the editor can reload exactly this draft when the player taps
+  // "back to editor" from the playtest pause menu. Without this, the
+  // back-button bootstrap would either land on the studio chooser or
+  // restore a stale autosave.
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(saveJSON()));
+  } catch (err) {
+    console.warn('[editor3] failed to autosave before playtest', err);
+  }
   // Also stash decor so the playtest scene renders the user's design 1:1.
   try {
     sessionStorage.setItem('gloKartsStudio.playtest.decor', JSON.stringify(decor.toJSON()));
@@ -2531,10 +2589,10 @@ function validateTrack(t) {
   const out = [];
   if (t.placements.size < 2) out.push('Add at least 2 pieces before playtesting');
   if (!t.spawn?.()) out.push('Track needs a Spawn piece');
-  const hasFinish = Array.from(t.placements.values()).some(
-    (p) => SEGMENTS[p.key]?.isFinish,
-  );
-  if (!hasFinish) out.push('Track needs a Finish piece');
+  // A dedicated Finish piece is no longer required — the simulator now
+  // treats the Spawn cell as the implicit lap line when no Finish exists.
+  // This unblocks closed loops (where Spawn already marks start/finish)
+  // without forcing the user to drop a separate gantry.
   return out;
 }
 
@@ -2566,7 +2624,90 @@ if (kartSelectEl) {
       localStorage.setItem('studioSelectedKart', activeKartId);
     } catch {}
     updateKartPreview(activeKartId);
+    refreshKartGridSelection();
   });
+}
+
+// ── Kart picker sub-menu (right-aside Kart tab) ───────────────
+// Builds a card grid in #kartGrid from the kart catalog. Selecting a
+// card sets the same activeKartId/storage keys as the legacy <select>,
+// keeps the legacy <select> in sync (so the playtest hand-off keeps
+// working), and refreshes the spawn-tile preview kart.
+const kartGridEl = document.getElementById('kartGrid');
+const kartSearchEl = document.getElementById('kartSearch');
+/** @type {Map<string, HTMLButtonElement>} */
+const _kartCardById = new Map();
+/** @type {Map<string, HTMLImageElement>} per-id thumbnail <img> nodes. */
+const _kartThumbImgById = new Map();
+function _buildKartCards() {
+  if (!kartGridEl) return;
+  kartGridEl.innerHTML = '';
+  _kartCardById.clear();
+  for (const k of KARTS) {
+    const card = document.createElement('button');
+    card.type = 'button';
+    card.className = 'kart-card';
+    card.dataset.kartId = k.id;
+    card.dataset.kartLabel = k.label.toLowerCase();
+    card.title = `${k.label} (${k.weight}) — ${k.id}`;
+    card.innerHTML = `
+      <div class="kart-thumb">
+        <div class="kart-accent" style="background:${k.accent}"></div>
+        <img class="kart-thumb-img" alt="" loading="lazy" />
+      </div>
+      <div class="kart-label"></div>
+      <div class="kart-meta"></div>
+    `;
+    card.querySelector('.kart-label').textContent = k.label;
+    card.querySelector('.kart-meta').textContent = k.weight;
+    // Stash the <img> for lazy rendering when the panel actually opens.
+    const imgEl = card.querySelector('.kart-thumb-img');
+    _kartThumbImgById.set(k.id, imgEl);
+    card.addEventListener('click', () => _selectKart(k.id));
+    kartGridEl.appendChild(card);
+    _kartCardById.set(k.id, card);
+  }
+  refreshKartGridSelection();
+}
+function refreshKartGridSelection() {
+  for (const [id, card] of _kartCardById) {
+    card.classList.toggle('active', id === activeKartId);
+  }
+}
+function _selectKart(id) {
+  if (!id || id === activeKartId) return;
+  activeKartId = id;
+  try {
+    sessionStorage.setItem('studioSelectedKart', activeKartId);
+    localStorage.setItem('studioSelectedKart', activeKartId);
+  } catch {}
+  if (kartSelectEl) kartSelectEl.value = activeKartId;
+  updateKartPreview(activeKartId);
+  refreshKartGridSelection();
+}
+kartSearchEl?.addEventListener('input', () => {
+  const q = kartSearchEl.value.trim().toLowerCase();
+  for (const card of _kartCardById.values()) {
+    const match = !q || card.dataset.kartLabel.includes(q) || card.dataset.kartId.includes(q);
+    card.style.display = match ? '' : 'none';
+  }
+});
+_buildKartCards();
+// Pre-warm the thumbnail cache the first time the user opens the Kart
+// panel — not at editor start — so the heavier GLB loads + render
+// passes don't hitch initial editor boot.
+let _kartThumbsPrewarmed = false;
+function _maybePrewarmKartThumbs() {
+  if (_kartThumbsPrewarmed) return;
+  _kartThumbsPrewarmed = true;
+  // Kick off renders for every catalog entry. The renderer queues at
+  // most one render per animation frame, so this stays smooth even with
+  // 30+ karts.
+  for (const [id, imgEl] of _kartThumbImgById) {
+    renderKartThumbnail(id).then((url) => {
+      if (url) imgEl.src = url;
+    });
+  }
 }
 
 // Preview kart on the spawn piece so users see their choice before playtesting.
@@ -2905,12 +3046,13 @@ window.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') hideContextMenu();
 });
 
-// ── Bootstrap: try restoring last track or seed with 1 spawn ─
-const raw = localStorage.getItem(STORAGE_KEY);
-if (raw) {
-  try { loadFromJSON(JSON.parse(raw)); } catch {}
-}
-if (track.placements.size === 0) {
+// ── Bootstrap: show studio landing, then apply the user's choice ─
+// Tracks the cloud-side identity of the currently-loaded track (set when
+// the user opens a template, remixes a community track, or saves to cloud).
+// `null` means "this draft has never been pushed to the backend".
+let currentCloudId = null;
+
+function _seedFreshTrack() {
   // Seed: a small starter loop centered on origin
   track.place('spawn', 0, 0, 0);
   track.place('straight', 0, 1, 0);
@@ -2918,9 +3060,92 @@ if (track.placements.size === 0) {
   track.place('finish', 0, 3, 0);
   rebuildAll();
 }
-pushUndo();
-refreshHud();
-updatePreview();
+
+function _bootstrapFromChoice(choice) {
+  // Drop the bootstrap curtain — the user has made (or skipped) a
+  // landing choice, so the chrome is safe to reveal. Done first so a
+  // throw inside the loaders below still uncovers the workplane.
+  document.body.classList.remove('studio-booting');
+  // Belt-and-braces: the inline pre-boot script in editor.html already
+  // dismisses the splash as soon as the landing markup paints, but if
+  // the user reaches a choice before that fires (or the splash safety
+  // timeout hasn't run) make sure it's gone before we reveal #app.
+  if (typeof window.__gkSplashHide === 'function') window.__gkSplashHide();
+  if (choice?.action === 'continue') {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) { try { loadFromJSON(JSON.parse(raw)); } catch {} }
+    if (track.placements.size === 0) _seedFreshTrack();
+  } else if (choice?.action === 'load' && choice.json) {
+    try {
+      loadFromJSON(choice.json);
+      if (choice.meta?.id) currentCloudId = choice.meta.id;
+      if (choice.meta?.name) {
+        track.name = choice.meta.name;
+        const nameEl = document.getElementById('trackName');
+        if (nameEl) nameEl.value = choice.meta.name;
+      }
+    } catch (err) {
+      console.warn('[studio] failed to apply landing JSON', err);
+      _seedFreshTrack();
+    }
+  } else {
+    // 'new' or anything unexpected
+    _seedFreshTrack();
+  }
+  pushUndo();
+  refreshHud();
+  updatePreview();
+}
+
+// Returning from playtest? Skip the studio landing chooser and reload
+// the autosaved draft directly so the user lands back on the design
+// they were just testing instead of the templates menu.
+const _editorBootParams = new URLSearchParams(window.location.search);
+if (_editorBootParams.get('resume') === '1') {
+  // Strip the query so a manual refresh later goes through the normal
+  // landing flow.
+  try {
+    const u = new URL(window.location.href);
+    u.searchParams.delete('resume');
+    window.history.replaceState({}, '', u.toString());
+  } catch {}
+  _bootstrapFromChoice({ action: 'continue' });
+} else {
+  showStudioLanding().then(_bootstrapFromChoice).catch((err) => {
+    console.warn('[studio] landing failed, falling back to autoload', err);
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) { try { loadFromJSON(JSON.parse(raw)); } catch {} }
+    if (track.placements.size === 0) _seedFreshTrack();
+    pushUndo(); refreshHud(); updatePreview();
+  });
+}
+async function _cloudSaveCurrent({ publish = false } = {}) {
+  const name = (document.getElementById('trackName')?.value || track.name || 'Untitled Track').trim() || 'Untitled Track';
+  const stored = localStorage.getItem('gloKartsStudio.authorName') || '';
+  const author = (prompt('Display name for the author? (leave blank for "Anonymous")', stored) || '').trim();
+  if (author) { try { localStorage.setItem('gloKartsStudio.authorName', author); } catch {} }
+  const track_data = saveJSON();
+  try {
+    let detail;
+    if (currentCloudId) {
+      detail = await StudioAPI.update(currentCloudId, {
+        name, author_name: author, track_data,
+        ...(publish ? { is_public: true } : {}),
+      });
+    } else {
+      detail = await StudioAPI.create({
+        name, author_name: author, description: '',
+        track_data, thumbnail: '', tags: '',
+        is_public: !!publish,
+      });
+      currentCloudId = detail.id;
+    }
+    toast(publish ? 'Published to community' : 'Saved to cloud');
+  } catch (err) {
+    console.warn('[studio] cloud save failed', err);
+    toast('Cloud save failed: ' + (err.message || 'unknown'));
+  }
+}
 
 // Gizmo toolbar wiring
 ensureTransformControls();
@@ -3682,6 +3907,14 @@ _menuDropdown?.addEventListener('click', (e) => {
     input.click();
   } else if (action === 'save') {
     document.getElementById('saveBtn')?.click();
+  } else if (action === 'landing') {
+    showStudioLanding().then(_bootstrapFromChoice);
+  } else if (action === 'cloud-save') {
+    _cloudSaveCurrent({ publish: false });
+  } else if (action === 'cloud-publish') {
+    _cloudSaveCurrent({ publish: true });
+  } else if (action === 'cloud-mine') {
+    showStudioLanding().then(_bootstrapFromChoice);
   } else if (action === 'clear') {
     document.getElementById('clearBtn')?.click()
       ?? (confirm('Clear all pieces?') && (track.clear(), decor.clear(), rebuildAll(), rebuildAllDecor(), clearSelection(), pushUndo()));
@@ -3706,11 +3939,50 @@ document.getElementById('topTabDesign')?.addEventListener('click', (e) => {
 document.getElementById('topTabSimulate')?.addEventListener('click', () => {
   document.getElementById('playBtn')?.click();
 });
-document.getElementById('topTabHome')?.addEventListener('click', () => {
-  if (confirm('Leave the editor and return to the lobby? Unsaved work will be lost.')) {
-    window.location.href = '/index.html';
-  }
-});
+// GLO-styled confirm dialog (replaces native window.confirm so the UI
+// stays cohesive with the lobby's dark-glass + neon-pink aesthetic).
+function gloConfirm(message, { title = 'Confirm', okText = 'OK', cancelText = 'Cancel' } = {}) {
+  return new Promise((resolve) => {
+    const overlay = document.createElement('div');
+    overlay.className = 'glo-modal-overlay';
+    overlay.innerHTML = `
+      <div class="glo-modal" role="dialog" aria-modal="true" aria-labelledby="gloModalTitle">
+        <h3 id="gloModalTitle" class="glo-modal-title">${title}</h3>
+        <p class="glo-modal-msg"></p>
+        <div class="glo-modal-actions">
+          <button type="button" class="glo-btn glo-btn-ghost" data-act="cancel">${cancelText}</button>
+          <button type="button" class="glo-btn glo-btn-primary" data-act="ok">${okText}</button>
+        </div>
+      </div>`;
+    overlay.querySelector('.glo-modal-msg').textContent = message;
+    const close = (val) => {
+      overlay.classList.add('closing');
+      setTimeout(() => { overlay.remove(); document.removeEventListener('keydown', onKey); resolve(val); }, 140);
+    };
+    const onKey = (e) => {
+      if (e.key === 'Escape') { e.preventDefault(); close(false); }
+      else if (e.key === 'Enter') { e.preventDefault(); close(true); }
+    };
+    overlay.addEventListener('click', (e) => {
+      const act = e.target.closest('[data-act]')?.dataset.act;
+      if (act === 'ok') close(true);
+      else if (act === 'cancel' || e.target === overlay) close(false);
+    });
+    document.addEventListener('keydown', onKey);
+    document.body.appendChild(overlay);
+    requestAnimationFrame(() => overlay.classList.add('open'));
+    setTimeout(() => overlay.querySelector('[data-act="ok"]')?.focus(), 30);
+  });
+}
+async function _confirmReturnToLobby() {
+  const ok = await gloConfirm(
+    'Leave the editor and return to the lobby? Unsaved work will be lost.',
+    { title: 'Return to Lobby', okText: 'Return to Lobby', cancelText: 'Stay in Editor' },
+  );
+  if (ok) window.location.href = '/index.html';
+}
+document.getElementById('topTabHome')?.addEventListener('click', _confirmReturnToLobby);
+document.getElementById('brandBtn')?.addEventListener('click', _confirmReturnToLobby);
 document.getElementById('topTabLibrary')?.addEventListener('click', () => {
   document.getElementById('shareBtn')?.click();
 });
@@ -3735,24 +4007,34 @@ document.getElementById('topTabBrick')?.addEventListener('click', (e) => {
   toast(_brickViewOn ? 'Wireframe ON' : 'Wireframe OFF');
 });
 
-// 3) Right-aside tabs — Shapes / Workplane.
+// 3) Right-aside tabs — Shapes / Kart / Workplane.
 const _rightTabs = [
   document.getElementById('tabShapes'),
+  document.getElementById('tabKart'),
   document.getElementById('tabWorkplane'),
 ].filter(Boolean);
+const _shapesPanelEl = document.getElementById('shapesPanel');
+const _kartPanelEl = document.getElementById('kartPanel');
 function _setRightTab(name) {
-  const map = { shapes: 'tabShapes', workplane: 'tabWorkplane' };
+  const map = { shapes: 'tabShapes', kart: 'tabKart', workplane: 'tabWorkplane' };
   for (const t of _rightTabs) t.classList.toggle('active', t.id === map[name]);
+  // Toggle the visible panel between Shapes (palette) and Kart (kart grid).
+  if (_shapesPanelEl) _shapesPanelEl.hidden = name !== 'shapes';
+  if (_kartPanelEl) _kartPanelEl.hidden = name !== 'kart';
+  if (name === 'kart') _maybePrewarmKartThumbs();
   if (name === 'workplane') {
     // Pop the existing terrain settings popup as the "workplane" panel.
     document.getElementById('settingsBtn')?.click();
     // Auto-revert active state so the Shapes palette stays usable.
     setTimeout(() => {
       for (const t of _rightTabs) t.classList.toggle('active', t.id === 'tabShapes');
+      if (_shapesPanelEl) _shapesPanelEl.hidden = false;
+      if (_kartPanelEl) _kartPanelEl.hidden = true;
     }, 1200);
   }
 }
 document.getElementById('tabShapes')?.addEventListener('click', () => _setRightTab('shapes'));
+document.getElementById('tabKart')?.addEventListener('click', () => _setRightTab('kart'));
 document.getElementById('tabWorkplane')?.addEventListener('click', () => _setRightTab('workplane'));
 
 window.__studio = { track, decor, scene, camera, renderer, rebuildAll, rebuildAllDecor, refreshHud, refreshPlayButton, selectDecor, rebuildAllCSG, rebuildCSGForGroup, csgMeshByGid, decorMeshById, groupSelection, ungroupSelection, setActiveTool, selectedIds, selectedDecorIds, THREE, SEGMENTS, SEGMENT_KEYS, autoOrientRot };

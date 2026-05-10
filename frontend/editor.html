@@ -5,32 +5,211 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>GLO KARTS — Track Studio</title>
   <link rel="icon" href="data:," />
+  <!-- ============================================================
+       SPLASH BRIDGE
+       ============================================================
+       Painted before *anything* else (no font fetch, no external CSS,
+       no JS) so the user sees a branded interstitial within the first
+       16 ms of the new HTML parsing. Bridges the cold-load gap between
+       the lobby's exit fade and the inline studio landing without ever
+       showing a black void. The splash auto-removes once the landing's
+       interactive layer is mounted (or after a 2.5 s safety timeout).
+       ============================================================ -->
+  <style id="gk-splash-style">
+    html, body { background: #05050a; }
+    /* Visible immediately; CSS-only animations keep paint cheap. */
+    #gkSplash {
+      position: fixed; inset: 0; z-index: 2147483647;
+      display: flex; align-items: center; justify-content: center;
+      background:
+        radial-gradient(ellipse 90% 60% at 50% 40%, rgba(255,0,128,0.22) 0%, transparent 55%),
+        radial-gradient(ellipse 70% 50% at 50% 80%, rgba(120,0,80,0.18) 0%, transparent 60%),
+        #05050a;
+      color: #fff;
+      font-family: 'Exo 2', 'Segoe UI', sans-serif;
+      transition: opacity 280ms cubic-bezier(.4,0,.2,1);
+      animation: gkSplashIn 220ms cubic-bezier(.22,1,.36,1) both;
+      will-change: opacity;
+    }
+    #gkSplash.gk-splash-out { opacity: 0; pointer-events: none; }
+    @keyframes gkSplashIn { from { opacity: 0; } to { opacity: 1; } }
+    .gk-splash-stack {
+      display: flex; flex-direction: column; align-items: center; gap: 28px;
+      animation: gkSplashRise 520ms cubic-bezier(.22,1,.36,1) both;
+    }
+    @keyframes gkSplashRise {
+      from { opacity: 0; transform: translateY(14px) scale(.985); }
+      to   { opacity: 1; transform: none; }
+    }
+    .gk-splash-ring-wrap {
+      position: relative;
+      width: 168px; height: 168px;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .gk-splash-ring {
+      position: absolute; inset: 0;
+      border-radius: 50%;
+      border: 2px solid transparent;
+      border-top-color: #ff0080;
+      border-right-color: rgba(255,0,128,.55);
+      box-shadow:
+        0 0 24px rgba(255,0,128,.55),
+        0 0 60px rgba(255,0,128,.25),
+        inset 0 0 18px rgba(255,0,128,.20);
+      animation: gkSpin 1.4s linear infinite;
+    }
+    .gk-splash-ring.gk-ring-2 {
+      inset: 16px;
+      border-top-color: rgba(255,255,255,.8);
+      border-right-color: rgba(255,255,255,.20);
+      box-shadow: none;
+      animation: gkSpinReverse 2.1s linear infinite;
+      opacity: .55;
+    }
+    @keyframes gkSpin        { to { transform: rotate(360deg); } }
+    @keyframes gkSpinReverse { to { transform: rotate(-360deg); } }
+    .gk-splash-mark {
+      position: relative;
+      font-family: 'Bungee', 'Exo 2', sans-serif;
+      font-size: 26px; line-height: 1;
+      letter-spacing: 1px; color: #fff;
+      text-align: center;
+      text-shadow: 0 0 18px rgba(255,0,128,.65), 0 0 40px rgba(255,0,128,.35);
+      animation: gkPulse 2.2s ease-in-out infinite;
+    }
+    .gk-splash-mark span { display: block; }
+    .gk-splash-mark .gk-mark-glo   { color: #fff; }
+    .gk-splash-mark .gk-mark-karts { color: #ff0080; }
+    @keyframes gkPulse {
+      0%, 100% { text-shadow: 0 0 14px rgba(255,0,128,.55), 0 0 32px rgba(255,0,128,.25); }
+      50%      { text-shadow: 0 0 22px rgba(255,0,128,.85), 0 0 48px rgba(255,0,128,.45); }
+    }
+    .gk-splash-title {
+      font-family: 'Bungee', 'Exo 2', sans-serif;
+      font-size: 22px; letter-spacing: 4px;
+      color: #fff;
+      text-shadow: 0 0 18px rgba(255,0,128,.55);
+    }
+    .gk-splash-tagline {
+      font-size: 13px; letter-spacing: 3px;
+      text-transform: uppercase;
+      color: rgba(255,255,255,.62);
+      display: inline-flex; align-items: center; gap: 10px;
+      min-height: 18px;
+    }
+    .gk-splash-tagline .gk-dot {
+      display: inline-block; width: 6px; height: 6px; border-radius: 50%;
+      background: #ff0080; box-shadow: 0 0 10px rgba(255,0,128,.8);
+      animation: gkDot 1.2s ease-in-out infinite;
+    }
+    .gk-splash-tagline .gk-dot:nth-child(2) { animation-delay: .15s; }
+    .gk-splash-tagline .gk-dot:nth-child(3) { animation-delay: .30s; }
+    @keyframes gkDot {
+      0%, 80%, 100% { opacity: .25; transform: translateY(0); }
+      40%           { opacity: 1;   transform: translateY(-3px); }
+    }
+    .gk-splash-bar {
+      width: 240px; height: 3px;
+      background: rgba(255,255,255,.08);
+      border-radius: 999px;
+      overflow: hidden;
+      position: relative;
+    }
+    .gk-splash-bar::after {
+      content: '';
+      position: absolute; inset: 0;
+      width: 40%; left: -40%;
+      background: linear-gradient(90deg,
+        transparent,
+        rgba(255,0,128,.95) 30%,
+        rgba(255,80,180,1) 50%,
+        rgba(255,0,128,.95) 70%,
+        transparent);
+      box-shadow: 0 0 14px rgba(255,0,128,.75);
+      animation: gkSweep 1.4s cubic-bezier(.4,0,.2,1) infinite;
+    }
+    @keyframes gkSweep { to { left: 100%; } }
+    @media (prefers-reduced-motion: reduce) {
+      #gkSplash, .gk-splash-stack, .gk-splash-ring, .gk-splash-ring.gk-ring-2,
+      .gk-splash-mark, .gk-splash-bar::after, .gk-splash-tagline .gk-dot {
+        animation: none !important;
+      }
+    }
+  </style>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <!-- Non-render-blocking font load: fetch the stylesheet with media="print"
+       so it doesn't gate first paint, then swap to media="all" once it
+       loads. The splash uses a system-font fallback for the first frame
+       (still on-brand: bold sans + neon glow) and re-flows when Bungee
+       arrives a few hundred ms later. -->
+  <link
+    rel="stylesheet"
+    href="https://fonts.googleapis.com/css2?family=Bungee&family=Exo+2:wght@400;600;700;800&display=swap"
+    media="print"
+    onload="this.media='all'">
+  <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bungee&family=Exo+2:wght@400;600;700;800&display=swap"></noscript>
+  <!-- Kick off fetches for the heavy editor bundle + the bundled-templates
+       JSON in parallel with the HTML parse. The browser would otherwise
+       only discover editor-main.js when it reaches the <script> tag at
+       the bottom of <body>, which costs hundreds of ms on cold loads. -->
+  <link rel="modulepreload" href="/src/editor3/editor-main.js">
+  <link rel="modulepreload" href="/src/editor3/studio-landing.js">
+  <link rel="prefetch" href="/templates/bundled.json" as="fetch" crossorigin="anonymous">
   <style>
     /* ──────────────────────────────────────────────────────────
-       Tinkercad-style light theme. Workplane is a soft mint
-       gradient; chrome is light grey with bold blue accents.
+       GLO KARTS — Studio chrome aligned with the lobby's
+       liquid-glass + neon-pink identity. The workplane stays
+       light so geometry editing remains crisp; chrome,
+       toolbars, panels and popups go dark-glass.
        ────────────────────────────────────────────────────────── */
     :root {
-      --bg: #d6dde2;
-      --workplane-1: #cfe7f0;
-      --workplane-2: #eaf6f8;
-      --panel: #f4f5f7;
-      --panel-2: #ffffff;
-      --line: #d0d6dc;
-      --text: #2a2f36;
-      --muted: #6c7682;
-      --accent: #1faaf2;          /* Tinkercad cyan-blue */
-      --accent-2: #0f7dc2;
-      --accent-soft: #e2f3fd;
-      --good: #3ddc84;
-      --warn: #f5a623;
-      --danger: #e63a3a;
-      --radius: 6px;
-      --shadow-sm: 0 1px 3px rgba(0,0,0,0.08);
-      --shadow-md: 0 4px 14px rgba(0,0,0,0.12);
+      /* Page + workplane (still light for editing readability) */
+      --bg: #05050a;
+      --workplane-1: #c9d3dc;
+      --workplane-2: #ecf0f4;
+
+      /* Dark glass chrome */
+      --panel:    rgba(14, 10, 22, 0.78);
+      --panel-2:  rgba(26, 18, 36, 0.86);
+      --panel-solid: #14101e;
+      --line:     rgba(255, 255, 255, 0.10);
+      --line-hi:  rgba(255, 255, 255, 0.18);
+
+      /* Text */
+      --text:  #f4f1ff;
+      --muted: rgba(255, 255, 255, 0.58);
+
+      /* Neon-pink accent (matches lobby --accent #ff0080) */
+      --accent:      #ff0080;
+      --accent-2:    #ff3fa1;
+      --accent-soft: rgba(255, 0, 128, 0.16);
+      --accent-glow: rgba(255, 0, 128, 0.45);
+
+      /* Status (kept lively to read on dark) */
+      --good:   #3ddc84;
+      --warn:   #f5b942;
+      --danger: #ff4d6d;
+
+      --radius: 8px;
+      --shadow-sm: 0 1px 2px rgba(0,0,0,0.45), 0 0 0 1px rgba(255,255,255,0.04) inset;
+      --shadow-md: 0 6px 22px rgba(0,0,0,0.55), 0 0 0 1px rgba(255,255,255,0.05) inset;
+      --glass-blur: blur(14px) saturate(140%);
+
+      --font-display: 'Bungee', 'Impact', sans-serif;
+      --font-ui:      'Exo 2', 'Inter', system-ui, sans-serif;
     }
     * { box-sizing: border-box; }
-    html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font-family: 'Inter', system-ui, sans-serif; overflow: hidden; }
+    html, body {
+      margin: 0; height: 100%;
+      background:
+        radial-gradient(ellipse 110% 70% at 50% -10%, rgba(255,0,128,0.10) 0%, transparent 60%),
+        radial-gradient(ellipse 80% 60% at 80% 95%, rgba(120,0,80,0.06) 0%, transparent 55%),
+        var(--bg);
+      color: var(--text);
+      font-family: var(--font-ui);
+      overflow: hidden;
+    }
 
     /* Top header bar (logo + title + account-style buttons on the right) */
     #app {
@@ -47,18 +226,32 @@
       grid-area: header;
       display: flex; align-items: center; gap: 12px;
       padding: 0 14px;
-      background: var(--panel-2);
+      background: var(--panel);
+      backdrop-filter: var(--glass-blur);
+      -webkit-backdrop-filter: var(--glass-blur);
       border-bottom: 1px solid var(--line);
       box-shadow: var(--shadow-sm);
       z-index: 30;
     }
     header .brand {
       display: inline-flex; align-items: center; justify-content: center;
-      width: 40px; height: 30px; border-radius: 4px;
-      font-size: 9px; font-weight: 800; letter-spacing: 0.04em;
-      background: var(--accent); color: #fff; line-height: 1;
+      width: 44px; height: 32px; border-radius: 6px;
+      font-family: var(--font-display);
+      font-size: 9px; letter-spacing: 0.06em;
+      background: linear-gradient(135deg, var(--accent), #b30059);
+      color: #fff; line-height: 1;
       text-align: center; padding: 4px;
+      border: 0;
+      cursor: pointer;
+      box-shadow:
+        0 0 0 1px rgba(255,255,255,0.18) inset,
+        0 0 14px var(--accent-glow);
+      text-shadow: 0 1px 2px rgba(0,0,0,0.45);
+      transition: transform 0.12s ease, box-shadow 0.12s ease, filter 0.12s ease;
     }
+    header .brand:hover { filter: brightness(1.08); box-shadow: 0 0 0 1px rgba(255,255,255,0.28) inset, 0 0 20px var(--accent-glow); }
+    header .brand:active { transform: translateY(1px); }
+    header .brand:focus-visible { outline: 2px solid var(--accent-2); outline-offset: 2px; }
     header .menu-btn {
       width: 32px; height: 32px; border: none; background: transparent;
       cursor: pointer; color: var(--muted); display: inline-flex;
@@ -67,9 +260,12 @@
     header .menu-btn:hover { background: var(--line); color: var(--text); }
     .menu-dropdown {
       position: absolute; top: 44px; left: 64px; z-index: 100;
-      background: var(--panel-2); border: 1px solid var(--line);
-      border-radius: 6px; padding: 4px; min-width: 180px;
-      box-shadow: 0 4px 14px rgba(0,0,0,.18);
+      background: var(--panel-2);
+      backdrop-filter: var(--glass-blur);
+      -webkit-backdrop-filter: var(--glass-blur);
+      border: 1px solid var(--line);
+      border-radius: 8px; padding: 4px; min-width: 180px;
+      box-shadow: var(--shadow-md);
       display: flex; flex-direction: column;
     }
     .menu-dropdown[hidden] { display: none; }
@@ -78,13 +274,14 @@
       text-align: left; padding: 7px 12px; border-radius: 4px;
       cursor: pointer; font-size: 13px;
     }
-    .menu-dropdown button:hover { background: var(--accent-soft); color: var(--accent-2); }
+    .menu-dropdown button:hover { background: var(--accent-soft); color: var(--text); }
     header input.name {
       background: transparent; border: 1px solid transparent; color: var(--text);
-      padding: 5px 8px; border-radius: 4px; min-width: 220px; font-size: 14px; font-weight: 500;
+      padding: 5px 8px; border-radius: 6px; min-width: 220px; font-size: 14px; font-weight: 600;
+      letter-spacing: 0.02em;
     }
     header input.name:hover { border-color: var(--line); }
-    header input.name:focus { border-color: var(--accent); outline: none; background: var(--panel-2); }
+    header input.name:focus { border-color: var(--accent); outline: none; background: rgba(0,0,0,0.35); box-shadow: 0 0 0 3px var(--accent-soft); }
     header .spacer { flex: 1; }
     header .top-tabs { display: flex; gap: 2px; margin-right: 8px; }
     header .top-tab {
@@ -94,15 +291,21 @@
       align-items: center; justify-content: center;
     }
     header .top-tab:hover { background: var(--line); color: var(--text); }
-    header .top-tab.active { background: var(--accent); color: #fff; }
+    header .top-tab.active { background: var(--accent); color: #fff; box-shadow: 0 0 12px var(--accent-glow); }
     header .top-tab svg { width: 18px; height: 18px; fill: currentColor; }
     header button.action {
-      background: var(--panel-2); color: var(--text); border: 1px solid var(--line);
-      padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 13px;
+      background: rgba(255,255,255,0.04); color: var(--text); border: 1px solid var(--line);
+      padding: 6px 12px; border-radius: 8px; cursor: pointer; font-size: 13px;
+      font-family: var(--font-ui); font-weight: 600; letter-spacing: 0.04em;
     }
-    header button.action:hover { background: var(--accent-soft); border-color: var(--accent); }
-    header button.action.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
-    header button.action.primary:hover { background: var(--accent-2); border-color: var(--accent-2); }
+    header button.action:hover { background: var(--accent-soft); border-color: var(--accent); color: var(--text); }
+    header button.action.primary {
+      background: linear-gradient(180deg, var(--accent), #c4005f);
+      border-color: transparent; color: #fff;
+      letter-spacing: 0.08em; text-transform: uppercase;
+      box-shadow: 0 4px 14px var(--accent-glow), 0 0 0 1px rgba(255,255,255,0.18) inset;
+    }
+    header button.action.primary:hover { filter: brightness(1.08); box-shadow: 0 6px 20px var(--accent-glow), 0 0 0 1px rgba(255,255,255,0.25) inset; }
     header label.kart-pick {
       font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 6px;
     }
@@ -111,13 +314,14 @@
       padding: 5px 8px; border-radius: 4px; font-size: 12px;
     }
 
-    /* Second toolbar row — Tinkercad's edit/transform tool strip.
-       Pure white background to match Tinkercad's chrome. */
+    /* Second toolbar row — transform tool strip on dark glass. */
     .toolbar {
       grid-area: toolbar;
       display: flex; align-items: center; gap: 4px;
       padding: 0 12px;
-      background: var(--panel-2);
+      background: rgba(10, 7, 18, 0.72);
+      backdrop-filter: var(--glass-blur);
+      -webkit-backdrop-filter: var(--glass-blur);
       border-bottom: 1px solid var(--line);
       z-index: 20;
     }
@@ -131,8 +335,8 @@
       padding: 0;
     }
     .toolbar button:disabled { opacity: 0.35; cursor: default; }
-    .toolbar button:not(:disabled):hover { background: var(--accent-soft); color: var(--accent-2); }
-    .toolbar button.active { background: var(--accent); color: #fff; }
+    .toolbar button:not(:disabled):hover { background: var(--accent-soft); color: var(--text); }
+    .toolbar button.active { background: var(--accent); color: #fff; box-shadow: 0 0 10px var(--accent-glow); }
     .toolbar button svg { width: 18px; height: 18px; fill: currentColor; }
     .toolbar .spacer { flex: 1; }
     .toolbar .right-actions { display: flex; gap: 2px; }
@@ -147,6 +351,8 @@
     aside.right {
       grid-area: right;
       background: var(--panel);
+      backdrop-filter: var(--glass-blur);
+      -webkit-backdrop-filter: var(--glass-blur);
       border-left: 1px solid var(--line);
       display: flex; flex-direction: column;
       overflow: hidden;
@@ -239,11 +445,91 @@
     }
     .palette-group:first-child { margin-top: 0; }
 
-    /* Workplane viewport (Tinkercad's blue-tinted plane) */
+    /* ── Kart picker sub-menu (right-aside Kart tab) ────────────────
+       Vertical scrollable grid of kart cards. Each card shows the kart
+       name plus an accent stripe sourced from kart-catalog.js. The
+       active card is bordered with the global accent so the current
+       playtest kart is always visible. */
+    .right-panel { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+    .right-panel[hidden] { display: none; }
+    .kart-panel { padding-bottom: 0; }
+    .kart-grid {
+      flex: 1;
+      display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px; padding: 8px 12px 12px;
+      overflow-y: auto;
+      align-content: start;
+    }
+    .kart-card {
+      position: relative;
+      background: var(--panel-2); color: var(--text);
+      border: 1px solid var(--line); border-radius: 6px;
+      padding: 10px 8px 8px;
+      cursor: pointer;
+      display: flex; flex-direction: column; align-items: stretch; gap: 4px;
+      box-shadow: var(--shadow-sm);
+      text-align: left;
+      font: inherit;
+    }
+    .kart-card:hover {
+      border-color: var(--accent);
+      transform: translateY(-1px);
+      box-shadow: var(--shadow-md);
+    }
+    .kart-card.active {
+      border: 2px solid var(--accent);
+      background: var(--accent-soft);
+      padding: 9px 7px 7px; /* compensate +1px border */
+    }
+    /* 3D thumbnail container: square-ish frame with the accent line as a
+       thin underline. The kart .glb is rendered to a transparent PNG by
+       kart-thumbnails.js and slotted in as <img>. */
+    .kart-card .kart-thumb {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 4 / 3;
+      background: linear-gradient(160deg, #f3f5f7, #e0e6ec);
+      border-radius: 4px;
+      overflow: hidden;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .kart-card.active .kart-thumb {
+      background: linear-gradient(160deg, var(--accent-soft), #fff);
+    }
+    .kart-card .kart-thumb-img {
+      width: 100%; height: 100%;
+      object-fit: contain;
+      display: block;
+    }
+    /* Hide the broken-image icon while the render is in flight. */
+    .kart-card .kart-thumb-img:not([src]) { visibility: hidden; }
+    .kart-card .kart-accent {
+      position: absolute;
+      left: 0; right: 0; bottom: 0;
+      height: 3px;
+    }
+    .kart-card .kart-label {
+      font-size: 12px; font-weight: 600;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .kart-card .kart-meta {
+      font-size: 10px; color: var(--muted);
+      letter-spacing: 0.04em; text-transform: uppercase;
+    }
+    .kart-card.active .kart-meta { color: var(--accent-2, var(--accent)); }
+    .kart-card .kart-id {
+      font-size: 9px; color: var(--muted); opacity: 0.7;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+
+    /* Workplane viewport — kept light for editing readability,
+       with a faint pink rim that ties back to the lobby palette. */
     main {
       grid-area: main;
       position: relative;
-      background: linear-gradient(160deg, var(--workplane-2), var(--workplane-1));
+      background:
+        radial-gradient(ellipse 80% 60% at 50% 100%, rgba(255,0,128,0.06) 0%, transparent 60%),
+        linear-gradient(160deg, var(--workplane-2), var(--workplane-1));
       overflow: hidden;
     }
     canvas { display: block; width: 100%; height: 100%; }
@@ -388,7 +674,7 @@
 
     /* Left side viewport controls (home/orbit/+/-/cube) — Tinkercad-style stack */
     .vp-controls {
-      position: absolute; top: 96px; left: 12px;
+      position: absolute; top: 134px; left: 12px;
       display: flex; flex-direction: column; gap: 4px;
       z-index: 10;
     }
@@ -772,7 +1058,7 @@
 
     /* Workplane axis badge (TOP / FRONT / SIDE / PERSP) */
     .axis-badge {
-      position: absolute; top: 14px; left: 16px; z-index: 8;
+      position: absolute; top: 14px; left: 132px; z-index: 8;
       pointer-events: none;
       background: rgba(255,255,255,0.85);
       border: 1px solid var(--line);
@@ -851,21 +1137,876 @@
       border-radius: 3px; padding: 1px 4px; font-family: inherit;
       font-size: 10px; color: var(--text);
     }
+
+    /* ─────────────────────────────────────────────────────────────
+       GLO KARTS theme overrides — repaint the floaters and badges
+       that previously hardcoded Tinkercad whites/cyans so the
+       chrome reads cohesively against dark glass. The on-shape
+       gizmo handles (.dm-corner / .dm-rot / .dm-raise / .dm-size)
+       are intentionally left alone: they need to stay highly
+       visible against the bright workplane while editing.
+       ───────────────────────────────────────────────────────────── */
+
+    /* Top-left HUD pill */
+    .hud {
+      background: var(--panel-2);
+      backdrop-filter: var(--glass-blur);
+      -webkit-backdrop-filter: var(--glass-blur);
+      color: var(--muted);
+      border-color: var(--line);
+    }
+    .hud b { color: var(--text); }
+
+    /* Orbit cube — keep faces light so the labels read on the dark page,
+       but tint hover/active to the GLO accent */
+    .orbit-cube .face { color: #2a2330; }
+    .orbit-cube .face:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+    /* Left-side viewport stack */
+    .vp-controls button {
+      background: var(--panel-2);
+      backdrop-filter: var(--glass-blur);
+      -webkit-backdrop-filter: var(--glass-blur);
+      border-color: var(--line);
+      color: var(--text);
+    }
+    .vp-controls button:hover { color: #fff; background: var(--accent); border-color: var(--accent); box-shadow: 0 0 12px var(--accent-glow); }
+
+    /* Snap-grid bar */
+    .snap-grid-bar { color: var(--muted); }
+    .snap-grid-bar .settings-link { color: var(--muted); }
+    .snap-grid-bar .settings-link:hover { color: var(--accent-2); }
+    .snap-grid-bar select,
+    .snap-grid-bar .snap-toggle {
+      background: var(--panel-2);
+      backdrop-filter: var(--glass-blur);
+      -webkit-backdrop-filter: var(--glass-blur);
+      color: var(--text);
+      border-color: var(--line);
+    }
+    .snap-grid-bar .snap-toggle.active { background: var(--accent); color: #fff; border-color: var(--accent); box-shadow: 0 0 10px var(--accent-glow); }
+
+    /* Axis badge (TOP / FRONT / SIDE / PERSP) */
+    .axis-badge {
+      background: var(--panel-2);
+      backdrop-filter: var(--glass-blur);
+      -webkit-backdrop-filter: var(--glass-blur);
+      border-color: var(--line);
+      color: var(--accent-2);
+      letter-spacing: 0.12em;
+    }
+
+    /* Action ring + ring buttons */
+    .action-ring {
+      background: var(--panel-2);
+      backdrop-filter: var(--glass-blur);
+      -webkit-backdrop-filter: var(--glass-blur);
+      border-color: var(--line);
+      box-shadow: var(--shadow-md);
+    }
+    .ring-btn {
+      background: rgba(255,255,255,0.04);
+      border-color: var(--line);
+      color: var(--text);
+    }
+    .ring-btn:hover { background: var(--accent); border-color: var(--accent); color: #fff; box-shadow: 0 0 12px var(--accent-glow); }
+    .ring-btn--danger:hover { background: var(--danger); border-color: var(--danger); box-shadow: 0 0 12px rgba(255,77,109,0.5); }
+
+    /* Right-click context menu */
+    .context-menu {
+      background: var(--panel-2);
+      backdrop-filter: var(--glass-blur);
+      -webkit-backdrop-filter: var(--glass-blur);
+      border-color: var(--line);
+    }
+    .ctx-item { color: var(--text); }
+    .ctx-item:hover { background: var(--accent-soft); }
+    .ctx-item--danger { color: var(--danger); }
+    .ctx-item--danger:hover { background: rgba(255,77,109,0.18); }
+    .ctx-divider { background: var(--line); }
+
+    /* Drag tooltip */
+    .drag-tip {
+      background: var(--panel-2);
+      backdrop-filter: var(--glass-blur);
+      -webkit-backdrop-filter: var(--glass-blur);
+      color: var(--text);
+      border: 1px solid var(--line);
+    }
+    .drag-tip span { color: var(--accent-2); }
+
+    /* Align panel */
+    .align-panel {
+      background: var(--panel-2);
+      backdrop-filter: var(--glass-blur);
+      -webkit-backdrop-filter: var(--glass-blur);
+      border-color: var(--line);
+      color: var(--text);
+    }
+    .align-grid button {
+      background: rgba(255,255,255,0.04);
+      border-color: var(--line);
+      color: var(--text);
+    }
+    .align-grid button:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+    /* Terrain popup */
+    .terrain-popup {
+      background: var(--panel-2);
+      backdrop-filter: var(--glass-blur);
+      -webkit-backdrop-filter: var(--glass-blur);
+      border-color: var(--line);
+      color: var(--text);
+    }
+    .terrain-popup input[type="color"] { border-color: var(--line); }
+
+    /* Right panel category row + search field */
+    .category-row {
+      background: rgba(0,0,0,0.18);
+      border-bottom-color: var(--line);
+    }
+    .category-row select,
+    .category-row .search-btn,
+    .palette-search {
+      background: rgba(255,255,255,0.04);
+      color: var(--text);
+      border-color: var(--line);
+    }
+    .palette-search::placeholder { color: var(--muted); }
+    .palette-search:focus, .category-row select:focus { border-color: var(--accent); outline: none; box-shadow: 0 0 0 3px var(--accent-soft); }
+    .category-row .search-btn { color: var(--muted); }
+    .category-row .search-btn:hover { color: #fff; background: var(--accent); border-color: var(--accent); }
+
+    /* Right panel header (Shapes / Karts tabs) */
+    .right-header { border-bottom-color: var(--line); }
+    .right-header button {
+      background: rgba(255,255,255,0.04);
+      border-color: var(--line);
+      color: var(--muted);
+    }
+    .right-header button:hover { color: #fff; background: var(--accent); border-color: var(--accent); }
+    .right-header button.active { background: var(--accent); color: #fff; border-color: var(--accent); box-shadow: 0 0 12px var(--accent-glow); }
+
+    /* Palette tiles */
+    .palette button {
+      background: rgba(255,255,255,0.05);
+      color: var(--text);
+      border-color: var(--line);
+      box-shadow: var(--shadow-sm);
+    }
+    .palette button:hover {
+      border-color: var(--accent);
+      background: rgba(255,255,255,0.08);
+      box-shadow: 0 0 0 1px var(--accent) inset, 0 6px 18px rgba(0,0,0,0.5);
+    }
+    .palette button.active {
+      border: 2px solid var(--accent);
+      background: var(--accent-soft);
+      box-shadow: 0 0 14px var(--accent-glow);
+    }
+    .palette button .swatch {
+      background: linear-gradient(135deg, rgba(255,255,255,0.18), rgba(255,255,255,0.04));
+    }
+    .palette button .label { color: var(--muted); }
+    .palette-group {
+      color: var(--muted);
+      border-bottom-color: var(--line);
+      letter-spacing: 0.18em;
+    }
+
+    /* Kart cards */
+    .kart-card {
+      background: rgba(255,255,255,0.05);
+      color: var(--text);
+      border-color: var(--line);
+      box-shadow: var(--shadow-sm);
+    }
+    .kart-card:hover {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 1px var(--accent) inset, 0 6px 18px rgba(0,0,0,0.5);
+    }
+    .kart-card.active {
+      border: 2px solid var(--accent);
+      background: var(--accent-soft);
+      box-shadow: 0 0 14px var(--accent-glow);
+    }
+    .kart-card .kart-thumb {
+      background: linear-gradient(160deg, rgba(255,255,255,0.10), rgba(255,255,255,0.02));
+    }
+    .kart-card.active .kart-thumb {
+      background: linear-gradient(160deg, var(--accent-soft), rgba(255,255,255,0.04));
+    }
+    .kart-card .kart-meta { color: var(--muted); }
+    .kart-card.active .kart-meta { color: var(--accent-2); }
+    .kart-card .kart-id { color: var(--muted); }
+
+    /* Right summary block */
+    .right-summary {
+      background: rgba(0,0,0,0.18);
+      border-top-color: var(--line);
+    }
+    .right-summary h3 { color: var(--muted); }
+    .right-summary .row span:first-child { color: var(--muted); }
+
+    /* Bottom-left viewport buttons */
+    .vp-bottom-left button {
+      background: var(--panel-2);
+      backdrop-filter: var(--glass-blur);
+      -webkit-backdrop-filter: var(--glass-blur);
+      color: var(--text);
+      border-color: var(--line);
+    }
+    .vp-bottom-left button:hover { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+    /* Toast — keep punchy on dark */
+    .toast {
+      background: var(--panel-solid);
+      color: var(--text);
+      border: 1px solid var(--line);
+      box-shadow: var(--shadow-md);
+    }
+
+    /* ── Inspector popup (shape properties) — repaint to dark glass ── */
+    .inspector-popup {
+      background: var(--panel-2);
+      backdrop-filter: var(--glass-blur);
+      -webkit-backdrop-filter: var(--glass-blur);
+      border: 1px solid var(--line);
+      box-shadow: var(--shadow-md);
+      color: var(--text);
+      font-family: var(--font-ui);
+      border-radius: 10px;
+    }
+    .inspector-popup .ip-header {
+      background: rgba(0,0,0,0.25);
+      border-bottom-color: var(--line);
+    }
+    .inspector-popup .collapse-btn,
+    .inspector-popup .close-btn { color: var(--muted); }
+    .inspector-popup .collapse-btn:hover,
+    .inspector-popup .close-btn:hover { background: rgba(255,255,255,0.08); color: var(--text); }
+    .inspector-popup .ip-header .title { color: var(--text); }
+    .inspector-popup .ip-header-btn {
+      background: rgba(255,255,255,0.05);
+      border-color: var(--line);
+    }
+    .inspector-popup .ip-header-btn:hover { border-color: var(--accent); }
+    .inspector-popup .ip-header-btn.active { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset, 0 0 8px var(--accent-glow); }
+    .inspector-popup .ip-mat-btn {
+      background: rgba(255,255,255,0.05);
+      border-color: var(--line);
+      color: var(--text);
+    }
+    .inspector-popup .ip-mat-btn:hover { border-color: var(--accent); }
+    .inspector-popup .ip-mat-btn.active {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 1px var(--accent) inset, 0 0 8px var(--accent-glow);
+    }
+    .inspector-popup .ip-mat-label { color: var(--muted); }
+    .inspector-popup .ip-mat-btn.active .ip-mat-label { color: var(--text); }
+    .inspector-popup .ip-color-block { border-bottom-color: var(--line); }
+    .inspector-popup .swatch-pick { border-color: rgba(255,255,255,0.15); }
+    .inspector-popup .swatch-pick.active { box-shadow: 0 0 0 2px var(--accent), 0 0 8px var(--accent-glow); }
+    .inspector-popup .ip-color-custom {
+      background: rgba(255,255,255,0.05);
+      border-color: var(--line);
+      color: var(--text);
+    }
+    .inspector-popup .ip-color-custom:hover { border-color: var(--accent); }
+    .inspector-popup .ip-params .ip-param-row { border-top-color: var(--line); }
+    .inspector-popup .ip-param-label { color: var(--muted); }
+    .inspector-popup .ip-param-val {
+      color: var(--text);
+      background: var(--accent-soft);
+    }
+    .inspector-popup .ip-param-slider { accent-color: var(--accent); }
+    .inspector-popup .ip-extra { border-top-color: var(--line); }
+    .inspector-popup .ip-checkbox { color: var(--muted); }
+    .inspector-popup .ip-checkbox input { accent-color: var(--accent); }
+
+    /* HSV color popover */
+    .ip-color-popover {
+      background: var(--panel-2);
+      backdrop-filter: var(--glass-blur);
+      -webkit-backdrop-filter: var(--glass-blur);
+      border: 1px solid var(--line);
+      box-shadow: var(--shadow-md);
+      color: var(--text);
+      border-radius: 10px;
+    }
+    .ip-color-popover .ip-cp-preview { border-color: var(--line); }
+    .ip-color-popover .ip-cp-hex {
+      background: rgba(255,255,255,0.05);
+      border-color: var(--line);
+      color: var(--text);
+    }
+    .ip-color-popover .ip-cp-hex:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+    .ip-color-popover .ip-cp-recent { border-color: var(--line); }
+
+    /* Help strip */
+    .help-strip {
+      color: var(--muted);
+      background: var(--panel-2);
+      backdrop-filter: var(--glass-blur);
+      -webkit-backdrop-filter: var(--glass-blur);
+      border: 1px solid var(--line);
+    }
+
+    /* Scrollbars (cohere with the dark glass) */
+    .palette::-webkit-scrollbar,
+    .kart-grid::-webkit-scrollbar,
+    .ip-body::-webkit-scrollbar { width: 8px; }
+    .palette::-webkit-scrollbar-track,
+    .kart-grid::-webkit-scrollbar-track,
+    .ip-body::-webkit-scrollbar-track { background: transparent; }
+    .palette::-webkit-scrollbar-thumb,
+    .kart-grid::-webkit-scrollbar-thumb,
+    .ip-body::-webkit-scrollbar-thumb {
+      background: rgba(255,255,255,0.12);
+      border-radius: 4px;
+    }
+    .palette::-webkit-scrollbar-thumb:hover,
+    .kart-grid::-webkit-scrollbar-thumb:hover,
+    .ip-body::-webkit-scrollbar-thumb:hover { background: var(--accent); }
+
+    /* ── Studio bootstrap curtain ──────────────────────────────────
+       The editor chrome (#app) is hidden until the studio landing
+       resolves. The landing overlay (rendered inline below) covers the
+       entire viewport with its own --bg, so we don't need a separate
+       backdrop here — just keep #app out of the way until
+       _bootstrapFromChoice in editor-main.js drops the class. */
+    body.studio-booting #app { visibility: hidden; }
+
+    /* ── Studio Landing overlay ───────────────────────────────────── */
+    .studio-landing {
+      position: fixed; inset: 0; z-index: 9000;
+      display: flex; align-items: stretch; justify-content: center;
+      overflow-y: auto;
+      animation: slFadeIn 0.22s ease forwards;
+      font-family: var(--font-ui);
+      color: var(--text);
+    }
+    .studio-landing.closing { animation: slFadeOut 0.18s ease forwards; }
+    @keyframes slFadeIn  { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes slFadeOut { from { opacity: 1; } to { opacity: 0; } }
+    .studio-landing .sl-bg {
+      position: fixed; inset: 0; z-index: -1;
+      background:
+        radial-gradient(ellipse 110% 70% at 50% -10%, rgba(255,0,128,0.18) 0%, transparent 60%),
+        radial-gradient(ellipse 80% 60% at 80% 95%, rgba(120,0,80,0.10) 0%, transparent 55%),
+        #05050a;
+      backdrop-filter: blur(18px) saturate(140%);
+      -webkit-backdrop-filter: blur(18px) saturate(140%);
+    }
+    .studio-landing .sl-shell {
+      width: min(1180px, 100%);
+      margin: 0 auto;
+      padding: 32px 32px 56px;
+      display: flex; flex-direction: column; gap: 22px;
+    }
+    .studio-landing .sl-header {
+      display: flex; align-items: center; gap: 18px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid var(--line);
+    }
+    .studio-landing .sl-brand {
+      flex: 0 0 auto;
+      width: 56px; height: 42px;
+      display: inline-flex; align-items: center; justify-content: center;
+      font-family: var(--font-display);
+      font-size: 11px; line-height: 1; letter-spacing: 0.06em;
+      background: linear-gradient(135deg, var(--accent), #b30059);
+      color: #fff; border-radius: 8px;
+      box-shadow: 0 0 0 1px rgba(255,255,255,0.18) inset, 0 0 18px var(--accent-glow);
+      text-shadow: 0 1px 2px rgba(0,0,0,0.45);
+    }
+    .studio-landing .sl-title { flex: 1; min-width: 0; }
+    .studio-landing .sl-title h1 {
+      margin: 0; font-family: var(--font-display);
+      font-size: 22px; letter-spacing: 0.18em; text-transform: uppercase;
+      text-shadow: 0 0 14px var(--accent-glow);
+    }
+    .studio-landing .sl-title p { margin: 4px 0 0; color: var(--muted); font-size: 13px; }
+    .studio-landing .sl-lobby {
+      background: rgba(255,255,255,0.05);
+      color: var(--text);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 8px 14px;
+      font: 700 12px/1 var(--font-ui);
+      letter-spacing: 0.08em; text-transform: uppercase;
+      cursor: pointer;
+      transition: background 0.12s, border-color 0.12s;
+    }
+    .studio-landing .sl-lobby:hover { background: var(--accent-soft); border-color: var(--accent); }
+
+    /* Quick action row (New / Continue) */
+    .studio-landing .sl-quickrow {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 14px;
+    }
+    .studio-landing .sl-card {
+      display: flex; align-items: center; gap: 16px;
+      padding: 20px;
+      background: var(--panel-2);
+      backdrop-filter: var(--glass-blur);
+      -webkit-backdrop-filter: var(--glass-blur);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      color: var(--text);
+      text-align: left;
+      cursor: pointer;
+      transition: transform 0.12s ease, border-color 0.12s, box-shadow 0.18s;
+      box-shadow: var(--shadow-md);
+      font: inherit;
+    }
+    .studio-landing .sl-card:hover {
+      border-color: var(--accent);
+      transform: translateY(-2px);
+      box-shadow: 0 12px 36px rgba(0,0,0,0.55), 0 0 24px var(--accent-glow);
+    }
+    .studio-landing .sl-card.disabled {
+      opacity: 0.5; cursor: not-allowed;
+    }
+    .studio-landing .sl-card.disabled:hover { transform: none; border-color: var(--line); box-shadow: var(--shadow-md); }
+    .studio-landing .sl-card-icon {
+      flex: 0 0 auto;
+      width: 56px; height: 56px;
+      display: inline-flex; align-items: center; justify-content: center;
+      font-size: 28px;
+      border-radius: 14px;
+      background: linear-gradient(135deg, var(--accent), #b30059);
+      color: #fff;
+      box-shadow: 0 0 18px var(--accent-glow), 0 0 0 1px rgba(255,255,255,0.18) inset;
+      text-shadow: 0 1px 2px rgba(0,0,0,0.45);
+    }
+    .studio-landing .sl-card-text h3 {
+      margin: 0 0 4px;
+      font-family: var(--font-display);
+      font-size: 14px; letter-spacing: 0.14em; text-transform: uppercase;
+      color: #fff;
+    }
+    .studio-landing .sl-card-text p, .studio-landing .sl-card-meta {
+      margin: 0; color: var(--muted); font-size: 12px;
+    }
+
+    /* Tabs */
+    .studio-landing .sl-tabs {
+      display: flex; gap: 4px;
+      border-bottom: 1px solid var(--line);
+    }
+    .studio-landing .sl-tab {
+      background: transparent; border: 0; cursor: pointer;
+      padding: 10px 16px;
+      font: 700 12px/1 var(--font-ui);
+      letter-spacing: 0.10em; text-transform: uppercase;
+      color: var(--muted);
+      border-bottom: 2px solid transparent;
+      transition: color 0.12s, border-color 0.12s;
+    }
+    .studio-landing .sl-tab:hover { color: var(--text); }
+    .studio-landing .sl-tab.active { color: #fff; border-bottom-color: var(--accent); text-shadow: 0 0 10px var(--accent-glow); }
+
+    /* Tab panes */
+    .studio-landing .sl-pane { display: none; }
+    .studio-landing .sl-pane.active { display: block; }
+    .studio-landing .sl-grid {
+      display: grid; gap: 14px;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    }
+    .studio-landing .sl-empty {
+      padding: 40px 12px;
+      color: var(--muted);
+      text-align: center;
+      font-size: 13px;
+      grid-column: 1 / -1;
+    }
+    .studio-landing .sl-empty small { color: var(--text-muted, var(--muted)); opacity: 0.75; }
+
+    /* Track tile */
+    .studio-landing .sl-tile {
+      display: flex; flex-direction: column;
+      background: var(--panel-2);
+      backdrop-filter: var(--glass-blur);
+      -webkit-backdrop-filter: var(--glass-blur);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      overflow: hidden;
+      transition: transform 0.12s, border-color 0.12s, box-shadow 0.18s;
+      cursor: pointer;
+    }
+    .studio-landing .sl-tile:hover {
+      border-color: var(--accent);
+      transform: translateY(-2px);
+      box-shadow: 0 12px 32px rgba(0,0,0,0.55), 0 0 22px var(--accent-glow);
+    }
+    .studio-landing .sl-tile-thumb {
+      aspect-ratio: 16 / 9;
+      background: linear-gradient(160deg, rgba(255,255,255,0.08), rgba(255,255,255,0.02));
+      display: flex; align-items: center; justify-content: center;
+      overflow: hidden;
+    }
+    .studio-landing .sl-tile-thumb img { width: 100%; height: 100%; object-fit: cover; }
+    .studio-landing .sl-tile-thumb-placeholder {
+      width: 100%; height: 100%;
+      background:
+        repeating-linear-gradient(45deg, rgba(255,255,255,0.02) 0 12px, transparent 12px 24px),
+        radial-gradient(circle at 50% 60%, rgba(255,0,128,0.18) 0%, transparent 60%);
+    }
+    .studio-landing .sl-tile-body {
+      padding: 12px 14px 6px;
+      flex: 1; min-height: 0;
+    }
+    .studio-landing .sl-tile-name {
+      margin: 0 0 4px;
+      font-family: var(--font-display);
+      font-size: 13px; letter-spacing: 0.10em; text-transform: uppercase;
+      color: #fff;
+    }
+    .studio-landing .sl-tile-meta { margin: 0 0 6px; color: var(--muted); font-size: 11px; }
+    .studio-landing .sl-tile-desc { margin: 0 0 8px; color: var(--muted); font-size: 12px; line-height: 1.4; }
+    .studio-landing .sl-tile-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
+    .studio-landing .sl-tag {
+      font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase;
+      color: var(--accent-2);
+      background: var(--accent-soft);
+      border: 1px solid var(--line);
+      padding: 2px 6px; border-radius: 999px;
+    }
+    .studio-landing .sl-tile-actions {
+      display: flex; gap: 6px; padding: 0 12px 12px;
+    }
+    .studio-landing .sl-btn {
+      flex: 1;
+      padding: 8px 10px;
+      border-radius: 8px;
+      font: 700 11px/1 var(--font-ui);
+      letter-spacing: 0.08em; text-transform: uppercase;
+      cursor: pointer;
+      border: 1px solid transparent;
+      transition: filter 0.12s, background 0.12s, border-color 0.12s, box-shadow 0.12s;
+    }
+    .studio-landing .sl-btn-primary {
+      background: linear-gradient(180deg, var(--accent), #c4005f);
+      color: #fff;
+      box-shadow: 0 4px 14px var(--accent-glow), 0 0 0 1px rgba(255,255,255,0.18) inset;
+    }
+    .studio-landing .sl-btn-primary:hover { filter: brightness(1.08); }
+    .studio-landing .sl-btn-ghost {
+      background: rgba(255,255,255,0.05);
+      color: var(--text);
+      border-color: var(--line);
+    }
+    .studio-landing .sl-btn-ghost:hover { background: rgba(255,255,255,0.10); border-color: var(--accent); }
+
+    /* Flash error bar */
+    .studio-landing .sl-flash {
+      position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%);
+      padding: 10px 16px;
+      background: rgba(255,77,109,0.18);
+      border: 1px solid rgba(255,77,109,0.5);
+      border-radius: 10px;
+      color: #ffd7df;
+      font-size: 12px;
+      opacity: 0; pointer-events: none;
+      transition: opacity 0.18s ease;
+    }
+    .studio-landing .sl-flash.show { opacity: 1; }
+
+    @media (max-width: 720px) {
+      .studio-landing .sl-quickrow { grid-template-columns: 1fr; }
+      .studio-landing .sl-shell { padding: 18px 14px 40px; }
+      .studio-landing .sl-title h1 { font-size: 17px; }
+    }
+
+    /* ── GLO-styled modal dialog (replaces native confirm) ── */
+    .glo-modal-overlay {
+      position: fixed; inset: 0; z-index: 9999;
+      display: flex; align-items: center; justify-content: center;
+      background: rgba(5, 3, 12, 0.62);
+      backdrop-filter: blur(8px) saturate(120%);
+      -webkit-backdrop-filter: blur(8px) saturate(120%);
+      opacity: 0;
+      transition: opacity 0.18s ease;
+    }
+    .glo-modal-overlay.open { opacity: 1; }
+    .glo-modal-overlay.closing { opacity: 0; }
+    .glo-modal {
+      min-width: 320px; max-width: 460px;
+      padding: 22px 22px 18px;
+      background: var(--panel-2);
+      backdrop-filter: var(--glass-blur);
+      -webkit-backdrop-filter: var(--glass-blur);
+      border: 1px solid var(--line-hi);
+      border-radius: 16px;
+      box-shadow:
+        0 0 0 1px rgba(255,255,255,0.06) inset,
+        0 24px 80px rgba(0,0,0,0.65),
+        0 0 40px rgba(255,0,128,0.12);
+      color: var(--text);
+      font-family: var(--font-ui);
+      transform: translateY(8px) scale(0.98);
+      transition: transform 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
+    }
+    .glo-modal-overlay.open .glo-modal { transform: translateY(0) scale(1); }
+    .glo-modal-title {
+      margin: 0 0 10px;
+      font-family: var(--font-display);
+      font-size: 14px; letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: #fff;
+      text-shadow: 0 0 12px var(--accent-glow);
+    }
+    .glo-modal-msg {
+      margin: 0 0 18px;
+      font-size: 14px; line-height: 1.45;
+      color: var(--muted);
+    }
+    .glo-modal-actions {
+      display: flex; gap: 10px; justify-content: flex-end;
+    }
+    .glo-btn {
+      padding: 9px 16px;
+      border-radius: 10px;
+      font-family: var(--font-ui); font-weight: 700;
+      letter-spacing: 0.06em; text-transform: uppercase;
+      font-size: 12px;
+      cursor: pointer;
+      transition: filter 0.12s ease, transform 0.08s ease, box-shadow 0.12s ease, background 0.12s ease, border-color 0.12s ease;
+    }
+    .glo-btn:active { transform: translateY(1px); }
+    .glo-btn:focus-visible { outline: 2px solid var(--accent-2); outline-offset: 2px; }
+    .glo-btn-ghost {
+      background: rgba(255,255,255,0.05);
+      color: var(--text);
+      border: 1px solid var(--line);
+    }
+    .glo-btn-ghost:hover { background: rgba(255,255,255,0.10); border-color: var(--line-hi); }
+    .glo-btn-primary {
+      background: linear-gradient(180deg, var(--accent), #c4005f);
+      color: #fff;
+      border: 1px solid transparent;
+      box-shadow: 0 4px 14px var(--accent-glow), 0 0 0 1px rgba(255,255,255,0.18) inset;
+    }
+    .glo-btn-primary:hover { filter: brightness(1.08); box-shadow: 0 6px 22px var(--accent-glow), 0 0 0 1px rgba(255,255,255,0.25) inset; }
   </style>
 </head>
-<body>
+<body class="studio-booting">
+  <!-- ============================================================
+       SPLASH BRIDGE MARKUP
+       ============================================================
+       Sits ABOVE the inline studio landing in z-order. Removed by
+       window.__gkSplashHide() which is called by the inline pre-boot
+       script (after the landing has rendered + autosave is checked)
+       and again by editor-main.js once _bootstrapFromChoice runs.
+       Either path triggers a 280 ms cross-fade into the landing.
+       A 2.5 s safety timeout guarantees removal even if both fail.
+       ============================================================ -->
+  <div id="gkSplash" role="status" aria-live="polite" aria-label="Loading Track Studio">
+    <div class="gk-splash-stack">
+      <div class="gk-splash-ring-wrap">
+        <div class="gk-splash-ring"></div>
+        <div class="gk-splash-ring gk-ring-2"></div>
+        <div class="gk-splash-mark">
+          <span class="gk-mark-glo">GLO</span>
+          <span class="gk-mark-karts">KARTS</span>
+        </div>
+      </div>
+      <div class="gk-splash-title">TRACK STUDIO</div>
+      <div class="gk-splash-bar" aria-hidden="true"></div>
+      <div class="gk-splash-tagline" id="gkSplashTagline">
+        Tuning karts<span class="gk-dot"></span><span class="gk-dot"></span><span class="gk-dot"></span>
+      </div>
+    </div>
+  </div>
+  <script>
+    // Splash dismissal helper — installed before any module so the
+    // inline landing pre-boot script (further down) and editor-main.js
+    // can both call it. Idempotent: extra calls are no-ops.
+    (function () {
+      var splashShownAt = performance.now();
+      var taglineEl = document.getElementById('gkSplashTagline');
+      var taglines = [
+        'Tuning karts',
+        'Polishing chrome',
+        'Charging the GLO',
+        'Aligning the workplane',
+        'Loading templates',
+      ];
+      var idx = 0;
+      var rot = setInterval(function () {
+        if (!taglineEl || !taglineEl.isConnected) { clearInterval(rot); return; }
+        idx = (idx + 1) % taglines.length;
+        // Replace only the leading text node so the animated dots stay put.
+        var first = taglineEl.firstChild;
+        if (first && first.nodeType === 3) first.nodeValue = taglines[idx] + ' ';
+      }, 900);
+
+      window.__gkSplashHide = function () {
+        var s = document.getElementById('gkSplash');
+        if (!s || s.dataset.hiding === '1') return;
+        s.dataset.hiding = '1';
+        // Enforce a minimum visible duration so the splash always
+        // reads as an intentional brand beat instead of a one-frame
+        // flash on warm-cache loads. ~700 ms lets the rotating ring
+        // make a full revolution and the loading bar sweep once.
+        var MIN_VISIBLE_MS = 700;
+        var elapsed = performance.now() - splashShownAt;
+        var wait = Math.max(0, MIN_VISIBLE_MS - elapsed);
+        setTimeout(function () {
+          clearInterval(rot);
+          s.classList.add('gk-splash-out');
+          setTimeout(function () { s.remove(); }, 320);
+        }, wait);
+      };
+
+      // Safety net — never let the splash trap the user if the editor
+      // module fails to load or hits an exception during bootstrap.
+      setTimeout(function () { try { window.__gkSplashHide(); } catch (e) {} }, 4500);
+    })();
+  </script>
+  <!-- ============================================================
+       INLINE STUDIO LANDING
+       ============================================================
+       Pre-rendered so the landing UI paints with the HTML, before
+       editor-main.js has even started fetching. studio-landing.js
+       (loaded by editor-main.js) detects this element and adopts it
+       instead of creating a fresh overlay. Any clicks on the
+       primary cards while editor-main.js is still parsing are
+       captured into window.__studioPreClick and replayed once the
+       module is ready. Net effect on cold loads: landing visible in
+       <100 ms instead of >1 s.
+       ============================================================ -->
+  <div class="studio-landing" data-preshown="1">
+    <div class="sl-bg"></div>
+    <div class="sl-shell" role="dialog" aria-modal="true" aria-label="Track Studio">
+      <header class="sl-header">
+        <div class="sl-brand">GLO<br>KARTS</div>
+        <div class="sl-title">
+          <h1>Track Studio</h1>
+          <p>Build a new circuit, remix the community, or pick up where you left off.</p>
+        </div>
+        <button class="sl-lobby" data-action="lobby" type="button" title="Return to lobby">← Lobby</button>
+      </header>
+      <section class="sl-quickrow">
+        <button class="sl-card" data-card="new" data-action="new" type="button">
+          <div class="sl-card-icon">＋</div>
+          <div class="sl-card-text">
+            <h3>New Project</h3>
+            <p>Empty workspace.</p>
+          </div>
+        </button>
+        <button class="sl-card disabled" data-card="continue" data-action="continue" type="button">
+          <div class="sl-card-icon">⟳</div>
+          <div class="sl-card-text">
+            <h3>Continue</h3>
+            <p class="sl-card-meta">No autosave found yet.</p>
+          </div>
+        </button>
+      </section>
+      <nav class="sl-tabs">
+        <button class="sl-tab active" data-tab="templates" type="button">Templates</button>
+        <button class="sl-tab" data-tab="community" type="button">Remix Community</button>
+        <button class="sl-tab" data-tab="mine" type="button">My Saves</button>
+      </nav>
+      <section class="sl-pane active" data-pane="templates"><div class="sl-grid"><div class="sl-empty">Loading templates…</div></div></section>
+      <section class="sl-pane" data-pane="community"><div class="sl-grid"></div></section>
+      <section class="sl-pane" data-pane="mine"><div class="sl-grid"></div></section>
+    </div>
+  </div>
+  <script>
+    // Pre-boot interactions for the inline landing. Runs synchronously
+    // before any module loads. Two jobs:
+    //   1) Light up the Continue card immediately if an autosave exists.
+    //      studio-landing.js does the same later, but doing it here
+    //      avoids a flash of the disabled state on warm reloads.
+    //   2) Capture clicks on the primary cards (New / Continue / Lobby)
+    //      so a fast user isn't ignored while editor-main.js is still
+    //      parsing. studio-landing.js drains the queue on adoption.
+    (function () {
+      // URL shortcuts (?resume=1, ?new=1, ?template=, ?community=) bypass
+      // the landing entirely. The inline overlay is rendered into the
+      // HTML so cold loads paint instantly, but on these bypass URLs it
+      // would sit on top of the workspace forever — neither editor-main.js
+      // nor studio-landing.js touch the pre-rendered node when they
+      // early-exit. Strip it now so the playtest "← Back to Editor" flow
+      // (which sends the user to /editor.html?resume=1) lands them on
+      // their workspace instead of the chooser.
+      try {
+        var qp = new URLSearchParams(location.search);
+        if (qp.get('resume') === '1' || qp.get('new') === '1'
+            || qp.get('template') || qp.get('community')) {
+          var pre = document.querySelector('.studio-landing[data-preshown="1"]');
+          if (pre && pre.parentNode) pre.parentNode.removeChild(pre);
+          // Skip the rest of the pre-boot work — nothing below applies
+          // when there's no landing on screen.
+          return;
+        }
+      } catch (e) { /* URL parse failures are non-fatal */ }
+      try {
+        var raw = localStorage.getItem('gloKartsStudio.lastTrack');
+        if (raw) {
+          var parsed = JSON.parse(raw);
+          var n = (parsed && parsed.track && parsed.track.placements && parsed.track.placements.length) || 0;
+          if (n > 0) {
+            var cont = document.querySelector('.studio-landing [data-card="continue"]');
+            if (cont) {
+              cont.classList.remove('disabled');
+              var meta = cont.querySelector('.sl-card-meta');
+              var name = (parsed && parsed.track && parsed.track.name) || '';
+              if (meta) meta.textContent = name ? (name + ' · ' + n + ' pieces') : (n + ' pieces');
+            }
+          }
+        }
+      } catch (e) { /* localStorage may be blocked; non-fatal */ }
+      var landing = document.querySelector('.studio-landing[data-preshown="1"]');
+      if (!landing) return;
+      // Landing markup is parsed and present — fade the splash out so
+      // the user lands on the interactive cards. We wait one paint so
+      // the landing actually composites before the splash starts its
+      // 280 ms cross-fade out (otherwise the user sees a black flicker
+      // between the two layers on first paint).
+      requestAnimationFrame(function () {
+        requestAnimationFrame(function () {
+          if (window.__gkSplashHide) window.__gkSplashHide();
+        });
+      });
+      landing.addEventListener('click', function (e) {
+        var t = e.target.closest('[data-action]');
+        if (!t) return;
+        var action = t.dataset.action;
+        if (action === 'lobby') {
+          // Lobby is a navigation; safe to handle synchronously.
+          location.href = '/index.html';
+          return;
+        }
+        if (action === 'continue' && t.classList.contains('disabled')) return;
+        if (action === 'new' || action === 'continue') {
+          window.__studioPreClick = { action: action, at: Date.now() };
+          // Visual feedback so the user knows the click registered
+          // even though the editor module is still loading.
+          t.style.opacity = '0.6';
+        }
+      }, true);
+    })();
+  </script>
   <div id="app">
     <header>
-      <span class="brand">GLO<br>KARTS</span>
+      <button type="button" class="brand" id="brandBtn" title="Return to lobby" aria-label="Return to lobby">GLO<br>KARTS</button>
       <button class="menu-btn" id="menuBtn" title="Menu">
         <svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
       </button>
       <div id="menuDropdown" class="menu-dropdown" hidden>
+        <button data-action="landing">Studio Home…</button>
         <button data-action="new">New track</button>
         <button data-action="open">Open from URL…</button>
         <button data-action="export">Export JSON</button>
         <button data-action="import">Import JSON…</button>
         <button data-action="save">Save to browser</button>
+        <hr style="border:0;border-top:1px solid var(--line);margin:4px 0;">
+        <button data-action="cloud-save">Save to cloud…</button>
+        <button data-action="cloud-publish">Publish to community…</button>
+        <button data-action="cloud-mine">My saved tracks…</button>
+        <hr style="border:0;border-top:1px solid var(--line);margin:4px 0;">
         <button data-action="clear">Clear all</button>
       </div>
       <input class="name" id="trackName" value="My Track" maxlength="40" />
@@ -896,7 +2037,7 @@
       </label>
       <button class="action" id="shareBtn" title="Import" style="display:none">Import</button>
       <button class="action" id="saveBtn" title="Save (browser)" style="display:none">Export</button>
-      <button class="action primary" id="playBtn" title="Playtest">Send To</button>
+      <button class="action primary" id="playBtn" title="Playtest">Playtest</button>
     </header>
 
     <!-- Tinkercad-style transform/edit toolbar.
@@ -975,7 +2116,7 @@
       <div class="orbit-cube" id="orbitCube" title="Drag to orbit · click face to snap">
         <div class="cube" id="orbitCubeInner">
           <div class="face f-top"    data-view="top">TOP</div>
-          <div class="face f-bottom" data-view="bottom">BOT</div>
+          <div class="face f-bottom" data-view="bottom">BOTTOM</div>
           <div class="face f-front"  data-view="front">FRONT</div>
           <div class="face f-back"   data-view="back">BACK</div>
           <div class="face f-right"  data-view="right">RIGHT</div>
@@ -1266,10 +2407,16 @@
         <button class="active" title="Shapes" id="tabShapes">
           <svg viewBox="0 0 24 24"><path d="M3 3h8v8H3zm10 0h8v8h-8zM3 13h8v8H3zm10 0h8v8h-8z"/></svg>
         </button>
+        <button title="Karts" id="tabKart">
+          <!-- Steering-wheel glyph denoting the Kart selection sub-menu. -->
+          <svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 100 20 10 10 0 000-20zm0 4a6 6 0 015.65 4H6.35A6 6 0 0112 6zm-6 6h2v6.32A8 8 0 016 12zm10 6.32V12h2a8 8 0 01-2 6.32zM10 12h4v8h-4z"/></svg>
+        </button>
         <button title="Workplane" id="tabWorkplane">
           <svg viewBox="0 0 24 24"><path d="M3 18h18v2H3zm0-7h18v2H3zm0-7h18v2H3z"/></svg>
         </button>
       </div>
+      <!-- Shapes-tab content (palette) -->
+      <div id="shapesPanel" class="right-panel">
       <div class="category-row">
         <select id="categorySelect">
           <option value="all">All Shapes</option>
@@ -1285,6 +2432,16 @@
       </div>
       <input id="paletteSearch" type="text" placeholder="Search shapes…" class="palette-search" />
       <div class="palette" id="palette"></div>
+      </div><!-- /shapesPanel -->
+
+      <!-- Kart-tab content. Hidden by default; shown when the Kart tab is
+           selected from the right-aside. Each card represents one kart from
+           kart-catalog.js. Clicking sets the active kart for both the
+           preview and the playtest hand-off. -->
+      <div id="kartPanel" class="right-panel kart-panel" hidden>
+        <input id="kartSearch" type="text" placeholder="Search karts…" class="palette-search show" />
+        <div class="kart-grid" id="kartGrid"></div>
+      </div>
       <!-- Track Info panel hidden for Tinkercad parity. Compat shims below. -->
       <div class="right-summary" style="display:none">
         <h3>Track Info</h3>

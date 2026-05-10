@@ -1,6 +1,8 @@
 // GLO KARTS — Kart Preview (lobby-car.js)
 // Renamed STK characters, 3D underglow, Pick-your-GLO system
 
+import { computeGloLook } from './kart-glo.js';
+
 // ── Kart roster with GLO-Karts character names ──────────────────
 const STK_KARTS = [
   { id: 'adiumy',          name: 'Angela'  },
@@ -357,9 +359,13 @@ class KartPreview {
     this._enterDir         = 0;
     this._enterT           = 1; // 1 = fully settled
 
-    const savedId = sessionStorage.getItem('selectedKart') || 'tux';
+    const savedId = sessionStorage.getItem('selectedKart') || 'amanda';
     this.currentIndex = STK_KARTS.findIndex(k => k.id === savedId);
-    if (this.currentIndex < 0) this.currentIndex = 0;
+    if (this.currentIndex < 0) {
+      // Default to Grace ('amanda') if nothing valid is saved
+      this.currentIndex = STK_KARTS.findIndex(k => k.id === 'amanda');
+      if (this.currentIndex < 0) this.currentIndex = 0;
+    }
 
     try {
       this.init();
@@ -489,146 +495,13 @@ class KartPreview {
   updateUnderglow(dt) {
     this.glowTime += dt;
     const t = this.glowTime;
-    let intensity = 1;  // 0-1 multiplier
-    let c1 = new THREE.Color(gloColor);
-    let c2 = new THREE.Color(gloColor2);
-    let col = c1.clone();
-
-    switch (gloEffect) {
-      case 'solid':
-        intensity = 1;
-        break;
-      case 'pulse':
-        intensity = 0.45 + 0.55 * (0.5 + 0.5 * Math.sin(t * 2.5));
-        break;
-      case 'strobe':
-        intensity = Math.floor(t * 12) % 2 === 0 ? 1 : 0.05;
-        break;
-      case 'rainbow': {
-        const hue = (t * 0.18) % 1;
-        col.setHSL(hue, 1, 0.55);
-        intensity = 0.85;
-        break;
-      }
-      case 'two-color': {
-        const blend = 0.5 + 0.5 * Math.sin(t * 2);
-        col.lerpColors(c1, c2, blend);
-        intensity = 0.9;
-        break;
-      }
-      case 'chase': {
-        intensity = 0.5 + 0.5 * Math.abs(Math.sin(t * 3));
-        const hue2 = (t * 0.08) % 1;
-        col.setHSL(hue2, 1, 0.55);
-        break;
-      }
-
-      // ── Themed scene effects ────────────────────────────────────────────
-      case 'sunrise': {
-        col = _gradColors(['#1a0030','#881100','#ff4400','#ff9900','#ffdd55','#ff9900','#ff4400','#881100'], t / 10);
-        intensity = 0.75 + 0.25 * Math.sin(t * 0.4);
-        break;
-      }
-      case 'sunset': {
-        col = _gradColors(['#ff5500','#ff2200','#cc0055','#880033','#440011','#880033','#cc0055','#ff2200'], t / 8);
-        intensity = 0.8 + 0.2 * Math.sin(t * 0.5);
-        break;
-      }
-      case 'sunset-glow': {
-        col = _gradColors(['#ffaa00','#ff5500','#ff1166','#ff8800'], t / 3);
-        intensity = 0.7 + 0.3 * (0.5 + 0.5 * Math.sin(t * 2.5));
-        break;
-      }
-      case 'spring': {
-        col = _gradColors(['#ffaabb','#aaffbb','#ffffaa','#ccaaff','#ffaabb'], t / 8);
-        intensity = 0.7 + 0.3 * (0.5 + 0.5 * Math.sin(t * 1.5));
-        break;
-      }
-      case 'aurora': {
-        col = _gradColors(['#00ff88','#00bbff','#8800ff','#00ff44','#00ffaa'], t / 10);
-        intensity = 0.6 + 0.4 * (0.5 + 0.5 * Math.sin(t * 3.5 + Math.sin(t * 1.7) * 1.2));
-        break;
-      }
-      case 'full-rainbow': {
-        col.setHSL((t * 0.3) % 1, 1.0, 0.52);
-        intensity = 0.85 + 0.15 * Math.sin(t * 2.0);
-        break;
-      }
-      case 'forest': {
-        col = _gradColors(['#003300','#116611','#335522','#005500','#224422'], t / 12);
-        intensity = 0.7 + 0.3 * (0.5 + 0.5 * Math.sin(t * 0.7));
-        break;
-      }
-      case 'ocean': {
-        col = _gradColors(['#001133','#002266','#0044aa','#0077cc','#44aaff','#0077cc','#0044aa'], t / 8);
-        intensity = 0.75 + 0.25 * Math.sin(t * 1.2);
-        break;
-      }
-      case 'snowing': {
-        col = _gradColors(['#bbccee','#ddeeff','#ffffff','#aabbdd'], t / 4);
-        const spark = Math.random() > 0.96 ? 1.45 : 1.0;
-        intensity = (0.65 + 0.2 * Math.sin(t * 2.0)) * spark;
-        break;
-      }
-      case 'spring-wind': {
-        col = _gradColors(['#eeffcc','#ccffee','#ffeeff','#ffffcc','#eeffcc'], t / 5);
-        intensity = 0.5 + 0.5 * Math.abs(Math.sin(t * 2.2));
-        break;
-      }
-      case 'cloudy': {
-        col = _gradColors(['#667788','#778899','#99aabb','#778899'], t / 20);
-        intensity = 0.4 + 0.25 * Math.sin(t * 0.6);
-        break;
-      }
-      case 'firefly': {
-        const fTick = Math.floor(t * 7);
-        const fOn   = ((fTick * 1013 + fTick * fTick * 997) % 17) < 2;
-        col  = fOn ? new THREE.Color('#ffff88') : new THREE.Color('#002200');
-        intensity = fOn ? (1.0 + 0.4 * Math.sin(t * 45)) : 0.04;
-        break;
-      }
-      case 'fire': {
-        col = _gradColors(['#ff0000','#ff4400','#ff8800','#ffcc00','#ff4400'], t / 0.9);
-        intensity = 0.6 + 0.4 * Math.random();
-        break;
-      }
-      case 'waterfall': {
-        col = _gradColors(['#0077bb','#00aaee','#55ccff','#ffffff','#55ccff'], t / 3.5);
-        intensity = 0.7 + 0.3 * (0.5 + 0.5 * Math.sin(t * 4.0));
-        break;
-      }
-      case 'falling-petals': {
-        col = _gradColors(['#ffbbcc','#ff88aa','#ffbbdd','#ffffff','#ffaabb'], t / 6);
-        intensity = 0.6 + 0.4 * Math.abs(Math.sin(t * 4.5));
-        break;
-      }
-      case 'wave': {
-        col = _gradColors(['#001144','#003388','#0055aa','#0088cc','#003388'], t / 4);
-        intensity = 0.6 + 0.4 * (0.5 + 0.5 * Math.sin(t * Math.PI * 0.8));
-        break;
-      }
-      case 'raining': {
-        col = _gradColors(['#3355aa','#4466bb','#6688cc','#4466bb'], t / 3);
-        intensity = 0.5 + 0.3 * (0.5 + 0.5 * Math.sin(t * 8.0)) + 0.2 * Math.random();
-        break;
-      }
-      case 'falling-leaves': {
-        col = _gradColors(['#aa3300','#dd6600','#cc8800','#772200','#aa3300'], t / 6);
-        intensity = 0.6 + 0.4 * Math.abs(Math.sin(t * 3.8));
-        break;
-      }
-      case 'river': {
-        col = _gradColors(['#005566','#007788','#009999','#44aaaa','#007788'], t / 5);
-        intensity = 0.75 + 0.25 * Math.sin(t * 1.5);
-        break;
-      }
-      case 'water-drop': {
-        const wPhase = (t % 1.5) / 1.5;
-        intensity = Math.exp(-wPhase * 5) * 0.95 + 0.05;
-        col = new THREE.Color('#0099ee');
-        break;
-      }
-    }
+    // Delegate colour/intensity computation to the shared GLO runtime so
+    // every play-mode (lobby preview + editor playtest + realtime) renders
+    // an identical effect from one source of truth.
+    if (!this._gloScratch) this._gloScratch = new THREE.Color();
+    const { color: col, intensity } = computeGloLook(THREE, t, {
+      gloEffect, gloColor, gloColor2,
+    }, this._gloScratch);
 
     // Apply colour & opacity
     if (this.glowDisc) {

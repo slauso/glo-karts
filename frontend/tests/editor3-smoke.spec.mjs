@@ -26,7 +26,10 @@ test.describe('Track Studio (editor3) — Smoke', () => {
     await waitForEditor(page);
 
     await expect(page).toHaveTitle(/Track Studio/);
-    await expect(page.locator('#kartSelect')).toBeVisible();
+    // Kart picker is now exposed via the right-aside Kart sub-menu (the
+    // legacy header <select id="kartSelect"> is kept hidden as a compat
+    // shim). The Kart tab button must be visible.
+    await expect(page.locator('#tabKart')).toBeVisible();
     await expect(page.locator('#playBtn')).toBeVisible();
 
     const pieceCount = await page.evaluate(() => window.__studio.track.placements.size);
@@ -37,13 +40,18 @@ test.describe('Track Studio (editor3) — Smoke', () => {
     await page.goto(`${BASE}/editor.html`, { waitUntil: 'networkidle' });
     await waitForEditor(page);
 
-    const options = await page.locator('#kartSelect option').count();
-    expect(options).toBeGreaterThanOrEqual(10);
+    // Open the Kart sub-menu in the right-aside.
+    await page.click('#tabKart');
+    await expect(page.locator('#kartPanel')).toBeVisible();
 
-    // Change selection, verify persistence.
-    await page.selectOption('#kartSelect', 'gnu');
+    const cardCount = await page.locator('#kartGrid .kart-card').count();
+    expect(cardCount).toBeGreaterThanOrEqual(10);
+
+    // Change selection by clicking a card; verify persistence + active state.
+    await page.click('#kartGrid .kart-card[data-kart-id="gnu"]');
     const stored = await page.evaluate(() => localStorage.getItem('studioSelectedKart'));
     expect(stored).toBe('gnu');
+    await expect(page.locator('#kartGrid .kart-card[data-kart-id="gnu"]')).toHaveClass(/active/);
   });
 
   test('3 — Playtest button launches play.html with the track encoded', async ({ page }) => {

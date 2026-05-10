@@ -47,6 +47,7 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "rest_framework",  # Add Django REST Framework
     "corsheaders",     # Add CORS headers
+    "tracks",          # Track persistence + community sharing
 ]
 
 MIDDLEWARE = [
@@ -166,6 +167,14 @@ CORS_ALLOWED_ORIGIN_REGEXES = [
 ]
 
 CORS_ALLOW_CREDENTIALS = True
+
+# Allow the Studio's anonymous identity header on all CORS preflights
+# (django-cors-headers ships a sensible default list but does not include
+# custom headers, so we extend it here).
+from corsheaders.defaults import default_headers as _default_cors_headers
+CORS_ALLOW_HEADERS = list(_default_cors_headers) + [
+    "x-owner-token",
+]
 
 # Add REST Framework default settings (optional)
 REST_FRAMEWORK = {

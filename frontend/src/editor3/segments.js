@@ -19,8 +19,12 @@
 //   - kart length ~2.0m (chassis HZ=1.0)
 //   - kart width  ~1.2m (chassis HX=0.6, capped to 1.4 in kart-loader)
 //   - road width  ~10.8m → kart width is ~11% of road, MK8 ratio
-// TILE bumped from 7 → 12 so karts no longer dwarf the segments.
-export const TILE = 12;         // world units per grid cell
+// TILE bumped from 7 → 12 → 18 → 36 to support arena battle / race-battle modes
+// where 8+ karts share the road simultaneously and need maneuver space for items,
+// drift lines, and projectile arcs. Saved tracks store dimensionless cell coords
+// so widening the tile is non-breaking; decor positions migrate via tile-ratio
+// scaling in editor-main.js loadFromJSON.
+export const TILE = 36;         // world units per grid cell (metres) — ROAD_WIDTH = TILE*0.9 = 32.4m gives ~25 kart-widths of headroom for combat play
 export const ROAD_WIDTH = TILE * 0.9;
 export const ROAD_THICK = 0.5;
 export const WALL_HEIGHT = 1.6;
@@ -32,9 +36,13 @@ export const WALL_THICK = 0.5;
 //   tier 2 = bridge deck (y = BRIDGE_DECK_HEIGHT)
 export const PLATEAU_HEIGHT = TILE * 0.6;
 export const BRIDGE_DECK_HEIGHT = TILE * 1.2;
-// Bridge on/off ramps span this many cells so the climb stays gradual
-// (rise / run = BRIDGE_DECK_HEIGHT / (BRIDGE_RAMP_CELLS * TILE) ≈ 0.30).
-export const BRIDGE_RAMP_CELLS = 4;
+// Bridge on/off ramps span this many cells so the climb stays gradual.
+// At 6 cells: rise/run = (TILE*1.2)/(6*TILE) = 0.20 → ~11.3°. The previous
+// 4-cell version (~16.7°) launched karts off the offramp at high speed
+// because the chassis couldn't pitch down quickly enough at the deck→ramp
+// joint and went ballistic. Bridge probe (scripts/bridge-traversal-probe.mjs)
+// confirmed clean traversal at 6 cells.
+export const BRIDGE_RAMP_CELLS = 6;
 
 /**
  * @typedef {Object} Block
@@ -66,24 +74,44 @@ function deck(extentZ = TILE) {
 }
 
 function curbStripes(extentZ = TILE) {
-  // FUNCTIONAL alternating red/white curbs along both long edges. The
-  // stripes are SOLID low bumps (height 0.25 m) so a kart that strays
-  // off the racing line clatters over them — the rumble destabilises
-  // the chassis enough to encourage drivers to stay inside the road.
+  // Tilted-wedge curbs along both long edges. Replaces the previous
+  // vertical-walled box curbs (0.25m tall) which the chassis box used
+  // to clip into instead of riding over: chassis half-Y ≈ 0.3m sits
+  // BELOW the curb top (0.75m above ground), so the chassis flank
+  // slammed into the curb wall and stuck. Wheels (raycast straight
+  // down) couldn't climb the wall either.
+  //
+  // New design: each stripe is a thin (6cm) plate tilted 18° outward
+  // around the road axis (Z). The INNER edge sits at the road surface
+  // and the OUTER edge rises ~0.20m at the road's outer edge. Wheels
+  // raycast onto the inclined top surface and the kart rolls smoothly
+  // up; the chassis follows because there's no vertical face to slam
+  // into. At speed the kart pops off the high outer edge giving the
+  // proper "ride the curb" feel. Marked drivable:true so wheel
+  // raycasts treat the slope as road.
+  //
+  // Geometry: plate width W=0.55m laterally; rotZ = side*18°.
+  //   inner edge → roughly at (side * (ROAD_WIDTH/2 - W*cosθ)) at y≈0
+  //   outer edge → at  side * ROAD_WIDTH/2          at y≈+0.20m
   const out = [];
-  const stripeW = 0.32;
-  const stripeH = 0.25;
+  const W = 0.55;
+  const T = 0.06;
+  const TILT = 0.314;          // ~18°
+  const cosT = Math.cos(TILT);
+  const sinT = Math.sin(TILT);
+  const xc = (ROAD_WIDTH / 2) - (W * cosT) / 2;
+  const yc = ROAD_THICK + (W * sinT) / 2 + (T * cosT) / 2;
   const stripeLen = extentZ / 5;
   for (let side = -1; side <= 1; side += 2) {
-    const x = side * (ROAD_WIDTH / 2 - stripeW / 2);
     for (let i = 0; i < 5; i++) {
       const z = -extentZ / 2 + stripeLen * (i + 0.5);
       out.push({
         kind: 'box',
-        size: [stripeW, stripeH, stripeLen * 0.95],
-        pos: [x, ROAD_THICK + stripeH / 2, z],
+        size: [W, T, stripeLen * 0.95],
+        pos: [side * xc, yc, z],
+        rotZ: side * TILT,
         color: i % 2 === 0 ? CURB_R : CURB_W,
-        // solid:true → wheels physically bump over the curb.
+        drivable: true,
       });
     }
   }
@@ -241,12 +269,17 @@ export const SEGMENTS = {
   },
 
   // ── Banked turn ──────────────────────────────────────────────
-  // Single-cell 90° banked corner. Outside edge of the arc is lifted so
-  // karts can carry more speed through the bend.
+  // 90° banked corner spanning a 2×2 cell footprint (4 grid squares).
+  // Cross-section is a SYMMETRIC concave bowl (low centerline, raised
+  // inner AND outer edges) so karts settle into the curve and can carry
+  // high speed through the apex — like a velodrome / NASCAR oval. The
+  // 1.5×TILE arc radius (vs the 0.5×TILE single-cell variant) gives a
+  // gentler turn that maintains speed instead of scrubbing it. The bowl
+  // walls eliminate the need for separate guardrails on either side.
   banked_turn: {
     label: 'Banked Turn',
     category: 'road',
-    span: { x: 1, z: 1 },
+    span: { x: 2, z: 2 },
     blocks: bankedTurnBlocks(),
   },
 
@@ -270,11 +303,10 @@ export const SEGMENTS = {
     category: 'height',
     span: { x: 1, z: 1 },
     // Short kicker ramp that launches the kart. Rises ~1.2u over 1 cell.
-    blocks: rampBlocks(0, 1.2, TILE).map((b, i) => ({
-      ...b,
-      // shrink to 1-cell length
-      size: i === 0 ? [ROAD_WIDTH, ROAD_THICK, Math.sqrt(1.2 * 1.2 + TILE * TILE)] : b.size,
-    })),
+    // rampBlocks now emits a chain of short tilted segments that follow
+    // the smoothstep profile, so no per-block size override is needed
+    // (the previous override was for the legacy single-chord deck box).
+    blocks: rampBlocks(0, 1.2, TILE),
   },
 
   // ── Bridge (deck spans 1×2 elevated, top tier) ───────────────
@@ -446,13 +478,18 @@ function cornerBlocks(mirror) {
     const pz = insideZ + Math.sin(angle) * R;
     // Tangent angle for stripe orientation
     const tan = angle + Math.PI / 2;
+    // Thin drivable plate (was 0.25m vertical-walled box that the
+    // chassis box clipped into). 0.06m height + drivable flag means
+    // wheels raycast onto the curb top and roll over instead of the
+    // chassis flank slamming into a wall. Visual is unchanged in shape
+    // but the kart now treats it as a rumble strip.
     blocks.push({
       kind: 'box',
-      size: [0.32, 0.25, stripeLen],
-      pos: [px, ROAD_THICK + 0.125, pz],
+      size: [0.32, 0.06, stripeLen],
+      pos: [px, ROAD_THICK + 0.03, pz],
       rotY: tan,
       color: i % 2 === 0 ? CURB_R : CURB_W,
-      // solid:true (default) so the kart bumps over a wide-line curb.
+      drivable: true,
     });
   }
   return blocks;
@@ -492,12 +529,14 @@ function curvedPlateauBlocks(mirror) {
     const R = TILE * 0.15;
     const px = insideX + Math.cos(angle) * R;
     const pz = insideZ + Math.sin(angle) * R;
+    // Thin drivable plate — see cornerBlocks for rationale.
     blocks.push({
       kind: 'box',
-      size: [0.32, 0.25, stripeLen],
-      pos: [px, deckH + ROAD_THICK + 0.125, pz],
+      size: [0.32, 0.06, stripeLen],
+      pos: [px, deckH + ROAD_THICK + 0.03, pz],
       rotY: angle + Math.PI / 2,
       color: i % 2 === 0 ? CURB_R : CURB_W,
+      drivable: true,
     });
   }
   // Slim support columns under the arc deck. Four pillars sit AT the
@@ -530,38 +569,51 @@ function curvedPlateauBlocks(mirror) {
 }
 
 function rampBlocks(yStart, yEnd, lengthZ) {
-  // The kart drives on its top face.
-  const dy = yEnd - yStart;
-  const dz = lengthZ;
-  const length = Math.sqrt(dy * dy + dz * dz);
-  const angle = Math.atan2(dy, dz);              // pitch around X
-  const cy = (yStart + yEnd) / 2 + ROAD_THICK / 2;
-  const cz = lengthZ / 2 - TILE / 2;             // ramp's first cell anchor at -TILE/2
-  const blocks = [
-    {
-      kind: 'box',
-      size: [ROAD_WIDTH, ROAD_THICK, length],
-      pos: [0, cy, cz],
-      rotX: -angle,                               // tilt forward
-      color: RAMP_COLOR,
-      drivable: true,
-    },
-    // Side rails along the ramp
-    {
-      kind: 'box',
-      size: [WALL_THICK, WALL_HEIGHT, length],
-      pos: [(TILE / 2) - WALL_THICK / 2, cy + WALL_HEIGHT / 2 + 0.05, cz],
-      rotX: -angle,
-      color: WALL_COLOR,
-    },
-    {
-      kind: 'box',
-      size: [WALL_THICK, WALL_HEIGHT, length],
-      pos: [-(TILE / 2) + WALL_THICK / 2, cy + WALL_HEIGHT / 2 + 0.05, cz],
-      rotX: -angle,
-      color: WALL_COLOR,
-    },
-  ];
+  // The kart drives on a chain of short tilted box segments that follow
+  // the same smoothstep height profile used by `buildRamp` in
+  // road-geometry.js. A single full-length tilted box (the previous
+  // implementation) was a CHORD across the smoothstep curve — the visual
+  // road bulges above the chord on the upper half, so the kart's wheels
+  // sat below the rendered surface and the chassis appeared to clip
+  // through the deck on the way up. Sampling the same profile and
+  // emitting N short chords keeps the collider hugging the visible road.
+  // Sampling rate: 16 boxes (was 8). Each box is a constant-pitch chord
+  // approximating the smoothstep curve; doubling the count halves the
+  // pitch step at each box-to-box joint, eliminating the micro-bumps
+  // that were spiking chassis vy ~6 m/s above the expected climb rate
+  // (probe: onramp vy peaked at +15.5 m/s vs expected +9.8 m/s at top
+  // speed on the 11.3° slope). Smoother colliders also smooth the
+  // crest transition into the flat deck.
+  const SEGMENTS_RAMP = 16;
+  const profile = (t) => {
+    const e = t * t * (3 - 2 * t);   // smoothstep — must match buildRamp
+    return yStart + (yEnd - yStart) * e;
+  };
+  const blocks = slopedDeckSegmentsAlongZ(profile, lengthZ, SEGMENTS_RAMP, {
+    width: ROAD_WIDTH,
+    thick: ROAD_THICK,
+    color: RAMP_COLOR,
+    drivable: true,
+  });
+  // Side rails along the ramp. The visual rails follow the smooth
+  // curve — using the chord midpoint per segment with the same tilt as
+  // the deck keeps them flush. We emit one rail piece per deck segment.
+  const sideRails = slopedDeckSegmentsAlongZ(profile, lengthZ, SEGMENTS_RAMP, {
+    width: WALL_THICK,
+    thick: WALL_HEIGHT,
+    color: WALL_COLOR,
+    drivable: false,
+    yLift: ROAD_THICK / 2 + 0.05,
+  });
+  const railsLeft = sideRails.map((b) => ({
+    ...b,
+    pos: [-(TILE / 2) + WALL_THICK / 2, b.pos[1], b.pos[2]],
+  }));
+  const railsRight = sideRails.map((b) => ({
+    ...b,
+    pos: [(TILE / 2) - WALL_THICK / 2, b.pos[1], b.pos[2]],
+  }));
+  blocks.push(...railsLeft, ...railsRight);
   // Slim under-deck support pillars. Place one pair per cell-boundary
   // crossing along the ramp (excluding the foot which is already at
   // ground level). Pillar height tracks the ramp profile so each one
@@ -573,8 +625,7 @@ function rampBlocks(yStart, yEnd, lengthZ) {
   for (let i = 1; i < cellCount; i++) {
     const z = -TILE / 2 + i * TILE;          // pillar z (cell boundary)
     const t = (z + TILE / 2) / lengthZ;      // [0..1] along ramp
-    const e = t * t * (3 - 2 * t);           // smooth-step profile
-    const yDeck = yStart + (yEnd - yStart) * e;
+    const yDeck = profile(t);
     if (yDeck < 0.4) continue;                // skip if too short to read
     for (const sx of [-1, +1]) {
       blocks.push({
@@ -587,6 +638,54 @@ function rampBlocks(yStart, yEnd, lengthZ) {
     }
   }
   return blocks;
+}
+
+/**
+ * Build a chain of short tilted box segments approximating a smooth
+ * height profile y(t) over local Z ∈ [-TILE/2, -TILE/2 + lengthZ]. Each
+ * segment spans `dz = lengthZ / segments` horizontally; its length is
+ * the chord √(dy²+dz²); its rotX = -atan2(dy, dz); its centre sits at
+ * the chord midpoint plus a yLift offset (0 by default) and is raised
+ * by half the box thickness so the box's TOP face matches the profile.
+ *
+ * Used by rampBlocks, bumpBlocks, rollingHillBlocks so the playtest
+ * collider tracks the visible road instead of a single straight chord
+ * (which let the kart clip through the deck on the way up smooth
+ * curves — see buildRamp / buildHill / buildBump in road-geometry.js
+ * for the matching visual sampling).
+ */
+function slopedDeckSegmentsAlongZ(profile, lengthZ, segments, opts) {
+  const w = opts.width;
+  const t = opts.thick;
+  const lift = opts.yLift || 0;
+  const out = [];
+  for (let i = 0; i < segments; i++) {
+    const t0 = i / segments;
+    const t1 = (i + 1) / segments;
+    const z0 = -TILE / 2 + lengthZ * t0;
+    const z1 = -TILE / 2 + lengthZ * t1;
+    const y0 = profile(t0);
+    const y1 = profile(t1);
+    const dz = z1 - z0;
+    const dy = y1 - y0;
+    const len = Math.sqrt(dy * dy + dz * dz);
+    const angle = Math.atan2(dy, dz);     // pitch around X
+    // Match the historical placement convention used by the previous
+    // single-chord rampBlocks: centre Y = midpoint Y + thickness/2 (or
+    // + caller-supplied lift). Keeps decks/rails/pillars aligned with
+    // the rest of segments.js.
+    const cy = (y0 + y1) * 0.5 + t / 2 + lift;
+    const cz = (z0 + z1) * 0.5;
+    out.push({
+      kind: 'box',
+      size: [w, t, len],
+      pos: [0, cy, cz],
+      rotX: -angle,
+      color: opts.color,
+      drivable: !!opts.drivable,
+    });
+  }
+  return out;
 }
 
 // ── Phase 1A new helpers ──────────────────────────────────────
@@ -628,71 +727,139 @@ function crossroadsBlocks() {
 }
 
 function bankedTurnBlocks() {
-  // Block-list FALLBACK only — the editor uses the visual builder in
-  // road-geometry.js (`buildBanked`). We just need a single drivable cell
-  // here so saved layouts and physics still have something solid to stand on
-  // when the visual builder is not available.
-  return [
-    {
-      kind: 'box',
-      size: [ROAD_WIDTH, ROAD_THICK, TILE],
-      pos: [0, ROAD_THICK / 2, 0],
-      color: ROAD_COLOR,
-      drivable: true,
-    },
-  ];
+  // Banked 90° corner over a 2×2 footprint. The visual builder
+  // (`buildBanked` in road-geometry.js) draws a SYMMETRIC concave bowl
+  // whose top surface is  y(t,u) = ROAD_THICK + lift(t)·u²  for u∈[-1,+1]
+  // along the cross-section and t∈[0,1] along the arc. A box-strip
+  // collider can't seal the lateral seams once the bank steepens past
+  // ~45° (each strip is only ROAD_THICK thick along its tilted normal,
+  // which becomes mostly horizontal and leaves wheel-swallowing gaps
+  // between strips). Instead we emit a single Trimesh whose top face
+  // matches the bowl exactly and whose bottom face sits on ground (y=0),
+  // so wheels can never fall under the surface regardless of bank angle.
+  const N_TANG = 28;             // arc samples
+  const M_LAT  = 24;             // lateral samples (per side of u=0)
+  const ROAD = ROAD_WIDTH;
+  // Apex bank height. Real-world velodromes / superspeedways top out
+  // around 30°35°; with a parabolic profile y = lift·u² the slope at
+  // the rim is dy/dx_world = 4·lift/ROAD, so lift = 0.20·ROAD gives a
+  // ~39° outer rim and a still-comfortable ~22° a third of the way out.
+  // Earlier we used 0.5·ROAD which produced a near-vertical 63° wall and
+  // launched any kart that didn't perfectly track the centerline.
+  const LIFT_MAX = ROAD * 0.20;
+  const cx = -TILE / 2;
+  const cz = -TILE / 2;
+  const r = 1.5 * TILE;
+  const a0 = 0;
+  const a1 = Math.PI / 2;
+  // Build a (N_TANG+1) × (M_LAT+1) grid of TOP vertices on the bowl,
+  // plus a matching grid of BOTTOM vertices at y=0. Two triangles per
+  // quad on the top, two for each side wall, two for each end cap.
+  // We don't bother with a bottom face (the bowl never lifts off the
+  // ground plane below it).
+  const cols = M_LAT + 1;
+  const rows = N_TANG + 1;
+  const topVerts = [];     // Float[]
+  const botVerts = [];
+  for (let i = 0; i < rows; i++) {
+    const t = i / N_TANG;
+    const a = a0 + (a1 - a0) * t;
+    const lift = Math.sin(t * Math.PI) * LIFT_MAX;
+    for (let j = 0; j < cols; j++) {
+      const u = -1 + (2 * j) / M_LAT;
+      const radial = r + u * (ROAD / 2);
+      const wx = cx + Math.cos(a) * radial;
+      const wz = cz + Math.sin(a) * radial;
+      const wy = ROAD_THICK + lift * u * u;
+      topVerts.push(wx, wy, wz);
+      botVerts.push(wx, 0, wz);
+    }
+  }
+  const verts = topVerts.concat(botVerts);
+  const idx = [];
+  const top = (i, j) => i * cols + j;                     // 0 .. rows*cols-1
+  const bot = (i, j) => rows * cols + i * cols + j;       // bottom block
+  // Top surface (drivable). Wind so the normal points up.
+  for (let i = 0; i < N_TANG; i++) {
+    for (let j = 0; j < M_LAT; j++) {
+      const a = top(i, j),     b = top(i, j + 1);
+      const c = top(i + 1, j), d = top(i + 1, j + 1);
+      idx.push(a, c, b);
+      idx.push(b, c, d);
+    }
+  }
+  // Inner side wall (j=0 column). Connects top edge to bottom edge.
+  for (let i = 0; i < N_TANG; i++) {
+    const t0 = top(i, 0),     t1 = top(i + 1, 0);
+    const b0 = bot(i, 0),     b1 = bot(i + 1, 0);
+    idx.push(t0, b0, t1);
+    idx.push(t1, b0, b1);
+  }
+  // Outer side wall (j=M_LAT column).
+  for (let i = 0; i < N_TANG; i++) {
+    const t0 = top(i, M_LAT),     t1 = top(i + 1, M_LAT);
+    const b0 = bot(i, M_LAT),     b1 = bot(i + 1, M_LAT);
+    idx.push(t0, t1, b0);
+    idx.push(t1, b1, b0);
+  }
+  // Entry end cap (i=0 row).
+  for (let j = 0; j < M_LAT; j++) {
+    const t0 = top(0, j),     t1 = top(0, j + 1);
+    const b0 = bot(0, j),     b1 = bot(0, j + 1);
+    idx.push(t0, t1, b0);
+    idx.push(t1, b1, b0);
+  }
+  // Exit end cap (i=N_TANG row).
+  for (let j = 0; j < M_LAT; j++) {
+    const t0 = top(N_TANG, j),     t1 = top(N_TANG, j + 1);
+    const b0 = bot(N_TANG, j),     b1 = bot(N_TANG, j + 1);
+    idx.push(t0, b0, t1);
+    idx.push(t1, b0, b1);
+  }
+  return [{
+    kind: 'trimesh',
+    vertices: verts,
+    indices: idx,
+    pos: [0, 0, 0],
+    color: ROAD_COLOR,
+    drivable: true,
+  }];
 }
 
 function bumpBlocks(height, lengthZcells) {
-  // Drivable deck with a low rounded bump made of 3 stacked slabs.
+  // Drivable surface follows the same sin-arch curve as the visual
+  // `buildBump` (peak ≈ 0.45 m). The previous stack-of-slabs collider
+  // sat ~90 mm BELOW the visual peak so the kart clipped through the
+  // top of the bump. Sample the curve and emit short tilted boxes.
   const lz = TILE * lengthZcells;
-  return [
-    { kind: 'box', size: [ROAD_WIDTH, ROAD_THICK, lz], pos: [0, ROAD_THICK / 2, 0], color: ROAD_COLOR, drivable: true },
-    { kind: 'box', size: [ROAD_WIDTH, height * 0.4, lz * 0.7], pos: [0, ROAD_THICK + height * 0.2, 0], color: ROAD_COLOR, drivable: true },
-    { kind: 'box', size: [ROAD_WIDTH, height * 0.4, lz * 0.45], pos: [0, ROAD_THICK + height * 0.5, 0], color: ROAD_COLOR, drivable: true },
-    { kind: 'box', size: [ROAD_WIDTH, height * 0.3, lz * 0.25], pos: [0, ROAD_THICK + height * 0.75, 0], color: ROAD_COLOR, drivable: true },
-  ];
+  // buildBump uses peak = 0.45 unconditionally; respect caller's
+  // `height` arg for compatibility with custom bumps but cap at 0.45 to
+  // avoid clipping the rendered surface.
+  const peak = Math.max(height, 0.45);
+  const profile = (t) => Math.sin(t * Math.PI) * peak;
+  return slopedDeckSegmentsAlongZ(profile, lz, 12, {
+    width: ROAD_WIDTH,
+    thick: ROAD_THICK,
+    color: ROAD_COLOR,
+    drivable: true,
+  });
 }
 
 function rollingHillBlocks(peakHeight, lengthZ) {
-  // Up-and-over hill modelled as two opposing ramps meeting at the peak.
-  // Each slope's HORIZONTAL projection equals one cell (TILE), so the two
-  // slopes together fill the full 2-cell footprint with no middle gap.
-  // Cell 0 spans local z=-TILE/2..+TILE/2 (up-slope centred at 0); cell 1
-  // spans +TILE/2..+3*TILE/2 (down-slope centred at +TILE). Peak filler
-  // sits at the seam between the two cells (z = TILE/2).
-  const cellLen = lengthZ / 2;                      // = TILE per slope
-  const slopeLen = Math.sqrt(peakHeight * peakHeight + cellLen * cellLen);
-  const angle = Math.atan2(peakHeight, cellLen);
-  const cy = (peakHeight / 2) + ROAD_THICK / 2;
-  return [
-    // up-slope (cell 0, centred at z=0)
-    {
-      kind: 'box',
-      size: [ROAD_WIDTH, ROAD_THICK, slopeLen],
-      pos: [0, cy, 0],
-      rotX: -angle,
-      color: ROAD_COLOR,
-      drivable: true,
-    },
-    // down-slope (cell 1, centred at z=+cellLen)
-    {
-      kind: 'box',
-      size: [ROAD_WIDTH, ROAD_THICK, slopeLen],
-      pos: [0, cy, cellLen],
-      rotX: angle,
-      color: ROAD_COLOR,
-      drivable: true,
-    },
-    // small peak filler bridging the seam between the two slopes
-    {
-      kind: 'box',
-      size: [ROAD_WIDTH, ROAD_THICK * 1.5, TILE * 0.4],
-      pos: [0, peakHeight + ROAD_THICK / 2, cellLen / 2],
-      color: ROAD_COLOR,
-      drivable: true,
-    },
-  ];
+  // Up-and-over hill modelled as N short tilted box segments tracking
+  // the same sin profile as the visual `buildHill` (peak = TILE*0.275).
+  // The previous two-tilted-boxes-meeting-at-the-peak collider was a
+  // chord on each half — visual sin curve bulged ~6 m above the chord
+  // mid-slope so karts visibly sank into the hill on the way up. A
+  // dense segment chain hugs the curve and eliminates the clipping.
+  const peak = Math.max(peakHeight, TILE * 0.275);
+  const profile = (t) => Math.sin(t * Math.PI) * peak;
+  return slopedDeckSegmentsAlongZ(profile, lengthZ, 16, {
+    width: ROAD_WIDTH,
+    thick: ROAD_THICK,
+    color: ROAD_COLOR,
+    drivable: true,
+  });
 }
 
 function bridgeBlocks(deckHeight, lengthZ) {
@@ -914,8 +1081,9 @@ const CONNECTORS = {
     { x: 0, z: 0, side: 'E' },
     { x: 0, z: 0, side: 'W' },
   ],
-  // Banked left turn — same connectivity as `corner`.
-  banked_turn:     [{ x: 0, z: 0, side: 'S' }, { x: 0, z: 0, side: 'W' }],
+  // Banked left turn — 2×2 footprint, connectors at the midpoints of
+  // the south edge of cell (1,0) and west edge of cell (0,1).
+  banked_turn:     [{ x: 1, z: 0, side: 'S' }, { x: 0, z: 1, side: 'W' }],
   bump_up:         SN,
   hill_complete:   [{ x: 0, z: 0, side: 'S' }, { x: 0, z: 1, side: 'N' }],
   jump_ramp:       SN,
@@ -992,24 +1160,114 @@ function tallWallStraight(length, cx, cz, baseY, axis) {
 }
 
 /** Tilted wall hugging a ramp deck. `sideX` is +1 or -1 selecting the
- *  +X or -X long edge. The wall axis runs along Z, thickness along X,
- *  and the whole stack tips by the ramp pitch via rotX so it stays
- *  flush with the (tilted) deck surface across the full ramp length. */
+ *  +X or -X long edge. The wall is emitted as a CHAIN of short tilted
+ *  segments that follows the same smoothstep height profile used by
+ *  `rampBlocks` (and `buildRamp` in road-geometry.js), so the wall
+ *  stays flush with the curved deck instead of sagging away from it
+ *  on the bottom half and floating off it on the top half (the bug the
+ *  previous single-chord wall produced — smoothstep is S-shaped, so a
+ *  straight chord meets the curve only at the two endpoints). */
 function tallWallRamp(yStart, yEnd, lengthZ, sideX) {
-  const dy = yEnd - yStart;
-  const length = Math.sqrt(dy * dy + lengthZ * lengthZ);
-  const angle = Math.atan2(dy, lengthZ);
-  // Same Y/Z anchor as the ramp deck itself (mirrors rampBlocks).
-  const cyDeckCenter = (yStart + yEnd) / 2 + ROAD_THICK / 2;
-  const yDeckTop = cyDeckCenter + ROAD_THICK / 2;
-  const cz = lengthZ / 2 - TILE / 2;
-  const cx = sideX * (TILE / 2 - W2_INSET);
-  return [
-    { kind: 'box', size: [W2_FOOT_T, W2_FOOT_H, length],
-      pos: [cx, yDeckTop + W2_FOOT_H / 2, cz], rotX: -angle, color: WALL_COLOR },
-    { kind: 'box', size: [W2_TOP_T,  W2_TOP_H,  length],
-      pos: [cx, yDeckTop + W2_FOOT_H + W2_TOP_H / 2, cz], rotX: -angle, color: WALL_COLOR },
-  ];
+  // Match rampBlocks segment count + profile exactly.
+  const SEGMENTS_RAMP = 16;
+  const profile = (t) => {
+    const e = t * t * (3 - 2 * t);   // smoothstep — must match rampBlocks
+    return yStart + (yEnd - yStart) * e;
+  };
+  const cx = sideX * (ROAD_WIDTH / 2 + W2_INSET);
+  const out = [];
+  for (let i = 0; i < SEGMENTS_RAMP; i++) {
+    const t0 = i / SEGMENTS_RAMP;
+    const t1 = (i + 1) / SEGMENTS_RAMP;
+    const z0 = -TILE / 2 + lengthZ * t0;
+    const z1 = -TILE / 2 + lengthZ * t1;
+    const y0 = profile(t0);
+    const y1 = profile(t1);
+    const dz = z1 - z0;
+    const dy = y1 - y0;
+    const len = Math.sqrt(dy * dy + dz * dz);
+    const angle = Math.atan2(dy, dz);
+    // Top of deck at this segment's chord midpoint. Mirrors the deck's
+    // own placement: deck centre Y = (y0+y1)/2 + ROAD_THICK/2, so the
+    // deck's TOP face sits at (y0+y1)/2 + ROAD_THICK.
+    const yDeckTop = (y0 + y1) * 0.5 + ROAD_THICK;
+    const cz = (z0 + z1) * 0.5;
+    out.push(
+      { kind: 'box', size: [W2_FOOT_T, W2_FOOT_H, len],
+        pos: [cx, yDeckTop + W2_FOOT_H / 2, cz], rotX: -angle, color: WALL_COLOR },
+      { kind: 'box', size: [W2_TOP_T,  W2_TOP_H,  len],
+        pos: [cx, yDeckTop + W2_FOOT_H + W2_TOP_H / 2, cz], rotX: -angle, color: WALL_COLOR },
+    );
+  }
+  return out;
+}
+
+/**
+ * Curved wall hugging an L-bend's outer corner. Replaces the previous
+ * pair of perpendicular `tallWallStraight` walls along the two closed
+ * cell edges — those left a visible right-angle gap at the bend apex
+ * and ignored the curved contour of the racing surface (curb arc).
+ *
+ * Geometry: a quarter-circle of `segments` short wall chords centred at
+ * the bend's INSIDE corner (where the two connector edges meet) with
+ * radius R = TILE - W2_INSET. That radius is chosen so the chord
+ * endpoints at angles thetaStart / thetaEnd land exactly on the
+ * adjacent straight neighbour's wall positions (±halfEdge along the
+ * connector seams) — mating perfectly without a step.
+ *
+ * Each chord box is centred on the chord midpoint (not the arc midpoint)
+ * so adjacent chord ends meet exactly on the arc, then yawed via rotY
+ * = tMid + π/2 to align the chord's length axis with the arc tangent.
+ * Same rotY convention as cornerBlocks' curb-stripe orientation so the
+ * wall and curb follow the same curve.
+ *
+ * @param {[number,number]} insideCorner [x,z] of the inside corner.
+ * @param {number} thetaStart  polar start angle from inside corner
+ *        (radians; 0 = +X, π/2 = +Z, π = -X). Sweep direction is given
+ *        by the sign of (thetaEnd - thetaStart).
+ * @param {number} thetaEnd    polar end angle.
+ * @param {number} baseY       top-of-deck Y the foundation rests on.
+ * @param {number} [segments]  chord count (default 12 — with TILE=36 and
+ *        a 90° sweep, chord ≈ 4.7m and the residual triangular gap at
+ *        each chord join is < 5cm, imperceptible at racing speed).
+ */
+function tallWallArc(insideCorner, thetaStart, thetaEnd, baseY, segments = 12) {
+  const out = [];
+  // Arc radius: places the wall foot's INNER face exactly at the road's
+  // outer edge (which is at T/2 + ROAD_WIDTH/2 from the inside corner).
+  // This matches the new straight halfEdge by construction — a straight
+  // neighbour's wall at ±halfEdge meets this arc's endpoint without any
+  // step (since arc endpoint x at θ=0 is -T/2 + R = ROAD_WIDTH/2 + W2_INSET
+  // = halfEdge).
+  const R = TILE / 2 + ROAD_WIDTH / 2 + W2_INSET;
+  const dTheta = (thetaEnd - thetaStart) / segments;
+  // Chord midpoint sits at radius R*cos(|dθ|/2) from the centre; chord
+  // length 2R*sin(|dθ|/2). With these exact values consecutive chord
+  // ends coincide on the arc (verified: chord endpoint = arc point at
+  // boundary angle). Adding a tiny chordLen overshoot covers the small
+  // triangular gap on the OUTER side caused by adjacent chords having
+  // different yaw — keeps the wall visually solid from the road side.
+  const halfDTheta = Math.abs(dTheta) / 2;
+  const rMid = R * Math.cos(halfDTheta);
+  const chordLen = 2 * R * Math.sin(halfDTheta) + W2_FOOT_T * 0.5;
+  for (let i = 0; i < segments; i++) {
+    const tMid = thetaStart + dTheta * (i + 0.5);
+    const cx = insideCorner[0] + rMid * Math.cos(tMid);
+    const cz = insideCorner[1] + rMid * Math.sin(tMid);
+    // Tangent at arc angle t is (-sin t, cos t). rotY(θ) sends local +Z
+    // to (sin θ, cos θ); aligning with the tangent gives θ = -t. The
+    // previous formula (t + π/2) made colliders radial — invisible bug
+    // that produced visible spoke-like flaring once the matching
+    // visuals were added in road-geometry.js.
+    const rotY = -tMid;
+    out.push(
+      { kind: 'box', size: [W2_FOOT_T, W2_FOOT_H, chordLen],
+        pos: [cx, baseY + W2_FOOT_H / 2, cz], rotY, color: WALL_COLOR },
+      { kind: 'box', size: [W2_TOP_T, W2_TOP_H, chordLen],
+        pos: [cx, baseY + W2_FOOT_H + W2_TOP_H / 2, cz], rotY, color: WALL_COLOR },
+    );
+  }
+  return out;
 }
 
 /** Build the wall set for one base segment. Returns `null` for segments
@@ -1017,7 +1275,15 @@ function tallWallRamp(yStart, yEnd, lengthZ, sideX) {
  *  already-enclosed tunnels, pickup/overlay, spawn). */
 function buildWalls(key) {
   const T = TILE;
-  const halfEdge = T / 2 - W2_INSET;     // wall centre offset from cell centre
+  // Wall positioning: foot INNER face flush with the road's outer edge.
+  // Earlier convention placed wall feet at the CELL perimeter
+  // (T/2 - W2_INSET), which left a visible ~1.45 m gap between the
+  // red/white curb arc (at TILE/2 + ROAD_WIDTH/2 from inside corner)
+  // and the wall foot. The same gap existed on every straight walled
+  // segment but was invisible there because everything's parallel —
+  // the curved variants made it obvious. Hugging the road edge keeps
+  // walls visually attached to the curb and is consistent everywhere.
+  const halfEdge = ROAD_WIDTH / 2 + W2_INSET;     // wall foot inner face at ±ROAD_WIDTH/2
   const groundDeckTop = ROAD_THICK;      // top of ground-tier deck
 
   switch (key) {
@@ -1025,7 +1291,6 @@ function buildWalls(key) {
     case 'straight':
     case 'finish':
     case 'bump_up':
-    case 'banked_turn':
       return [
         ...tallWallStraight(T, +halfEdge, 0, groundDeckTop, 'z'),
         ...tallWallStraight(T, -halfEdge, 0, groundDeckTop, 'z'),
@@ -1038,19 +1303,19 @@ function buildWalls(key) {
         ...tallWallStraight(T, -halfEdge, 0, groundDeckTop, 'z'),
       ];
 
-    // ── Corners (closed edges = perpendicular outside L) ────────
-    // corner L: connectors S, W → closed N (+Z) and E (+X).
+    // ── Corners (curved wall hugging the bend's outer arc) ────
+    // Single arc of radius (T - W2_INSET) centred at the L-bend's INSIDE
+    // corner. The seam endpoints (±halfEdge, ∓T/2) and (∓T/2, ±halfEdge)
+    // are exactly that distance from the inside corner, so the arc mates
+    // seamlessly with the straight neighbours' walls. The arc itself is
+    // the only barrier needed: with adjacent straight tile walls
+    // continuing the line, nothing escapes off the cell perimeter.
+    // corner L: connectors S, W → inside (-T/2,-T/2), arc 0 → π/2.
     case 'corner':
-      return [
-        ...tallWallStraight(T, +halfEdge, 0, groundDeckTop, 'z'),  // E
-        ...tallWallStraight(T, 0, +halfEdge, groundDeckTop, 'x'),  // N
-      ];
-    // corner R: connectors S, E → closed N (+Z) and W (-X).
+      return tallWallArc([-T / 2, -T / 2], 0, Math.PI / 2, groundDeckTop);
+    // corner R: connectors S, E → inside (+T/2,-T/2), arc π → π/2 (CW).
     case 'cornerR':
-      return [
-        ...tallWallStraight(T, -halfEdge, 0, groundDeckTop, 'z'),  // W
-        ...tallWallStraight(T, 0, +halfEdge, groundDeckTop, 'x'),  // N
-      ];
+      return tallWallArc([+T / 2, -T / 2], Math.PI, Math.PI / 2, groundDeckTop);
 
     // ── Plateau family (mid-tier deck) ─────────────────────────
     case 'plateau': {
@@ -1062,17 +1327,12 @@ function buildWalls(key) {
     }
     case 'curved_plateau': {
       const yTop = PLATEAU_HEIGHT + ROAD_THICK;
-      return [
-        ...tallWallStraight(T, +halfEdge, 0, yTop, 'z'),
-        ...tallWallStraight(T, 0, +halfEdge, yTop, 'x'),
-      ];
+      // L bend: same inside-corner / arc as ground 'corner', lifted to deck.
+      return tallWallArc([-T / 2, -T / 2], 0, Math.PI / 2, yTop);
     }
     case 'curved_plateauR': {
       const yTop = PLATEAU_HEIGHT + ROAD_THICK;
-      return [
-        ...tallWallStraight(T, -halfEdge, 0, yTop, 'z'),
-        ...tallWallStraight(T, 0, +halfEdge, yTop, 'x'),
-      ];
+      return tallWallArc([+T / 2, -T / 2], Math.PI, Math.PI / 2, yTop);
     }
 
     // ── Ramps (tilted walls following the deck pitch) ──────────
@@ -1149,6 +1409,9 @@ function buildWalls(key) {
     case 't_junction':
     case 'crossroads':
     case 'spawn':
+    // Banked turn — the concave bowl IS the outer wall on both sides;
+    // adding tall straight barriers would clip the bowl rim and look wrong.
+    case 'banked_turn':
       return null;
 
     default:

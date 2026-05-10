@@ -84,3 +84,48 @@ export function resolveSelectedKartId() {
 export function getKart(id) {
   return KART_BY_ID[id] || KART_BY_ID[DEFAULT_KART_ID];
 }
+
+/**
+ * Per-kart TRAIL PROFILE — describes how the skid / glow trails should
+ * be emitted for karts whose visible chassis doesn't match the standard
+ * 4-wheel raycast vehicle (hovercraft, broom, trikes, etc.).
+ *
+ * Fields:
+ *   • `skipDarkSkids`   — suppress all dark rubber skid quads.
+ *                         Hovercraft / broom: no rubber on the ground.
+ *   • `frontCenter`     — collapse the two front skid lanes into a
+ *                         single CENTERLINE lane (trikes with a single
+ *                         centred front wheel). Rear stays as a pair.
+ *   • `rearCenter`      — collapse the two rear skid lanes into a
+ *                         single centerline lane (trikes with a single
+ *                         centred rear wheel — uncommon).
+ *   • `centerOnlyGlow`  — the GLO trail is emitted as a single
+ *                         centerline ribbon instead of two parallel
+ *                         rear ribbons. Used by hovercraft / broom so
+ *                         the boost trail reads as one stripe.
+ *   • `glowFloatY`      — extra metres above the wheel-contact plane
+ *                         to lift the GLO trail. Hovercraft hovers; the
+ *                         trail should sit slightly above the road, not
+ *                         scuffed into it.
+ *
+ * Defaults (no entry) = standard 4-wheel rubber + 2-wheel rear glow.
+ */
+export const KART_TRAIL_PROFILES = {
+  // Pat — hovercraft. No tyres at all; air-cushion exhaust trails as a
+  // single floating glow stripe. No dark rubber marks.
+  xue: { skipDarkSkids: true, centerOnlyGlow: true, glowFloatY: 0.08 },
+  // Toni — flying broom. Same idea as the hovercraft (no rubber on the
+  // road; one centered glow trail behind the broom).
+  sara_the_racer: { skipDarkSkids: true, centerOnlyGlow: true, glowFloatY: 0.05 },
+  // Trikes (1 front + 2 rear). Front skid collapses to a single
+  // centerline lane so the dark mark reads under the visible front
+  // wheel; rears stay as a normal pair. GLO trail unchanged (rear-only,
+  // matches the two visible rear wheels).
+  sara_the_wizard: { frontCenter: true },
+  toots:           { frontCenter: true },
+  ozom:            { frontCenter: true },
+};
+
+export function getKartTrailProfile(id) {
+  return KART_TRAIL_PROFILES[id] || {};
+}
