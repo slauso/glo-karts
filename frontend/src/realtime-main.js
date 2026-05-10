@@ -2,6 +2,7 @@ import { ColyseusBabylonClient } from './modules/realtime/colyseus-babylon-clien
 import { resolveKartAsset } from './modules/content-registry.js';
 import { getColyseusEndpoint, shouldUseColyseus } from './modules/realtime/feature-flag.js';
 import { initPageTransitions } from './ui/page-transition.js';
+import { getRoomNameForMode, getLegacyModeFamily } from './game-modes.js';
 
 initPageTransitions();
 
@@ -145,7 +146,11 @@ async function bootRealtime() {
     return;
   }
 
-  const roomName = config?.roomName || (config?.gameMode === 'battle' ? 'battle_room' : 'race_room');
+  // Phase 1.2: prefer the registry-derived room name (resolved via modeId).
+  // Falls through to legacy gameMode mapping when modeId is absent.
+  const roomName = config?.roomName
+    || (config?.modeId ? getRoomNameForMode(config.modeId) : null)
+    || (getLegacyModeFamily(config?.gameMode) === 'battle' ? 'battle_room' : 'race_room');
   const endpoint = getColyseusEndpoint();
   const playerName = smokeName || resolvePlayerName(config);
   const myPlayerId = getCurrentPlayerId();

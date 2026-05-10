@@ -1,7 +1,7 @@
 // Lobby constants & pure helpers — extracted from lobby.js (Phase 1.x).
 // No DOM, no Colyseus, no class state. Safe to import from any subsystem.
 
-import { getMode } from '../game-modes.js';
+import { getMode, getLegacyModeFamily as canonicalGetLegacyModeFamily } from '../game-modes.js';
 import { ALL_ARENAS, ALL_TRACKS, CUSTOM_TRACK_ID } from '../modules/content-registry.js';
 
 export const DEFAULTS = {
@@ -109,9 +109,8 @@ export const BATTLE_RULE_PRESETS = {
 };
 
 export function getLegacyModeFamily(modeId) {
-  if (modeId === 'battle_online') return 'battle';
-  if (modeId === 'gloflux_race' || modeId === 'gloflux_arena') return 'gloflux';
-  return 'race';
+  // Phase 1.2: Delegate to game-modes.js (single source of truth).
+  return canonicalGetLegacyModeFamily(modeId);
 }
 
 export function usesArenaSelection(modeId) {

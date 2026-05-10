@@ -58,6 +58,8 @@ export const MODE_REGISTRY = {
     status: MODE_STATUS.READY,
     selectors: { track: false, arena: true, battleSettings: true },
     requiresLobby: true,
+    legacyFamily: 'battle',
+    roomName: 'battle_room',
     buildConfig(lobby) {
       return {
         gameMode: 'battle',
@@ -113,6 +115,8 @@ export const MODE_REGISTRY = {
     page: 'gloflux.html',
     status: MODE_STATUS.HIDDEN,
     requiresLobby: true,
+    legacyFamily: 'gloflux',
+    roomName: 'gloflux',
     selectors: { track: false, arena: false, battleSettings: false },
     buildConfig(lobby) {
       return {
@@ -137,6 +141,8 @@ export const MODE_REGISTRY = {
     page: 'gloflux.html',
     status: MODE_STATUS.HIDDEN,
     requiresLobby: true,
+    legacyFamily: 'gloflux',
+    roomName: 'gloflux',
     selectors: { track: false, arena: false, battleSettings: false },
     buildConfig(lobby) {
       return {
@@ -148,6 +154,32 @@ export const MODE_REGISTRY = {
         multiplayer: true,
         multiplayerProvider: 'colyseus',
         selectedKart: sessionStorage.getItem('selectedKart') || 'amanda',
+      };
+    },
+  },
+
+  // Phase 1.2: Registered to mirror the realtime server's defaultModeId('race')
+  // path (see realtime/src/rooms/LobbyRoom.js). Hidden in the UI; addressable
+  // via getMode('race_online') for room-name resolution.
+  race_online: {
+    id: 'race_online',
+    category: 'online',
+    label: 'Race Online',
+    desc: 'Realtime kart race on a shared track.',
+    icon: 'fa-flag-checkered',
+    page: 'realtime.html',
+    status: MODE_STATUS.HIDDEN,
+    selectors: { track: true, arena: false, battleSettings: false },
+    requiresLobby: true,
+    legacyFamily: 'race',
+    roomName: 'race_room',
+    buildConfig(lobby) {
+      return {
+        gameMode: 'race',
+        trackId: lobby?.selectedMap,
+        multiplayer: true,
+        multiplayerProvider: 'colyseus',
+        maxPlayers: lobby?.selectedMaxPlayers || 8,
       };
     },
   },
@@ -190,4 +222,33 @@ export function requiresLobby(modeId) {
 export function isPlayable(modeId) {
   const mode = MODE_REGISTRY[modeId];
   return !!mode && (mode.status === MODE_STATUS.READY || mode.status === MODE_STATUS.BETA);
+}
+
+// Phase 1.2: Canonical legacy-family + room-name resolvers. Prefer these over
+// hardcoded `gameMode === 'battle'` / `'race_room'` string comparisons.
+//
+// The fallback branches mirror the legacy single-player-routing.js heuristics
+// for mode IDs that have NOT been registered (e.g. battle_solo, quick_race);
+// once those modes get formal MODE_REGISTRY entries, the fallback can be
+// dropped.
+const LEGACY_GLOFLUX_IDS = new Set(['gloflux_race', 'gloflux_arena']);
+const LEGACY_BATTLE_FALLBACK_IDS = new Set([
+  'battle', 'battle_solo', 'soccer', 'local_2p_battle', 'battle_online',
+]);
+
+export function getLegacyModeFamily(modeId) {
+  const mode = MODE_REGISTRY[modeId];
+  if (mode?.legacyFamily) return mode.legacyFamily;
+  if (LEGACY_GLOFLUX_IDS.has(modeId)) return 'gloflux';
+  if (LEGACY_BATTLE_FALLBACK_IDS.has(modeId)) return 'battle';
+  return 'race';
+}
+
+export function getRoomNameForMode(modeId) {
+  const mode = MODE_REGISTRY[modeId];
+  if (mode?.roomName) return mode.roomName;
+  const family = getLegacyModeFamily(modeId);
+  if (family === 'gloflux') return 'gloflux';
+  if (family === 'battle') return 'battle_room';
+  return 'race_room';
 }
