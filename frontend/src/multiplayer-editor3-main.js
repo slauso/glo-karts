@@ -22,7 +22,7 @@ import { SEGMENTS, TILE } from './editor3/segments.js';
 import { WORLD_UNITS_PER_M } from './editor3/units.js';
 import { cloneKart } from './editor3/kart-loader.js';
 import { DEFAULT_KART_ID } from './editor3/kart-catalog.js';
-import { KartFxRig } from './editor3/kart-fx-rig.js';
+import { KartFxRig, spawnPickupBurst } from './editor3/kart-fx-rig.js';
 import { createKartAudio, STD_KIT } from './editor3/kart-audio.js';
 
 const S = WORLD_UNITS_PER_M;
@@ -205,12 +205,24 @@ function ensurePickupMesh(id, x, y, z, active) {
   } else {
     entry.mesh.position.set(x, y, z);
     if (entry.active !== active) {
+      // Active→inactive transition = some kart just grabbed it. Fire a
+      // GLO-tinted sparkle burst at its location for visual feedback.
+      if (entry.active && !active) {
+        const upd = spawnPickupBurst({
+          scene, position: entry.mesh.position.clone(),
+          color: 0xffd166, lifeS: 0.6,
+        });
+        if (upd) pickupBursts.push(upd);
+      }
       entry.mesh.material = active ? PICKUP_MAT_ACTIVE : PICKUP_MAT_INACTIVE;
       entry.active = active;
     }
   }
   return entry;
 }
+
+// Active pickup-burst lifecycle closures driven from tick().
+const pickupBursts = [];
 
 // ── Projectile FX (transient) ───────────────────────────────────────
 const fxBodies = []; // { mesh, life }
@@ -222,6 +234,115 @@ function spawnProjectileFx(x, y, z, color) {
   scene.add(m);
   fxBodies.push({ mesh: m, life: 0.8 });
 }
+
+// ── Render loop additions ───────────────────────────────────────────
+let roomRef = null; // populated once room joined
+const PICKUP_PROXIMITY_MM = 16 * S; // client-side trigger to send pickupItem
+
+// ── UI overlays (lobby + pause) ────────────────────────────────
+const overlays = {
+  lobby: document.getElementById('overlay-lobby'),
+  pause: document.getElementById('overlay-pause'),
+  countdown: document.getElementById('overlay-countdown'),
+  countdownNum: document.getElementById('countdown-num'),
+  lobbyTrack: document.getElementById('lobby-track'),
+  lobbyCode: document.getElementById('lobby-code'),
+  lobbyLaps: document.getElementById('lobby-laps'),
+  lobbyNetStatus: document.getElementById('lobby-net-status'),
+  lobbyPlayers: document.getElementById('lobby-players'),
+  lobbyStartBtn: document.getElementById('lobby-start'),
+  lobbyLeaveBtn: document.getElementById('lobby-leave'),
+  pauseTrack: document.getElementById('pause-track'),
+  pauseLap: document.getElementById('pause-lap'),
+  pausePlayers: document.getElementById('pause-players'),
+  pauseResumeBtn: document.getElementById('pause-resume'),
+  pauseLeaveBtn: document.getElementById('pause-leave'),
+};
+
+// `inputLocked` is true while the lobby OR pause overlay is open. We
+// still poll input so the network keeps a steady 30Hz stream, but we
+// zero throttle/brake/steer/drift so the kart cannot be driven by an
+// unattended player. The server is authoritative; this is just to
+// prevent surprise inputs from leaking through.
+let inputLocked = true;
+let raceStarted = false;
+
+function showLobby()  { overlays.lobby?.classList.remove('hidden'); inputLocked = true; }
+function hideLobby()  { overlays.lobby?.classList.add('hidden'); }
+function showPause()  { overlays.pause?.classList.remove('hidden'); inputLocked = true; }
+function hidePause()  { overlays.pause?.classList.add('hidden'); inputLocked = false; }
+
+function startCountdown(onDone) {
+  let n = 3;
+  overlays.countdown?.classList.remove('hidden');
+  if (overlays.countdownNum) overlays.countdownNum.textContent = String(n);
+  const tickN = () => {
+    n--;
+    if (n <= 0) {
+      if (overlays.countdownNum) overlays.countdownNum.textContent = 'GO!';
+      setTimeout(() => {
+        overlays.countdown?.classList.add('hidden');
+        onDone && onDone();
+      }, 600);
+      return;
+    }
+    if (overlays.countdownNum) {
+      // Trigger the CSS pulse animation by replacing the node.
+      overlays.countdownNum.style.animation = 'none';
+      overlays.countdownNum.textContent = String(n);
+      // eslint-disable-next-line no-unused-expressions
+      overlays.countdownNum.offsetHeight;
+      overlays.countdownNum.style.animation = '';
+    }
+    setTimeout(tickN, 1000);
+  };
+  setTimeout(tickN, 1000);
+}
+
+function beginRace() {
+  if (raceStarted) return;
+  raceStarted = true;
+  hideLobby();
+  startCountdown(() => { inputLocked = false; });
+}
+
+function leaveMatch() {
+  // Best-effort graceful leave; navigation kills the WebSocket either way.
+  try { roomRef?.leave(true); } catch {}
+  // Navigate to the main menu / index. Use lobby.html if present in
+  // the deployment, else fall back to root.
+  window.location.href = '/index.html';
+}
+
+if (overlays.lobbyStartBtn) overlays.lobbyStartBtn.addEventListener('click', beginRace);
+if (overlays.lobbyLeaveBtn) overlays.lobbyLeaveBtn.addEventListener('click', leaveMatch);
+if (overlays.pauseResumeBtn) overlays.pauseResumeBtn.addEventListener('click', hidePause);
+if (overlays.pauseLeaveBtn)  overlays.pauseLeaveBtn.addEventListener('click', leaveMatch);
+
+function renderLobbyPlayers(state) {
+  if (!overlays.lobbyPlayers) return;
+  const items = [];
+  state.karts.forEach((k, sid) => {
+    const me = sid === mySid;
+    const colorHex = (k.color && /^#?[0-9a-f]{6}$/i.test(String(k.color)))
+      ? (String(k.color).startsWith('#') ? k.color : `#${k.color}`)
+      : '#ff3aa1';
+    const name = k.name || sid.slice(0, 6);
+    items.push(`<div class="overlay-player ${me ? 'me' : ''}">
+      <span class="swatch" style="background:${colorHex};color:${colorHex}"></span>
+      <span>${name}${me ? ' (you)' : ''}</span>
+    </div>`);
+  });
+  overlays.lobbyPlayers.innerHTML = items.join('') || '<div class="overlay-player">waiting for players…</div>';
+}
+
+// Esc toggles pause when in-race; ignored during pre-race lobby.
+window.addEventListener('keydown', (e) => {
+  if (e.code !== 'Escape') return;
+  if (!raceStarted) return;
+  if (overlays.pause && overlays.pause.classList.contains('hidden')) showPause();
+  else hidePause();
+});
 
 // ── Audio (local kart only) ────────────────────────────────────────
 // The audio rig opens an AudioContext on first interaction; remote
@@ -236,10 +357,6 @@ function ensureKartAudio() {
 window.addEventListener('pointerdown', ensureKartAudio, { once: true });
 window.addEventListener('keydown',     ensureKartAudio, { once: true });
 
-// ── Render loop additions ───────────────────────────────────────────────────────
-let roomRef = null; // populated once room joined
-const PICKUP_PROXIMITY_MM = 16 * S; // client-side trigger to send pickupItem
-
 const input = { throttle: 0, brake: 0, steer: 0, drift: false, seq: 0 };
 const keys = new Set();
 window.addEventListener('keydown', (e) => {
@@ -250,6 +367,13 @@ window.addEventListener('keydown', (e) => {
 window.addEventListener('keyup', (e) => { keys.delete(e.code); });
 
 function pollInput() {
+  if (inputLocked) {
+    input.throttle = 0;
+    input.brake = 0;
+    input.steer = 0;
+    input.drift = false;
+    return;
+  }
   const fwd = keys.has('KeyW') || keys.has('ArrowUp');
   const back = keys.has('KeyS') || keys.has('ArrowDown');
   const left = keys.has('KeyA') || keys.has('ArrowLeft');
@@ -297,6 +421,10 @@ function tick(now) {
   // Spin pickup boxes.
   for (const { mesh, active } of pickupMeshes.values()) {
     if (active) mesh.rotation.y += dt * 1.6;
+  }
+  // Drive pickup-burst closures; they self-dispose by returning true.
+  for (let i = pickupBursts.length - 1; i >= 0; i--) {
+    if (pickupBursts[i](dt)) pickupBursts.splice(i, 1);
   }
   // Fade projectile FX.
   for (let i = fxBodies.length - 1; i >= 0; i--) {
@@ -389,6 +517,25 @@ async function connect() {
     window.__mySid = mySid;
   }
   setStatus(`connected as ${mySid.slice(0, 6)}`, 'ok');
+  // Surface lobby code and laps the moment we know our session id.
+  if (overlays.lobbyCode) overlays.lobbyCode.textContent = ROOM_CODE || '— OPEN —';
+  if (overlays.lobbyLaps) overlays.lobbyLaps.textContent = String(TOTAL_LAPS);
+  if (overlays.lobbyNetStatus) overlays.lobbyNetStatus.textContent = 'connected';
+  if (overlays.lobbyTrack)
+    overlays.lobbyTrack.textContent = hud.track ? hud.track.textContent : '—';
+  if (overlays.pauseTrack && hud.track)
+    overlays.pauseTrack.textContent = hud.track.textContent;
+  if (overlays.lobbyStartBtn) overlays.lobbyStartBtn.disabled = false;
+
+  // Auto-start support for Playwright probes / headless smoke tests.
+  // The probe sets ?autostart=1 (or runs under webdriver); we click
+  // the lobby Start button on its behalf so the lobby overlay isn't
+  // a regression-blocker for existing 2p drive probes.
+  const autostart = params.get('autostart') === '1'
+    || (typeof navigator !== 'undefined' && navigator.webdriver);
+  if (autostart) {
+    setTimeout(() => beginRace(), 250);
+  }
 
   // Schema 3.x: use room.onStateChange (kart.onChange is not available client-side).
   let joinCount = 0;
@@ -431,12 +578,16 @@ async function connect() {
       if (!state.karts.get(sid)) removeGhost(sid);
     }
     if (hud.players) hud.players.textContent = String(state.karts.size);
+    if (overlays.pausePlayers) overlays.pausePlayers.textContent = String(state.karts.size);
+    // Refresh lobby roster while pre-race overlay is up.
+    if (!raceStarted) renderLobbyPlayers(state);
     // Pickups.
     state.pickups.forEach((p, id) => { ensurePickupMesh(id, p.x, p.y, p.z, !!p.active); });
     // Local kart HUD (lap, weapon) + audio.
     const me = state.karts.get(mySid);
     if (me) {
       if (hud.lap) hud.lap.textContent = `${me.lap || 0} / ${state.totalLaps || TOTAL_LAPS}`;
+      if (overlays.pauseLap) overlays.pauseLap.textContent = `${me.lap || 0} / ${state.totalLaps || TOTAL_LAPS}`;
       if (hud.weapon) hud.weapon.textContent = me.weapon2 ? `${me.weapon2} ×${me.ammo2}` : '—';
       if (hud.reserve) hud.reserve.textContent = me.weapon3 ? `${me.weapon3} ×${me.ammo3}` : '—';
       // Drive audio rig from the local kart's authoritative state so

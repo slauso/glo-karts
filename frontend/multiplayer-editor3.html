@@ -24,10 +24,183 @@
       font-size: 12px; color: #8b96a3;
     }
     .controls b { color: #e6edf3; }
+
+    /* ── Pregame lobby + pause overlay ─────────────────────────── */
+    .overlay {
+      position: fixed; inset: 0;
+      background: radial-gradient(ellipse at center, rgba(20,10,30,0.92) 0%, rgba(5,8,12,0.97) 70%);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 50;
+      font-family: 'Inter', system-ui, sans-serif;
+      color: #e6edf3;
+      backdrop-filter: blur(8px);
+    }
+    .overlay.hidden { display: none; }
+    .overlay-card {
+      background: linear-gradient(180deg, rgba(30,18,48,0.92), rgba(15,10,25,0.95));
+      border: 1px solid rgba(255, 58, 161, 0.45);
+      box-shadow: 0 0 40px rgba(255, 58, 161, 0.25), inset 0 0 30px rgba(0, 229, 255, 0.05);
+      border-radius: 14px;
+      padding: 28px 36px;
+      min-width: 380px;
+      max-width: 520px;
+    }
+    .overlay-title {
+      font-size: 28px;
+      font-weight: 800;
+      margin: 0 0 4px 0;
+      background: linear-gradient(90deg, #ff3aa1 0%, #00e5ff 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      letter-spacing: 2px;
+    }
+    .overlay-sub {
+      font-size: 12px;
+      color: #8b96a3;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      margin-bottom: 22px;
+    }
+    .overlay-row {
+      display: flex; justify-content: space-between; gap: 16px;
+      padding: 8px 0;
+      border-bottom: 1px dashed rgba(255,255,255,0.08);
+      font-size: 14px;
+    }
+    .overlay-row:last-of-type { border-bottom: none; }
+    .overlay-row .k { color: #8b96a3; }
+    .overlay-row .v { color: #e6edf3; font-weight: 600; }
+    .overlay-row .v.code {
+      font-family: 'Fira Code', monospace;
+      color: #ffd166;
+      letter-spacing: 2px;
+    }
+    .overlay-players {
+      margin: 14px 0 22px 0;
+      max-height: 140px;
+      overflow-y: auto;
+    }
+    .overlay-player {
+      display: flex; align-items: center; gap: 10px;
+      padding: 6px 8px;
+      border-radius: 4px;
+      font-size: 13px;
+    }
+    .overlay-player .swatch {
+      width: 14px; height: 14px; border-radius: 50%;
+      box-shadow: 0 0 10px currentColor;
+    }
+    .overlay-player.me { background: rgba(255, 58, 161, 0.10); }
+    .overlay-buttons {
+      display: flex; gap: 12px; margin-top: 18px;
+    }
+    .overlay-btn {
+      flex: 1;
+      padding: 12px 18px;
+      border: none;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: transform 0.08s ease, box-shadow 0.15s ease;
+      font-family: inherit;
+    }
+    .overlay-btn:hover { transform: translateY(-1px); }
+    .overlay-btn.primary {
+      background: linear-gradient(135deg, #ff3aa1 0%, #ff6b6b 100%);
+      color: #fff;
+      box-shadow: 0 4px 14px rgba(255, 58, 161, 0.4);
+    }
+    .overlay-btn.secondary {
+      background: rgba(255,255,255,0.05);
+      color: #e6edf3;
+      border: 1px solid rgba(255,255,255,0.18);
+    }
+    .overlay-btn.danger {
+      background: rgba(255, 77, 109, 0.15);
+      color: #ff4d6d;
+      border: 1px solid rgba(255, 77, 109, 0.45);
+    }
+    .overlay-btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
+    .overlay-hint {
+      margin-top: 14px;
+      font-size: 11px;
+      color: #6a7280;
+      text-align: center;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+    /* Countdown big number */
+    .countdown {
+      position: fixed; inset: 0;
+      display: flex; align-items: center; justify-content: center;
+      z-index: 40;
+      pointer-events: none;
+      font-family: 'Inter', system-ui, sans-serif;
+    }
+    .countdown.hidden { display: none; }
+    .countdown-num {
+      font-size: 220px;
+      font-weight: 900;
+      background: linear-gradient(180deg, #ff3aa1 0%, #00e5ff 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      text-shadow: 0 0 60px rgba(255, 58, 161, 0.6);
+      animation: pulse 1s ease-in-out;
+      letter-spacing: 0;
+    }
+    @keyframes pulse {
+      0% { transform: scale(0.6); opacity: 0; }
+      30% { transform: scale(1.15); opacity: 1; }
+      100% { transform: scale(1); opacity: 1; }
+    }
   </style>
 </head>
 <body>
   <canvas id="canvas"></canvas>
+
+  <!-- Pregame lobby overlay -->
+  <div id="overlay-lobby" class="overlay">
+    <div class="overlay-card">
+      <h1 class="overlay-title">GLO KARTS</h1>
+      <div class="overlay-sub">— neon arena lobby —</div>
+      <div class="overlay-row"><span class="k">Track</span><span class="v" id="lobby-track">…</span></div>
+      <div class="overlay-row"><span class="k">Lobby Code</span><span class="v code" id="lobby-code">—</span></div>
+      <div class="overlay-row"><span class="k">Laps</span><span class="v" id="lobby-laps">3</span></div>
+      <div class="overlay-row"><span class="k">Status</span><span class="v" id="lobby-net-status">connecting…</span></div>
+      <div class="overlay-players" id="lobby-players"></div>
+      <div class="overlay-buttons">
+        <button class="overlay-btn secondary" id="lobby-leave">Back to Menu</button>
+        <button class="overlay-btn primary" id="lobby-start" disabled>Ready · Start Race</button>
+      </div>
+      <div class="overlay-hint">first ready locks in countdown for everyone</div>
+    </div>
+  </div>
+
+  <!-- In-game pause/quit menu -->
+  <div id="overlay-pause" class="overlay hidden">
+    <div class="overlay-card">
+      <h1 class="overlay-title">Paused</h1>
+      <div class="overlay-sub">— race continues server-side —</div>
+      <div class="overlay-row"><span class="k">Track</span><span class="v" id="pause-track">…</span></div>
+      <div class="overlay-row"><span class="k">Lap</span><span class="v" id="pause-lap">0 / 3</span></div>
+      <div class="overlay-row"><span class="k">Players</span><span class="v" id="pause-players">0</span></div>
+      <div class="overlay-buttons">
+        <button class="overlay-btn primary" id="pause-resume">Resume (Esc)</button>
+        <button class="overlay-btn danger"  id="pause-leave">Leave Match</button>
+      </div>
+      <div class="overlay-hint">leaving disconnects you · the race continues for others</div>
+    </div>
+  </div>
+
+  <!-- Countdown digit -->
+  <div id="overlay-countdown" class="countdown hidden">
+    <div class="countdown-num" id="countdown-num">3</div>
+  </div>
   <div class="hud">
     <div><b>GLO KARTS Online</b> <span style="color:#8b96a3">(editor3)</span></div>
     <div class="row"><span>Track:</span><span id="hud-track">…</span></div>

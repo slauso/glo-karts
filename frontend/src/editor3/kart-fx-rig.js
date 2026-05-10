@@ -175,6 +175,15 @@ export class KartFxRig {
     this._prevDriftTier = 0;
     this._prevBoostTimer = 0;
     this._prevGloBurnoutT = 0;
+    // Edge-detect engine explosion (false→true) for the one-shot steam
+    // burst and re-arm only after the engine recovers.
+    this._prevEngineExploded = false;
+    // Edge-detect throttle press (off→on) for the ignition pop puff.
+    this._prevThrottle = 0;
+    // Stationary-burnout overlay stamps live in the same particle pool
+    // but use a dedicated cadence so they don't get throttled by the
+    // moving-skid emitter.
+    this._gloStampNextAt = [0, 0];
   }
 
   setGloColor(color) {
@@ -467,11 +476,150 @@ export class KartFxRig {
     }
     this._prevDriftTier = driftTier;
 
-    // ── Engine-explosion burst (one-shot on engineExploded edge) ──
-    // The boostTimer/gloBurnoutT change naturally on release; we don't
-    // currently have an `engineExploded` edge in this rig, so we skip
-    // the explosion VFX. A future refinement can wire this from the
-    // schema's `engineExploded` flag.
+    // ── Engine-explosion one-shot ────────────────────────────────
+    // When engineExploded transitions false→true, fire a chunky steam
+    // / smoke burst at the rear of the chassis. SP playtest does the
+    // same via triggerEngineExplosion(); this is the visual mirror.
+    const exploded = !!state.engineExploded;
+    if (exploded && !this._prevEngineExploded) {
+      const ax = px - fx * (CHASSIS_HZ * 0.9);
+      const ay = py + CHASSIS_HY * 0.8;
+      const az = pz - fz * (CHASSIS_HZ * 0.9);
+      for (let p = 0; p < 36; p++) {
+        const ang = Math.random() * Math.PI * 2;
+        const r = M(0.4) + Math.random() * M(0.6);
+        this._spawnPuff(
+          ax + Math.cos(ang) * r,
+          ay + (Math.random() - 0.2) * M(0.4),
+          az + Math.sin(ang) * r,
+          Math.cos(ang) * (M(2) + Math.random() * M(3)),
+          M(2) + Math.random() * M(3),
+          Math.sin(ang) * (M(2) + Math.random() * M(3)),
+          0.85 + Math.random() * 0.4,
+          M(0.55) + Math.random() * M(0.35),
+          0.85, 0.85, 0.90,
+        );
+      }
+      // Brighter GLO core puffs interleaved.
+      for (let p = 0; p < 24; p++) {
+        const ang = Math.random() * Math.PI * 2;
+        this._spawnPuff(
+          ax + Math.cos(ang) * M(0.3),
+          ay + Math.random() * M(0.5),
+          az + Math.sin(ang) * M(0.3),
+          Math.cos(ang) * M(2.5),
+          M(1.5) + Math.random() * M(2),
+          Math.sin(ang) * M(2.5),
+          0.7 + Math.random() * 0.3,
+          M(0.40) + Math.random() * M(0.25),
+          1.0, 1.0, 1.0, // GLO-tinted via uColor
+        );
+      }
+    }
+    // While exploded, continue venting steam from the engine bay so the
+    // lockout reads as "smoking wreck" rather than just dead controls.
+    if (exploded) {
+      const ax = px - fx * (CHASSIS_HZ * 0.7);
+      const ay = py + CHASSIS_HY * 0.6;
+      const az = pz - fz * (CHASSIS_HZ * 0.7);
+      const puffs = 2;
+      for (let p = 0; p < puffs; p++) {
+        this._spawnPuff(
+          ax + (Math.random() - 0.5) * M(0.4),
+          ay + Math.random() * M(0.2),
+          az + (Math.random() - 0.5) * M(0.4),
+          (Math.random() - 0.5) * M(0.6),
+          M(1.2) + Math.random() * M(0.6),
+          (Math.random() - 0.5) * M(0.6),
+          0.55 + Math.random() * 0.2,
+          M(0.40) + Math.random() * M(0.15),
+          0.78, 0.80, 0.85,
+        );
+      }
+    }
+    this._prevEngineExploded = exploded;
+
+    // ── Exhaust emitter ────────────────────────────────────────
+    // Per-frame puffs from a metre behind the chassis at half-height,
+    // hue ramps grey→orange with throttle. Mirrors SP spawnExhaustPuff.
+    const throttle = Math.max(0, +state.throttleIn || 0);
+    const speedRatio = Math.min(1, speed / M(52));
+    if (!exploded) {
+      // Ignition pop on throttle press edge.
+      if (throttle > 0.5 && this._prevThrottle <= 0.5) {
+        const ax = px - fx * M(1.1);
+        const ay = py + CHASSIS_HY * 0.5;
+        const az = pz - fz * M(1.1);
+        for (let b = 0; b < 8; b++) {
+          this._spawnPuff(
+            ax + (Math.random() - 0.5) * M(0.25),
+            ay + (Math.random() - 0.5) * M(0.15),
+            az + (Math.random() - 0.5) * M(0.25),
+            -fx * (M(2) + Math.random() * M(2)) + (Math.random() - 0.5) * M(0.6),
+            M(0.6) + Math.random() * M(0.5),
+            -fz * (M(2) + Math.random() * M(2)) + (Math.random() - 0.5) * M(0.6),
+            0.55 + Math.random() * 0.20,
+            M(0.32) + Math.random() * M(0.18),
+            // hot orange ignition
+            0.95, 0.55 + Math.random() * 0.20, 0.20,
+          );
+        }
+      }
+      // Continuous baseline puff: 1–3 per frame depending on throttle.
+      const baseline = Math.max(1, Math.floor(0.5 + throttle * 2.2));
+      for (let p = 0; p < baseline; p++) {
+        const ax = px - fx * M(1.1);
+        const ay = py + CHASSIS_HY * 0.5;
+        const az = pz - fz * M(1.1);
+        const intensity = throttle * 0.85 + 0.1;
+        const back = M(1.5) + speedRatio * M(2.0);
+        // Hot puffs orange-tinted on hard throttle, cool grey at idle.
+        const hot = intensity;
+        this._spawnPuff(
+          ax + (Math.random() - 0.5) * M(0.20),
+          ay + (Math.random() - 0.5) * M(0.10),
+          az + (Math.random() - 0.5) * M(0.20),
+          -fx * back + (Math.random() - 0.5) * M(0.4),
+          M(0.6) + Math.random() * M(0.4),
+          -fz * back + (Math.random() - 0.5) * M(0.4),
+          0.45 + Math.random() * 0.20,
+          M(0.28) + Math.random() * M(0.14),
+          0.50 + hot * 0.45,         // R warms with throttle
+          0.50 + hot * 0.10,         // G mostly flat
+          0.55 - hot * 0.30,         // B cools out with throttle
+        );
+      }
+    }
+    this._prevThrottle = throttle;
+
+    // ── GLO stationary stamps during burnout charge ─────────────
+    // SP emits an additive GLO-tinted footprint under each rear wheel
+    // every ~80ms while charging so the ground reads as a growing pool
+    // of heat. Implemented here as a strong, low-velocity GLO puff at
+    // each rear contact patch on a fixed cadence.
+    if (charging) {
+      const nowMs = (typeof performance !== 'undefined' ? performance.now() : Date.now());
+      for (let i = 0; i < 2; i++) {
+        if (!wheelWorld[i].grounded) continue;
+        if (nowMs < this._gloStampNextAt[i]) continue;
+        this._gloStampNextAt[i] = nowMs + 80;
+        const w = wheelWorld[i];
+        // 3 stacked GLO puffs per stamp for density.
+        for (let p = 0; p < 3; p++) {
+          this._spawnPuff(
+            w.x + (Math.random() - 0.5) * M(0.10),
+            w.y + M(0.04) + Math.random() * M(0.04),
+            w.z + (Math.random() - 0.5) * M(0.10),
+            (Math.random() - 0.5) * M(0.15),
+            (Math.random() - 0.3) * M(0.15),
+            (Math.random() - 0.5) * M(0.15),
+            0.55 + Math.random() * 0.20,
+            M(0.40) + Math.random() * M(0.20),
+            1.0, 1.0, 1.0, // GLO-tinted from uColor
+          );
+        }
+      }
+    }
 
     // ── Particle integration: advance lives & positions ──────
     const lifeAttr = this._puffGeo.attributes.aLife;
@@ -510,4 +658,72 @@ export class KartFxRig {
       this._puffMat.dispose();
     }
   }
+}
+
+// ── Standalone pickup-collect burst ─────────────────────────────────
+// Used by the multiplayer client when a pickup transitions
+// active→inactive (some kart grabbed it). Spawns a transient
+// THREE.Points cloud at the pickup's location that auto-disposes after
+// `lifeS` seconds. Lives outside of any KartFxRig so kart-removed-mid-
+// burst doesn't take the burst with it.
+const _PICKUP_BURST_PARTICLES = 32;
+export function spawnPickupBurst({ scene, position, color = 0xffd166, lifeS = 0.6 }) {
+  if (!scene || !position) return;
+  const geo = new THREE.BufferGeometry();
+  const positions = new Float32Array(_PICKUP_BURST_PARTICLES * 3);
+  const sizes = new Float32Array(_PICKUP_BURST_PARTICLES);
+  const lives = new Float32Array(_PICKUP_BURST_PARTICLES);
+  const tints = new Float32Array(_PICKUP_BURST_PARTICLES * 3);
+  const vels = new Float32Array(_PICKUP_BURST_PARTICLES * 3);
+  for (let i = 0; i < _PICKUP_BURST_PARTICLES; i++) {
+    const i3 = i * 3;
+    positions[i3 + 0] = position.x;
+    positions[i3 + 1] = position.y;
+    positions[i3 + 2] = position.z;
+    const ang = Math.random() * Math.PI * 2;
+    const upBias = 0.4 + Math.random() * 0.6;
+    const speed = M(3) + Math.random() * M(3);
+    vels[i3 + 0] = Math.cos(ang) * speed;
+    vels[i3 + 1] = upBias * speed;
+    vels[i3 + 2] = Math.sin(ang) * speed;
+    lives[i] = 1;
+    sizes[i] = M(0.30) + Math.random() * M(0.15);
+    tints[i3 + 0] = 1; tints[i3 + 1] = 1; tints[i3 + 2] = 1;
+  }
+  geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  geo.setAttribute('aSize', new THREE.BufferAttribute(sizes, 1));
+  geo.setAttribute('aLife', new THREE.BufferAttribute(lives, 1));
+  geo.setAttribute('aTint', new THREE.BufferAttribute(tints, 3));
+  const mat = makePuffMaterial(color);
+  const points = new THREE.Points(geo, mat);
+  points.frustumCulled = false;
+  scene.add(points);
+  let elapsed = 0;
+  const pa = geo.attributes.position;
+  const la = geo.attributes.aLife;
+  // Hand back a per-frame update + auto-dispose closure so the caller
+  // can drive lifecycle from its existing render loop.
+  return function updatePickupBurst(dt) {
+    elapsed += dt;
+    for (let i = 0; i < _PICKUP_BURST_PARTICLES; i++) {
+      const i3 = i * 3;
+      lives[i] = Math.max(0, 1 - elapsed / lifeS);
+      positions[i3 + 0] += vels[i3 + 0] * dt;
+      positions[i3 + 1] += vels[i3 + 1] * dt;
+      positions[i3 + 2] += vels[i3 + 2] * dt;
+      vels[i3 + 1] -= M(2.0) * dt;
+      const drag = Math.exp(-1.4 * dt);
+      vels[i3 + 0] *= drag;
+      vels[i3 + 2] *= drag;
+    }
+    pa.needsUpdate = true;
+    la.needsUpdate = true;
+    if (elapsed >= lifeS) {
+      scene.remove(points);
+      geo.dispose();
+      mat.dispose();
+      return true; // signal caller to stop calling
+    }
+    return false;
+  };
 }
