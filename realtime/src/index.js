@@ -10,6 +10,7 @@ import { LobbyRoom } from "./rooms/LobbyRoom.js";
 import { GloFluxRoom } from "./rooms/GloFluxRoom.js";
 import { FpsArenaRoom } from "./rooms/FpsArenaRoom.js";
 import { StudioRoom } from "./rooms/StudioRoom.js";
+import { Editor3RaceRoom } from "./rooms/Editor3RaceRoom.js";
 import { log } from "./logger.js";
 
 const port = Number(process.env.COLYSEUS_PORT || 2567);
@@ -44,6 +45,11 @@ gameServer.define("fps_arena", FpsArenaRoom)
 
 gameServer.define("studio_room", StudioRoom)
   .filterBy(["code"]);
+
+// Phase 2 — Track Studio ↔ multiplayer bridge.
+// Promoted from spikes/editor3-bridge. Accepts {trackId} or {trackData}.
+gameServer.define("editor3_race_room", Editor3RaceRoom)
+  .filterBy(["partyCode", "trackId"]);
 
 // Task 2.4: Disable monitor in production to prevent information leakage.
 if (process.env.NODE_ENV !== "production") {

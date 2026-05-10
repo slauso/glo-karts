@@ -1,0 +1,98 @@
+/**
+ * track-loader.js — Build a cannon-es world from an editor3 Track JSON.
+ *
+ * Accepts either:
+ *   1) Wire format          : { v:1, name?, placements:[{k,x,z,r}, ...] }
+ *   2) Backend envelope     : { track: { v:1, ... }, decor?, meta? }
+ *   3) Raw placements array : [{k,x,z,r}, ...]
+ *
+ * Returns the same body list installed on the world plus a list of computed
+ * spawn poses (world units = mm) for kart placement. Spawn poses are derived
+ * from any placement whose segment def has `isSpawn: true`. If none exist we
+ * fall back to the first placement at the standard kart hover height.
+ */
+import * as CANNON from 'cannon-es';
+import { buildSegmentBody, getDrivableTopY, SEGMENT_SCALE } from '../../../frontend/src/editor3/segment-physics.js';
+import { SEGMENTS, TILE } from '../../../frontend/src/editor3/segments.js';
+
+const S = SEGMENT_SCALE;
+const KART_HOVER_M = 1.5; // metres above drivable surface for spawn
+
+/** Normalize any of the supported input shapes into a placements array. */
+function extractPlacements(input) {
+  if (Array.isArray(input)) return input;
+  if (input?.placements && Array.isArray(input.placements)) return input.placements;
+  if (input?.track?.placements && Array.isArray(input.track.placements)) return input.track.placements;
+  return [];
+}
+
+/**
+ * Build static collider bodies for every placement and add them to `world`.
+ * @param {CANNON.World} world
+ * @param {*} trackData See module doc for accepted shapes.
+ * @returns {{ bodies: CANNON.Body[], spawns: Array<{x:number,y:number,z:number,heading:number}>, finish: object|null }}
+ */
+export function buildWorldFromTrackData(world, trackData) {
+  const placements = extractPlacements(trackData);
+  const bodies = [];
+  const spawns = [];
+  let finish = null;
+
+  for (const p of placements) {
+    if (!p || typeof p.k !== 'string') continue;
+    const def = SEGMENTS[p.k];
+    if (!def) continue;
+    const worldPos = {
+      x: (p.x ?? 0) * TILE * S,
+      y: 0,
+      z: (p.z ?? 0) * TILE * S,
+    };
+    const worldRotY = ((p.r ?? 0) % 4) * (Math.PI / 2);
+    const body = buildSegmentBody(p.k, worldPos, worldRotY);
+    if (body) {
+      world.addBody(body);
+      bodies.push(body);
+    }
+    if (def.isSpawn) {
+      spawns.push({
+        x: worldPos.x,
+        y: getDrivableTopY(p.k) + KART_HOVER_M * S,
+        z: worldPos.z,
+        heading: worldRotY,
+      });
+    }
+    if (def.isFinish && !finish) {
+      finish = { x: worldPos.x, y: worldPos.y, z: worldPos.z, heading: worldRotY };
+    }
+  }
+
+  // Fallback: no explicit spawn — drop karts on the first placement.
+  if (spawns.length === 0 && placements.length > 0) {
+    const first = placements[0];
+    spawns.push({
+      x: (first.x ?? 0) * TILE * S,
+      y: getDrivableTopY(first.k) + KART_HOVER_M * S,
+      z: (first.z ?? 0) * TILE * S,
+      heading: ((first.r ?? 0) % 4) * (Math.PI / 2),
+    });
+  }
+
+  return { bodies, spawns, finish };
+}
+
+/**
+ * Build a tiny default arena (used when no track is supplied). Mirrors the
+ * spike's 6×6 tile floor so existing smoke clients keep working.
+ */
+export function buildDefaultArena(world) {
+  const HALF = 3 * TILE * S; // 6×6 tiles, centred on origin
+  const ground = new CANNON.Body({ mass: 0, type: CANNON.Body.STATIC });
+  ground.addShape(new CANNON.Box(new CANNON.Vec3(HALF, 0.5 * S, HALF)));
+  ground.position.set(0, -0.5 * S, 0);
+  world.addBody(ground);
+  return {
+    bodies: [ground],
+    spawns: [{ x: 0, y: 1.5 * S, z: 0, heading: 0 }],
+    finish: null,
+  };
+}

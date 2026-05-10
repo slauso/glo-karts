@@ -87,71 +87,9 @@ export function buildSegmentMesh(key) {
 /**
  * Build a static cannon-es Body containing every solid block of a segment.
  * The body is placed at `worldPos` and rotated by `worldRotY` (radians).
+ *
+ * Implementation moved to ./segment-physics.js (Phase 2.1) so the realtime
+ * server can import the same builder without pulling in three.js. This file
+ * still re-exports it for browser callers.
  */
-export function buildSegmentBody(key, worldPos, worldRotY) {
-  const def = SEGMENTS[key];
-  if (!def) return null;
-  const body = new CANNON.Body({ mass: 0, type: CANNON.Body.STATIC });
-  const yawQuat = new CANNON.Quaternion();
-  yawQuat.setFromAxisAngle(new CANNON.Vec3(0, 1, 0), worldRotY);
-  body.position.set(worldPos.x, worldPos.y, worldPos.z);
-  body.quaternion.copy(yawQuat);
-
-  for (const block of def.blocks) {
-    if (block.solid === false) continue;
-    const offset = new CANNON.Vec3(
-      (block.pos?.[0] || 0) * S,
-      (block.pos?.[1] || 0) * S,
-      (block.pos?.[2] || 0) * S,
-    );
-    const localQuat = new CANNON.Quaternion();
-    if (block.rotX || block.rotY || block.rotZ) {
-      const qx = new CANNON.Quaternion();
-      qx.setFromAxisAngle(new CANNON.Vec3(1, 0, 0), block.rotX || 0);
-      const qy = new CANNON.Quaternion();
-      qy.setFromAxisAngle(new CANNON.Vec3(0, 1, 0), block.rotY || 0);
-      const qz = new CANNON.Quaternion();
-      qz.setFromAxisAngle(new CANNON.Vec3(0, 0, 1), block.rotZ || 0);
-      const tmp = new CANNON.Quaternion();
-      qy.mult(qx, tmp);
-      tmp.mult(qz, localQuat);
-    }
-    if (block.kind === 'trimesh') {
-      // Curved surfaces (banked-turn bowl) where a discrete box mesh
-      // can't seal the lateral seams without gaps. Vertices are stored
-      // in segment-local *segment units* and scaled here to world (mm).
-      const verts = new Float32Array(block.vertices.length);
-      for (let i = 0; i < block.vertices.length; i++) verts[i] = block.vertices[i] * S;
-      const shape = new CANNON.Trimesh(verts, block.indices);
-      body.addShape(shape, offset, localQuat);
-      continue;
-    }
-    const halfExtents = new CANNON.Vec3(
-      (block.size[0] * S) / 2, (block.size[1] * S) / 2, (block.size[2] * S) / 2,
-    );
-    const shape = new CANNON.Box(halfExtents);
-    body.addShape(shape, offset, localQuat);
-  }
-  return body;
-}
-
-/** True if a segment block is marked as the "drivable" road surface. */
-export function getDrivableTopY(key) {
-  const def = SEGMENTS[key];
-  if (!def) return 0.4 * S;
-  let maxY = 0;
-  for (const b of def.blocks) {
-    if (!b.drivable) continue;
-    if (b.kind === 'trimesh') {
-      // Top is the highest vertex y in segment-local units.
-      const verts = b.vertices;
-      for (let i = 1; i < verts.length; i += 3) {
-        if (verts[i] > maxY) maxY = verts[i];
-      }
-      continue;
-    }
-    const top = b.pos[1] + b.size[1] / 2;
-    if (top > maxY) maxY = top;
-  }
-  return (maxY || 0.4) * S;
-}
+export { buildSegmentBody, getDrivableTopY } from './segment-physics.js';
