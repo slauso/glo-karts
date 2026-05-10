@@ -59,6 +59,7 @@ class RacingLobby {
     this.selectedBattleType = DEFAULTS.battleType;
     this.selectedMaxPlayers = DEFAULTS.maxPlayers;
     this.selectedBotCount = DEFAULTS.botCount;
+    this.selectedLaps = 3;
     this.selectedLoadout = DEFAULTS.loadoutId;
     this.selectedCustomWeapons = new Set(['bowling_ball', 'plunger', 'cake', 'bubblegum', 'shield']);
     this.activeBattleView = 'core';
@@ -851,6 +852,7 @@ class RacingLobby {
       arenaTheme: this.selectedGlofluxTheme,
       battleType: this.selectedBattleType,
       maxPlayers: this.selectedMaxPlayers,
+      totalLaps: Number(this.selectedLaps) || 3,
       scoreLimit: parseInt(document.getElementById('battle-score-limit')?.value || '5', 10) || 5,
       loadoutId: this.selectedLoadout,
       collisionDamage: !!document.getElementById('battle-collision-damage')?.checked,
@@ -1098,6 +1100,7 @@ class RacingLobby {
   _getLeftSetupState() {
     const modeEntry = getMode(this.selectedModeId);
     const showBattle = !!(modeEntry?.selectors?.battleSettings);
+    const showRace = !!(modeEntry?.selectors?.raceSettings);
     const isGloflux = modeEntry?.id === 'gloflux' || modeEntry?.id?.startsWith('gloflux_');
     const showTrack = usesTrackSelection(this.selectedModeId) || usesArenaSelection(this.selectedModeId);
 
@@ -1105,8 +1108,8 @@ class RacingLobby {
       showBattle,
       isGloflux,
       showTrack,
-      isRaceWithBots: false,
-      showSetup: showTrack || showBattle || isGloflux,
+      isRaceWithBots: showRace,
+      showSetup: showTrack || showBattle || isGloflux || showRace,
     };
   }
 
@@ -1190,6 +1193,15 @@ class RacingLobby {
 
     const scoreLimitEl = document.getElementById('battle-score-limit');
     if (scoreLimitEl && state.scoreLimit) scoreLimitEl.value = String(state.scoreLimit);
+
+    if (state.totalLaps) {
+      this.selectedLaps = Number(state.totalLaps) || 3;
+      const lapsEl = document.getElementById('race-laps');
+      if (lapsEl) {
+        lapsEl.value = String(this.selectedLaps);
+        this._syncGlassDropdown(lapsEl);
+      }
+    }
 
     if (state.loadoutId) {
       this.selectedLoadout = state.loadoutId;
@@ -1482,6 +1494,7 @@ class RacingLobby {
 
     lapsEl?.addEventListener('change', () => {
       this.selectedLaps = parseInt(lapsEl.value || '3', 10);
+      this.sendSettingsUpdate();
     });
 
     this._initGlassDropdown(lapsEl);

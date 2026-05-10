@@ -196,7 +196,7 @@ export const MODE_REGISTRY = {
     icon: 'fa-globe',
     page: 'multiplayer-editor3.html',
     status: MODE_STATUS.READY,
-    selectors: { track: true, arena: false, battleSettings: true, studioTracks: true },
+    selectors: { track: true, arena: false, raceSettings: true, studioTracks: true },
     requiresLobby: true,
     legacyFamily: 'race',
     roomName: 'editor3_race_room',
@@ -209,7 +209,7 @@ export const MODE_REGISTRY = {
         multiplayerProvider: 'colyseus',
         maxPlayers: lobby?.selectedMaxPlayers || 8,
         loadoutId: lobby?.selectedLoadout || 'random-all',
-        scoreLimit: parseInt(document.getElementById('battle-score-limit')?.value || '5', 10) || 5,
+        totalLaps: Number(lobby?.selectedLaps) || 3,
       };
     },
   },
