@@ -142,12 +142,17 @@ async function probeGameState(page, label, sampleSeconds = 6) {
 }
 
 async function injectInputs(page, durationMs = 4000) {
-  // Hold W to drive forward for `durationMs`
+  // Hold W to drive forward for `durationMs`. The game polls a Set populated
+  // by window keydown/keyup, so the keys must be re-asserted as long as we
+  // want them held — the page never sees the OS-level "key repeat" event.
   await page.evaluate((ms) => {
-    const evDown = new KeyboardEvent('keydown', { code: 'KeyW', key: 'w', bubbles: true });
-    const evUp = new KeyboardEvent('keyup', { code: 'KeyW', key: 'w', bubbles: true });
-    window.dispatchEvent(evDown);
-    setTimeout(() => window.dispatchEvent(evUp), ms);
+    const fire = () => window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyW', key: 'w', bubbles: true }));
+    fire();
+    const id = setInterval(fire, 100);
+    setTimeout(() => {
+      clearInterval(id);
+      window.dispatchEvent(new KeyboardEvent('keyup', { code: 'KeyW', key: 'w', bubbles: true }));
+    }, ms);
   }, durationMs);
   await wait(durationMs + 200);
 }
@@ -195,11 +200,33 @@ async function injectInputs(page, durationMs = 4000) {
     await host.screenshot({ path: path.join(screenshotDir, 'host-idle.png'), fullPage: false });
     await guest.screenshot({ path: path.join(screenshotDir, 'guest-idle.png'), fullPage: false });
 
-    await injectInputs(host, 3000);
-    await injectInputs(guest, 3000);
-
-    out.samples.hostDrive = await probeGameState(host, 'HOST', 4);
-    out.samples.guestDrive = await probeGameState(guest, 'GUEST', 4);
+    // Drive both clients forward in parallel for ~12s and probe at the same time.
+    const driveMs = 12000;
+    const driveSamples = (async () => {
+      // Sample state every second from BOTH pages while driving.
+      const samples = { host: [], guest: [] };
+      for (let i = 0; i < driveMs / 1000; i++) {
+        await wait(1000);
+        const grab = (page) => page.evaluate(() => {
+          const room = window.__roomRef;
+          const me = window.__mySid;
+          const karts = [];
+          if (room?.state?.karts) {
+            room.state.karts.forEach((k, sid) => {
+              karts.push({ sid, x: Math.round(k.x), y: Math.round(k.y), z: Math.round(k.z), lap: k.lap, lastSeq: k.lastSeq });
+            });
+          }
+          return { me, lap: document.getElementById('hud-lap')?.textContent, weapon: document.getElementById('hud-weapon')?.textContent, karts };
+        });
+        samples.host.push(await grab(host));
+        samples.guest.push(await grab(guest));
+      }
+      return samples;
+    })();
+    const driveInputs = Promise.all([injectInputs(host, driveMs), injectInputs(guest, driveMs)]);
+    const [, samples] = await Promise.all([driveInputs, driveSamples]);
+    out.samples.drive = samples;
+    console.log('[probe] drive samples:', JSON.stringify(samples, null, 2));
 
     await host.screenshot({ path: path.join(screenshotDir, 'host-drive.png'), fullPage: false });
     await guest.screenshot({ path: path.join(screenshotDir, 'guest-drive.png'), fullPage: false });

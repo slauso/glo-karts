@@ -343,7 +343,29 @@ export class Editor3RaceRoom extends Room {
   }
 
   onJoin(client, options = {}) {
-    const pose = this.spawns[this.spawnCursor % this.spawns.length] || { x: 0, y: 1.5, z: 0, heading: 0 };
+    const basePose = this.spawns[this.spawnCursor % this.spawns.length] || { x: 0, y: 1.5, z: 0, heading: 0 };
+    // Stagger karts so multiple players don't pile on top of one spawn
+    // marker (most templates ship with a single spawn). Offset along the
+    // spawn's local "behind" axis (negative forward), with a small lateral
+    // zig-zag so a 2-row grid forms naturally.
+    const slot = this.spawnCursor;
+    const row = Math.floor(slot / this.spawns.length);
+    const lateral = ((slot % 2) === 0 ? -1 : 1) * M(2.5);
+    const back = (row + (this.spawns.length === 1 ? row : 0)) * M(5);
+    const heading = basePose.heading || 0;
+    // Forward unit-vector for this spawn (segment "forward" is +Z in local
+    // space, rotated by heading around +Y).
+    const fwdX = Math.sin(heading);
+    const fwdZ = Math.cos(heading);
+    // Right unit-vector (perpendicular, rotated -90°).
+    const rightX = Math.cos(heading);
+    const rightZ = -Math.sin(heading);
+    const pose = {
+      x: basePose.x - fwdX * back + rightX * lateral,
+      y: basePose.y,
+      z: basePose.z - fwdZ * back + rightZ * lateral,
+      heading,
+    };
     this.spawnCursor++;
     const vehicle = spawnVehicle(this.world, pose);
     this.vehicles.set(client.sessionId, vehicle);
@@ -417,8 +439,16 @@ export class Editor3RaceRoom extends Room {
     for (const [sid, input] of this.inputs.entries()) {
       const v = this.vehicles.get(sid);
       if (!v) continue;
-      const eng = input.throttle * MAX_ENGINE - input.brake * MAX_BRAKE * 50;
-      v.applyEngineForce(eng, 2);
+      // Engine force is NEGATED to match SP playtest (`physics-worker.js`):
+      // with axleLocal = (-1,0,0) and directionLocal = (0,-1,0) the wheel
+      // tangent under positive engine force drives the chassis in +Z local,
+      // but the spawn segment is authored "forward = -Z" so the kart
+      // would drive backwards along the track. SP fixes this by negating
+      // the engine force; we mirror.
+      const eng = -(input.throttle * MAX_ENGINE - input.brake * MAX_BRAKE * 50);
+      v.applyEngineForce(eng * 0.25, 0); // rear assist (matches SP 25% split)
+      v.applyEngineForce(eng * 0.25, 1);
+      v.applyEngineForce(eng, 2);        // front drive (FWD bias to curb wheelies)
       v.applyEngineForce(eng, 3);
       v.setSteeringValue(input.steer * 0.5, 0);
       v.setSteeringValue(input.steer * 0.5, 1);
