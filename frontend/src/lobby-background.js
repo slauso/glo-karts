@@ -166,4 +166,13 @@ class LobbyBackground {
   }
 }
 
+// Auto-init on DOM ready (replaces former lobby-background-init.js bootstrap).
+if (typeof document !== 'undefined') {
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => new LobbyBackground());
+  } else {
+    new LobbyBackground();
+  }
+}
+
 export default LobbyBackground;
