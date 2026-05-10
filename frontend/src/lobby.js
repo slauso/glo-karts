@@ -91,7 +91,11 @@ class RacingLobby {
     // re-rendered once the full template/community/mine list resolves.
     loadStudioTracks().then(() => {
       try {
-        if (usesStudioTracks(this.selectedModeId)) this._rebuildMapDropdown();
+        if (usesStudioTracks(this.selectedModeId)) {
+          this._rebuildMapDropdown();
+          window.__trackPreview?.refreshStudioList?.();
+          if (this.selectedMap) window.__trackPreview?.setById?.(this.selectedMap);
+        }
       } catch { /* ignore */ }
     }).catch(() => { /* offline / backend down — keep seed */ });
   }
@@ -225,12 +229,22 @@ class RacingLobby {
     // Track carousel integration
     document.addEventListener('trackCarouselChanged', (event) => {
       if (!event.detail?.trackId) return;
-      this.selectedMap = event.detail.trackId;
+      const trackId = event.detail.trackId;
+      this.selectedMap = trackId;
+      // Phase 2.5: keep customTrackData in sync when the carousel lands on
+      // the host's local browser draft so multiplayer-editor3 can ship it
+      // through the LobbyRoom -> Editor3RaceRoom path.
+      if (trackId === LOCAL_DRAFT_TRACK_ID) {
+        const draft = readLocalDraftTrack();
+        if (draft?.raw) sessionStorage.setItem('customTrackData', draft.raw);
+      } else if (trackId !== CUSTOM_TRACK_ID) {
+        sessionStorage.removeItem('customTrackData');
+      }
       // Sync hidden dropdown for compatibility
       const mapName = document.querySelector('.selected-map-name');
-      if (mapName) mapName.textContent = event.detail.trackName || event.detail.trackId;
+      if (mapName) mapName.textContent = event.detail.trackName || trackId;
       document.querySelectorAll('.dropdown-option').forEach((opt) =>
-        opt.classList.toggle('selected', opt.getAttribute('data-map-id') === event.detail.trackId)
+        opt.classList.toggle('selected', opt.getAttribute('data-map-id') === trackId)
       );
       this.sendSettingsUpdate();
     });
@@ -348,7 +362,7 @@ class RacingLobby {
     });
 
     if (window.__trackPreview) {
-      window.__trackPreview.setMode(usesArenaSelection(this.selectedModeId) ? 'battle' : 'race');
+      window.__trackPreview.setMode(usesStudioTracks(this.selectedModeId) ? 'studio' : (usesArenaSelection(this.selectedModeId) ? 'battle' : 'race'));
       window.__trackPreview.setById(mapId);
     }
 
@@ -1176,7 +1190,7 @@ class RacingLobby {
 
     // Sync the 3D track carousel to server state
     if (window.__trackPreview) {
-      window.__trackPreview.setMode(usesArenaSelection(this.selectedModeId) ? 'battle' : 'race');
+      window.__trackPreview.setMode(usesStudioTracks(this.selectedModeId) ? 'studio' : (usesArenaSelection(this.selectedModeId) ? 'battle' : 'race'));
       window.__trackPreview.setById(this.selectedMap);
     }
 
@@ -1273,7 +1287,7 @@ class RacingLobby {
       if (selectedMapName) selectedMapName.textContent = option.textContent;
       mapDropdown?.classList.remove('open');
 
-      // Sync the 3D carousel to the dropdown selection
+    // Sync the 3D track carousel to the dropdown selection
       if (window.__trackPreview) {
         window.__trackPreview.setById(mapId);
       }
@@ -1384,7 +1398,7 @@ class RacingLobby {
 
     // Sync track carousel to the right list
     if (window.__trackPreview) {
-      window.__trackPreview.setMode(usesArenaSelection(modeId) ? 'battle' : 'race');
+      window.__trackPreview.setMode(usesStudioTracks(modeId) ? 'studio' : (usesArenaSelection(modeId) ? 'battle' : 'race'));
     }
 
     // Reset map to defaults when switching race↔battle

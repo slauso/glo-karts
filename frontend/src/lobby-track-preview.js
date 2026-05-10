@@ -2,13 +2,30 @@
 // Navigation + thumbnail preview display.
 
 import { ALL_TRACKS, ALL_ARENAS } from './modules/content-registry.js';
+import { getStudioTrackCache, loadStudioTracks, LOCAL_DRAFT_TRACK_ID, readLocalDraftTrack } from './lobby/constants.js';
 
 // ── Rosters (derived from content-registry) ─────────────────────────────────
 
 const STK_TRACKS = Object.values(ALL_TRACKS).map(t => ({ id: t.id, name: t.label }));
 const STK_ARENAS = Object.values(ALL_ARENAS).map(a => ({ id: a.id, name: a.label }));
 
+// Phase 2.5: Studio carousel list (Online Arena). Pulled from the same
+// loadStudioTracks() cache the lobby dropdown uses, with the host's local
+// browser draft prepended when present.
+function getStudioList() {
+  const out = [];
+  const draft = readLocalDraftTrack();
+  if (draft) out.push({ id: LOCAL_DRAFT_TRACK_ID, name: `${draft.name} (browser draft)` });
+  for (const t of getStudioTrackCache()) {
+    const suffix = t.source === 'mine' ? '  ·  yours'
+      : (t.source === 'community' ? '  ·  community' : '');
+    out.push({ id: t.id, name: `${t.name}${suffix}` });
+  }
+  return out.length ? out : [{ id: '__loading__', name: 'Loading Studio tracks…' }];
+}
+
 function getList(mode) {
+  if (mode === 'studio') return getStudioList();
   return mode === 'battle' ? STK_ARENAS : STK_TRACKS;
 }
 
@@ -162,12 +179,25 @@ class TrackPreview {
     }
   }
 
-  /** Switch between race ↔ battle roster. */
+  /** Switch between race ↔ battle ↔ studio roster. */
   setMode(newMode) {
     if (newMode === this.mode) return;
     this.mode         = newMode;
     this.currentIndex = 0;
     this._updateInfo();
+    // Phase 2.5: when entering studio mode, kick off a fresh fetch and
+    // re-render once the cache populates so the carousel mirrors the
+    // dropdown's grouped Studio list.
+    if (newMode === 'studio') {
+      loadStudioTracks({ force: true })
+        .then(() => this._updateInfo())
+        .catch(() => { /* offline */ });
+    }
+  }
+
+  /** Force a refresh from the Studio cache (called by lobby on dropdown updates). */
+  refreshStudioList() {
+    if (this.mode === 'studio') this._updateInfo();
   }
 
   // ── Events ─────────────────────────────────────────────────────────────────
