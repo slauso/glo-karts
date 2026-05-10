@@ -57,10 +57,14 @@ async function selectOnlineArena(page) {
 }
 
 async function pickFirstTemplate(page) {
-  await page.evaluate(() => {
-    const tile = document.querySelector('.lsp-tile');
-    tile?.click();
+  // Prefer Tutorial Loop (closed loop, simplest).
+  const ok = await page.evaluate(() => {
+    const tiles = Array.from(document.querySelectorAll('.lsp-tile'));
+    const tut = tiles.find((t) => /tutorial/i.test(t.textContent || ''));
+    (tut || tiles[0])?.click();
+    return !!(tut || tiles[0]);
   });
+  if (!ok) throw new Error('no template tiles found');
   await wait(500);
 }
 
@@ -141,20 +145,35 @@ async function probeGameState(page, label, sampleSeconds = 6) {
   return samples;
 }
 
-async function injectInputs(page, durationMs = 4000) {
-  // Hold W to drive forward for `durationMs`. The game polls a Set populated
+async function injectInputs(page, durationMs = 4000, opts = {}) {
+  // Hold WASD keys for `durationMs`. The game polls a Set populated
   // by window keydown/keyup, so the keys must be re-asserted as long as we
   // want them held — the page never sees the OS-level "key repeat" event.
-  await page.evaluate((ms) => {
-    const fire = () => window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyW', key: 'w', bubbles: true }));
+  const codes = opts.codes || ['KeyW'];
+  await page.evaluate(({ ms, codes }) => {
+    const fire = () => {
+      for (const code of codes) {
+        window.dispatchEvent(new KeyboardEvent('keydown', { code, key: code.replace('Key', '').toLowerCase(), bubbles: true }));
+      }
+    };
     fire();
     const id = setInterval(fire, 100);
     setTimeout(() => {
       clearInterval(id);
-      window.dispatchEvent(new KeyboardEvent('keyup', { code: 'KeyW', key: 'w', bubbles: true }));
+      for (const code of codes) {
+        window.dispatchEvent(new KeyboardEvent('keyup', { code, key: code.replace('Key', '').toLowerCase(), bubbles: true }));
+      }
     }, ms);
-  }, durationMs);
+  }, { ms: durationMs, codes });
   await wait(durationMs + 200);
+}
+
+async function ghostCount(page) {
+  return page.evaluate(() => {
+    const room = window.__roomRef;
+    if (!room?.state?.karts) return -1;
+    return room.state.karts.size;
+  });
 }
 
 (async () => {
@@ -196,6 +215,10 @@ async function injectInputs(page, durationMs = 4000) {
 
     out.samples.hostIdle = await probeGameState(host, 'HOST', 4);
     out.samples.guestIdle = await probeGameState(guest, 'GUEST', 4);
+
+    out.ghostsHostIdle = await ghostCount(host);
+    out.ghostsGuestIdle = await ghostCount(guest);
+    console.log(`[probe] ghosts: host=${out.ghostsHostIdle} guest=${out.ghostsGuestIdle}`);
 
     await host.screenshot({ path: path.join(screenshotDir, 'host-idle.png'), fullPage: false });
     await guest.screenshot({ path: path.join(screenshotDir, 'guest-idle.png'), fullPage: false });

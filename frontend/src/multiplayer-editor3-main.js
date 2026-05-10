@@ -81,14 +81,19 @@ scene.fog = new THREE.Fog(0x0a0d12, 80 * S, 200 * S);
 const camera = new THREE.PerspectiveCamera(60, 1, 0.1 * S, 400 * S);
 camera.position.set(0, 12 * S, 18 * S);
 
-const sun = new THREE.DirectionalLight(0xffffff, 1.1);
-sun.position.set(40 * S, 80 * S, 30 * S);
+// Lighting parity with single-player playtest (play-main.js): bright sun +
+// ambient + hemi so the track surfaces aren't pitch-black.
+const sun = new THREE.DirectionalLight(0xffffff, 1.4);
+sun.position.set(60 * S, 120 * S, 40 * S);
 sun.castShadow = true;
 sun.shadow.mapSize.set(1024, 1024);
-sun.shadow.camera.left = -100 * S; sun.shadow.camera.right = 100 * S;
-sun.shadow.camera.top = 100 * S; sun.shadow.camera.bottom = -100 * S;
+sun.shadow.camera.left = -80 * S; sun.shadow.camera.right = 80 * S;
+sun.shadow.camera.top = 80 * S; sun.shadow.camera.bottom = -80 * S;
+sun.shadow.camera.near = 1 * S; sun.shadow.camera.far = 250 * S;
+sun.shadow.bias = -0.0008;
 scene.add(sun);
-scene.add(new THREE.HemisphereLight(0x88aaff, 0x202028, 0.45));
+scene.add(new THREE.AmbientLight(0x6b7a92, 0.55));
+scene.add(new THREE.HemisphereLight(0x88aaff, 0x222530, 0.85));
 
 function resize() {
   const w = window.innerWidth, h = window.innerHeight;
@@ -147,7 +152,9 @@ function ensureGhost(sid, idx) {
   group.add(placeholder);
   scene.add(group);
   cloneKart(DEFAULT_KART_ID, color).then((kart) => {
-    kart.scale.setScalar(S);
+    // cloneKart already returns the model auto-scaled to mm-units
+    // (KART_TARGET_LENGTH = 2000mm). Do NOT multiply by S again — that
+    // produced a 2km-long kart that swallowed the camera.
     group.remove(placeholder);
     placeholder.geometry.dispose();
     placeholder.material.dispose();
