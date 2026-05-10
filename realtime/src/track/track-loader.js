@@ -57,6 +57,9 @@ export function buildWorldFromTrackData(world, trackData) {
     const worldRotY = ((p.r ?? 0) % 4) * (Math.PI / 2);
     const body = buildSegmentBody(p.k, worldPos, worldRotY);
     if (body) {
+      // Apply the world's ground material so the wheel/ground contact pair
+      // (defined by Editor3RaceRoom.makeWorld) is used for friction.
+      if (world.__groundMat) body.material = world.__groundMat;
       world.addBody(body);
       bodies.push(body);
     }

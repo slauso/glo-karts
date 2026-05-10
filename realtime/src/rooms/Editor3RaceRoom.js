@@ -40,13 +40,23 @@ import { log } from "../logger.js";
 
 const TICK_HZ = 60;
 const SNAPSHOT_HZ = 20;
+const SCALE = 1000; // mm/m — must match SEGMENT_SCALE in segment-physics.js.
+                    // The track world is built in mm-units (1 unit = 1 mm),
+                    // so kart bodies, wheel radii, gravity, and engine forces
+                    // must all be expressed in mm to interact correctly.
+const M = (n) => n * SCALE; // metres → world units (mm)
+
+// Kart geometry/mass — scaled to mm to match the track world. These mirror
+// the SP playtest physics in `frontend/src/editor3/physics-worker.js` so
+// online_arena drives identically to single-player playtest.
 const KART_MASS = 150;
-const CHASSIS_HX = 0.6, CHASSIS_HY = 0.3, CHASSIS_HZ = 1.0;
-const WHEEL_RADIUS = 0.4;
-const MAX_ENGINE = 1700;
-const MAX_BRAKE = 28;
+const CHASSIS_HX = M(0.6), CHASSIS_HY = M(0.3), CHASSIS_HZ = M(1.0);
+const WHEEL_RADIUS = M(0.4);
+// Engine force is applied in world-units · mass / s² → scale by SCALE so the
+// resulting acceleration in m/s² stays the same as in metres-space.
+const MAX_ENGINE = 1700 * SCALE;
+const MAX_BRAKE = 28 * SCALE;
 const MAX_PLAYERS = 8;
-const SCALE = 1000; // mm/m — must match SEGMENT_SCALE in segment-physics.js
 const FINISH_TRIGGER_RADIUS_MM = 18 * SCALE;
 const HALF_TRACK_FAR_RADIUS_MM = 30 * SCALE;
 const MIN_LAP_TIME_MS = 4000;
@@ -102,10 +112,31 @@ function clamp01(n) { return Math.max(0, Math.min(1, Number(n) || 0)); }
 function clampSym(n) { return Math.max(-1, Math.min(1, Number(n) || 0)); }
 
 function makeWorld() {
-  const world = new CANNON.World({ gravity: new CANNON.Vec3(0, -9.82, 0) });
+  // Gravity in mm/s². Mirror SP playtest (`physics-worker.js`) which uses
+  // M(25) for snappier arcade falls; using M(9.82) was too floaty when
+  // combined with the heavy karts and stiff suspension below.
+  const world = new CANNON.World({ gravity: new CANNON.Vec3(0, -M(25), 0) });
   world.broadphase = new CANNON.SAPBroadphase(world);
   world.allowSleep = true;
   world.defaultContactMaterial.friction = 0.4;
+  // Ground+wheel contact material — matches SP playtest so karts get
+  // grippy traction the moment a wheel raycast hits the road deck.
+  const groundMat = new CANNON.Material("ground");
+  const wheelMat = new CANNON.Material("wheel");
+  world.addContactMaterial(new CANNON.ContactMaterial(groundMat, wheelMat, {
+    friction: 0.65, restitution: 0.05,
+  }));
+  world.__groundMat = groundMat;
+  world.__wheelMat = wheelMat;
+  // Backstop plane far below the track. Without this a kart that misses
+  // a deck (e.g. on a banked-turn seam) falls into the void forever and
+  // the snapshot stream balloons with NaN-adjacent positions. SP playtest
+  // uses an infinite plane at y=0; we put ours well below the lowest
+  // possible deck so it only catches actual fall-throughs.
+  const floor = new CANNON.Body({ mass: 0, material: groundMat, shape: new CANNON.Plane() });
+  floor.quaternion.setFromAxisAngle(new CANNON.Vec3(1, 0, 0), -Math.PI / 2);
+  floor.position.set(0, -M(50), 0);
+  world.addBody(floor);
   return world;
 }
 
@@ -114,7 +145,10 @@ function spawnVehicle(world, pose) {
   chassis.addShape(new CANNON.Box(new CANNON.Vec3(CHASSIS_HX, CHASSIS_HY, CHASSIS_HZ)));
   chassis.position.set(pose.x, pose.y, pose.z);
   chassis.quaternion.setFromAxisAngle(new CANNON.Vec3(0, 1, 0), pose.heading || 0);
-  chassis.angularDamping = 0.2;
+  // Damping mirrors SP playtest — bleeds residual lateral velocity / yaw
+  // wobble so corrections settle quickly (arcade-feel responsiveness).
+  chassis.linearDamping = 0.06;
+  chassis.angularDamping = 0.55;
   world.addBody(chassis);
 
   const vehicle = new CANNON.RaycastVehicle({
@@ -123,28 +157,40 @@ function spawnVehicle(world, pose) {
     indexUpAxis: 1,
     indexForwardAxis: 2,
   });
+  // Suspension tuning copied from SP playtest (`physics-worker.js`). The
+  // previous defaults (stiffness 30, force 1e5) were tuned for metres-space
+  // and resulted in karts falling through the deck on first contact.
   const wheelOpts = {
     radius: WHEEL_RADIUS,
     directionLocal: new CANNON.Vec3(0, -1, 0),
-    suspensionStiffness: 30,
-    suspensionRestLength: 0.3,
-    frictionSlip: 1.5,
-    dampingRelaxation: 2.3,
-    dampingCompression: 4.4,
-    maxSuspensionForce: 100000,
-    rollInfluence: 0.01,
+    suspensionStiffness: 60,
+    suspensionRestLength: M(0.3),
+    frictionSlip: 4.6,
+    dampingRelaxation: 4.4,
+    dampingCompression: 4.6,
+    maxSuspensionForce: M(150000),
+    rollInfluence: 0.012,
     axleLocal: new CANNON.Vec3(-1, 0, 0),
     chassisConnectionPointLocal: new CANNON.Vec3(),
-    maxSuspensionTravel: 0.3,
+    maxSuspensionTravel: M(0.45),
     customSlidingRotationalSpeed: -30,
     useCustomSlidingRotationalSpeed: true,
   };
-  const dx = CHASSIS_HX, dz = CHASSIS_HZ - 0.2;
-  for (const [px, pz] of [[-dx, dz], [dx, dz], [-dx, -dz], [dx, -dz]]) {
-    wheelOpts.chassisConnectionPointLocal = new CANNON.Vec3(px, 0, pz);
+  // Wheel placement matches SP playtest so weight transfer + raycast
+  // origin are identical between online and SP.
+  const WX = CHASSIS_HX + M(0.05);
+  const WZ = CHASSIS_HZ * 0.75;
+  const WY = -CHASSIS_HY * 0.5;
+  for (const [px, pz] of [[-WX, -WZ], [WX, -WZ], [-WX, WZ], [WX, WZ]]) {
+    wheelOpts.chassisConnectionPointLocal = new CANNON.Vec3(px, WY, pz);
     vehicle.addWheel({ ...wheelOpts });
   }
   vehicle.addToWorld(world);
+  // Tag wheels with the wheelMat so the ground/wheel contact material
+  // applies (otherwise we get the default friction = 0.4 instead of 0.65).
+  for (const w of vehicle.wheelInfos) {
+    w.material = world.__wheelMat;
+  }
   return vehicle;
 }
 

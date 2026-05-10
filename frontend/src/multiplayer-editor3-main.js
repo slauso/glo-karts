@@ -335,6 +335,11 @@ async function connect() {
   }
   roomRef = room;
   mySid = room.sessionId;
+  // Debug hooks for Playwright probes / browser devtools.
+  if (typeof window !== 'undefined') {
+    window.__roomRef = room;
+    window.__mySid = mySid;
+  }
   setStatus(`connected as ${mySid.slice(0, 6)}`, 'ok');
 
   // Schema 3.x: use room.onStateChange (kart.onChange is not available client-side).
