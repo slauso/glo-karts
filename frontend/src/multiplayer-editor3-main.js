@@ -22,6 +22,8 @@ import { SEGMENTS, TILE } from './editor3/segments.js';
 import { WORLD_UNITS_PER_M } from './editor3/units.js';
 import { cloneKart } from './editor3/kart-loader.js';
 import { DEFAULT_KART_ID } from './editor3/kart-catalog.js';
+import { KartFxRig } from './editor3/kart-fx-rig.js';
+import { createKartAudio, STD_KIT } from './editor3/kart-audio.js';
 
 const S = WORLD_UNITS_PER_M;
 const SEND_HZ = 30;
@@ -160,7 +162,16 @@ function ensureGhost(sid, idx) {
     placeholder.material.dispose();
     group.add(kart);
   }).catch(() => { /* keep placeholder */ });
-  const entry = { group, target: { x: 0, y: 0, z: 0, qx: 0, qy: 0, qz: 0, qw: 1 }, color };
+  // Per-kart FX rig: skid trails, drift smoke, drift sparks, boost
+  // flames, burnout puffs. Driven by broadcast schema fields each
+  // frame so remote ghosts visibly drift / boost / charge identically
+  // to the SP playtest experience.
+  const fx = new KartFxRig({ scene, gloColor: color });
+  const entry = {
+    group,
+    target: { x: 0, y: 0, z: 0, qx: 0, qy: 0, qz: 0, qw: 1 },
+    color, fx,
+  };
   ghosts.set(sid, entry);
   return entry;
 }
@@ -169,6 +180,7 @@ function removeGhost(sid) {
   const g = ghosts.get(sid);
   if (!g) return;
   scene.remove(g.group);
+  if (g.fx) g.fx.dispose();
   ghosts.delete(sid);
 }
 
@@ -211,7 +223,20 @@ function spawnProjectileFx(x, y, z, color) {
   fxBodies.push({ mesh: m, life: 0.8 });
 }
 
-// ── Render loop additions ───────────────────────────────────────────
+// ── Audio (local kart only) ────────────────────────────────────────
+// The audio rig opens an AudioContext on first interaction; remote
+// karts don't get their own engine voices to keep the mix sane.
+let kartAudio = null;
+let _prevDriftTier = 0;
+function ensureKartAudio() {
+  if (kartAudio) return kartAudio;
+  try { kartAudio = createKartAudio({ kit: STD_KIT, masterVolume: 0.6 }); } catch { kartAudio = null; }
+  return kartAudio;
+}
+window.addEventListener('pointerdown', ensureKartAudio, { once: true });
+window.addEventListener('keydown',     ensureKartAudio, { once: true });
+
+// ── Render loop additions ───────────────────────────────────────────────────────
 let roomRef = null; // populated once room joined
 const PICKUP_PROXIMITY_MM = 16 * S; // client-side trigger to send pickupItem
 
@@ -256,6 +281,18 @@ function tick(now) {
     g.position.y += (t.y - g.position.y) * LERP;
     g.position.z += (t.z - g.position.z) * LERP;
     g.quaternion.slerp(new THREE.Quaternion(t.qx, t.qy, t.qz, t.qw), LERP);
+    // Per-kart FX driven by latest schema state captured below in
+    // onStateChange (entry._fxState is refreshed there each snapshot).
+    if (entry.fx && entry._fxState) {
+      entry._fxState.position.x = g.position.x;
+      entry._fxState.position.y = g.position.y;
+      entry._fxState.position.z = g.position.z;
+      entry._fxState.quaternion.x = g.quaternion.x;
+      entry._fxState.quaternion.y = g.quaternion.y;
+      entry._fxState.quaternion.z = g.quaternion.z;
+      entry._fxState.quaternion.w = g.quaternion.w;
+      entry.fx.update(entry._fxState, dt);
+    }
   }
   // Spin pickup boxes.
   for (const { mesh, active } of pickupMeshes.values()) {
@@ -357,12 +394,37 @@ async function connect() {
   let joinCount = 0;
   room.onStateChange((state) => {
     if (!state) return;
-    // Karts: ensure ghosts + sync targets.
+    // Karts: ensure ghosts + sync targets + fx state.
     state.karts.forEach((kart, sid) => {
       let entry = ghosts.get(sid);
       if (!entry) entry = ensureGhost(sid, joinCount++);
       entry.target.x = kart.x; entry.target.y = kart.y; entry.target.z = kart.z;
       entry.target.qx = kart.qx; entry.target.qy = kart.qy; entry.target.qz = kart.qz; entry.target.qw = kart.qw;
+      // Capture the broadcast effect-driving state for this kart so
+      // the render-loop fx update reflects the latest tick. Allocate
+      // once and reuse to avoid GC pressure.
+      if (!entry._fxState) {
+        entry._fxState = {
+          position: { x: 0, y: 0, z: 0 },
+          quaternion: { x: 0, y: 0, z: 0, w: 1 },
+          velocity: { x: 0, y: 0, z: 0 },
+          driftActive: false, driftTier: 0, driftDir: 0,
+          boostTimer: 0, gloBurnoutT: 0, chargingBurnout: false,
+          wheelGrounded: 0, throttleIn: 0, brakeIn: 0, steerIn: 0,
+        };
+      }
+      const fs = entry._fxState;
+      fs.velocity.x = kart.vx || 0; fs.velocity.y = kart.vy || 0; fs.velocity.z = kart.vz || 0;
+      fs.driftActive = !!kart.driftActive;
+      fs.driftTier = kart.driftTier | 0;
+      fs.driftDir = kart.driftDir | 0;
+      fs.boostTimer = +kart.boostTimer || 0;
+      fs.gloBurnoutT = +kart.gloBurnoutT || 0;
+      fs.chargingBurnout = !!kart.chargingBurnout;
+      fs.wheelGrounded = kart.wheelGrounded | 0;
+      fs.throttleIn = +kart.throttleIn || 0;
+      fs.brakeIn = +kart.brakeIn || 0;
+      fs.steerIn = +kart.steerIn || 0;
     });
     // Remove ghosts whose karts left.
     for (const sid of [...ghosts.keys()]) {
@@ -371,12 +433,43 @@ async function connect() {
     if (hud.players) hud.players.textContent = String(state.karts.size);
     // Pickups.
     state.pickups.forEach((p, id) => { ensurePickupMesh(id, p.x, p.y, p.z, !!p.active); });
-    // Local kart HUD (lap, weapon).
+    // Local kart HUD (lap, weapon) + audio.
     const me = state.karts.get(mySid);
     if (me) {
       if (hud.lap) hud.lap.textContent = `${me.lap || 0} / ${state.totalLaps || TOTAL_LAPS}`;
       if (hud.weapon) hud.weapon.textContent = me.weapon2 ? `${me.weapon2} ×${me.ammo2}` : '—';
       if (hud.reserve) hud.reserve.textContent = me.weapon3 ? `${me.weapon3} ×${me.ammo3}` : '—';
+      // Drive audio rig from the local kart's authoritative state so
+      // engine pitch / skid loop / boost SFX track exactly what the
+      // server-side physics computed.
+      if (kartAudio) {
+        const speedMs = Math.hypot(me.vx || 0, me.vy || 0, me.vz || 0) / WORLD_UNITS_PER_M;
+        const grounded = (me.wheelGrounded | 0) !== 0;
+        // Lateral component of velocity in m/s (chassis-frame).
+        const fx2 = 2 * ((me.qw || 1) * (me.qy || 0) + (me.qx || 0) * (me.qz || 0));
+        const fz2 = 1 - 2 * ((me.qy || 0) * (me.qy || 0) + (me.qx || 0) * (me.qx || 0));
+        const _ang = Math.atan2(fx2, fz2);
+        const fwdX = Math.sin(_ang), fwdZ = Math.cos(_ang);
+        const lat = Math.abs((me.vx || 0) * fwdZ - (me.vz || 0) * fwdX) / WORLD_UNITS_PER_M;
+        const fwdMs = ((me.vx || 0) * fwdX + (me.vz || 0) * fwdZ) / WORLD_UNITS_PER_M;
+        const braking = (me.brakeIn || 0) > 0.5 && fwdMs > 5;
+        kartAudio.update({
+          speed: speedMs,
+          throttle: me.throttleIn || 0,
+          lateralSpeed: lat,
+          braking,
+          grounded,
+          drifting: !!me.driftActive,
+          charging: !!me.chargingBurnout,
+          boosting: (me.boostTimer || 0) > 0 || (me.gloBurnoutT || 0) > 0,
+          exploded: !!me.engineExploded,
+        });
+        const tier = me.driftTier | 0;
+        if (tier > _prevDriftTier) {
+          try { kartAudio.playOneShot('miniTurbo', { gain: 0.7 }); } catch {}
+        }
+        _prevDriftTier = tier;
+      }
     }
   });
 

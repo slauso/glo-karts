@@ -100,6 +100,23 @@ export const KART_ANGULAR_DAMPING = 0.55;
 export const TYRE_GRIP = 4.6;
 export const TYRE_GRIP_DRIFT = 2.3;
 
+// ── Burnout (W+Space stationary charge → release boost) ────
+// Mirror of SP play-main.js client-side mechanic so online karts
+// have the same charge meter + release boost. Detection (brake +
+// throttle while nearly stationary) already lives in applyKartControls;
+// these constants drive the timer/boost overlay built on top.
+export const BURNOUT_CHARGE_MIN_S = 0.18;
+export const BURNOUT_BOOST_DURATION_S = 0.7;
+export const BURNOUT_BOOST_DURATION_MAX_S = 2.2;
+export const BURNOUT_OVERHEAT_S = 6.0;
+export const ENGINE_LOCKOUT_S = 1.6;
+export const ENGINE_STEAM_S = 4.0;
+// Boost force applied while gloBurnoutT > 0. Mirrors drift mini-turbo
+// scaling so a fully-charged burnout release reads as a stronger,
+// longer boost than a tier-3 drift.
+export const BURNOUT_BOOST_FORCE = M(2800);
+export const BURNOUT_BOOST_TOPSPEED_MUL = 1.32;
+
 // ── Local axis constants ────────────────────────────────────
 const FORWARD_LOCAL = new CANNON.Vec3(0, 0, 1);
 const RIGHT_LOCAL = new CANNON.Vec3(1, 0, 0);
@@ -143,6 +160,12 @@ export function createControlState() {
     driftJustReleasedTier: 0,
     driftExitDamp: 0,
     driftExitDir: 0,
+    // Burnout overlay (W+Space hold → release boost)
+    burnoutCharge: 0,           // seconds of W+Space hold accumulated
+    burnoutPrevSpace: false,    // edge detector for release
+    gloBurnoutT: 0,             // remaining seconds of burnout boost
+    engineExplodedUntilMs: 0,   // wall-time ms; controls input lockout
+    chargingBurnout: false,     // true while accumulating charge (broadcast)
   };
 }
 
@@ -207,7 +230,18 @@ const _boostPoint = new CANNON.Vec3();
  * preserved bit-for-bit.
  */
 export function applyKartControls(ctx, dt) {
-  const { chassisBody, vehicle, controlState, keys, playerCombat } = ctx;
+  const { chassisBody, vehicle, controlState, playerCombat } = ctx;
+  let { keys } = ctx;
+
+  // Engine-explosion lockout: zero every drive input while the recovery
+  // timer is active. Mirrors SP `shipKeysIfChanged()` which sends false
+  // keys to the worker for the duration. Kart keeps its momentum but
+  // loses throttle/steer/brake/drift, selling the "blown engine" beat.
+  const nowMs = Date.now();
+  const exploded = nowMs < (controlState.engineExplodedUntilMs || 0);
+  if (exploded) {
+    keys = { w: false, s: false, a: false, d: false, space: false, drift: false };
+  }
 
   const rawAccel = (keys.w ? 1 : 0) + (keys.s ? -1 : 0);
   const rawSteer = (keys.a ? 1 : 0) + (keys.d ? -1 : 0);
@@ -232,7 +266,8 @@ export function applyKartControls(ctx, dt) {
   const mult = playerCombat.boostMult * playerCombat.slowMult;
   const intent = controlState.throttle;
   const driftBoostMul = controlState.boostTimer > 0 ? DRIFT_BOOST_TOPSPEED_MUL : 1;
-  const speedCap = TOP_SPEED_MS * mult * driftBoostMul;
+  const burnoutBoostMul = (controlState.gloBurnoutT || 0) > 0 ? BURNOUT_BOOST_TOPSPEED_MUL : 1;
+  const speedCap = TOP_SPEED_MS * mult * Math.max(driftBoostMul, burnoutBoostMul);
   const overspeed = (intent > 0 && speedFwd > speedCap * 0.92)
     ? Math.max(0, 1 - (speedFwd - speedCap * 0.92) / (speedCap * 0.18))
     : 1;
@@ -637,6 +672,60 @@ export function applyKartControls(ctx, dt) {
     }
     if (controlState.boostTimer <= 0) {
       controlState.boostTier = 0;
+    }
+  }
+
+  // ── Burnout charge / release / boost ────────────────────────────
+  // Mirrors the SP play-main client mechanic so online karts have the
+  // same charge meter, release-boost reward, and overheat-explosion
+  // beat. Inputs read from the post-lockout `keys` so a blown engine
+  // can't accumulate charge.
+  const _wForBurnout = !!keys.w;
+  const _spaceForBurnout = !!keys.space;
+  const _stationary = Math.abs(speedFwd) < M(2.5);
+  const _chargingNow =
+    _spaceForBurnout && _wForBurnout && _stationary
+    && !drifting && !controlState.driftActive
+    && !exploded;
+  controlState.chargingBurnout = _chargingNow;
+  if (_chargingNow) {
+    controlState.burnoutCharge = (controlState.burnoutCharge || 0) + dt;
+    if (controlState.burnoutCharge >= BURNOUT_OVERHEAT_S) {
+      controlState.engineExplodedUntilMs = nowMs + ENGINE_LOCKOUT_S * 1000;
+      controlState.burnoutCharge = 0;
+      controlState.gloBurnoutT = 0;
+    }
+  } else if ((controlState.burnoutCharge || 0) > 0
+             && !_spaceForBurnout && controlState.burnoutPrevSpace) {
+    if (controlState.burnoutCharge >= BURNOUT_CHARGE_MIN_S && _wForBurnout && !exploded) {
+      const t = Math.min(1, controlState.burnoutCharge / BURNOUT_OVERHEAT_S);
+      controlState.gloBurnoutT = BURNOUT_BOOST_DURATION_S
+        + (BURNOUT_BOOST_DURATION_MAX_S - BURNOUT_BOOST_DURATION_S) * t;
+    }
+    controlState.burnoutCharge = 0;
+  } else if (!_spaceForBurnout) {
+    controlState.burnoutCharge = Math.max(0, (controlState.burnoutCharge || 0) - dt * 2);
+  }
+  controlState.burnoutPrevSpace = _spaceForBurnout;
+
+  // Burnout boost integration. Like the drift mini-turbo this is a
+  // forward force applied at a low point on the chassis, so the boost
+  // doesn't pitch the nose up.
+  if ((controlState.gloBurnoutT || 0) > 0) {
+    controlState.gloBurnoutT = Math.max(0, controlState.gloBurnoutT - dt);
+    let _bGrounded = false;
+    for (let _i = 0; _i < 4; _i++) {
+      if (vehicle.wheelInfos[_i] && vehicle.wheelInfos[_i].isInContact) { _bGrounded = true; break; }
+    }
+    if (_bGrounded) {
+      const fmag = -BURNOUT_BOOST_FORCE;
+      _driftImpulse.set(_fwd.x * fmag, 0, _fwd.z * fmag);
+      _boostPoint.set(
+        chassisBody.position.x,
+        chassisBody.position.y - M(0.45),
+        chassisBody.position.z,
+      );
+      chassisBody.applyForce(_driftImpulse, _boostPoint);
     }
   }
 }

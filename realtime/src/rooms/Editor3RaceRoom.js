@@ -76,6 +76,21 @@ type("string")(KartState.prototype, "weapon2");
 type("uint8")(KartState.prototype, "ammo2");
 type("string")(KartState.prototype, "weapon3");
 type("uint8")(KartState.prototype, "ammo3");
+// FX-driving state — broadcast so each client can render skid trails,
+// drift sparks, burnout smoke, boost flames, and engine SFX 1:1 with
+// SP playtest. Without these the only visible thing remote karts do
+// is glide silently across the track.
+type("boolean")(KartState.prototype, "driftActive");
+type("uint8")(KartState.prototype, "driftTier");      // 0..3
+type("number")(KartState.prototype, "boostTimer");     // sec remaining (drift mini-turbo)
+type("number")(KartState.prototype, "gloBurnoutT");    // sec remaining (burnout boost)
+type("boolean")(KartState.prototype, "chargingBurnout"); // W+Space hold accumulating
+type("number")(KartState.prototype, "throttleIn");     // 0..1
+type("number")(KartState.prototype, "brakeIn");        // 0..1
+type("number")(KartState.prototype, "steerIn");        // -1..1 (smoothed)
+type("uint8")(KartState.prototype, "wheelGrounded");   // bitmask 4 bits
+type("int8")(KartState.prototype, "driftDir");         // -1, 0, +1
+type("boolean")(KartState.prototype, "engineExploded"); // true while lockout active
 
 class PickupState extends Schema {}
 type("number")(PickupState.prototype, "x");
@@ -340,6 +355,12 @@ export class Editor3RaceRoom extends Room {
     ks.color = String(options.playerColor || "#ff3aa1");
     ks.kartId = String(options.playerKart || options.kartId || "tux");
     ks.lap = 0; ks.place = 1; ks.finished = false;
+    ks.driftActive = false; ks.driftTier = 0;
+    ks.boostTimer = 0; ks.gloBurnoutT = 0;
+    ks.chargingBurnout = false;
+    ks.throttleIn = 0; ks.brakeIn = 0; ks.steerIn = 0;
+    ks.wheelGrounded = 0; ks.driftDir = 0;
+    ks.engineExploded = false;
     ks.weapon2 = ""; ks.ammo2 = 0;
     ks.weapon3 = ""; ks.ammo3 = 0;
     this.state.karts.set(client.sessionId, ks);
@@ -479,6 +500,7 @@ export class Editor3RaceRoom extends Room {
   }
 
   _writeSnapshot() {
+    const nowMs = Date.now();
     for (const [sid, vehicle] of this.vehicles.entries()) {
       const ks = this.state.karts.get(sid);
       if (!ks) continue;
@@ -489,7 +511,30 @@ export class Editor3RaceRoom extends Room {
       ks.qx = q.x; ks.qy = q.y; ks.qz = q.z; ks.qw = q.w;
       ks.vx = v.x; ks.vy = v.y; ks.vz = v.z;
       const input = this.inputs.get(sid);
-      if (input) ks.lastSeq = input.seq;
+      if (input) {
+        ks.lastSeq = input.seq;
+        ks.throttleIn = input.throttle || 0;
+        ks.brakeIn = input.brake || 0;
+      }
+      // Per-kart effects-driving state. Pulled from the shared
+      // controlState so SP and online render the same drift/boost/
+      // burnout/engine-explosion beats per kart.
+      const cs = this.controlStates ? this.controlStates.get(sid) : null;
+      if (cs) {
+        ks.driftActive = !!cs.driftActive;
+        ks.driftTier = (cs.driftTier | 0) & 0xff;
+        ks.boostTimer = +cs.boostTimer || 0;
+        ks.gloBurnoutT = +cs.gloBurnoutT || 0;
+        ks.chargingBurnout = !!cs.chargingBurnout;
+        ks.steerIn = +cs.steer || 0;
+        ks.driftDir = (cs.driftDir | 0);
+        ks.engineExploded = nowMs < (cs.engineExplodedUntilMs || 0);
+      }
+      let mask = 0;
+      for (let i = 0; i < 4 && i < vehicle.wheelInfos.length; i++) {
+        if (vehicle.wheelInfos[i].isInContact) mask |= (1 << i);
+      }
+      ks.wheelGrounded = mask;
     }
   }
 }
