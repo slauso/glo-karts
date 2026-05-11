@@ -20,7 +20,7 @@ import { Client } from 'colyseus.js';
 import { buildSegmentMesh } from './editor3/segment-builder.js';
 import { SEGMENTS, TILE } from './editor3/segments.js';
 import { WORLD_UNITS_PER_M } from './editor3/units.js';
-import { cloneKart } from './editor3/kart-loader.js';
+import { cloneKart, resolveKartWheels } from './editor3/kart-loader.js';
 import { DEFAULT_KART_ID, KART_BY_ID } from './editor3/kart-catalog.js';
 import { KartFxRig, spawnPickupBurst } from './editor3/kart-fx-rig.js';
 import { createKartUnderglow, DEFAULT_GLO_EFFECT, DEFAULT_GLO_COLOR, DEFAULT_GLO_COLOR2 } from './kart-glo.js';
@@ -37,6 +37,15 @@ const CHASSIS_HY_MM = 0.3 * WORLD_UNITS_PER_M;
 // the road surface instead of hovering ~30 cm above it.
 const SUSPENSION_REST_MM = 0.3 * WORLD_UNITS_PER_M;
 const KART_VISUAL_DROP_MM = CHASSIS_HY_MM + SUSPENSION_REST_MM;
+// Visual wheel radius (mirrors `WHEEL_RADIUS = M(0.4)` in the shared
+// physics module). Used by the per-frame wheel-spin integrator so
+// the rolling rate matches the kart's forward velocity.
+const WHEEL_RADIUS_MM = 0.4 * WORLD_UNITS_PER_M;
+// Visual steer lock approximation — mirrors play-main.js. The server
+// scales steer by a speed-dependent lock (0.20–0.58 rad); 0.45 reads
+// truthful at typical race speeds without piping the live lock value
+// over the wire.
+const VISUAL_STEER_LOCK_RAD = 0.45;
 import { createKartAudio, STD_KIT } from './editor3/kart-audio.js';
 
 const S = WORLD_UNITS_PER_M;
@@ -253,6 +262,16 @@ function ensureGhost(sid, idx, kartState) {
     placeholder.geometry.dispose();
     placeholder.material.dispose();
     group.add(kart);
+    // Cache the kart model + its wheel pivots so the per-frame visual
+    // rig can spin the wheels, steer the front pair, and apply
+    // suspension-style body roll/pitch. Without this every remote
+    // kart slides forward with frozen wheels (reads as broken).
+    const entry = ghosts.get(sid);
+    if (entry) {
+      entry.kartModel = kart;
+      entry.kartBaseY = kart.position.y;
+      entry.wheels = resolveKartWheels(kart) || null;
+    }
   }).catch(() => { /* keep placeholder */ });
   // Per-kart FX rig: skid trails, drift smoke, drift sparks, boost
   // flames, burnout puffs. Tinted by the player's chosen GLO colour
@@ -287,6 +306,16 @@ function ensureGhost(sid, idx, kartState) {
     // Each entry: { t, x, y, z, qx, qy, qz, qw, vx, vy, vz }.
     snapshots: [],
     interpDelayMs: 110, // adapted at runtime by the network stats; see tick()
+    // Visual physics rig (populated when GLB resolves):
+    kartModel: null,        // THREE.Group of the loaded kart GLB
+    kartBaseY: -KART_VISUAL_DROP_MM,
+    wheels: null,           // { fl, fr, rl, rr } pivots from resolveKartWheels
+    wheelRollAngle: 0,      // accumulated rolling rotation (rad)
+    smoothedSteer: 0,       // low-passed steering for visual lerp on front wheels
+    smoothedRoll: 0,        // low-passed body roll (rad)
+    smoothedPitch: 0,       // low-passed body pitch (rad)
+    suspensionBob: 0,       // low-passed Y bob (mm) from vertical accel
+    lastVx: 0, lastVy: 0, lastVz: 0, lastVelT: 0, // for accel finite-diff
   };
   ghosts.set(sid, entry);
   return entry;
@@ -504,9 +533,20 @@ function pollInput() {
   // Signed throttle: +1 forward, -1 reverse, 0 coast. Brake (Space) is
   // its own axis so a player can hold W+Space for a burnout charge or
   // S to actually back out of a wall.
-  input.throttle = fwd ? 1 : (back ? -1 : 0);
+  const targetThrottle = fwd ? 1 : (back ? -1 : 0);
+  const targetSteer = (left ? -1 : 0) + (right ? 1 : 0);
+  // Client-side ramp on steering + throttle so digital keyboard inputs
+  // don't slam the server with a 0 \u2192 1 step every keydown. Pairs with
+  // the visual `smoothedSteer` low-pass to make the kart feel weighted
+  // and analog instead of binary on/off.
+  const dtPoll = 1 / SEND_HZ;
+  const aSteer = 1 - Math.exp(-8.0 * dtPoll);     // full lock ~125 ms
+  const aThrottle = 1 - Math.exp(-6.0 * dtPoll);  // full pedal ~165 ms
+  input.steer    += (targetSteer    - input.steer)    * aSteer;
+  input.throttle += (targetThrottle - input.throttle) * aThrottle;
+  if (Math.abs(input.steer) < 0.005) input.steer = 0;
+  if (Math.abs(input.throttle) < 0.01) input.throttle = 0;
   input.brake = brake ? 1 : 0;
-  input.steer = (left ? -1 : 0) + (right ? 1 : 0);
   input.drift = drift;
 }
 
@@ -587,6 +627,114 @@ function _sampleSnapshotBuffer(entry, renderTimeMs, dst) {
 }
 const _sampleScratch = { x: 0, y: 0, z: 0, qx: 0, qy: 0, qz: 0, qw: 1 };
 
+// ── Kart visual feel rig ────────────────────────────────────────────
+// Drives wheel spin, front-wheel steering, body roll/pitch, and a
+// suspension-style Y bob for every visible kart (local + remote).
+// Without this every remote kart slides forward with frozen wheels
+// and a perfectly rigid chassis \u2014 reads as "broken" / "disconnected".
+//
+// Inputs per kart:
+//   \u2022 group quaternion (smoothed render orientation)
+//   \u2022 latest server velocity from the snapshot buffer / fxState
+//   \u2022 steerIn (server-broadcast steering intent) for remote karts
+//     OR the live `input.steer` for the local kart
+//
+// Outputs:
+//   \u2022 wheels.fl/fr/rl/rr quaternions (steered + rolled)
+//   \u2022 kartModel.position.y (suspension bob)
+//   \u2022 kartModel.rotation (chassis roll on Z + pitch on X)
+function _updateKartVisuals(entry, dt, nowMs) {
+  if (!entry.kartModel) return;
+  const g = entry.group;
+  // Forward axis from render quaternion (Y-up world).
+  const qx = g.quaternion.x, qy = g.quaternion.y, qz = g.quaternion.z, qw = g.quaternion.w;
+  const sinyCosp = 2 * (qw * qy + qx * qz);
+  const cosyCosp = 1 - 2 * (qy * qy + qx * qx);
+  const yaw = Math.atan2(sinyCosp, cosyCosp);
+  const fwdX = Math.sin(yaw), fwdZ = Math.cos(yaw);
+
+  // Latest velocity \u2014 prefer the freshest snapshot (authoritative)
+  // because fxState may be one frame stale.
+  const buf = entry.snapshots;
+  const last = buf.length ? buf[buf.length - 1] : null;
+  const vx = last ? last.vx : (entry._fxState?.velocity.x || 0);
+  const vy = last ? last.vy : (entry._fxState?.velocity.y || 0);
+  const vz = last ? last.vz : (entry._fxState?.velocity.z || 0);
+
+  // Forward + lateral speed (mm/s) in chassis frame.
+  const fwdSpeed = vx * fwdX + vz * fwdZ;
+  const latSpeed = vx * fwdZ - vz * fwdX;
+
+  // Wheel roll integration: omega = fwd / radius. Same units (mm/s, mm).
+  const omega = fwdSpeed / WHEEL_RADIUS_MM;
+  entry.wheelRollAngle += omega * dt;
+
+  // Steering target. For LOCAL kart use live input (zero-latency feel).
+  // For remote karts use the server-broadcast steerIn.
+  const targetSteer = entry.sid === mySid
+    ? (input.steer || 0)
+    : (entry._fxState?.steerIn || 0);
+  // Critically-damped low-pass so the wheel angle doesn't snap on
+  // every input edge.
+  const steerAlpha = 1 - Math.exp(-22 * dt);
+  entry.smoothedSteer += (targetSteer - entry.smoothedSteer) * steerAlpha;
+  const steerAngle = entry.smoothedSteer * VISUAL_STEER_LOCK_RAD;
+
+  if (entry.wheels) {
+    const apply = (w, isFront) => {
+      // Restore base quat \u2192 steer (Y) \u2192 roll (X). YXZ Euler order so
+      // the roll is performed about the post-steered axle.
+      w.quaternion.copy(w.userData.baseQuat);
+      if (isFront) w.rotateY(steerAngle);
+      w.rotateX(entry.wheelRollAngle);
+    };
+    apply(entry.wheels.fl, true);
+    apply(entry.wheels.fr, true);
+    apply(entry.wheels.rl, false);
+    apply(entry.wheels.rr, false);
+  }
+
+  // ── Chassis roll / pitch / suspension bob ─────────────────────
+  // Derive longitudinal + lateral acceleration via finite-diff of the
+  // raw server velocity (snapshot deltas). Then map to chassis tilt:
+  //   roll  = -lateralAccel  \u2192 outside wheels compress in a turn
+  //   pitch = +longitudinalAccel \u2192 squat under accel, dive under brake
+  // Convert mm/s\u00b2 \u2192 m/s\u00b2 \u2192 fraction of g, then scale to a small
+  // tilt angle (~6\u00b0 max). All values low-passed so the chassis
+  // doesn't twitch on snapshot jitter.
+  const dtAccel = Math.max(0.016, (nowMs - (entry.lastVelT || nowMs)) / 1000);
+  const ax = (vx - (entry.lastVx || 0)) / dtAccel;
+  const az = (vz - (entry.lastVz || 0)) / dtAccel;
+  const ay = (vy - (entry.lastVy || 0)) / dtAccel;
+  entry.lastVx = vx; entry.lastVy = vy; entry.lastVz = vz; entry.lastVelT = nowMs;
+  // Project accel into chassis frame.
+  const fwdAccel = (ax * fwdX + az * fwdZ) / WORLD_UNITS_PER_M; // m/s\u00b2
+  const latAccel = (ax * fwdZ - az * fwdX) / WORLD_UNITS_PER_M; // m/s\u00b2
+  const vertAccel = ay / WORLD_UNITS_PER_M;
+  const G = 9.81;
+  // Tilt scales: ~3\u00b0 / g cornering, ~5\u00b0 / g squat\u2011dive. Capped.
+  const TILT_PER_G_LAT = 0.052;  // \u22483\u00b0
+  const TILT_PER_G_LON = 0.087;  // \u22485\u00b0
+  const TILT_CAP = 0.14;          // \u22488\u00b0
+  const targetRoll  = Math.max(-TILT_CAP, Math.min(TILT_CAP, -latAccel / G * TILT_PER_G_LAT));
+  const targetPitch = Math.max(-TILT_CAP, Math.min(TILT_CAP,  fwdAccel / G * TILT_PER_G_LON));
+  const tiltAlpha = 1 - Math.exp(-10 * dt);
+  entry.smoothedRoll  += (targetRoll  - entry.smoothedRoll)  * tiltAlpha;
+  entry.smoothedPitch += (targetPitch - entry.smoothedPitch) * tiltAlpha;
+  entry.kartModel.rotation.set(entry.smoothedPitch, 0, entry.smoothedRoll);
+
+  // Suspension Y bob: vertical accel \u2192 small Y offset. Compresses
+  // (negative offset) when chassis accelerates upward (landing),
+  // extends (positive) when falling. Capped so jumps don't make
+  // the model leave the chassis.
+  const targetBob = Math.max(-30, Math.min(30, -vertAccel / G * 18)); // mm
+  const bobAlpha = 1 - Math.exp(-14 * dt);
+  entry.suspensionBob += (targetBob - entry.suspensionBob) * bobAlpha;
+  entry.kartModel.position.y = entry.kartBaseY + entry.suspensionBob;
+  // Silence unused-locals warning while keeping vars intentional.
+  void fwdSpeed; void latSpeed;
+}
+
 function tick(now) {
   const dt = Math.min((now - lastFrame) / 1000, 0.05);
   lastFrame = now;
@@ -612,45 +760,56 @@ function tick(now) {
       }
     }
     if (!usedBuffer) {
-      g.position.x += (t.x - g.position.x) * LERP;
-      g.position.y += (t.y - g.position.y) * LERP;
-      g.position.z += (t.z - g.position.z) * LERP;
-      g.quaternion.slerp(new THREE.Quaternion(t.qx, t.qy, t.qz, t.qw), LERP);
-    }
-    // Phase B1a \u2014 lightweight input prediction for the LOCAL kart.
-    // Until full client-side physics replay (B1) lands, we cheat: visually
-    // bias the local kart's position forward by (server velocity \u00d7 RTT/2)
-    // and add a tiny extra yaw kick from the live steer input. This makes
-    // the kart appear to react instantly to the user's stick / keys while
-    // remaining server-authoritative \u2014 the position will snap back if the
-    // server says otherwise, but the snap is < 0.3 m at 100 ms RTT and
-    // imperceptible after the LERP.
-    if (entry.sid === mySid) {
-      const buf = entry.snapshots;
-      const last = buf.length ? buf[buf.length - 1] : null;
-      if (last) {
-        const lookaheadSec = Math.min(0.12, (_netRttMs * 0.5) / 1000);
-        g.position.x += last.vx * lookaheadSec;
-        g.position.y += last.vy * lookaheadSec;
-        g.position.z += last.vz * lookaheadSec;
+      // Phase B1b \u2014 stable client-side prediction for the LOCAL kart.
+      //
+      // The previous implementation LERPed to the last server target
+      // and then ADDED `velocity * RTT/2` ON TOP every render frame.
+      // Because the lookahead was re-applied each frame (not folded
+      // into the LERP target), it produced a per-frame additive bias
+      // that visibly jittered \u2014 the kart's render position oscillated
+      // between (target + bias) and (smoothed target + new bias)
+      // every snapshot delivery.
+      //
+      // Fix: integrate the freshest snapshot's velocity from the
+      // snapshot timestamp through "now + RTT/2", set THAT as the
+      // LERP target, and exponentially smooth the visual position
+      // toward it. The kart still leads the server by RTT/2 (so
+      // controls feel instant), but the prediction is computed once
+      // per frame relative to a STABLE anchor instead of stacking on
+      // top of the previous frame.
+      let tx = t.x, ty = t.y, tz = t.z;
+      let tqx = t.qx, tqy = t.qy, tqz = t.qz, tqw = t.qw;
+      if (entry.sid === mySid) {
+        const buf = entry.snapshots;
+        const last = buf.length ? buf[buf.length - 1] : null;
+        if (last) {
+          const ageSec = Math.max(0, (now - last.t) / 1000);
+          const halfRttSec = Math.min(0.12, (_netRttMs * 0.5) / 1000);
+          const leadSec = Math.min(0.18, ageSec + halfRttSec);
+          tx = last.x + last.vx * leadSec;
+          ty = last.y + last.vy * leadSec;
+          tz = last.z + last.vz * leadSec;
+          tqx = last.qx; tqy = last.qy; tqz = last.qz; tqw = last.qw;
+        }
       }
-      // Visual yaw nudge from live steer (capped). Three.js quaternion
-      // multiplication: q' = q * yaw(\u0394).
-      const yawKickRad = (input.steer || 0) * 0.04; // \u22482\u00b0 max nudge
-      if (Math.abs(yawKickRad) > 1e-4) {
-        const half = yawKickRad * 0.5;
-        const s = Math.sin(half);
-        const c = Math.cos(half);
-        // local-Y rotation quaternion (0, s, 0, c)
-        const qx = g.quaternion.x, qy = g.quaternion.y, qz = g.quaternion.z, qw = g.quaternion.w;
-        g.quaternion.set(
-          qx * c + qz * s,
-          qy * c + qw * s,
-          qz * c - qx * s,
-          qw * c - qy * s,
-        );
-      }
+      // Frame-rate-independent exponential smoothing toward the
+      // (predicted) target. ALPHA picks ~LERP at 60 fps but stays
+      // well-behaved at 30 / 144 / 240 fps (no over-shoot).
+      const POS_RATE = 12; // 1/s; e^(-12*0.0167) \u2248 0.82, i.e. ~18% per 60 fps frame
+      const ROT_RATE = 18;
+      const aPos = 1 - Math.exp(-POS_RATE * dt);
+      const aRot = 1 - Math.exp(-ROT_RATE * dt);
+      g.position.x += (tx - g.position.x) * aPos;
+      g.position.y += (ty - g.position.y) * aPos;
+      g.position.z += (tz - g.position.z) * aPos;
+      _tmpQuatA.set(tqx, tqy, tqz, tqw);
+      g.quaternion.slerp(_tmpQuatA, aRot);
     }
+    // Visual feel rig: spin wheels, steer the front pair, apply
+    // body roll/pitch + suspension bob. Runs for every kart, local
+    // and remote, using the smoothed render quaternion + the latest
+    // server velocity. See _updateKartVisuals() comments for detail.
+    _updateKartVisuals(entry, dt, now);
     // Per-kart FX driven by latest schema state captured below in
     // onStateChange (entry._fxState is refreshed there each snapshot).
     if (entry.fx && entry._fxState) {
@@ -923,6 +1082,19 @@ async function connect() {
         entry.group.position.set(msg.x, msg.y, msg.z);
       }
       entry.target.x = msg.x; entry.target.y = msg.y; entry.target.z = msg.z;
+      // Reset visual rig state so the kart doesn't carry roll/pitch
+      // or velocity-derived bob into the respawn pose. Without this
+      // a respawn from a wreck mid-air leaves the model tilted for
+      // ~half a second after the chassis snaps upright.
+      entry.smoothedRoll = 0;
+      entry.smoothedPitch = 0;
+      entry.suspensionBob = 0;
+      entry.lastVx = 0; entry.lastVy = 0; entry.lastVz = 0;
+      entry.lastVelT = performance.now();
+      if (entry.kartModel) {
+        entry.kartModel.position.y = entry.kartBaseY;
+        entry.kartModel.rotation.set(0, 0, 0);
+      }
     }
     if (msg.sessionId === mySid) {
       const reason = msg.reason === 'fellOff' ? 'Fell off — respawning' : 'Respawn';
