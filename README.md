@@ -92,7 +92,6 @@ GLO-KARTS + CADKarts is open source and welcomes contributions. See LICENSE for 
 
 ---
 
-**To set the default branch to `glo-karts+CADKarts`, go to your repository settings on GitHub and update the default branch.**
 
 
 
