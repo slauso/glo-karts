@@ -266,8 +266,13 @@ export function applyKartControls(ctx, dt) {
   const mult = playerCombat.boostMult * playerCombat.slowMult;
   const intent = controlState.throttle;
   const driftBoostMul = controlState.boostTimer > 0 ? DRIFT_BOOST_TOPSPEED_MUL : 1;
-  const burnoutBoostMul = (controlState.gloBurnoutT || 0) > 0 ? BURNOUT_BOOST_TOPSPEED_MUL : 1;
-  const speedCap = TOP_SPEED_MS * mult * Math.max(driftBoostMul, burnoutBoostMul);
+  // NOTE: SP playtest does NOT add a burnout-boost top-speed multiplier;
+  // the burnout release "feels" fast simply because the kart goes from
+  // ~0 m/s to TOP_SPEED in a few seconds with full throttle held. Adding
+  // a multiplier here was an MP-only deviation that, combined with the
+  // backward-pointing burnout body force below, made online burnout
+  // glitch (kart launched then got pushed back). Match SP exactly.
+  const speedCap = TOP_SPEED_MS * mult * driftBoostMul;
   const overspeed = (intent > 0 && speedFwd > speedCap * 0.92)
     ? Math.max(0, 1 - (speedFwd - speedCap * 0.92) / (speedCap * 0.18))
     : 1;
@@ -708,25 +713,19 @@ export function applyKartControls(ctx, dt) {
   }
   controlState.burnoutPrevSpace = _spaceForBurnout;
 
-  // Burnout boost integration. Like the drift mini-turbo this is a
-  // forward force applied at a low point on the chassis, so the boost
-  // doesn't pitch the nose up.
+  // Burnout boost decay. SP playtest does NOT apply a body force during
+  // the gloBurnoutT window — the boost effect is purely "release brake
+  // from a stop with full throttle held", letting the engine accelerate
+  // the kart from rest. The previous MP-only `chassisBody.applyForce`
+  // call here used `_fwd * -BURNOUT_BOOST_FORCE`, which is a WORLD-space
+  // backward force (since `_fwd` is the chassis forward direction — see
+  // `speedFwd = v.dot(_fwd)`). That backward push fought the engine and
+  // produced the "glitches out" symptom (weak, juddery acceleration on
+  // release). We still tick gloBurnoutT down here so the visual trail
+  // (KartFxRig) and the broadcast `gloBurnoutT` schema field decay at
+  // the same rate the SP play-main client decays it.
   if ((controlState.gloBurnoutT || 0) > 0) {
     controlState.gloBurnoutT = Math.max(0, controlState.gloBurnoutT - dt);
-    let _bGrounded = false;
-    for (let _i = 0; _i < 4; _i++) {
-      if (vehicle.wheelInfos[_i] && vehicle.wheelInfos[_i].isInContact) { _bGrounded = true; break; }
-    }
-    if (_bGrounded) {
-      const fmag = -BURNOUT_BOOST_FORCE;
-      _driftImpulse.set(_fwd.x * fmag, 0, _fwd.z * fmag);
-      _boostPoint.set(
-        chassisBody.position.x,
-        chassisBody.position.y - M(0.45),
-        chassisBody.position.z,
-      );
-      chassisBody.applyForce(_driftImpulse, _boostPoint);
-    }
   }
 }
 

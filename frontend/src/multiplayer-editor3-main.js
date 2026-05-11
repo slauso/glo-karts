@@ -158,6 +158,29 @@ scene.fog = new THREE.Fog(0x0a0d12, 80 * S, 200 * S);
 
 const camera = new THREE.PerspectiveCamera(60, 1, 0.1 * S, 400 * S);
 camera.position.set(0, 12 * S, 18 * S);
+const CAM_FOV_BASE = 60;
+
+// ── Burnout camera punch (local kart only) ─────────────────────────
+// Mirrors the SP playtest beats:
+//   • While chargingBurnout is true, pull FOV inward (anticipation).
+//   • On the rising edge of gloBurnoutT (release → boost), snap a
+//     positive FOV kick + a brief white flash overlay. Both ease back
+//     fast so the punch reads as a single "pop" rather than a sustained
+//     change. Without this the player gets no proprioceptive cue that
+//     the burnout actually fired, which reads as the move "glitching".
+let _mpBurnoutFovKick = 0;        // current target offset (deg)
+let _mpBurnoutFovKickSm = 0;      // smoothed to camera.fov
+let _mpBurnoutFlash = 0;          // 0..1 white-overlay opacity target
+let _mpPrevGloBurnoutT = 0;       // edge detector for release
+let _mpPrevEngineExploded = false;// edge detector for explosion
+const _mpBurnoutFlashEl = (() => {
+  if (typeof document === 'undefined') return null;
+  const el = document.createElement('div');
+  el.id = 'mp-burnout-flash';
+  el.style.cssText = 'position:fixed;inset:0;pointer-events:none;background:#fff;opacity:0;mix-blend-mode:screen;z-index:9998;transition:none;';
+  document.body.appendChild(el);
+  return el;
+})();
 
 // Lighting parity with single-player playtest (play-main.js): bright sun +
 // ambient + hemi so the track surfaces aren't pitch-black.
@@ -878,6 +901,50 @@ function tick(now) {
     targetCam.copy(me.group.position).addScaledVector(fwd, -14 * S).add(new THREE.Vector3(0, 8 * S, 0));
     camera.position.lerp(targetCam, 0.12);
     camera.lookAt(me.group.position.x, me.group.position.y + 1 * S, me.group.position.z);
+
+    // ── Burnout camera punch ────────────────────────────────────
+    // Drive off the LOCAL kart's broadcast burnout state. Edge-detect
+    // gloBurnoutT 0 → positive (release) and engineExploded false →
+    // true (overheat) for one-shot flash + FOV punch. While charging,
+    // pull FOV in slightly so the release "snap" reads as a contrast.
+    const fxs = me._fxState;
+    if (fxs) {
+      const gloT = +fxs.gloBurnoutT || 0;
+      const exploded = !!fxs.engineExploded;
+      const charging = !!fxs.chargingBurnout;
+      // Rising edge: release boost just fired.
+      if (gloT > 0 && _mpPrevGloBurnoutT <= 0) {
+        // Charge magnitude is approximated by the initial gloT value:
+        // gloT0 = 0.7 + 1.5 * (charge/6). t01 = (gloT0-0.7)/1.5 ∈ [0,1].
+        const t01 = Math.max(0, Math.min(1, (gloT - 0.7) / 1.5));
+        _mpBurnoutFlash = Math.max(_mpBurnoutFlash, 0.5 + 0.5 * t01);
+        _mpBurnoutFovKick = Math.max(_mpBurnoutFovKick, 6.0 * t01);
+      }
+      // Engine overheat: bigger flash.
+      if (exploded && !_mpPrevEngineExploded) {
+        _mpBurnoutFlash = Math.max(_mpBurnoutFlash, 0.85);
+        _mpBurnoutFovKick = Math.max(_mpBurnoutFovKick, 4.0);
+      }
+      // Charging anticipation: pull in FOV up to ~4° at full charge
+      // (mirrors SP _burnoutFovKick = -stage * 4.5).
+      if (charging && gloT <= 0 && !exploded) {
+        const stage = 0.6; // can't read burnoutCharge from schema; use a steady target
+        if (_mpBurnoutFovKick > -stage * 4.0) {
+          _mpBurnoutFovKick = -stage * 4.0;
+        }
+      }
+      _mpPrevGloBurnoutT = gloT;
+      _mpPrevEngineExploded = exploded;
+    }
+    // Decay kick + flash toward 0; smooth FOV onto camera.
+    _mpBurnoutFovKick *= Math.exp(-3.5 * dt);
+    if (Math.abs(_mpBurnoutFovKick) < 0.02) _mpBurnoutFovKick = 0;
+    _mpBurnoutFlash = Math.max(0, _mpBurnoutFlash - dt * 4.0);
+    _mpBurnoutFovKickSm += (_mpBurnoutFovKick - _mpBurnoutFovKickSm) * (1 - Math.exp(-12 * dt));
+    const targetFov = CAM_FOV_BASE + _mpBurnoutFovKickSm;
+    camera.fov += (targetFov - camera.fov) * (1 - Math.exp(-4.0 * dt));
+    camera.updateProjectionMatrix();
+    if (_mpBurnoutFlashEl) _mpBurnoutFlashEl.style.opacity = String(_mpBurnoutFlash);
   } else {
     camera.lookAt(0, 0, 0);
   }
