@@ -725,15 +725,58 @@ class RacingLobby {
    * change them; the back / Main Menu button stays interactive so they
    * can still leave. Cleared automatically when the room closes or when
    * the local client is the host.
+   *
+   * Also toggles a global `.in-lobby` class on the left panel: while
+   * connected (host OR guest), the giant initial mode cards are hidden
+   * — the active mode is already implied by the lobby state, so the
+   * panel collapses to just the active mode setup + a compact mode
+   * status strip.
    */
   _applyGuestLock() {
     const leftPanel = document.querySelector('.simplified-left-panel');
     if (!leftPanel) return;
-    const isGuest = !!(this.room && !this.isHost);
+    const inLobby = !!this.room;
+    const isGuest = inLobby && !this.isHost;
+
+    leftPanel.classList.toggle('in-lobby', inLobby);
     leftPanel.classList.toggle('is-guest-locked', isGuest);
+    if (inLobby) {
+      // Collapse the "pick a mode" initial state — mode is set by the lobby.
+      leftPanel.classList.remove('mode-initial');
+    }
 
     const setup = document.getElementById('inline-setup');
     if (!setup) return;
+
+    // When in a lobby, force the inline setup section visible so the
+    // active-mode title + track picker + settings actually render even
+    // if the user never clicked a mode card locally.
+    if (inLobby) setup.classList.remove('hidden');
+
+    // Compact mode-status strip: replaces the giant mode cards while
+    // connected. Shows the active mode name + role chip (HOST / GUEST)
+    // so the panel still communicates what the user is in.
+    let strip = leftPanel.querySelector('.lobby-mode-strip');
+    if (inLobby) {
+      const modeEntry = getMode(this.selectedModeId);
+      const modeLabel = (modeEntry?.label || this.selectedModeId || 'LOBBY').toUpperCase();
+      const roleLabel = this.isHost ? 'HOST' : 'GUEST';
+      if (!strip) {
+        strip = document.createElement('div');
+        strip.className = 'lobby-mode-strip';
+        // Insert above the mode-selector-container so it sits at the top.
+        const modeCards = leftPanel.querySelector('.mode-selector-container');
+        if (modeCards) leftPanel.insertBefore(strip, modeCards);
+        else leftPanel.prepend(strip);
+      }
+      strip.innerHTML =
+        `<span class="lms-mode"><i class="fas fa-circle-nodes"></i> ${modeLabel}</span>` +
+        `<span class="lms-role lms-role--${this.isHost ? 'host' : 'guest'}">${roleLabel}</span>`;
+    } else if (strip) {
+      strip.remove();
+    }
+
+    // Guest-only read-only banner inside the inline setup.
     let banner = setup.querySelector('.guest-lock-banner');
     if (isGuest) {
       if (!banner) {

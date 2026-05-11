@@ -6499,3 +6499,64 @@ select option {
   opacity: 1;
   filter: none;
 }
+
+
+/* ---------------------------------------------------
+   IN-LOBBY LEFT PANEL — compact mode strip
+   While connected to any lobby (host or guest), hide
+   the giant initial mode cards (irrelevant; the mode
+   is already determined by the lobby) and show a
+   compact mode-status strip at the top instead.
+--------------------------------------------------- */
+.simplified-left-panel.in-lobby .mode-selector-container {
+  display: none !important;
+}
+
+.simplified-left-panel .lobby-mode-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 4px 4px 10px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: linear-gradient(180deg,
+    rgba(255, 0, 110, 0.10) 0%,
+    rgba(120, 0, 60, 0.06) 100%);
+  border: 1px solid rgba(255, 0, 110, 0.28);
+  box-shadow: 0 0 14px rgba(255, 0, 110, 0.10) inset;
+  user-select: none;
+}
+.simplified-left-panel .lms-mode {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 1.6px;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.95);
+  text-shadow: 0 0 8px rgba(255, 0, 110, 0.35);
+}
+.simplified-left-panel .lms-mode i {
+  font-size: 0.85rem;
+  color: rgba(255, 0, 110, 0.95);
+}
+.simplified-left-panel .lms-role {
+  font-size: 0.58rem;
+  font-weight: 800;
+  letter-spacing: 1.6px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  text-transform: uppercase;
+}
+.simplified-left-panel .lms-role--host {
+  color: rgba(120, 255, 180, 0.95);
+  background: rgba(0, 200, 120, 0.15);
+  border: 1px solid rgba(0, 220, 130, 0.45);
+}
+.simplified-left-panel .lms-role--guest {
+  color: rgba(255, 200, 90, 0.95);
+  background: rgba(255, 170, 60, 0.12);
+  border: 1px solid rgba(255, 180, 60, 0.42);
+}
