@@ -69,6 +69,12 @@ type("uint32")(KartState.prototype, "lastSeq");
 type("string")(KartState.prototype, "name");
 type("string")(KartState.prototype, "color");
 type("string")(KartState.prototype, "kartId");
+// Customisable underglow — broadcast so each client renders the
+// player's chosen GLO pattern + colour beneath every kart, identical
+// to the SP playtest "Pick Your GLO" rig.
+type("string")(KartState.prototype, "gloEffect");
+type("string")(KartState.prototype, "gloColor");
+type("string")(KartState.prototype, "gloColor2");
 type("uint8")(KartState.prototype, "lap");
 type("uint8")(KartState.prototype, "place");
 type("boolean")(KartState.prototype, "finished");
@@ -354,6 +360,9 @@ export class Editor3RaceRoom extends Room {
     ks.name = String(options.playerName || `Player_${client.sessionId.slice(0, 4)}`).slice(0, 24);
     ks.color = String(options.playerColor || "#ff3aa1");
     ks.kartId = String(options.playerKart || options.kartId || "tux");
+    ks.gloEffect = String(options.gloEffect || "solid");
+    ks.gloColor = String(options.gloColor || "#ff0080");
+    ks.gloColor2 = String(options.gloColor2 || "#00e5ff");
     ks.lap = 0; ks.place = 1; ks.finished = false;
     ks.driftActive = false; ks.driftTier = 0;
     ks.boostTimer = 0; ks.gloBurnoutT = 0;

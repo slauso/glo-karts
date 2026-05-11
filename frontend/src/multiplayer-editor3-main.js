@@ -21,8 +21,9 @@ import { buildSegmentMesh } from './editor3/segment-builder.js';
 import { SEGMENTS, TILE } from './editor3/segments.js';
 import { WORLD_UNITS_PER_M } from './editor3/units.js';
 import { cloneKart } from './editor3/kart-loader.js';
-import { DEFAULT_KART_ID } from './editor3/kart-catalog.js';
+import { DEFAULT_KART_ID, KART_BY_ID } from './editor3/kart-catalog.js';
 import { KartFxRig, spawnPickupBurst } from './editor3/kart-fx-rig.js';
+import { createKartUnderglow, DEFAULT_GLO_EFFECT, DEFAULT_GLO_COLOR, DEFAULT_GLO_COLOR2 } from './kart-glo.js';
 
 // Match the shared physics module so the visual offset for the cloned
 // kart GLB places the wheels on the contact patch instead of leaving
@@ -33,7 +34,6 @@ import { createKartAudio, STD_KIT } from './editor3/kart-audio.js';
 const S = WORLD_UNITS_PER_M;
 const SEND_HZ = 60;
 const TUTORIAL_LOOP_ID = '11111111-1111-1111-1111-111111111111';
-const PEER_COLORS = [0xff3aa1, 0x00e5ff, 0xffd166, 0x06d6a0, 0xff8c42, 0x9d4edd, 0x118ab2, 0xef476f];
 
 const params = new URLSearchParams(window.location.search);
 
@@ -47,8 +47,27 @@ try {
 const TRACK_ID = (GAME_CONFIG && GAME_CONFIG.trackId) || params.get('trackId') || TUTORIAL_LOOP_ID;
 const ROOM_CODE = (GAME_CONFIG && GAME_CONFIG.lobbyCode) || params.get('room') || '';
 const PLAYER_NAME = (GAME_CONFIG && GAME_CONFIG.localPlayerName) || sessionStorage.getItem('playerName') || '';
-const PLAYER_COLOR = (GAME_CONFIG && GAME_CONFIG.localPlayerColor) || sessionStorage.getItem('playerColor') || '';
-const PLAYER_KART = (GAME_CONFIG && GAME_CONFIG.localPlayerKart) || sessionStorage.getItem('playerKart') || DEFAULT_KART_ID;
+const PLAYER_COLOR = (GAME_CONFIG && GAME_CONFIG.localPlayerColor) || sessionStorage.getItem('playerColor') || sessionStorage.getItem('carColor') || '';
+const PLAYER_KART = (GAME_CONFIG && GAME_CONFIG.localPlayerKart)
+  || sessionStorage.getItem('selectedKart')
+  || sessionStorage.getItem('studioSelectedKart')
+  || sessionStorage.getItem('playerKart')
+  || DEFAULT_KART_ID;
+const LOCAL_GLO_EFFECT = (GAME_CONFIG && GAME_CONFIG.localGloEffect) || sessionStorage.getItem('gloEffect') || DEFAULT_GLO_EFFECT;
+const LOCAL_GLO_COLOR = (GAME_CONFIG && GAME_CONFIG.localGloColor) || sessionStorage.getItem('gloColor') || DEFAULT_GLO_COLOR;
+const LOCAL_GLO_COLOR2 = (GAME_CONFIG && GAME_CONFIG.localGloColor2) || sessionStorage.getItem('gloColor2') || DEFAULT_GLO_COLOR2;
+// Mirror the local player's lobby selection back into sessionStorage
+// so any sub-system that reads it later (e.g. resolveSelectedKartId,
+// getStoredGlo) sees the lobby choice rather than a stale default.
+try {
+  if (PLAYER_KART) {
+    sessionStorage.setItem('selectedKart', PLAYER_KART);
+    sessionStorage.setItem('studioSelectedKart', PLAYER_KART);
+  }
+  sessionStorage.setItem('gloEffect', LOCAL_GLO_EFFECT);
+  sessionStorage.setItem('gloColor', LOCAL_GLO_COLOR);
+  sessionStorage.setItem('gloColor2', LOCAL_GLO_COLOR2);
+} catch { /* sessionStorage may be blocked */ }
 const TOTAL_LAPS = (GAME_CONFIG && GAME_CONFIG.totalLaps) || 3;
 const WEAPON_POOL = (GAME_CONFIG && Array.isArray(GAME_CONFIG.weaponPool)) ? GAME_CONFIG.weaponPool : null;
 const CUSTOM_TRACK_DATA = (GAME_CONFIG && GAME_CONFIG.customTrackData) || '';
@@ -141,30 +160,45 @@ function buildTrackVisuals(trackData) {
 }
 
 // ── Kart ghosts ─────────────────────────────────────────────────────
-const ghosts = new Map(); // sessionId -> { group, target:{x,y,z,qx,qy,qz,qw}, color }
+const ghosts = new Map(); // sessionId -> { group, target, color, kartId, fx, underglow }
 
-function pickColor(idx) { return PEER_COLORS[idx % PEER_COLORS.length]; }
+const PEER_FALLBACK = ['#ff3aa1', '#00e5ff', '#ffd166', '#06d6a0', '#ff8c42', '#9d4edd', '#118ab2', '#ef476f'];
+// Convert a colour name / hex / catalog token into a THREE-safe hex
+// string. Falls back to a deterministic palette pick when unparseable
+// so the kart never renders pure white.
+function resolvePlayerColor(raw, idx) {
+  if (raw && typeof raw === 'string' && raw.trim()) {
+    try {
+      const c = new THREE.Color(raw.trim());
+      return `#${c.getHexString()}`;
+    } catch { /* fall through */ }
+  }
+  return PEER_FALLBACK[idx % PEER_FALLBACK.length];
+}
+function resolveKartId(raw) {
+  if (raw && KART_BY_ID[raw]) return raw;
+  return DEFAULT_KART_ID;
+}
 
-function ensureGhost(sid, idx) {
+function ensureGhost(sid, idx, kartState) {
   if (ghosts.has(sid)) return ghosts.get(sid);
-  const color = pickColor(idx);
+  const colorHex = resolvePlayerColor(kartState?.color, idx);
+  const kartId = resolveKartId(kartState?.kartId);
+  const colorNum = new THREE.Color(colorHex).getHex();
   const group = new THREE.Group();
   // placeholder while GLB loads — sit at chassis center (y = 0 in
   // group-local) so the swap to the GLB model doesn't pop visually.
   const placeholder = new THREE.Mesh(
     new THREE.BoxGeometry(1.2 * S, 0.6 * S, 2.0 * S),
-    new THREE.MeshStandardMaterial({ color, transparent: true, opacity: 0.55 }),
+    new THREE.MeshStandardMaterial({ color: colorNum, transparent: true, opacity: 0.55 }),
   );
   placeholder.castShadow = true;
   placeholder.position.y = 0;
   group.add(placeholder);
   scene.add(group);
-  cloneKart(DEFAULT_KART_ID, color).then((kart) => {
+  cloneKart(kartId, colorNum).then((kart) => {
     // Drop the GLB so the kart's wheels sit on the contact patch.
-    // The kart template has y = 0 at the chassis bottom, so shifting
-    // by -CHASSIS_HY puts the chassis bottom at the cannon body's
-    // bottom (where the wheel rays originate). Without this offset
-    // the kart visually floats ~30 cm above the road. Mirrors SP.
+    // Mirrors SP play-main offset (-CHASSIS_HY).
     kart.position.y = -CHASSIS_HY_MM;
     group.remove(placeholder);
     placeholder.geometry.dispose();
@@ -172,14 +206,29 @@ function ensureGhost(sid, idx) {
     group.add(kart);
   }).catch(() => { /* keep placeholder */ });
   // Per-kart FX rig: skid trails, drift smoke, drift sparks, boost
-  // flames, burnout puffs. Driven by broadcast schema fields each
-  // frame so remote ghosts visibly drift / boost / charge identically
-  // to the SP playtest experience.
-  const fx = new KartFxRig({ scene, gloColor: color });
+  // flames, burnout puffs. Tinted by the player's chosen GLO colour
+  // so each remote ghost trails its own brand.
+  const gloColorHex = (kartState?.gloColor && kartState.gloColor.trim()) || colorHex;
+  const fx = new KartFxRig({ scene, gloColor: gloColorHex });
+  // Per-kart underglow disc/halo — mirrors SP playtest "Pick Your GLO"
+  // rig. initialState pins this instance to the broadcast values
+  // instead of the global sessionStorage glo.
+  const underglow = createKartUnderglow(THREE, scene, {
+    innerRadius: 1.1 * S,
+    haloRadius: 3.0 * S,
+    groundOffsetY: 0.7 * S * 0.9, // (CHASSIS_HY + WHEEL_RADIUS) * 0.9
+    lightRange: 5.0 * S,
+    castLight: true,
+    initialState: {
+      gloEffect: kartState?.gloEffect || DEFAULT_GLO_EFFECT,
+      gloColor: kartState?.gloColor || DEFAULT_GLO_COLOR,
+      gloColor2: kartState?.gloColor2 || DEFAULT_GLO_COLOR2,
+    },
+  });
   const entry = {
     group,
     target: { x: 0, y: 0, z: 0, qx: 0, qy: 0, qz: 0, qw: 1 },
-    color, fx,
+    color: colorHex, kartId, fx, underglow,
   };
   ghosts.set(sid, entry);
   return entry;
@@ -430,6 +479,7 @@ function tick(now) {
       entry._fxState.quaternion.w = g.quaternion.w;
       entry.fx.update(entry._fxState, dt);
     }
+    if (entry.underglow) entry.underglow.update(dt, g);
   }
   // Spin pickup boxes.
   for (const { mesh, active } of pickupMeshes.values()) {
@@ -512,6 +562,9 @@ async function connect() {
       playerName: PLAYER_NAME || undefined,
       playerColor: PLAYER_COLOR || undefined,
       playerKart: PLAYER_KART || undefined,
+      gloEffect: LOCAL_GLO_EFFECT,
+      gloColor: LOCAL_GLO_COLOR,
+      gloColor2: LOCAL_GLO_COLOR2,
     };
     if (CUSTOM_TRACK_DATA) opts.customTrackData = CUSTOM_TRACK_DATA;
     if (WEAPON_POOL) opts.weaponPool = WEAPON_POOL;
@@ -557,7 +610,7 @@ async function connect() {
     // Karts: ensure ghosts + sync targets + fx state.
     state.karts.forEach((kart, sid) => {
       let entry = ghosts.get(sid);
-      if (!entry) entry = ensureGhost(sid, joinCount++);
+      if (!entry) entry = ensureGhost(sid, joinCount++, kart);
       entry.target.x = kart.x; entry.target.y = kart.y; entry.target.z = kart.z;
       entry.target.qx = kart.qx; entry.target.qy = kart.qy; entry.target.qz = kart.qz; entry.target.qw = kart.qw;
       // Capture the broadcast effect-driving state for this kart so

@@ -693,6 +693,12 @@ class RacingLobby {
           gameConfig.localPlayerName = me.name;
           gameConfig.localPlayerColor = me.playerColor;
           gameConfig.localPlayerKart = me.playerKart;
+          // Carry the local player's GLO selection so the multiplayer
+          // page can render their chosen underglow pattern + colour and
+          // forward it to the race room (which broadcasts it to peers).
+          gameConfig.localGloEffect = me.gloEffect;
+          gameConfig.localGloColor = me.gloColor;
+          gameConfig.localGloColor2 = me.gloColor2;
           sessionStorage.setItem('gameConfig', JSON.stringify(gameConfig));
         }
       } catch { /* best-effort */ }

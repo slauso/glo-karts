@@ -211,9 +211,14 @@ export function createKartUnderglow(THREE, scene, opts = {}) {
   const lightRange    = opts.lightRange    ?? 4.5;
   const castLight     = opts.castLight     ?? true;
 
-  let state = getStoredGlo();
-  const onGloChanged = () => { state = getStoredGlo(); };
-  if (typeof document !== 'undefined') {
+  let state = opts.initialState ? { ...opts.initialState } : getStoredGlo();
+  // When `opts.followStorage` is false (default when initialState is
+  // supplied), the rig ignores global `gloChanged` events and uses
+  // whatever the caller set via setState() — lets multiplayer drive a
+  // distinct GLO per remote ghost.
+  const followStorage = opts.followStorage ?? !opts.initialState;
+  const onGloChanged = () => { if (followStorage) state = getStoredGlo(); };
+  if (typeof document !== 'undefined' && followStorage) {
     document.addEventListener('gloChanged', onGloChanged);
   }
 
@@ -402,7 +407,7 @@ export function createKartUnderglow(THREE, scene, opts = {}) {
   function dispose() {
     if (disposed) return;
     disposed = true;
-    if (typeof document !== 'undefined') {
+    if (typeof document !== 'undefined' && followStorage) {
       document.removeEventListener('gloChanged', onGloChanged);
     }
     scene.remove(halo); scene.remove(disc);
@@ -414,5 +419,13 @@ export function createKartUnderglow(THREE, scene, opts = {}) {
 
   return { update, setEnabled, dispose,
     setIntensityBoost(mult) { _intensityBoostTarget = Math.max(0, mult || 0); },
+    setState(next) {
+      if (!next) return;
+      state = {
+        gloEffect: next.gloEffect || state.gloEffect,
+        gloColor: next.gloColor || state.gloColor,
+        gloColor2: next.gloColor2 || state.gloColor2,
+      };
+    },
     get state() { return state; }, get currentColor() { return _color; } };
 }
