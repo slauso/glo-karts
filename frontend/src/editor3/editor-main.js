@@ -3130,15 +3130,18 @@ function _promptTrackName({ purpose = 'save' } = {}) {
     : purpose === 'cloud'
       ? 'Track name (saved to your cloud My Saves):'
       : 'Track name:';
-  const raw = prompt(label, def);
-  if (raw === null) return null; // user cancelled
-  const name = raw.trim() || 'Untitled Track';
-  // Mirror back into the editor so subsequent saves and the export
-  // filename use the same identity.
-  track.name = name;
-  const el = document.getElementById('trackName');
-  if (el) el.value = name;
-  return name;
+  return gloPrompt(label, {
+    title: purpose === 'publish' ? 'Publish to Community' : 'Save Track',
+    defaultValue: def,
+    okText: purpose === 'publish' ? 'Publish' : 'Save',
+  }).then((raw) => {
+    if (raw === null) return null; // user cancelled
+    const name = raw.trim() || 'Untitled Track';
+    track.name = name;
+    const el = document.getElementById('trackName');
+    if (el) el.value = name;
+    return name;
+  });
 }
 
 // Phase 2.12: a single save funnel that always (a) writes to the local
@@ -3146,20 +3149,35 @@ function _promptTrackName({ purpose = 'save' } = {}) {
 // appears in My Saves on the studio landing page and in the online lobby
 // track picker. `publish=true` flips it to public for Remix Community.
 async function _saveCurrent({ publish = false, askName = true } = {}) {
-  const name = askName ? _promptTrackName({ purpose: publish ? 'publish' : 'cloud' }) : (track.name || 'Untitled Track');
-  if (name === null) return; // cancelled
+  let name;
+  if (askName) {
+    name = await _promptTrackName({ purpose: publish ? 'publish' : 'cloud' });
+    if (name === null) return; // cancelled
+  } else {
+    // Quick-save path: no prompt, just use whatever's in the trackName
+    // input (or fall back to track.name / 'Untitled Track').
+    name = (document.getElementById('trackName')?.value || track.name || '').trim() || 'Untitled Track';
+    track.name = name;
+  }
   const track_data = saveJSON();
   // 1) Always update the browser autoload slot first — this is the offline
   //    safety net and keeps the next "Continue" card pointing at this draft.
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(track_data)); } catch {}
   // 2) Mirror to the cloud (silent failure → keep the local save).
   let cloudOk = false;
+  let cloudErr = '';
   try {
     const stored = localStorage.getItem('gloKartsStudio.authorName') || '';
-    const author = publish
-      ? (prompt('Display name for the author? (leave blank for "Anonymous")', stored) || '').trim()
-      : stored.trim();
-    if (author) { try { localStorage.setItem('gloKartsStudio.authorName', author); } catch {} }
+    let author = stored.trim();
+    if (publish) {
+      const promptedAuthor = await gloPrompt(
+        'Display name for the author? (leave blank for "Anonymous")',
+        { title: 'Author', defaultValue: stored, okText: 'Publish' },
+      );
+      if (promptedAuthor === null) return; // cancelled at author step
+      author = promptedAuthor.trim();
+      if (author) { try { localStorage.setItem('gloKartsStudio.authorName', author); } catch {} }
+    }
     let detail;
     if (currentCloudId) {
       detail = await StudioAPI.update(currentCloudId, {
@@ -3177,6 +3195,7 @@ async function _saveCurrent({ publish = false, askName = true } = {}) {
     cloudOk = true;
   } catch (err) {
     console.warn('[studio] cloud save failed', err);
+    cloudErr = err?.message || 'unknown';
   }
   // 3) Notify any other open tabs (lobby picker / landing) to refresh
   //    their lists so the new save appears immediately.
@@ -3190,9 +3209,9 @@ async function _saveCurrent({ publish = false, askName = true } = {}) {
     }));
   } catch {}
   if (cloudOk) {
-    toast(publish ? `Published "${name}" to community` : `Saved "${name}" (browser + cloud)`);
+    toast(publish ? `Published "${name}" to community` : `Saved "${name}"`);
   } else {
-    toast(`Saved "${name}" to browser (cloud unavailable)`);
+    toast(`Saved "${name}" to browser (cloud unavailable: ${cloudErr})`);
   }
 }
 
@@ -3960,10 +3979,9 @@ _menuDropdown?.addEventListener('click', (e) => {
     };
     input.click();
   } else if (action === 'save') {
-    // Phase 2.12: route the menu's "Save to browser" through the same
-    // funnel as Save to cloud so every save shows up in My Saves and the
-    // online lobby track picker. Falls back gracefully if cloud is down.
-    _saveCurrent({ publish: false, askName: true });
+    // Phase 2.12: quick-save uses the existing trackName input value
+    // (no prompt) and pushes to both local autoload + cloud My Saves.
+    _saveCurrent({ publish: false, askName: false });
   } else if (action === 'landing') {
     showStudioLanding().then(_bootstrapFromChoice);
   } else if (action === 'cloud-save') {
@@ -4029,6 +4047,48 @@ function gloConfirm(message, { title = 'Confirm', okText = 'OK', cancelText = 'C
     document.body.appendChild(overlay);
     requestAnimationFrame(() => overlay.classList.add('open'));
     setTimeout(() => overlay.querySelector('[data-act="ok"]')?.focus(), 30);
+  });
+}
+// GLO-styled prompt dialog (replacement for window.prompt — Chrome can
+// silently suppress prompt() after rapid dialogs / sandboxed contexts,
+// which is why the Save buttons appeared to do nothing for some users).
+// Returns the entered string on OK, or null on Cancel/Esc.
+function gloPrompt(message, { title = 'Input', defaultValue = '', okText = 'OK', cancelText = 'Cancel', placeholder = '' } = {}) {
+  return new Promise((resolve) => {
+    const overlay = document.createElement('div');
+    overlay.className = 'glo-modal-overlay';
+    overlay.innerHTML = `
+      <div class="glo-modal" role="dialog" aria-modal="true" aria-labelledby="gloPromptTitle">
+        <h3 id="gloPromptTitle" class="glo-modal-title"></h3>
+        <p class="glo-modal-msg"></p>
+        <input type="text" class="glo-modal-input" />
+        <div class="glo-modal-actions">
+          <button type="button" class="glo-btn glo-btn-ghost" data-act="cancel">${cancelText}</button>
+          <button type="button" class="glo-btn glo-btn-primary" data-act="ok">${okText}</button>
+        </div>
+      </div>`;
+    overlay.querySelector('.glo-modal-title').textContent = title;
+    overlay.querySelector('.glo-modal-msg').textContent = message;
+    const input = overlay.querySelector('.glo-modal-input');
+    input.value = defaultValue || '';
+    input.placeholder = placeholder || '';
+    const close = (val) => {
+      overlay.classList.add('closing');
+      setTimeout(() => { overlay.remove(); document.removeEventListener('keydown', onKey); resolve(val); }, 140);
+    };
+    const onKey = (e) => {
+      if (e.key === 'Escape') { e.preventDefault(); close(null); }
+      else if (e.key === 'Enter') { e.preventDefault(); close(input.value); }
+    };
+    overlay.addEventListener('click', (e) => {
+      const act = e.target.closest('[data-act]')?.dataset.act;
+      if (act === 'ok') close(input.value);
+      else if (act === 'cancel' || e.target === overlay) close(null);
+    });
+    document.addEventListener('keydown', onKey);
+    document.body.appendChild(overlay);
+    requestAnimationFrame(() => overlay.classList.add('open'));
+    setTimeout(() => { input.focus(); input.select?.(); }, 30);
   });
 }
 async function _confirmReturnToLobby() {
