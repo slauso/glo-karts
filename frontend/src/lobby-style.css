@@ -6426,3 +6426,76 @@ select option {
     0 4px 10px rgba(0,0,0,0.24);
   transition: transform 0.08s ease, box-shadow 0.08s ease;
 }
+
+
+/* ---------------------------------------------------
+   GUEST LOCK — read-only mirror for non-host players
+   Applied to .simplified-left-panel when connected as
+   guest. Mode cards, track picker, and race/battle
+   settings render normally (so guests see the host's
+   live selections) but cannot be interacted with. The
+   setup-header (Main Menu / back button) stays active
+   so guests can leave the lobby.
+--------------------------------------------------- */
+.simplified-left-panel.is-guest-locked .guest-lock-banner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin: 8px 4px 10px;
+  padding: 7px 10px;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 1.4px;
+  text-transform: uppercase;
+  color: rgba(255, 200, 80, 0.92);
+  background: linear-gradient(180deg,
+    rgba(255, 170, 60, 0.10) 0%,
+    rgba(255, 140, 40, 0.06) 100%);
+  border: 1px solid rgba(255, 180, 60, 0.32);
+  border-radius: 8px;
+  box-shadow: 0 0 12px rgba(255, 170, 60, 0.10) inset;
+  text-align: center;
+  user-select: none;
+}
+.simplified-left-panel.is-guest-locked .guest-lock-banner i {
+  font-size: 0.7rem;
+  opacity: 0.85;
+}
+
+/* Greyed-out, non-interactive mirrors of host-controlled sections.
+   Keep them visible so the guest sees the host's selections live. */
+.simplified-left-panel.is-guest-locked .mode-selector-container,
+.simplified-left-panel.is-guest-locked .map-selector-container,
+.simplified-left-panel.is-guest-locked #race-settings,
+.simplified-left-panel.is-guest-locked #battle-settings,
+.simplified-left-panel.is-guest-locked .battle-settings {
+  pointer-events: none;
+  opacity: 0.55;
+  filter: saturate(0.6);
+  user-select: none;
+}
+
+/* Form controls inside the locked sections also get the disabled affordance. */
+.simplified-left-panel.is-guest-locked .mode-selector-container input,
+.simplified-left-panel.is-guest-locked .mode-selector-container select,
+.simplified-left-panel.is-guest-locked .mode-selector-container button,
+.simplified-left-panel.is-guest-locked .map-selector-container input,
+.simplified-left-panel.is-guest-locked .map-selector-container select,
+.simplified-left-panel.is-guest-locked .map-selector-container button,
+.simplified-left-panel.is-guest-locked #race-settings input,
+.simplified-left-panel.is-guest-locked #race-settings select,
+.simplified-left-panel.is-guest-locked #race-settings button,
+.simplified-left-panel.is-guest-locked .battle-settings input,
+.simplified-left-panel.is-guest-locked .battle-settings select,
+.simplified-left-panel.is-guest-locked .battle-settings button {
+  cursor: not-allowed;
+}
+
+/* Setup header (back button + active mode title) stays fully usable so
+   guests can always leave the lobby via Main Menu. */
+.simplified-left-panel.is-guest-locked .setup-header {
+  pointer-events: auto;
+  opacity: 1;
+  filter: none;
+}

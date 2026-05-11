@@ -652,6 +652,7 @@ class RacingLobby {
       this.updatePlayerList();
       this.refreshActionButtons();
       this.refreshBattleControls();
+      this._applyGuestLock();
     });
 
     room.onMessage('joined', (payload) => {
@@ -717,6 +718,40 @@ class RacingLobby {
     this.sendPlayerUpdate();
   }
 
+  /**
+   * Toggle a "read-only mirror" presentation of the left setup panel for
+   * non-host players in an active lobby. Connected guests should see the
+   * host's selections (mode / track / race settings) but not be able to
+   * change them; the back / Main Menu button stays interactive so they
+   * can still leave. Cleared automatically when the room closes or when
+   * the local client is the host.
+   */
+  _applyGuestLock() {
+    const leftPanel = document.querySelector('.simplified-left-panel');
+    if (!leftPanel) return;
+    const isGuest = !!(this.room && !this.isHost);
+    leftPanel.classList.toggle('is-guest-locked', isGuest);
+
+    const setup = document.getElementById('inline-setup');
+    if (!setup) return;
+    let banner = setup.querySelector('.guest-lock-banner');
+    if (isGuest) {
+      if (!banner) {
+        banner = document.createElement('div');
+        banner.className = 'guest-lock-banner';
+        banner.innerHTML = '<i class="fas fa-lock"></i> READ-ONLY \u00B7 HOST CONTROLS THIS LOBBY';
+        const header = setup.querySelector('.setup-header');
+        if (header && header.nextSibling) {
+          setup.insertBefore(banner, header.nextSibling);
+        } else {
+          setup.prepend(banner);
+        }
+      }
+    } else if (banner) {
+      banner.remove();
+    }
+  }
+
   async leaveLobby(showMessage = true) {
     if (!this.room) return;
     try {
@@ -746,6 +781,7 @@ class RacingLobby {
     this.refreshBattleControls();
     this.updateLobbyPresence(statusText);
     this.setJoinStatus(statusText);
+    this._applyGuestLock();
   }
 
   showPartyPanels() {
