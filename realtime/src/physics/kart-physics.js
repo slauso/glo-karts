@@ -737,12 +737,16 @@ export function applyKartControls(ctx, dt) {
  * needing a full keyboard model on the server.
  */
 export function inputsToKeys(input) {
-  const t = Math.max(0, Math.min(1, Number(input?.throttle) || 0));
+  // Throttle is SIGNED in [-1, 1]: positive = forward (W), negative =
+  // reverse (S). Brake is unsigned in [0, 1] = Space. This mirrors SP
+  // playtest where reverse is its own gear, not a brake; without this
+  // mapping karts had no way to back out of a wall.
+  const t = Math.max(-1, Math.min(1, Number(input?.throttle) || 0));
   const b = Math.max(0, Math.min(1, Number(input?.brake) || 0));
   const s = Math.max(-1, Math.min(1, Number(input?.steer) || 0));
   return {
     w: t > 0.01,
-    s: false,                       // online clients use brake for reverse intent
+    s: t < -0.01,
     a: s < -0.05,
     d: s > 0.05,
     space: b > 0.5,

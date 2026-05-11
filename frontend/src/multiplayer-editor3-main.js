@@ -479,6 +479,9 @@ window.addEventListener('keydown', (e) => {
   keys.add(e.code);
   if (e.code === 'KeyE' && roomRef) { try { roomRef.send('fireWeapon', { slot: 'secondary' }); } catch {} }
   if (e.code === 'KeyQ' && roomRef) { try { roomRef.send('swapSecondaryWeapon'); } catch {} }
+  // Phase F1 — manual respawn. Server rate-limits to 1 per 1.5s and
+  // snaps the kart back to its nearest spawn pose with zero velocity.
+  if (e.code === 'KeyR' && roomRef && !inputLocked) { try { roomRef.send('respawn'); } catch {} }
 });
 window.addEventListener('keyup', (e) => { keys.delete(e.code); });
 
@@ -498,8 +501,11 @@ function pollInput() {
   // Drift = Shift (ShiftLeft / ShiftRight). Mirrors SP playtest binding
   // so hop→commit→slide works identically online.
   const drift = keys.has('ShiftLeft') || keys.has('ShiftRight');
-  input.throttle = fwd ? 1 : 0;
-  input.brake = brake ? 1 : (back ? 0.4 : 0);
+  // Signed throttle: +1 forward, -1 reverse, 0 coast. Brake (Space) is
+  // its own axis so a player can hold W+Space for a burnout charge or
+  // S to actually back out of a wall.
+  input.throttle = fwd ? 1 : (back ? -1 : 0);
+  input.brake = brake ? 1 : 0;
   input.steer = (left ? -1 : 0) + (right ? 1 : 0);
   input.drift = drift;
 }
@@ -904,6 +910,24 @@ async function connect() {
   });
   room.onMessage('raceComplete', () => {
     setStatus('race complete', 'ok');
+  });
+  // Phase F1 — server respawned this kart (manual R or fall-through).
+  // Snap the local visual immediately so the player doesn't see a 100ms
+  // teleport-trail; clear the snapshot buffer so the interpolator
+  // doesn't try to LERP across the discontinuity.
+  room.onMessage('kartRespawned', (msg) => {
+    const entry = ghosts.get(msg.sessionId);
+    if (entry) {
+      entry.snapshots.length = 0;
+      if (entry.group) {
+        entry.group.position.set(msg.x, msg.y, msg.z);
+      }
+      entry.target.x = msg.x; entry.target.y = msg.y; entry.target.z = msg.z;
+    }
+    if (msg.sessionId === mySid) {
+      const reason = msg.reason === 'fellOff' ? 'Fell off — respawning' : 'Respawn';
+      setStatus(reason, 'ok');
+    }
   });
 
   // Input send loop (30Hz).

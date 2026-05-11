@@ -283,11 +283,21 @@ export class Editor3RaceRoom extends Room {
     this.onMessage("input", (client, msg) => {
       this.inputs.set(client.sessionId, {
         seq: (msg && msg.seq) | 0,
-        throttle: clamp01(msg?.throttle ?? 0),
+        // Throttle is signed: -1 = reverse, 0 = coast, 1 = full forward.
+        // Was clamp01 here which silently dropped reverse intent; karts
+        // could only roll backward via residual momentum.
+        throttle: clampSym(msg?.throttle ?? 0),
         brake: clamp01(msg?.brake ?? 0),
         steer: clampSym(msg?.steer ?? 0),
         drift: !!msg?.drift,
       });
+    });
+
+    // Phase F1 — off-course recovery. Client binds R; server snaps the
+    // kart to its nearest spawn and zeroes velocity. Rate-limited to one
+    // respawn per 1.5s to prevent grief / abuse.
+    this.onMessage("respawn", (client) => {
+      this._respawnKart(client.sessionId, { reason: "manual" });
     });
 
     this.onMessage("pickupItem", (client, data) => {
@@ -386,8 +396,26 @@ export class Editor3RaceRoom extends Room {
       }
     });
 
-    this.tickHandle = setInterval(() => this._tick(), this.tickDt * 1000);
-    this.snapshotHandle = setInterval(() => this._writeSnapshot(), this.snapshotDt * 1000);
+    // Phase F2 — single deterministic tick loop. We previously ran two
+    // independent setInterval timers (60Hz physics + 30Hz snapshot writer)
+    // which raced under load: the snapshot writer could fire mid-tick and
+    // observe a partially-stepped world, producing one stuttery frame per
+    // contention. Consolidating into a single 60Hz loop that also writes
+    // a snapshot every other tick removes the race and keeps cadence
+    // stable when the event loop is busy.
+    let _snapAcc = 0;
+    const _snapEveryNth = Math.max(1, Math.round(TICK_HZ / SNAPSHOT_HZ));
+    this.tickHandle = setInterval(() => {
+      this._tick();
+      if (++_snapAcc >= _snapEveryNth) { _snapAcc = 0; this._writeSnapshot(); }
+    }, this.tickDt * 1000);
+    this.snapshotHandle = null;
+
+    // Phase F2 — align Colyseus state-flush cadence with our 30Hz
+    // snapshot writer. Default is 50ms (20Hz); a 33ms patch rate keeps
+    // network bandwidth bounded while delivering every snapshot we
+    // generate, which removes the visible stutter at high RTT.
+    this.setPatchRate(1000 / SNAPSHOT_HZ);
 
     log("info", "editor3_room_create", {
       roomId: this.roomId, trackId, trackName: this.state.trackName,
@@ -492,6 +520,56 @@ export class Editor3RaceRoom extends Room {
     this._purgeKart(client.sessionId);
   }
 
+  /**
+   * Phase F1 — reset a kart to its nearest spawn (or finish line).
+   * Used by manual `respawn` messages and the per-tick auto-respawn for
+   * fall-through cases (kart drops below the world floor).
+   */
+  _respawnKart(sessionId, opts = {}) {
+    const v = this.vehicles.get(sessionId);
+    const ks = this.state.karts.get(sessionId);
+    if (!v || !ks) return false;
+    const nowMs = Date.now();
+    if (!this._lastRespawnAt) this._lastRespawnAt = new Map();
+    const last = this._lastRespawnAt.get(sessionId) || 0;
+    if (opts.reason === "manual" && nowMs - last < 1500) return false;
+    this._lastRespawnAt.set(sessionId, nowMs);
+
+    // Pick the nearest spawn ahead of (or at) the kart's current position.
+    // For multi-spawn templates this naturally puts you back near the most
+    // recently passed checkpoint.
+    const spawns = this.spawns && this.spawns.length ? this.spawns : [{ x: 0, y: M(1.5), z: 0, heading: 0 }];
+    let best = spawns[0]; let bestD2 = Infinity;
+    for (const s of spawns) {
+      const dx = s.x - ks.x, dz = s.z - ks.z;
+      const d2 = dx * dx + dz * dz;
+      if (d2 < bestD2) { bestD2 = d2; best = s; }
+    }
+    const heading = best.heading || 0;
+    // Lift the kart slightly above the spawn pose so it doesn't clip into
+    // the deck and immediately fall through.
+    const liftY = M(0.6);
+    v.chassisBody.position.set(best.x, best.y + liftY, best.z);
+    v.chassisBody.quaternion.setFromAxisAngle(new CANNON.Vec3(0, 1, 0), heading);
+    v.chassisBody.velocity.set(0, 0, 0);
+    v.chassisBody.angularVelocity.set(0, 0, 0);
+    // Clear control state so a held drift / boost timer doesn't carry
+    // through the respawn.
+    const cs = this.controlStates?.get(sessionId);
+    if (cs) {
+      cs.throttle = 0; cs.steer = 0;
+      cs.driftActive = false; cs.driftArmed = false; cs.driftAirborne = false;
+      cs.driftCharge = 0; cs.driftTier = 0;
+      cs.boostTimer = 0; cs.gloBurnoutT = 0;
+      cs.engineExplodedUntilMs = 0;
+    }
+    this.broadcast("kartRespawned", {
+      sessionId, reason: opts.reason || "manual",
+      x: best.x, y: best.y + liftY, z: best.z, ts: nowMs,
+    });
+    return true;
+  }
+
   _purgeKart(sessionId) {
     const v = this.vehicles.get(sessionId);
     if (v) {
@@ -509,7 +587,7 @@ export class Editor3RaceRoom extends Room {
 
   onDispose() {
     clearInterval(this.tickHandle);
-    clearInterval(this.snapshotHandle);
+    if (this.snapshotHandle) clearInterval(this.snapshotHandle);
     if (this.tickDurations.length) {
       const sorted = [...this.tickDurations].sort((a, b) => a - b);
       const p = (q) => sorted[Math.floor(sorted.length * q)] ?? 0;
@@ -592,6 +670,18 @@ export class Editor3RaceRoom extends Room {
     const dur = Number(process.hrtime.bigint() - t0) / 1e6;
     this.tickDurations.push(dur);
     if (this.tickDurations.length > 1200) this.tickDurations.shift();
+
+    // Phase F1 — fall-through guard. Any kart that drops below the world
+    // floor (placed at y=-50m by makeWorld) is auto-respawned so the
+    // player isn't stranded. Also catches NaN cases that would otherwise
+    // poison the snapshot stream.
+    const FALL_Y = -M(40);
+    for (const [sid, v] of this.vehicles.entries()) {
+      const py = v.chassisBody.position.y;
+      if (!Number.isFinite(py) || py < FALL_Y) {
+        this._respawnKart(sid, { reason: "fellOff" });
+      }
+    }
 
     // Lap detection.
     if (this.finish && this.state.status === "racing") {
