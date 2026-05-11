@@ -33,7 +33,7 @@
 import { Room } from "@colyseus/core";
 import { Schema, MapSchema, type } from "@colyseus/schema";
 import * as CANNON from "cannon-es";
-import { buildWorldFromTrackData, buildDefaultArena } from "../track/track-loader.js";
+import { buildWorldFromTrackData, buildDefaultArena, validateTrackData } from "../track/track-loader.js";
 import { fetchTrack } from "../track/backend-client.js";
 import { RACE_WEAPON_POOL, WEAPONS, grantWeapon, swapSecondaryWeapon } from "../combat.js";
 import { log } from "../logger.js";
@@ -209,7 +209,31 @@ export class Editor3RaceRoom extends Room {
     }
 
     if (trackData) {
+      // Phase A3 — pre-flight validation. Errors fall back to default arena;
+      // warnings (e.g. missing finish line) are logged so we have a forensic
+      // trail when guests report 'race never ends' or 'wrong starting grid'.
+      const validation = validateTrackData(trackData);
+      if (!validation.ok) {
+        log("warn", "editor3_room_track_invalid", {
+          trackId,
+          errors: validation.errors,
+          warnings: validation.warnings,
+        });
+        // Still attempt to build (forgiving) so a partial track is better
+        // than a blank arena — but downstream clients will see the warnings.
+      } else if (validation.warnings.length) {
+        log("info", "editor3_room_track_warnings", { trackId, warnings: validation.warnings });
+      }
       const result = buildWorldFromTrackData(this.world, trackData);
+      // Phase A2 — surface segment-registry parity issues so we can spot
+      // client/server drift the moment a track loads on the server.
+      if (result.diagnostics?.unknownSegments?.length) {
+        log("warn", "editor3_room_unknown_segments", {
+          trackId,
+          count: result.diagnostics.unknownSegments.length,
+          keys: result.diagnostics.unknownSegments,
+        });
+      }
       this.spawns = result.spawns;
       this.finish = result.finish;
       this.pickupSpawns = result.pickups;

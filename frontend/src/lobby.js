@@ -237,14 +237,21 @@ class RacingLobby {
     document.addEventListener('trackCarouselChanged', (event) => {
       if (!event.detail?.trackId) return;
       const trackId = event.detail.trackId;
+      const source = event.detail.source;
       this.selectedMap = trackId;
       // Phase 2.5: keep customTrackData in sync when the carousel lands on
       // the host's local browser draft so multiplayer-editor3 can ship it
       // through the LobbyRoom -> Editor3RaceRoom path.
+      // Phase A1: do NOT clear customTrackData when the source is the
+      // studio picker (templates / community / mine) \u2014 the picker has
+      // just populated sessionStorage with the cloud track payload.
       if (trackId === LOCAL_DRAFT_TRACK_ID) {
         const draft = readLocalDraftTrack();
         if (draft?.raw) sessionStorage.setItem('customTrackData', draft.raw);
-      } else if (trackId !== CUSTOM_TRACK_ID) {
+      } else if (
+        trackId !== CUSTOM_TRACK_ID &&
+        source !== 'templates' && source !== 'community' && source !== 'mine'
+      ) {
         sessionStorage.removeItem('customTrackData');
       }
       // Sync hidden dropdown for compatibility
@@ -936,9 +943,15 @@ class RacingLobby {
   }
 
   buildSettingsPayload() {
+    // Phase A1: also ship customTrackData when the host has selected a
+    // cloud-backed studio track. The picker pre-fetches the track payload
+    // into sessionStorage on _pick(); without this branch the realtime
+    // server only got the trackId and would render a default arena (which
+    // looked to users as 'misaligned segments').
+    const cachedCustom = sessionStorage.getItem('customTrackData') || '';
     const customTrackData = (this.selectedMap === CUSTOM_TRACK_ID || this.selectedMap === LOCAL_DRAFT_TRACK_ID)
-      ? (sessionStorage.getItem('customTrackData') || readLocalDraftTrack()?.raw || '')
-      : '';
+      ? (cachedCustom || readLocalDraftTrack()?.raw || '')
+      : (cachedCustom || '');
 
     const matchLength = document.getElementById('battle-match-length')?.value || '8';
     const healthMultiplier = document.getElementById('battle-health-multiplier')?.value || '1';

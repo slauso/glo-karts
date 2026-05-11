@@ -137,9 +137,19 @@ export class LobbyRoom extends Room {
         sanitizedPool.forEach((weaponId) => this.state.weaponPool.push(weaponId));
       }
 
-      // Custom track data (max 64KB)
+      // Custom track data — Phase A1: hard-fail above 256 KB instead of
+      // silently truncating (which previously caused 'misaligned segments'
+      // on guests when the host's track JSON exceeded 64 KB).
       if (typeof data.customTrackData === 'string') {
-        this.state.customTrackData = data.customTrackData.slice(0, 65536);
+        const MAX_TRACK_BYTES = 262144; // 256 KB
+        if (data.customTrackData.length > MAX_TRACK_BYTES) {
+          console.warn(`[LobbyRoom] Rejecting customTrackData (${data.customTrackData.length} > ${MAX_TRACK_BYTES} bytes)`);
+          client.send('matchError', {
+            message: `Track too large to broadcast (${(data.customTrackData.length / 1024).toFixed(1)} KB > 256 KB). Trim segments or remove decor.`,
+          });
+        } else {
+          this.state.customTrackData = data.customTrackData;
+        }
       }
 
       this.setMetadata({

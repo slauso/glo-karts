@@ -213,12 +213,41 @@ class LobbyStudioPicker {
   _pick(id, name, source) {
     this.selectedId = id;
     this._refreshActiveStates();
-    // Drive the same channel the legacy carousel uses so lobby.js's
-    // existing trackCarouselChanged listener handles selectedMap +
-    // customTrackData (for the local draft) + sendSettingsUpdate().
-    document.dispatchEvent(new CustomEvent('trackCarouselChanged', {
-      detail: { trackId: id, trackName: name, mode: 'studio', source },
-    }));
+    // Phase A1: for cloud-backed selections (templates / community / mine)
+    // we MUST fetch the full track payload and stash it as customTrackData
+    // before notifying the lobby \u2014 otherwise sendSettingsUpdate() will
+    // ship just the trackId, and the realtime room can't materialise the
+    // track for guests, leading to mis-aligned / blank segment loads.
+    // The local draft branch is handled by lobby.js (reads sessionStorage).
+    const isCloud = source === 'templates' || source === 'community' || source === 'mine';
+    const dispatch = () => {
+      document.dispatchEvent(new CustomEvent('trackCarouselChanged', {
+        detail: { trackId: id, trackName: name, mode: 'studio', source },
+      }));
+    };
+    if (isCloud) {
+      StudioAPI.get(id, { play: true }).then((rec) => {
+        const td = rec?.fields?.track_data || rec?.track_data;
+        // Only the inner `track` blob (placements + meta) is needed by the
+        // physics builder. Decor is intentionally dropped from the wire
+        // payload \u2014 it has no physics impact and bloats the broadcast.
+        const physicsOnly = td?.track ? { track: td.track, meta: td.meta || {} } : td;
+        if (physicsOnly) {
+          try {
+            sessionStorage.setItem('customTrackData', JSON.stringify(physicsOnly));
+          } catch (e) {
+            console.warn('[lobby-studio-picker] failed to cache customTrackData', e);
+          }
+        }
+        dispatch();
+      }).catch((err) => {
+        console.warn('[lobby-studio-picker] failed to fetch track for online play', err);
+        // Still dispatch \u2014 lobby will surface a graceful error path.
+        dispatch();
+      });
+    } else {
+      dispatch();
+    }
   }
 }
 

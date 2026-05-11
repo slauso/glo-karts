@@ -44,11 +44,15 @@ export function buildWorldFromTrackData(world, trackData) {
   const pickups = [];
   let finish = null;
 
+  // Phase A2: collect parity diagnostics (unknown / malformed placements).
+  const unknownSegments = new Set();
+  let skippedMalformed = 0;
+
   let pickupSeq = 0;
   for (const p of placements) {
-    if (!p || typeof p.k !== 'string') continue;
+    if (!p || typeof p.k !== 'string') { skippedMalformed += 1; continue; }
     const def = SEGMENTS[p.k];
-    if (!def) continue;
+    if (!def) { unknownSegments.add(p.k); continue; }
     const worldPos = {
       x: (p.x ?? 0) * TILE * S,
       y: 0,
@@ -101,7 +105,53 @@ export function buildWorldFromTrackData(world, trackData) {
     });
   }
 
-  return { bodies, spawns, finish, pickups };
+  return {
+    bodies, spawns, finish, pickups,
+    diagnostics: {
+      placementsTotal: placements.length,
+      placementsApplied: bodies.length,
+      unknownSegments: [...unknownSegments],
+      skippedMalformed,
+      hasSpawn: spawns.length > 0,
+      hasFinish: !!finish,
+    },
+  };
+}
+
+/**
+ * Phase A3 — lightweight pre-flight validator. Walks the placements list
+ * and reports whether the track is structurally raceable: at least one
+ * known segment, at least one spawn (explicit or fallback), at least one
+ * finish/lap-trigger. Returns { ok, errors:[], warnings:[] } so callers
+ * can refuse to start a match with an explanatory matchError.
+ */
+export function validateTrackData(trackData) {
+  const errors = [];
+  const warnings = [];
+  const placements = extractPlacements(trackData);
+  if (!placements.length) {
+    errors.push('Track has no placements.');
+    return { ok: false, errors, warnings };
+  }
+  let known = 0;
+  let hasSpawn = false;
+  let hasFinish = false;
+  const unknownSegments = new Set();
+  for (const p of placements) {
+    if (!p || typeof p.k !== 'string') continue;
+    const def = SEGMENTS[p.k];
+    if (!def) { unknownSegments.add(p.k); continue; }
+    known += 1;
+    if (def.isSpawn) hasSpawn = true;
+    if (def.isFinish) hasFinish = true;
+  }
+  if (known === 0) errors.push('Track contains zero recognised segments.');
+  if (!hasSpawn) warnings.push('No explicit spawn segment; falling back to first placement.');
+  if (!hasFinish) warnings.push('No finish/lap-trigger segment; race cannot complete.');
+  if (unknownSegments.size) {
+    warnings.push(`Unknown segment keys: ${[...unknownSegments].join(', ')}`);
+  }
+  return { ok: errors.length === 0, errors, warnings, unknownSegments: [...unknownSegments] };
 }
 
 /**
