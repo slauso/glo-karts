@@ -4057,7 +4057,15 @@ input::placeholder { color: var(--text-muted); font-size: 0.88rem; }
   gap: 8px;
   width: 100%;
   margin-top: 8px;
+  /* Phase 2.12: declare an inline-size containment context so the picker's
+     internal layout adapts to the host card width (which the lobby
+     resizes based on viewport / sidebar variants) without clipping. */
+  container-type: inline-size;
+  container-name: lsp;
+  min-width: 0;
+  box-sizing: border-box;
 }
+.lobby-studio-picker * { box-sizing: border-box; }
 .lobby-studio-picker.hidden { display: none; }
 
 .lsp-tabs {
@@ -4065,35 +4073,54 @@ input::placeholder { color: var(--text-muted); font-size: 0.88rem; }
   gap: 4px;
   border-bottom: 1px solid var(--lg-border);
   padding-bottom: 4px;
+  min-width: 0;
 }
 .lsp-tab {
-  flex: 1;
+  flex: 1 1 0;
+  min-width: 0; /* allow shrink without overflow */
   background: transparent;
   border: 0;
   color: var(--text-muted);
   font-family: var(--font-ui);
-  font-size: 0.62rem;
+  /* Scale tab font with host width — never smaller than 0.55rem, never
+     larger than 0.7rem. */
+  font-size: clamp(0.55rem, 2.6cqi, 0.7rem);
   font-weight: 700;
-  letter-spacing: 1.5px;
+  letter-spacing: 1px;
   text-transform: uppercase;
-  padding: 6px 4px;
+  padding: 6px 2px;
   cursor: pointer;
   border-bottom: 2px solid transparent;
   transition: color 0.15s ease, border-color 0.15s ease;
+  /* If the label is too long for the available cell, ellipsise rather
+     than wrap onto a second line (which used to push the active
+     underline below the next row). */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: center;
 }
 .lsp-tab:hover { color: #fff; }
 .lsp-tab.active {
   color: #fff;
   border-bottom-color: var(--accent, #ff0080);
 }
+/* Very narrow hosts: tighten letter-spacing so all three labels fit. */
+@container lsp (max-width: 260px) {
+  .lsp-tab { letter-spacing: 0.5px; padding: 6px 1px; }
+}
 
 .lsp-list {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  max-height: 360px;
+  /* Use a flexible max-height that won't blow past the viewport on
+     short screens but still gives room on tall ones. */
+  max-height: min(360px, 55vh);
   overflow-y: auto;
+  overflow-x: hidden;
   padding-right: 4px;
+  min-width: 0;
 }
 .lsp-list::-webkit-scrollbar { width: 6px; }
 .lsp-list::-webkit-scrollbar-thumb {
@@ -4114,6 +4141,8 @@ input::placeholder { color: var(--text-muted); font-size: 0.88rem; }
   display: flex;
   flex-direction: column;
   flex: 0 0 auto;
+  min-width: 0;
+  width: 100%;
   background: rgba(10, 10, 24, 0.6);
   border: 1px solid var(--lg-border);
   border-radius: 8px;
@@ -4133,7 +4162,9 @@ input::placeholder { color: var(--text-muted); font-size: 0.88rem; }
 .lsp-thumb {
   width: 100%;
   aspect-ratio: 2 / 1;
-  min-height: 100px;
+  /* Use a percentage min-height so very narrow hosts don't get a
+     disproportionately tall thumbnail; cap with an absolute fallback. */
+  min-height: 80px;
   background: #07070f;
   display: block;
   overflow: hidden;
@@ -4156,16 +4187,24 @@ input::placeholder { color: var(--text-muted); font-size: 0.88rem; }
   display: flex;
   flex-direction: column;
   gap: 4px;
+  min-width: 0;
 }
 .lsp-name {
   font-family: var(--font-display);
-  font-size: 0.78rem;
+  /* Scale name with host width so a long track title doesn't overflow
+     a narrow card. */
+  font-size: clamp(0.7rem, 4cqi, 0.85rem);
   font-weight: 400;
   letter-spacing: 1px;
   color: #fff;
   text-transform: uppercase;
   margin: 0;
   line-height: 1.15;
+  /* Allow wrapping but break long unbroken strings so they don't push
+     siblings off the edge. */
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  min-width: 0;
 }
 .lsp-meta {
   font-family: var(--font-ui);
@@ -4173,6 +4212,7 @@ input::placeholder { color: var(--text-muted); font-size: 0.88rem; }
   color: var(--text-muted);
   margin: 0;
   letter-spacing: 0.5px;
+  overflow-wrap: anywhere;
 }
 .lsp-desc {
   font-family: var(--font-ui);
@@ -4184,12 +4224,14 @@ input::placeholder { color: var(--text-muted); font-size: 0.88rem; }
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+  overflow-wrap: anywhere;
 }
 .lsp-tags {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
   margin-top: 2px;
+  min-width: 0;
 }
 .lsp-tag {
   font-family: var(--font-ui);
@@ -4202,6 +4244,10 @@ input::placeholder { color: var(--text-muted); font-size: 0.88rem; }
   border: 1px solid rgba(255, 0, 128, 0.3);
   border-radius: 999px;
   padding: 2px 7px;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .lsp-use {
   margin-top: 6px;
@@ -4211,13 +4257,16 @@ input::placeholder { color: var(--text-muted); font-size: 0.88rem; }
   border: 0;
   border-radius: 6px;
   font-family: var(--font-ui);
-  font-size: 0.65rem;
+  font-size: clamp(0.6rem, 3cqi, 0.72rem);
   font-weight: 700;
   letter-spacing: 1.2px;
   text-transform: uppercase;
-  padding: 7px;
+  padding: 7px 8px;
   cursor: pointer;
   transition: filter 0.15s ease;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .lsp-use:hover { filter: brightness(1.1); }
 .lsp-tile.active .lsp-use {
