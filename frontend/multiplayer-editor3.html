@@ -5,158 +5,282 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>GLO KARTS — Online (editor3)</title>
   <link rel="icon" href="data:," />
+  <link href="https://fonts.googleapis.com/css2?family=Bungee&family=Exo+2:wght@400;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="src/lobby-style.css">
   <style>
-    html, body { margin: 0; height: 100%; background: #0a0d12; color: #e6edf3; font-family: 'Inter', system-ui, sans-serif; overflow: hidden; }
+    /* ===========================================================
+       GLO KARTS \u2014 Online (editor3) shell
+       Aligns the in-race HUD + pregame lobby overlay with the
+       Liquid Glass design language used in the main lobby.
+       =========================================================== */
+    html, body {
+      margin: 0; height: 100%;
+      background:
+        radial-gradient(ellipse 120% 80% at 50% -10%, rgba(180,0,90,0.18) 0%, transparent 60%),
+        radial-gradient(ellipse 80% 60% at 80% 110%, rgba(100,0,60,0.10) 0%, transparent 55%),
+        #05050a;
+      color: var(--text, #ffffff);
+      font-family: var(--font-ui, "Exo 2", "Poppins", sans-serif);
+      overflow: hidden;
+    }
     canvas { display: block; width: 100%; height: 100%; }
-    .hud {
-      position: fixed; left: 16px; top: 16px;
-      background: rgba(20,24,30,0.88); padding: 10px 14px; border-radius: 6px;
-      font-size: 13px; min-width: 220px;
-    }
-    .hud b { color: #ff3aa1; }
-    .hud .row { display:flex; justify-content: space-between; gap: 12px; }
-    .hud .ok { color: #00e5ff; }
-    .hud .warn { color: #ffd166; }
-    .hud .err { color: #ff4d6d; }
-    .controls {
-      position: fixed; left: 16px; bottom: 16px;
-      background: rgba(20,24,30,0.85); padding: 10px 14px; border-radius: 6px;
-      font-size: 12px; color: #8b96a3;
-    }
-    .controls b { color: #e6edf3; }
 
-    /* ── Pregame lobby + pause overlay ─────────────────────────── */
+    /* HUD chips \u2014 shared liquid glass surface */
+    .hud, .controls {
+      position: fixed;
+      padding: 10px 14px;
+      border-radius: 14px;
+      background: var(--lg-surface, rgba(255,255,255,0.05));
+      border: 1px solid var(--lg-border, rgba(255,255,255,0.1));
+      backdrop-filter: var(--lg-blur, blur(12px) saturate(140%));
+      -webkit-backdrop-filter: var(--lg-blur, blur(12px) saturate(140%));
+      box-shadow: 0 12px 36px rgba(0,0,0,0.45);
+      font-size: 13px;
+      letter-spacing: 0.04em;
+    }
+    .hud { left: 16px; top: 16px; min-width: 220px; }
+    .controls { left: 16px; bottom: 16px; font-size: 12px; color: var(--text-sub, rgba(255,255,255,0.65)); }
+    .hud b { color: var(--accent, #ff0080); }
+    .hud .row { display: flex; justify-content: space-between; gap: 12px; padding: 2px 0; }
+    .hud .ok   { color: #00e5ff; }
+    .hud .warn { color: #ffd166; }
+    .hud .err  { color: #ff4d6d; }
+    .controls b { color: var(--text, #ffffff); }
+
+    /* \u2500\u2500 Pregame lobby + pause overlay \u2014 LIQUID GLASS \u2500\u2500 */
     .overlay {
       position: fixed; inset: 0;
-      background: radial-gradient(ellipse at center, rgba(20,10,30,0.92) 0%, rgba(5,8,12,0.97) 70%);
       display: flex; align-items: center; justify-content: center;
       z-index: 50;
-      font-family: 'Inter', system-ui, sans-serif;
-      color: #e6edf3;
-      backdrop-filter: blur(8px);
+      background:
+        radial-gradient(ellipse 60% 50% at 50% 30%, rgba(255,0,128,0.18) 0%, transparent 60%),
+        radial-gradient(ellipse 80% 60% at 50% 100%, rgba(0,229,255,0.10) 0%, transparent 60%),
+        rgba(5, 5, 12, 0.78);
+      backdrop-filter: blur(18px) saturate(140%);
+      -webkit-backdrop-filter: blur(18px) saturate(140%);
+      font-family: var(--font-ui, "Exo 2", sans-serif);
+      color: var(--text, #fff);
     }
     .overlay.hidden { display: none; }
+
     .overlay-card {
-      background: linear-gradient(180deg, rgba(30,18,48,0.92), rgba(15,10,25,0.95));
-      border: 1px solid rgba(255, 58, 161, 0.45);
-      box-shadow: 0 0 40px rgba(255, 58, 161, 0.25), inset 0 0 30px rgba(0, 229, 255, 0.05);
-      border-radius: 14px;
-      padding: 28px 36px;
-      min-width: 380px;
-      max-width: 520px;
+      position: relative;
+      min-width: 420px;
+      max-width: 560px;
+      width: 90vw;
+      padding: 32px 36px 24px;
+      border-radius: var(--r-panel, 22px);
+      background:
+        linear-gradient(180deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.02) 60%, rgba(0,0,0,0.18) 100%),
+        var(--lg-surface, rgba(255,255,255,0.05));
+      border: 1px solid var(--lg-border, rgba(255,255,255,0.1));
+      box-shadow:
+        0  2px 0 rgba(255,255,255,0.10) inset,
+        0 -1px 0 rgba(0,0,0,0.40) inset,
+        0 24px 60px rgba(0,0,0,0.55),
+        0 60px 120px rgba(0,0,0,0.30),
+        0 0 80px rgba(255,0,128,0.18);
+      backdrop-filter: var(--lg-blur, blur(12px) saturate(140%));
+      -webkit-backdrop-filter: var(--lg-blur, blur(12px) saturate(140%));
     }
+    /* Top specular rim, matches main-lobby panels */
+    .overlay-card::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border-radius: inherit;
+      pointer-events: none;
+      background: linear-gradient(180deg, rgba(255,255,255,0.18) 0%, transparent 6%, transparent 94%, rgba(0,0,0,0.25) 100%);
+      mix-blend-mode: overlay;
+    }
+
     .overlay-title {
-      font-size: 28px;
-      font-weight: 800;
-      margin: 0 0 4px 0;
-      background: linear-gradient(90deg, #ff3aa1 0%, #00e5ff 100%);
+      margin: 0;
+      font-family: var(--font-display, "Bungee", sans-serif);
+      font-size: 38px;
+      font-weight: 400;
+      letter-spacing: 4px;
+      line-height: 1;
+      background: linear-gradient(180deg, #ffffff 0%, #ff8fc8 55%, #ff0080 100%);
       -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
       background-clip: text;
-      letter-spacing: 2px;
+      -webkit-text-fill-color: transparent;
+      text-shadow: 0 0 28px var(--glo-title-glow, rgba(255,0,128,0.55));
     }
     .overlay-sub {
-      font-size: 12px;
-      color: #8b96a3;
-      letter-spacing: 1px;
+      margin-top: 6px;
+      font-size: 11px;
+      letter-spacing: 0.32em;
       text-transform: uppercase;
-      margin-bottom: 22px;
+      color: var(--text-sub, rgba(255,255,255,0.65));
+    }
+
+    .overlay-rows {
+      margin-top: 22px;
+      border-top: 1px solid var(--lg-border, rgba(255,255,255,0.10));
     }
     .overlay-row {
-      display: flex; justify-content: space-between; gap: 16px;
-      padding: 8px 0;
-      border-bottom: 1px dashed rgba(255,255,255,0.08);
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 11px 2px;
+      border-bottom: 1px solid var(--lg-border, rgba(255,255,255,0.08));
+      font-size: 13px;
+      letter-spacing: 0.04em;
+    }
+    .overlay-row .k {
+      color: var(--text-sub, rgba(255,255,255,0.65));
+      text-transform: uppercase;
+      font-size: 11px;
+      letter-spacing: 0.16em;
+    }
+    .overlay-row .v {
+      color: var(--text, #fff);
+      font-weight: 700;
       font-size: 14px;
     }
-    .overlay-row:last-of-type { border-bottom: none; }
-    .overlay-row .k { color: #8b96a3; }
-    .overlay-row .v { color: #e6edf3; font-weight: 600; }
     .overlay-row .v.code {
-      font-family: 'Fira Code', monospace;
+      font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
       color: #ffd166;
-      letter-spacing: 2px;
+      letter-spacing: 0.18em;
+      padding: 4px 10px;
+      border-radius: var(--r-pill, 9999px);
+      background: rgba(255,209,102,0.10);
+      border: 1px solid rgba(255,209,102,0.30);
+      font-size: 12px;
     }
+
     .overlay-players {
-      margin: 14px 0 22px 0;
-      max-height: 140px;
+      margin: 18px 0 18px;
+      max-height: 168px;
       overflow-y: auto;
+      display: flex; flex-direction: column; gap: 6px;
+      padding-right: 2px;
     }
+    .overlay-players::-webkit-scrollbar { width: 6px; }
+    .overlay-players::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 3px; }
+
     .overlay-player {
-      display: flex; align-items: center; gap: 10px;
-      padding: 6px 8px;
-      border-radius: 4px;
+      display: flex; align-items: center; gap: 12px;
+      padding: 9px 12px;
+      border-radius: var(--r-card, 14px);
       font-size: 13px;
+      background: rgba(255,255,255,0.03);
+      border: 1px solid var(--lg-border, rgba(255,255,255,0.08));
+      transition: background 0.18s ease, border-color 0.18s ease;
     }
+    .overlay-player:hover { background: rgba(255,255,255,0.06); }
     .overlay-player .swatch {
       width: 14px; height: 14px; border-radius: 50%;
-      box-shadow: 0 0 10px currentColor;
+      box-shadow: 0 0 12px currentColor;
     }
-    .overlay-player.me { background: rgba(255, 58, 161, 0.10); }
+    .overlay-player.me {
+      background: linear-gradient(90deg, rgba(255,0,128,0.18), rgba(255,0,128,0.04));
+      border-color: var(--lg-border-accent, rgba(255,0,128,0.30));
+    }
+    .overlay-player.me .name::after {
+      content: ' \u2014 you';
+      color: var(--accent, #ff0080);
+      font-weight: 700;
+      letter-spacing: 0.04em;
+    }
+
     .overlay-buttons {
-      display: flex; gap: 12px; margin-top: 18px;
+      display: flex; gap: 12px; margin-top: 6px;
     }
     .overlay-btn {
       flex: 1;
-      padding: 12px 18px;
-      border: none;
-      border-radius: 6px;
-      font-size: 14px;
-      font-weight: 700;
-      letter-spacing: 1px;
+      padding: 14px 18px;
+      border: 1px solid transparent;
+      border-radius: var(--r-btn, 12px);
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 800;
+      letter-spacing: 0.18em;
       text-transform: uppercase;
       cursor: pointer;
-      transition: transform 0.08s ease, box-shadow 0.15s ease;
-      font-family: inherit;
+      transition: transform 0.08s ease, box-shadow 0.18s ease, background 0.18s ease, border-color 0.18s ease;
     }
-    .overlay-btn:hover { transform: translateY(-1px); }
+    .overlay-btn:active { transform: translateY(1px); }
     .overlay-btn.primary {
-      background: linear-gradient(135deg, #ff3aa1 0%, #ff6b6b 100%);
       color: #fff;
-      box-shadow: 0 4px 14px rgba(255, 58, 161, 0.4);
+      background: linear-gradient(180deg, rgba(255,0,128,1) 0%, rgba(179,0,89,1) 100%);
+      box-shadow:
+        0 1px 0 rgba(255,255,255,0.25) inset,
+        0 5px 0 var(--accent-dark, #b30059),
+        0 12px 28px rgba(255,0,128,0.40),
+        0 18px 40px rgba(255,0,128,0.18);
+    }
+    .overlay-btn.primary:hover {
+      box-shadow:
+        0 1px 0 rgba(255,255,255,0.35) inset,
+        0 7px 0 var(--accent-dark, #b30059),
+        0 16px 36px rgba(255,0,128,0.55),
+        0 22px 50px rgba(255,0,128,0.25);
+      transform: translateY(-2px);
     }
     .overlay-btn.secondary {
-      background: rgba(255,255,255,0.05);
-      color: #e6edf3;
-      border: 1px solid rgba(255,255,255,0.18);
+      color: var(--text, #fff);
+      background: var(--lg-surface, rgba(255,255,255,0.04));
+      border-color: var(--lg-border-hi, rgba(255,255,255,0.21));
+      backdrop-filter: var(--lg-blur-shallow, blur(6px) saturate(120%));
+      -webkit-backdrop-filter: var(--lg-blur-shallow, blur(6px) saturate(120%));
+    }
+    .overlay-btn.secondary:hover {
+      background: var(--lg-surface-hover, rgba(255,255,255,0.08));
+      border-color: rgba(255,255,255,0.34);
     }
     .overlay-btn.danger {
-      background: rgba(255, 77, 109, 0.15);
       color: #ff4d6d;
-      border: 1px solid rgba(255, 77, 109, 0.45);
+      background: rgba(255,77,109,0.12);
+      border-color: rgba(255,77,109,0.45);
     }
-    .overlay-btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
+    .overlay-btn.danger:hover {
+      background: rgba(255,77,109,0.22);
+      border-color: rgba(255,77,109,0.70);
+      color: #ffe2e8;
+    }
+    .overlay-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
+      background: rgba(255,255,255,0.04);
+      color: var(--text-muted, rgba(255,255,255,0.38));
+      border-color: var(--lg-border, rgba(255,255,255,0.10));
+    }
+
     .overlay-hint {
       margin-top: 14px;
-      font-size: 11px;
-      color: #6a7280;
+      font-size: 10.5px;
+      color: var(--text-muted, rgba(255,255,255,0.38));
       text-align: center;
-      letter-spacing: 1px;
+      letter-spacing: 0.22em;
       text-transform: uppercase;
     }
+
     /* Countdown big number */
     .countdown {
       position: fixed; inset: 0;
       display: flex; align-items: center; justify-content: center;
       z-index: 40;
       pointer-events: none;
-      font-family: 'Inter', system-ui, sans-serif;
+      font-family: var(--font-display, "Bungee", sans-serif);
     }
     .countdown.hidden { display: none; }
     .countdown-num {
-      font-size: 220px;
-      font-weight: 900;
-      background: linear-gradient(180deg, #ff3aa1 0%, #00e5ff 100%);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
-      text-shadow: 0 0 60px rgba(255, 58, 161, 0.6);
-      animation: pulse 1s ease-in-out;
+      font-size: 240px;
+      font-weight: 400;
       letter-spacing: 0;
+      background: linear-gradient(180deg, #ffffff 0%, #ff8fc8 50%, #ff0080 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+      text-shadow: 0 0 80px rgba(255,0,128,0.65), 0 0 140px rgba(255,0,128,0.30);
+      animation: pulse 1s ease-in-out;
     }
     @keyframes pulse {
-      0% { transform: scale(0.6); opacity: 0; }
-      30% { transform: scale(1.15); opacity: 1; }
-      100% { transform: scale(1); opacity: 1; }
+      0%   { transform: scale(0.55); opacity: 0; }
+      30%  { transform: scale(1.18); opacity: 1; }
+      100% { transform: scale(1.00); opacity: 1; }
     }
   </style>
 </head>
@@ -167,11 +291,13 @@
   <div id="overlay-lobby" class="overlay">
     <div class="overlay-card">
       <h1 class="overlay-title">GLO KARTS</h1>
-      <div class="overlay-sub">— neon arena lobby —</div>
-      <div class="overlay-row"><span class="k">Track</span><span class="v" id="lobby-track">…</span></div>
-      <div class="overlay-row"><span class="k">Lobby Code</span><span class="v code" id="lobby-code">—</span></div>
-      <div class="overlay-row"><span class="k">Laps</span><span class="v" id="lobby-laps">3</span></div>
-      <div class="overlay-row"><span class="k">Status</span><span class="v" id="lobby-net-status">connecting…</span></div>
+      <div class="overlay-sub">Neon Arena Lobby</div>
+      <div class="overlay-rows">
+        <div class="overlay-row"><span class="k">Track</span><span class="v" id="lobby-track">…</span></div>
+        <div class="overlay-row"><span class="k">Lobby Code</span><span class="v code" id="lobby-code">—</span></div>
+        <div class="overlay-row"><span class="k">Laps</span><span class="v" id="lobby-laps">3</span></div>
+        <div class="overlay-row"><span class="k">Status</span><span class="v" id="lobby-net-status">connecting…</span></div>
+      </div>
       <div class="overlay-players" id="lobby-players"></div>
       <div class="overlay-buttons">
         <button class="overlay-btn secondary" id="lobby-leave">Back to Menu</button>
@@ -185,10 +311,12 @@
   <div id="overlay-pause" class="overlay hidden">
     <div class="overlay-card">
       <h1 class="overlay-title">Paused</h1>
-      <div class="overlay-sub">— race continues server-side —</div>
-      <div class="overlay-row"><span class="k">Track</span><span class="v" id="pause-track">…</span></div>
-      <div class="overlay-row"><span class="k">Lap</span><span class="v" id="pause-lap">0 / 3</span></div>
-      <div class="overlay-row"><span class="k">Players</span><span class="v" id="pause-players">0</span></div>
+      <div class="overlay-sub">Race continues server-side</div>
+      <div class="overlay-rows">
+        <div class="overlay-row"><span class="k">Track</span><span class="v" id="pause-track">…</span></div>
+        <div class="overlay-row"><span class="k">Lap</span><span class="v" id="pause-lap">0 / 3</span></div>
+        <div class="overlay-row"><span class="k">Players</span><span class="v" id="pause-players">0</span></div>
+      </div>
       <div class="overlay-buttons">
         <button class="overlay-btn primary" id="pause-resume">Resume (Esc)</button>
         <button class="overlay-btn danger"  id="pause-leave">Leave Match</button>

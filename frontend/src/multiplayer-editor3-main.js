@@ -29,6 +29,14 @@ import { createKartUnderglow, DEFAULT_GLO_EFFECT, DEFAULT_GLO_COLOR, DEFAULT_GLO
 // kart GLB places the wheels on the contact patch instead of leaving
 // the chassis hovering above the road. Mirrors SP play-main.js.
 const CHASSIS_HY_MM = 0.3 * WORLD_UNITS_PER_M;
+// Cannon-es RaycastVehicle adds a suspension rest length on top of the
+// chassis half-height (SP uses fixed-height wheels, MP server uses
+// `suspensionRestLength: 0.3m` in realtime/src/physics/kart-physics.js).
+// The broadcast kart.y is the chassis-center, so the visual GLB needs
+// to drop CHASSIS_HY + SUSPENSION_REST_LENGTH so wheels visibly meet
+// the road surface instead of hovering ~30 cm above it.
+const SUSPENSION_REST_MM = 0.3 * WORLD_UNITS_PER_M;
+const KART_VISUAL_DROP_MM = CHASSIS_HY_MM + SUSPENSION_REST_MM;
 import { createKartAudio, STD_KIT } from './editor3/kart-audio.js';
 
 const S = WORLD_UNITS_PER_M;
@@ -221,20 +229,21 @@ function ensureGhost(sid, idx, kartState) {
   const kartId = resolveKartId(kartState?.kartId);
   const colorNum = new THREE.Color(colorHex).getHex();
   const group = new THREE.Group();
-  // placeholder while GLB loads — sit at chassis center (y = 0 in
-  // group-local) so the swap to the GLB model doesn't pop visually.
+  // placeholder while GLB loads — sit at the same chassis offset as
+  // the GLB so the swap doesn't pop visually.
   const placeholder = new THREE.Mesh(
     new THREE.BoxGeometry(1.2 * S, 0.6 * S, 2.0 * S),
     new THREE.MeshStandardMaterial({ color: colorNum, transparent: true, opacity: 0.55 }),
   );
   placeholder.castShadow = true;
-  placeholder.position.y = 0;
+  placeholder.position.y = -SUSPENSION_REST_MM; // chassis bottom drops by suspension extension
   group.add(placeholder);
   scene.add(group);
   cloneKart(kartId, colorNum).then((kart) => {
     // Drop the GLB so the kart's wheels sit on the contact patch.
-    // Mirrors SP play-main offset (-CHASSIS_HY).
-    kart.position.y = -CHASSIS_HY_MM;
+    // Mirrors SP play-main offset, plus the cannon-es suspension rest
+    // length (MP physics has compressible wheels; SP does not).
+    kart.position.y = -KART_VISUAL_DROP_MM;
     group.remove(placeholder);
     placeholder.geometry.dispose();
     placeholder.material.dispose();
@@ -251,7 +260,11 @@ function ensureGhost(sid, idx, kartState) {
   const underglow = createKartUnderglow(THREE, scene, {
     innerRadius: 1.1 * S,
     haloRadius: 3.0 * S,
-    groundOffsetY: 0.7 * S * 0.9, // (CHASSIS_HY + WHEEL_RADIUS) * 0.9
+    // Underglow `groundOffsetY` is positive distance from the anchor
+    // (group/chassis-center) DOWN to the road surface. Server chassis
+    // sits CHASSIS_HY (0.3) + SUSPENSION_REST (0.3) + WHEEL_RADIUS (0.4)
+    // = ~1.0m above ground. Lift slightly to avoid z-fight.
+    groundOffsetY: (CHASSIS_HY_MM + SUSPENSION_REST_MM + 0.4 * S) * 0.95,
     lightRange: 5.0 * S,
     castLight: true,
     initialState: {
@@ -911,6 +924,26 @@ async function connect() {
     const prev = _netRttMs;
     _netRttMs = prev * 0.8 + sampleMs * 0.2;
     _netJitterMs = _netJitterMs * 0.8 + Math.abs(sampleMs - prev) * 0.2;
+    // Phase B5: publish a compact network snapshot on window.__gloDebug
+    // so the online-feel-probe Playwright harness can assert latency,
+    // ghost teleport count, and reconcile correction without scraping
+    // the diag overlay.
+    try {
+      const ghostCount = ghosts.size;
+      let snapDepth = 0;
+      for (const g of ghosts.values()) snapDepth += g.snapshots?.length || 0;
+      window.__gloDebug = window.__gloDebug || {};
+      window.__gloDebug.network = {
+        rttMs: _netRttMs,
+        jitterMs: _netJitterMs,
+        interpDelayMs: _adaptiveInterpDelayMs(),
+        sendHz: SEND_HZ,
+        seqBehind: drift,
+        ghostCount,
+        avgSnapDepth: ghostCount ? (snapDepth / ghostCount) : 0,
+        ts: Date.now(),
+      };
+    } catch { /* probe-only diagnostics */ }
     // Phase E2: surface the live network state on the diagnostics overlay.
     if (_diagOverlay.isVisible()) {
       const ghostCount = ghosts.size;
