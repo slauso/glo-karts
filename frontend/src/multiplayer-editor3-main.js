@@ -92,6 +92,41 @@ function setStatus(text, cls = 'warn') {
   hud.status.className = cls;
 }
 
+// Phase E2 \u2014 client diagnostics overlay (toggle with backtick `).
+// Shows live RTT, jitter, adaptive interp delay, snapshot buffer depth,
+// and last reconcile correction. Off by default; persisted via localStorage.
+const _diagOverlay = (() => {
+  const el = document.createElement('div');
+  el.id = 'net-diag-overlay';
+  Object.assign(el.style, {
+    position: 'fixed', top: '8px', right: '8px', zIndex: '9999',
+    background: 'rgba(0,0,0,0.72)', color: '#9ff', padding: '8px 12px',
+    font: '11px/1.45 ui-monospace, monospace', borderRadius: '6px',
+    pointerEvents: 'none', minWidth: '210px', whiteSpace: 'pre',
+    border: '1px solid rgba(0,229,255,0.4)', display: 'none',
+  });
+  if (typeof document !== 'undefined' && document.body) document.body.appendChild(el);
+  let visible = false;
+  try { visible = localStorage.getItem('glok.netDiag') === '1'; } catch { /* ignore */ }
+  el.style.display = visible ? 'block' : 'none';
+  if (typeof window !== 'undefined') {
+    window.addEventListener('keydown', (e) => {
+      if (e.key === '`' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        visible = !visible;
+        el.style.display = visible ? 'block' : 'none';
+        try { localStorage.setItem('glok.netDiag', visible ? '1' : '0'); } catch { /* ignore */ }
+      }
+    });
+  }
+  return {
+    update(lines) {
+      if (!visible) return;
+      el.textContent = lines.join('\n');
+    },
+    isVisible() { return visible; },
+  };
+})();
+
 // ── Scene ───────────────────────────────────────────────────────────
 const canvas = document.getElementById('canvas');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
@@ -558,6 +593,40 @@ function tick(now) {
       g.position.z += (t.z - g.position.z) * LERP;
       g.quaternion.slerp(new THREE.Quaternion(t.qx, t.qy, t.qz, t.qw), LERP);
     }
+    // Phase B1a \u2014 lightweight input prediction for the LOCAL kart.
+    // Until full client-side physics replay (B1) lands, we cheat: visually
+    // bias the local kart's position forward by (server velocity \u00d7 RTT/2)
+    // and add a tiny extra yaw kick from the live steer input. This makes
+    // the kart appear to react instantly to the user's stick / keys while
+    // remaining server-authoritative \u2014 the position will snap back if the
+    // server says otherwise, but the snap is < 0.3 m at 100 ms RTT and
+    // imperceptible after the LERP.
+    if (entry.sid === mySid) {
+      const buf = entry.snapshots;
+      const last = buf.length ? buf[buf.length - 1] : null;
+      if (last) {
+        const lookaheadSec = Math.min(0.12, (_netRttMs * 0.5) / 1000);
+        g.position.x += last.vx * lookaheadSec;
+        g.position.y += last.vy * lookaheadSec;
+        g.position.z += last.vz * lookaheadSec;
+      }
+      // Visual yaw nudge from live steer (capped). Three.js quaternion
+      // multiplication: q' = q * yaw(\u0394).
+      const yawKickRad = (input.steer || 0) * 0.04; // \u22482\u00b0 max nudge
+      if (Math.abs(yawKickRad) > 1e-4) {
+        const half = yawKickRad * 0.5;
+        const s = Math.sin(half);
+        const c = Math.cos(half);
+        // local-Y rotation quaternion (0, s, 0, c)
+        const qx = g.quaternion.x, qy = g.quaternion.y, qz = g.quaternion.z, qw = g.quaternion.w;
+        g.quaternion.set(
+          qx * c + qz * s,
+          qy * c + qw * s,
+          qz * c - qx * s,
+          qw * c - qy * s,
+        );
+      }
+    }
     // Per-kart FX driven by latest schema state captured below in
     // onStateChange (entry._fxState is refreshed there each snapshot).
     if (entry.fx && entry._fxState) {
@@ -842,6 +911,21 @@ async function connect() {
     const prev = _netRttMs;
     _netRttMs = prev * 0.8 + sampleMs * 0.2;
     _netJitterMs = _netJitterMs * 0.8 + Math.abs(sampleMs - prev) * 0.2;
+    // Phase E2: surface the live network state on the diagnostics overlay.
+    if (_diagOverlay.isVisible()) {
+      const ghostCount = ghosts.size;
+      let snapDepth = 0;
+      for (const g of ghosts.values()) snapDepth += g.snapshots?.length || 0;
+      _diagOverlay.update([
+        `\u25b6 GLO-KARTS NET DIAG  [\\\` to toggle]`,
+        `RTT (proxy)     ${_netRttMs.toFixed(1).padStart(6)} ms`,
+        `Jitter (EWMA)   ${_netJitterMs.toFixed(1).padStart(6)} ms`,
+        `Interp delay    ${_adaptiveInterpDelayMs().toFixed(0).padStart(6)} ms`,
+        `Snapshot depth  ${(ghostCount ? (snapDepth / ghostCount) : 0).toFixed(1).padStart(6)} (\u00d7${ghostCount})`,
+        `Send rate       ${SEND_HZ.toString().padStart(6)} Hz`,
+        `Seq behind      ${drift.toString().padStart(6)}`,
+      ]);
+    }
   }, 1000);
 
   room.onLeave(() => setStatus('disconnected', 'err'));

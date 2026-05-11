@@ -177,6 +177,27 @@ export class Editor3RaceRoom extends Room {
   static maxClients = MAX_PLAYERS;
 
   async onCreate(options = {}) {
+    // Phase D2 \u2014 protocol/engine version handshake. Refuse to boot the
+    // room if a client/lobby is on an incompatible major version. Older
+    // clients omitting these fields are treated as v1 for backwards compat
+    // during the rollout window.
+    const SERVER_PROTOCOL_VERSION = 1;
+    const SERVER_ENGINE_VERSION = 1;
+    const optProto = Number(options.protocolVersion ?? 1);
+    const optEngine = Number(options.engineVersion ?? 1);
+    if (optProto !== SERVER_PROTOCOL_VERSION || optEngine !== SERVER_ENGINE_VERSION) {
+      log("warn", "editor3_room_version_mismatch", {
+        clientProtocol: optProto,
+        serverProtocol: SERVER_PROTOCOL_VERSION,
+        clientEngine: optEngine,
+        serverEngine: SERVER_ENGINE_VERSION,
+      });
+      this.broadcast("matchError", {
+        message: `Version mismatch: client=${optProto}/${optEngine}, server=${SERVER_PROTOCOL_VERSION}/${SERVER_ENGINE_VERSION}. Refresh the page.`,
+      });
+      // continue \u2014 do not throw, so existing flows still work; clients can
+      // surface the warning. Hard refusal can be enabled when versions diverge.
+    }
     this.maxClients = Math.min(Math.max(Number(options.maxPlayers) || MAX_PLAYERS, 1), MAX_PLAYERS);
     this.setState(new Editor3WorldState());
     this.state.totalLaps = Math.min(Math.max(Number(options.totalLaps) || 3, 1), 10);
@@ -316,6 +337,23 @@ export class Editor3RaceRoom extends Room {
       if (!weaponId || ammo <= 0) return;
       const def = WEAPONS[weaponId];
       if (!def) return;
+      // Phase C1 \u2014 server-authoritative weapon cooldown. Without this, a
+      // misbehaving / fast-fingered client could spam fireWeapon every tick
+      // and exhaust ammo (or worse, broadcast a flood of projectileFired
+      // events). We track per-kart per-slot lastFireMs and reject anything
+      // inside the weapon's cooldownMs window (defaults to 200ms).
+      const nowMs = Date.now();
+      if (!this._weaponLastFire) this._weaponLastFire = new Map();
+      const key = `${client.sessionId}:${slot}`;
+      const lastMs = this._weaponLastFire.get(key) || 0;
+      const cooldownMs = Number(def.cooldownMs) > 0 ? Number(def.cooldownMs) : 200;
+      if (nowMs - lastMs < cooldownMs) {
+        // Silent reject (don't tell potentially malicious clients exactly
+        // when they can fire next; they have the cooldown table client-side
+        // for their HUD anyway).
+        return;
+      }
+      this._weaponLastFire.set(key, nowMs);
       if (slot === "reserve") kart.ammo3 = Math.max(0, ammo - 1);
       else kart.ammo2 = Math.max(0, ammo - 1);
       this.broadcast("projectileFired", {
@@ -325,6 +363,27 @@ export class Editor3RaceRoom extends Room {
         x: kart.x, y: kart.y, z: kart.z,
         qx: kart.qx, qy: kart.qy, qz: kart.qz, qw: kart.qw,
       });
+      // Phase C2 \u2014 minimal server-authoritative impact resolution. For
+      // hitscan / front-cone weapons we do an immediate forward-ray check
+      // against the other karts and broadcast a single kartImpact so all
+      // clients display the same VFX. Full ballistic projectile physics
+      // (homing missiles, arcing bombs) remain client-visual-only until
+      // the server-side projectile sim ships; mark those by category.
+      const isHitscan = (def.category === 'hitscan' || def.category === 'cone' || def.range === 'short');
+      if (isHitscan) {
+        const target = this._findForwardCarTarget(kart, Number(def.rangeM) || 18);
+        if (target) {
+          const stunMs = Number(def.stunMs) > 0 ? Number(def.stunMs) : 600;
+          this.broadcast("kartImpact", {
+            sourceId: client.sessionId,
+            targetId: target.sid,
+            weapon: weaponId,
+            x: target.kart.x, y: target.kart.y, z: target.kart.z,
+            stunMs,
+            ts: Date.now(),
+          });
+        }
+      }
     });
 
     this.tickHandle = setInterval(() => this._tick(), this.tickDt * 1000);
@@ -405,19 +464,47 @@ export class Editor3RaceRoom extends Room {
     });
   }
 
-  onLeave(client) {
-    const v = this.vehicles.get(client.sessionId);
+  onLeave(client, consented) {
+    // Phase D3 \u2014 graceful reconnect window. Keep the kart, vehicle body and
+    // combat state warm for ~15s so a client that briefly drops (mobile
+    // hand-off, tab refresh) can rejoin and pick up where they left off.
+    // Consented leaves (host kicks them, race ends) bypass this.
+    if (!consented && this.state.status === "racing") {
+      try {
+        log("info", "editor3_room_leave_pending_reconnect", {
+          roomId: this.roomId, sessionId: client.sessionId,
+        });
+        // allowReconnection returns a Deferred that resolves with the new
+        // client when they rejoin, or rejects after the timeout.
+        // Migrate vehicle/kart state across the new sessionId.
+        // NOTE: the new client comes back with the SAME sessionId.
+        return this.allowReconnection(client, 15).then(() => {
+          log("info", "editor3_room_reconnected", {
+            roomId: this.roomId, sessionId: client.sessionId,
+          });
+        }).catch(() => {
+          this._purgeKart(client.sessionId);
+        });
+      } catch (err) {
+        log("warn", "editor3_room_reconnect_unsupported", { error: err.message });
+      }
+    }
+    this._purgeKart(client.sessionId);
+  }
+
+  _purgeKart(sessionId) {
+    const v = this.vehicles.get(sessionId);
     if (v) {
       v.removeFromWorld(this.world);
       this.world.removeBody(v.chassisBody);
     }
-    this.vehicles.delete(client.sessionId);
-    this.inputs.delete(client.sessionId);
-    this.kartMeta.delete(client.sessionId);
-    this.controlStates?.delete(client.sessionId);
-    this.playerCombats?.delete(client.sessionId);
-    this.state.karts.delete(client.sessionId);
-    log("info", "editor3_room_leave", { roomId: this.roomId, sessionId: client.sessionId, remaining: this.vehicles.size });
+    this.vehicles.delete(sessionId);
+    this.inputs.delete(sessionId);
+    this.kartMeta.delete(sessionId);
+    this.controlStates?.delete(sessionId);
+    this.playerCombats?.delete(sessionId);
+    this.state.karts.delete(sessionId);
+    log("info", "editor3_room_leave", { roomId: this.roomId, sessionId, remaining: this.vehicles.size });
   }
 
   onDispose() {
@@ -447,6 +534,37 @@ export class Editor3RaceRoom extends Room {
       if (other.lap > me.lap) behind++;
     }
     return total <= 1 ? 0.5 : behind / (total - 1);
+  }
+
+  /**
+   * Phase C2 helper: find the closest kart inside a forward cone of the
+   * given source kart. Used to resolve hitscan / short-range weapon
+   * impacts authoritatively on the server.
+   * @param {KartState} src
+   * @param {number} rangeM \u2014 max distance in metres
+   * @returns {{sid:string, kart:KartState}|null}
+   */
+  _findForwardCarTarget(src, rangeM = 18) {
+    if (!src) return null;
+    const range2 = rangeM * rangeM;
+    // Forward vector from src quaternion (rotate +Z by quat).
+    const qx = src.qx, qy = src.qy, qz = src.qz, qw = src.qw;
+    const fx = 2 * (qx * qz + qw * qy);
+    const fy = 2 * (qy * qz - qw * qx);
+    const fz = 1 - 2 * (qx * qx + qy * qy);
+    let bestSid = null, bestKart = null, bestDot = 0.5; // require >60deg fwd
+    let bestDist2 = range2;
+    for (const [sid, k] of this.state.karts.entries()) {
+      if (k === src) continue;
+      const dx = k.x - src.x, dy = k.y - src.y, dz = k.z - src.z;
+      const d2 = dx * dx + dy * dy + dz * dz;
+      if (d2 > bestDist2) continue;
+      const d = Math.sqrt(d2) || 1;
+      const dot = (dx * fx + dy * fy + dz * fz) / d;
+      if (dot < bestDot) continue;
+      bestSid = sid; bestKart = k; bestDist2 = d2;
+    }
+    return bestSid ? { sid: bestSid, kart: bestKart } : null;
   }
 
   _tick() {
@@ -488,8 +606,32 @@ export class Editor3RaceRoom extends Room {
         if (d2 > HALF_TRACK_FAR_RADIUS_MM * HALF_TRACK_FAR_RADIUS_MM) {
           meta.farReached = true;
         }
+        // Phase C3 \u2014 swept-segment crossing check. A fast kart can travel
+        // many metres per tick, so a point-in-radius test alone can miss a
+        // valid lap completion. Test whether the (prevX, prevZ) -> (x, z)
+        // segment passes within FINISH_TRIGGER_RADIUS_MM of the finish.
+        let crossed = false;
+        if (meta.prevX !== undefined) {
+          const ax = meta.prevX, az = meta.prevZ;
+          const bx = kart.x, bz = kart.z;
+          // Closest point on segment AB to the finish point F.
+          const fx = this.finish.x, fz = this.finish.z;
+          const abx = bx - ax, abz = bz - az;
+          const ab2 = abx * abx + abz * abz;
+          if (ab2 > 1e-3) {
+            let t = ((fx - ax) * abx + (fz - az) * abz) / ab2;
+            t = Math.max(0, Math.min(1, t));
+            const cx = ax + abx * t, cz = az + abz * t;
+            const ddx = cx - fx, ddz = cz - fz;
+            if (ddx * ddx + ddz * ddz < FINISH_TRIGGER_RADIUS_MM * FINISH_TRIGGER_RADIUS_MM) {
+              crossed = true;
+            }
+          }
+        }
+        meta.prevX = kart.x; meta.prevZ = kart.z;
+        const inRadius = d2 < FINISH_TRIGGER_RADIUS_MM * FINISH_TRIGGER_RADIUS_MM;
         if (meta.farReached
-            && d2 < FINISH_TRIGGER_RADIUS_MM * FINISH_TRIGGER_RADIUS_MM
+            && (inRadius || crossed)
             && (now - meta.lastLapAt) > MIN_LAP_TIME_MS) {
           kart.lap = Math.min(255, (kart.lap | 0) + 1);
           meta.farReached = false;

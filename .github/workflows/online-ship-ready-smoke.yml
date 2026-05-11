@@ -1,0 +1,79 @@
+name: Online Ship-Ready Smoke
+
+# Phase E3 of the Glo-Karts Online Mode Ship-Ready Plan.
+# Runs the suite of probes (A4, B5, C4, D4, E4) on every PR that touches
+# realtime/, frontend/src/multiplayer-* or frontend/src/modules/realtime/.
+
+on:
+  pull_request:
+    paths:
+      - 'realtime/**'
+      - 'frontend/src/multiplayer-editor3-main.js'
+      - 'frontend/src/modules/realtime/**'
+      - 'frontend/scripts/online-*.mjs'
+      - 'frontend/scripts/track-roundtrip-parity.mjs'
+      - 'frontend/scripts/server-tick-budget-probe.mjs'
+      - '.github/workflows/online-ship-ready-smoke.yml'
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: |
+            frontend/package.json
+            realtime/package.json
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install backend deps
+        working-directory: backend
+        run: |
+          pip install -r requirements.txt
+          python manage.py migrate --noinput
+          # Background django for fixture access during track-roundtrip probe.
+          (python manage.py runserver 0.0.0.0:8000 &) && sleep 4
+
+      - name: Install realtime deps & start server
+        working-directory: realtime
+        run: |
+          npm ci
+          (node src/index.js &) && sleep 3
+          curl -fsS http://127.0.0.1:2567/health
+
+      - name: Install frontend deps & start vite
+        working-directory: frontend
+        run: |
+          npm ci
+          (npm run dev -- --host 0.0.0.0 &) && sleep 6
+          curl -fsS http://127.0.0.1:5173 -o /dev/null
+
+      - name: Phase A4 \u2014 track round-trip parity
+        working-directory: frontend
+        run: node scripts/track-roundtrip-parity.mjs --backend=http://127.0.0.1:8000
+
+      - name: Phase B5 \u2014 online feel probe (scaffold)
+        working-directory: frontend
+        run: node scripts/online-feel-probe.mjs --realtime=ws://127.0.0.1:2567 --frontend=http://127.0.0.1:5173
+
+      - name: Phase C4 \u2014 combat probe (scaffold)
+        working-directory: frontend
+        run: node scripts/online-arena-2p-combat-probe.mjs --realtime=http://127.0.0.1:2567
+
+      - name: Phase D4 \u2014 reconnect probe (scaffold)
+        working-directory: frontend
+        run: node scripts/online-reconnect-probe.mjs --realtime=http://127.0.0.1:2567
+
+      - name: Phase E4 \u2014 server tick budget (scaffold)
+        working-directory: frontend
+        run: node scripts/server-tick-budget-probe.mjs --karts=8 --tickHz=60 --budgetMs=8
+
+      - name: Realtime metrics endpoint reachable
+        run: curl -fsS http://127.0.0.1:2567/metrics | head -30

@@ -173,6 +173,44 @@ export class LobbyRoom extends Room {
       const playerCount = this.state.players.size;
       if (playerCount < 1) return;
 
+      // Phase D1 \u2014 hand-rolled gameConfig validation. Reject obvious shape
+      // problems early with an explicit matchError so guests don't crash on
+      // a bad payload during the race-room boot. Zod kept out of the
+      // dependency tree on purpose; the schema is small and stable.
+      const validationErr = (() => {
+        const s = this.state;
+        if (!s.modeId || typeof s.modeId !== 'string') return 'modeId missing or not a string';
+        if (!s.gameMode || typeof s.gameMode !== 'string') return 'gameMode missing';
+        const isRaceMode = s.modeId === 'race_editor3' || s.modeId === 'online_arena' || s.gameMode === 'race';
+        if (isRaceMode) {
+          if (!s.trackId && !s.customTrackData) return 'race mode requires trackId or customTrackData';
+          if (!Number.isFinite(s.totalLaps) || s.totalLaps < 1 || s.totalLaps > 50) return 'totalLaps must be 1\u201350';
+          if (s.customTrackData) {
+            try {
+              const td = JSON.parse(s.customTrackData);
+              if (!td || typeof td !== 'object') return 'customTrackData not a JSON object';
+              if (!td.track || typeof td.track !== 'object') return 'customTrackData.track missing';
+              const placements = Array.isArray(td.track.placements) ? td.track.placements : null;
+              if (!placements || placements.length === 0) return 'customTrackData has zero placements';
+            } catch (e) {
+              return 'customTrackData is not valid JSON';
+            }
+          }
+        }
+        if (s.gameMode === 'battle') {
+          if (!s.arenaId) return 'battle mode requires arenaId';
+          if (!Number.isFinite(s.scoreLimit) || s.scoreLimit < 1) return 'scoreLimit must be \u22651';
+        }
+        if (!Number.isFinite(s.maxPlayers) || s.maxPlayers < 1 || s.maxPlayers > 12) return 'maxPlayers must be 1\u201312';
+        if (!Number.isFinite(s.botCount) || s.botCount < 0 || s.botCount > 10) return 'botCount must be 0\u201310';
+        return null;
+      })();
+      if (validationErr) {
+        console.warn(`[lobby_room] startMatch rejected: ${validationErr}`);
+        client.send('matchError', { message: `Cannot start match: ${validationErr}` });
+        return;
+      }
+
       // Auto-ready the host when they initiate start
       player.isReady = true;
 
@@ -290,6 +328,20 @@ export class LobbyRoom extends Room {
 
       const gameConfig = {
         type: "startGame",
+        // Phase D2 \u2014 wire-format version handshake. Bump these when the
+        // gameConfig schema or the engine protocol changes in a way that
+        // older clients/servers cannot tolerate. Receivers compare and
+        // surface a clear matchError instead of crashing on missing fields.
+        protocolVersion: 1,
+        engineVersion: 1,
+        // trackVersion travels inside customTrackData (`meta.version`); we
+        // surface it here for quick visibility.
+        trackVersion: (() => {
+          try {
+            const td = this.state.customTrackData ? JSON.parse(this.state.customTrackData) : null;
+            return Number(td?.meta?.version || 1);
+          } catch { return 1; }
+        })(),
         modeId: this.state.modeId,
         gameMode: this.state.gameMode,
         trackId: this.state.trackId,

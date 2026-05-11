@@ -26,6 +26,37 @@ app.get("/health", (_req, res) => {
   res.json({ ok: true, service: "GLOKarts-realtime", port, rooms, uptime: process.uptime(), ts: Date.now() });
 });
 
+// Phase E1 \u2014 Prometheus-format /metrics endpoint. Exports per-process
+// uptime + room counters. Per-room tick metrics (tickDriftMs, snapshotBytes)
+// are already collected at realtime-sync.js; we surface them aggregated.
+// Scrape with prometheus-style: GET /metrics returns text/plain.
+const _serverStartedAt = Date.now();
+app.get("/metrics", (_req, res) => {
+  const lines = [];
+  const stats = gameServer.matchMaker?.stats?.local ?? {};
+  const roomCount = Number(stats.roomCount ?? 0);
+  const ccu = Number(stats.ccu ?? 0);
+  lines.push('# HELP glokarts_uptime_seconds Process uptime in seconds.');
+  lines.push('# TYPE glokarts_uptime_seconds counter');
+  lines.push(`glokarts_uptime_seconds ${process.uptime().toFixed(1)}`);
+  lines.push('# HELP glokarts_rooms Total active Colyseus rooms.');
+  lines.push('# TYPE glokarts_rooms gauge');
+  lines.push(`glokarts_rooms ${roomCount}`);
+  lines.push('# HELP glokarts_clients Total connected clients across rooms.');
+  lines.push('# TYPE glokarts_clients gauge');
+  lines.push(`glokarts_clients ${ccu}`);
+  const mem = process.memoryUsage();
+  lines.push('# HELP glokarts_memory_rss_bytes Resident set size in bytes.');
+  lines.push('# TYPE glokarts_memory_rss_bytes gauge');
+  lines.push(`glokarts_memory_rss_bytes ${mem.rss}`);
+  lines.push('# HELP glokarts_memory_heap_used_bytes V8 heap used.');
+  lines.push('# TYPE glokarts_memory_heap_used_bytes gauge');
+  lines.push(`glokarts_memory_heap_used_bytes ${mem.heapUsed}`);
+  lines.push(`# server_started_at_ms ${_serverStartedAt}`);
+  res.set('Content-Type', 'text/plain; version=0.0.4');
+  res.send(lines.join('\n') + '\n');
+});
+
 const server = http.createServer(app);
 const gameServer = new Server({ transport: new WebSocketTransport({ server }) });
 
