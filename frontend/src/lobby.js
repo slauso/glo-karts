@@ -1072,7 +1072,13 @@ class RacingLobby {
       return;
     }
 
-    this.players.forEach((player) => {
+    // Clean up any previous kart previews
+    if (this._kartPreviews) {
+      this._kartPreviews.forEach(preview => preview && preview.dispose && preview.dispose());
+    }
+    this._kartPreviews = [];
+
+    this.players.forEach((player, idx) => {
       const li = document.createElement('li');
       li.className = 'player-row';
       if (player.isReady) li.classList.add('is-ready');
@@ -1081,6 +1087,27 @@ class RacingLobby {
       const indicator = document.createElement('span');
       indicator.className = `ready-indicator ${player.isReady ? 'ready' : 'not-ready'}`;
       li.appendChild(indicator);
+
+      // Kart preview container
+      const kartPreviewDiv = document.createElement('div');
+      kartPreviewDiv.className = 'kart-preview';
+      li.appendChild(kartPreviewDiv);
+
+      // Create spinning kart preview
+      try {
+        const KartPreview = require('./lobby-car.js').KartPreview;
+        const preview = new KartPreview({
+          container: kartPreviewDiv,
+          kartId: player.playerKart,
+          color: player.playerColor,
+          gloEffect: player.gloEffect,
+          spin: true,
+          spinSpeed: 0.008
+        });
+        this._kartPreviews.push(preview);
+      } catch (e) {
+        // fallback: no preview
+      }
 
       const name = document.createElement('span');
       name.className = 'player-name-text';

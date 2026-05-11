@@ -278,9 +278,9 @@ function ensureGhost(sid, idx, kartState) {
   scene.add(group);
   cloneKart(kartId, colorNum).then((kart) => {
     // Drop the GLB so the kart's wheels sit on the contact patch.
-    // Mirrors SP play-main offset, plus the cannon-es suspension rest
-    // length (MP physics has compressible wheels; SP does not).
-    kart.position.y = -KART_VISUAL_DROP_MM;
+    // Mirrors SP play-main offset. The loader already normalizes the model
+    // so wheels are at y=0, so only drop by CHASSIS_HY_MM.
+    kart.position.y = -CHASSIS_HY_MM;
     group.remove(placeholder);
     placeholder.geometry.dispose();
     placeholder.material.dispose();
@@ -695,7 +695,7 @@ function _updateKartVisuals(entry, dt, nowMs) {
   // every input edge.
   const steerAlpha = 1 - Math.exp(-22 * dt);
   entry.smoothedSteer += (targetSteer - entry.smoothedSteer) * steerAlpha;
-  const steerAngle = entry.smoothedSteer * VISUAL_STEER_LOCK_RAD;
+  const steerAngle = -entry.smoothedSteer * VISUAL_STEER_LOCK_RAD;
 
   if (entry.wheels) {
     const apply = (w, isFront) => {
