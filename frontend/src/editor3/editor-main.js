@@ -3119,13 +3119,47 @@ if (_editorBootParams.get('resume') === '1') {
     pushUndo(); refreshHud(); updatePreview();
   });
 }
-async function _cloudSaveCurrent({ publish = false } = {}) {
-  const name = (document.getElementById('trackName')?.value || track.name || 'Untitled Track').trim() || 'Untitled Track';
-  const stored = localStorage.getItem('gloKartsStudio.authorName') || '';
-  const author = (prompt('Display name for the author? (leave blank for "Anonymous")', stored) || '').trim();
-  if (author) { try { localStorage.setItem('gloKartsStudio.authorName', author); } catch {} }
+// Phase 2.12: ask for a track name (defaulting to current name) so saves
+// have a meaningful identity in the My Saves panel + lobby picker. Returns
+// the trimmed name, or null if the user cancelled.
+function _promptTrackName({ purpose = 'save' } = {}) {
+  const current = (document.getElementById('trackName')?.value || track.name || '').trim();
+  const def = current && current.toLowerCase() !== 'untitled track' ? current : '';
+  const label = purpose === 'publish'
+    ? 'Track name to publish:'
+    : purpose === 'cloud'
+      ? 'Track name (saved to your cloud My Saves):'
+      : 'Track name:';
+  const raw = prompt(label, def);
+  if (raw === null) return null; // user cancelled
+  const name = raw.trim() || 'Untitled Track';
+  // Mirror back into the editor so subsequent saves and the export
+  // filename use the same identity.
+  track.name = name;
+  const el = document.getElementById('trackName');
+  if (el) el.value = name;
+  return name;
+}
+
+// Phase 2.12: a single save funnel that always (a) writes to the local
+// autoload slot and (b) mirrors the track to the cloud as PRIVATE so it
+// appears in My Saves on the studio landing page and in the online lobby
+// track picker. `publish=true` flips it to public for Remix Community.
+async function _saveCurrent({ publish = false, askName = true } = {}) {
+  const name = askName ? _promptTrackName({ purpose: publish ? 'publish' : 'cloud' }) : (track.name || 'Untitled Track');
+  if (name === null) return; // cancelled
   const track_data = saveJSON();
+  // 1) Always update the browser autoload slot first — this is the offline
+  //    safety net and keeps the next "Continue" card pointing at this draft.
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(track_data)); } catch {}
+  // 2) Mirror to the cloud (silent failure → keep the local save).
+  let cloudOk = false;
   try {
+    const stored = localStorage.getItem('gloKartsStudio.authorName') || '';
+    const author = publish
+      ? (prompt('Display name for the author? (leave blank for "Anonymous")', stored) || '').trim()
+      : stored.trim();
+    if (author) { try { localStorage.setItem('gloKartsStudio.authorName', author); } catch {} }
     let detail;
     if (currentCloudId) {
       detail = await StudioAPI.update(currentCloudId, {
@@ -3140,11 +3174,31 @@ async function _cloudSaveCurrent({ publish = false } = {}) {
       });
       currentCloudId = detail.id;
     }
-    toast(publish ? 'Published to community' : 'Saved to cloud');
+    cloudOk = true;
   } catch (err) {
     console.warn('[studio] cloud save failed', err);
-    toast('Cloud save failed: ' + (err.message || 'unknown'));
   }
+  // 3) Notify any other open tabs (lobby picker / landing) to refresh
+  //    their lists so the new save appears immediately.
+  try {
+    const sig = JSON.stringify({ id: currentCloudId, name, ts: Date.now(), publish });
+    localStorage.setItem('gloKartsStudio.savesUpdated', sig);
+  } catch {}
+  try {
+    window.dispatchEvent(new CustomEvent('gloKartsStudio:savesUpdated', {
+      detail: { id: currentCloudId, name, publish },
+    }));
+  } catch {}
+  if (cloudOk) {
+    toast(publish ? `Published "${name}" to community` : `Saved "${name}" (browser + cloud)`);
+  } else {
+    toast(`Saved "${name}" to browser (cloud unavailable)`);
+  }
+}
+
+// Back-compat alias for the existing menu wiring + any external callers.
+async function _cloudSaveCurrent({ publish = false } = {}) {
+  return _saveCurrent({ publish, askName: true });
 }
 
 // Gizmo toolbar wiring
@@ -3906,7 +3960,10 @@ _menuDropdown?.addEventListener('click', (e) => {
     };
     input.click();
   } else if (action === 'save') {
-    document.getElementById('saveBtn')?.click();
+    // Phase 2.12: route the menu's "Save to browser" through the same
+    // funnel as Save to cloud so every save shows up in My Saves and the
+    // online lobby track picker. Falls back gracefully if cloud is down.
+    _saveCurrent({ publish: false, askName: true });
   } else if (action === 'landing') {
     showStudioLanding().then(_bootstrapFromChoice);
   } else if (action === 'cloud-save') {

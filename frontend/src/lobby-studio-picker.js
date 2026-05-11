@@ -28,6 +28,16 @@ class LobbyStudioPicker {
     this._loading = { templates: false, community: false, mine: false };
     this._render();
     this._loadTab('templates');
+    // Phase 2.12: when the editor saves a track (in this tab or a sibling
+    // tab), invalidate our caches so the new save shows up without a full
+    // lobby reload.
+    this._onStorage = (e) => {
+      if (e.key === 'gloKartsStudio.savesUpdated') this.refresh();
+    };
+    window.addEventListener('storage', this._onStorage);
+    // Same-tab signal (storage event only fires across tabs).
+    this._onSameTab = () => this.refresh();
+    window.addEventListener('gloKartsStudio:savesUpdated', this._onSameTab);
   }
 
   show() { this.root.classList.remove('hidden'); }
