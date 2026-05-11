@@ -1,5 +1,98 @@
 
-A real-time multiplayer 3D racing game built with JavaScript and modern web technologies. Race with friends through various tracks, compete for the best time, and enjoy physics-based driving mechanics.
+
+# GLO-KARTS + CADKarts
+
+GLO-KARTS is a next-generation real-time multiplayer 3D kart racing platform and track design studio. It combines a powerful CAD-style track builder, instant playtesting, online sharing, and competitive multiplayer racing—all in the browser. Design, test, share, and race on custom tracks with friends or the global community.
+
+## 🚦 Core Scope & Vision
+
+- **Design:** Snap-together track construction kit (inspired by Trackmania/Polytrack) with a 3D editor. Build custom racing circuits or battle arenas from interlocking segments, including curves, straights, banks, jumps, and more.
+- **Test:** One-click playtest—instantly drive your creation solo or with friends. Physics and visuals match the final online experience.
+- **Share:** Publish a share code or link. Friends can paste it to race the same track, or browse a gallery of community creations.
+- **Play Online:** Host or join multiplayer lobbies on any track (official or user-created). Compete in real-time with authoritative physics, leaderboards, and matchmaking.
+
+## ✨ Features
+
+- **CAD-Style Track Builder:** Full 3D editor for snapping, rotating, and customizing track segments. Supports elevation, banking, surface types, and decorative props.
+- **Instant Playtest:** Seamless transition from editing to driving—no reloads or exports needed.
+- **Track Sharing:** Generate share codes or links for any track. Import and play tracks from the community instantly.
+- **Online Multiplayer:** Real-time racing with friends or public lobbies. Authoritative Colyseus backend ensures fair, synchronized gameplay.
+- **Physics-Based Driving:** Realistic kart physics (Cannon-es/Ammo.js) with speed-dependent steering, suspension, drifting, and collisions.
+- **Custom Karts & Effects:** Choose karts, colors, GLO underglow, and visual FX. All effects and handling are parity-matched between single and multiplayer.
+- **Leaderboards & Stats:** Track best times, wins, and global rankings per track.
+- **Mobile & Desktop:** Fully playable on desktop and mobile, with touch and keyboard controls.
+- **Battle Modes:** Race, battle, and custom game modes supported.
+- **Lobby Matchmaking:** Create open/private lobbies, share join codes, or quick-match into open queues.
+- **Backend Integration:** Optional Python/Django backend for admin, stats, and moderation.
+
+## 🛠️ Design, Test, Share, Play Workflow
+
+1. **Design:** Use the in-browser CAD editor (`editor.html`) to build tracks from modular segments. Snap, rotate, and elevate pieces. Add props and surface types.
+2. **Test:** Click "Playtest" to instantly drive your track in the same physics/visuals as online play. Tweak and iterate without leaving the editor.
+3. **Share:** Save your track to a share code or link. Friends can paste this code to load your track, or you can submit it to the community gallery.
+4. **Play Online:** Host or join a multiplayer lobby on any track. All players sync to the same layout and compete in real-time.
+
+## Controls
+
+### Desktop
+- **W**: Accelerate
+- **S**: Brake/Reverse
+- **A**: Turn left
+- **D**: Turn right
+- **Space**: Handbrake/Drift
+- **R**: Reset to last checkpoint
+
+### Mobile
+- **Virtual Joystick**: Steer, accelerate, brake
+
+## 🧰 Technologies Used
+
+- **Three.js**: 3D rendering engine
+- **Cannon-es/Ammo.js**: Physics engine
+- **Colyseus**: Authoritative multiplayer backend
+- **JavaScript/HTML5/CSS3**: Core frontend
+- **Python/Django**: Optional backend/admin
+
+## 📐 Track Builder & CADKarts
+
+- **Snap-together segments**: Build tracks from a library of modular pieces (straights, curves, banks, jumps, etc.)
+- **Elevation & Banking**: Create overpasses, tunnels, and banked turns
+- **Surface Types**: Asphalt, dirt, ice, boost pads, and more
+- **Decorative Props**: Add scenery and obstacles
+- **Validation**: Built-in checks for connectivity, lap path, and playability
+- **Instant Playtest**: No export or reload—test your track live
+- **Share Codes**: Export/import tracks with a simple code or link
+
+## 🏁 Multiplayer & Online Play
+
+- **Authoritative Physics**: All players sync to the same simulation
+- **Lobby System**: Open/public and private lobbies, join codes, matchmaking
+- **Custom Tracks**: Race on any user-created or official track
+- **Leaderboards**: Track best times and wins per track
+- **Battle Modes**: Support for race, battle, and custom game types
+
+## 🗂️ Project Structure
+
+- `frontend/` — Main web client, CAD editor, and game UI
+- `backend/` — Optional Django backend for stats/admin
+- `realtime/` — Node.js Colyseus server for multiplayer
+- `tracks/` — Track segment definitions, fixtures, and assets
+- `public/` — Audio, models, textures, and static assets
+
+## 🚀 Quick Start
+
+1. `npm install` in `frontend/` and `realtime/`
+2. `npm run dev` in both to start the client and multiplayer server
+3. Open `index.html` (lobby), `editor.html` (track builder), or `play.html` (playtest)
+4. (Optional) Set up `backend/` for admin/stats
+
+## 📝 Credits & License
+
+GLO-KARTS + CADKarts is open source and welcomes contributions. See LICENSE for details.
+
+---
+
+**To set the default branch to `glo-karts+CADKarts`, go to your repository settings on GitHub and update the default branch.**
 
 
 
