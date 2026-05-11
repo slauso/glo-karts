@@ -530,22 +530,16 @@ function pollInput() {
   // Drift = Shift (ShiftLeft / ShiftRight). Mirrors SP playtest binding
   // so hop→commit→slide works identically online.
   const drift = keys.has('ShiftLeft') || keys.has('ShiftRight');
-  // Signed throttle: +1 forward, -1 reverse, 0 coast. Brake (Space) is
-  // its own axis so a player can hold W+Space for a burnout charge or
-  // S to actually back out of a wall.
-  const targetThrottle = fwd ? 1 : (back ? -1 : 0);
-  const targetSteer = (left ? -1 : 0) + (right ? 1 : 0);
-  // Client-side ramp on steering + throttle so digital keyboard inputs
-  // don't slam the server with a 0 \u2192 1 step every keydown. Pairs with
-  // the visual `smoothedSteer` low-pass to make the kart feel weighted
-  // and analog instead of binary on/off.
-  const dtPoll = 1 / SEND_HZ;
-  const aSteer = 1 - Math.exp(-8.0 * dtPoll);     // full lock ~125 ms
-  const aThrottle = 1 - Math.exp(-6.0 * dtPoll);  // full pedal ~165 ms
-  input.steer    += (targetSteer    - input.steer)    * aSteer;
-  input.throttle += (targetThrottle - input.throttle) * aThrottle;
-  if (Math.abs(input.steer) < 0.005) input.steer = 0;
-  if (Math.abs(input.throttle) < 0.01) input.throttle = 0;
+  // Send RAW digital intent. The server's shared physics core
+  // (`applyKartControls`) already smooths binary keys into a 0..1
+  // throttle ramp over ~167 ms \u2014 identical to SP playtest. A second
+  // client-side ramp here was producing ~530 ms total throttle delay
+  // vs SP, breaking SP\u2194MP feel parity. Visual smoothing for body roll /
+  // wheel steer lives in `_updateKartVisuals` (entry.smoothedSteer
+  // low-pass), so the wheels and chassis still look weighted even
+  // though the wire-level intent is binary.
+  input.steer = (left ? -1 : 0) + (right ? 1 : 0);
+  input.throttle = fwd ? 1 : (back ? -1 : 0);
   input.brake = brake ? 1 : 0;
   input.drift = drift;
 }
