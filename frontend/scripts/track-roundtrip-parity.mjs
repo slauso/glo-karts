@@ -23,9 +23,13 @@ import {
   buildWorldFromTrackData,
   validateTrackData,
 } from '../../realtime/src/track/track-loader.js';
+import { TILE, SEGMENTS } from '../src/editor3/segments.js';
+import { SEGMENT_SCALE } from '../src/editor3/segment-physics.js';
 
 const POS_TOL_MM = 0.01; // mm
 const ROT_TOL = 1e-6;
+const S_WORLD = SEGMENT_SCALE; // metres \u2192 world units
+const TILE_WORLD = TILE * S_WORLD; // world units per grid cell (matches SP track-data TILE)
 
 function makeWorld() {
   const w = new CANNON.World();
@@ -102,6 +106,50 @@ function probeTrack(track) {
   const a = summariseBodies(r1.bodies);
   const b = summariseBodies(r2.bodies);
   const issues = diffSummaries(a, b);
+
+  // SP-convention parity: assert the server's per-placement transforms
+  // match what `frontend/src/editor3/play-main.js` would produce. This
+  // is the actual ship-blocking check \u2014 a sign flip on the rotation
+  // (or a unit drift) would let MP & MP round-trip stay byte-equal but
+  // make every custom track look mirrored vs the editor playtest.
+  const placements = Array.isArray(track.track_data)
+    ? track.track_data
+    : (track.track_data?.placements
+        || track.track_data?.track?.placements
+        || []);
+  const spConventionIssues = [];
+  let bodyIdx = 0;
+  for (const p of placements) {
+    if (!p || typeof p.k !== 'string' || !SEGMENTS[p.k]) continue;
+    const expectedX = (p.x ?? 0) * TILE_WORLD;
+    const expectedZ = (p.z ?? 0) * TILE_WORLD;
+    const expectedYaw = -((p.r ?? 0) % 4) * (Math.PI / 2);
+    const body = r1.bodies[bodyIdx++];
+    if (!body) {
+      spConventionIssues.push(`missing body for placement ${bodyIdx - 1} (${p.k})`);
+      continue;
+    }
+    if (Math.abs(body.position.x - expectedX) > POS_TOL_MM) {
+      spConventionIssues.push(`${p.k}@${bodyIdx - 1}: pos.x ${body.position.x} \u2260 SP-expected ${expectedX}`);
+    }
+    if (Math.abs(body.position.z - expectedZ) > POS_TOL_MM) {
+      spConventionIssues.push(`${p.k}@${bodyIdx - 1}: pos.z ${body.position.z} \u2260 SP-expected ${expectedZ}`);
+    }
+    const expectedQuat = new CANNON.Quaternion();
+    expectedQuat.setFromAxisAngle(new CANNON.Vec3(0, 1, 0), expectedYaw);
+    if (
+      Math.abs(body.quaternion.x - expectedQuat.x) > ROT_TOL ||
+      Math.abs(body.quaternion.y - expectedQuat.y) > ROT_TOL ||
+      Math.abs(body.quaternion.z - expectedQuat.z) > ROT_TOL ||
+      Math.abs(body.quaternion.w - expectedQuat.w) > ROT_TOL
+    ) {
+      spConventionIssues.push(
+        `${p.k}@${bodyIdx - 1}: quat ${JSON.stringify([body.quaternion.x, body.quaternion.y, body.quaternion.z, body.quaternion.w])} \u2260 SP yaw=${expectedYaw.toFixed(4)}`
+      );
+    }
+  }
+  for (const m of spConventionIssues) issues.push(`SP-CONVENTION: ${m}`);
+
   const validation = validateTrackData(track.track_data);
   return {
     name: track.name,

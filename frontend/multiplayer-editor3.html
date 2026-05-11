@@ -12,7 +12,14 @@
        GLO KARTS \u2014 Online (editor3) shell
        Aligns the in-race HUD + pregame lobby overlay with the
        Liquid Glass design language used in the main lobby.
+       lobby-style.css is imported only for its CSS custom
+       properties (--accent, --lg-*, --font-*, --r-*). The
+       global checkered body::before ambient and any other
+       full-page chrome from that stylesheet are suppressed
+       here so they don't bleed into the live render canvas.
        =========================================================== */
+    body::before, body::after { content: none !important; display: none !important; background: none !important; animation: none !important; }
+    #background-canvas { display: none !important; }
     html, body {
       margin: 0; height: 100%;
       background:

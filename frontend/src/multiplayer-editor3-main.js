@@ -195,7 +195,12 @@ function buildTrackVisuals(trackData) {
     if (!def) continue;
     const mesh = buildSegmentMesh(p.k);
     mesh.position.set((p.x || 0) * TILE * S, 0, (p.z || 0) * TILE * S);
-    mesh.rotation.y = ((p.r || 0) % 4) * (Math.PI / 2);
+    // Match SP playtest convention (frontend/src/editor3/play-main.js):
+    // `mesh.rotation.y = -p.rot * Math.PI / 2`. Without the negative sign
+    // every corner placement was mirrored vs the editor preview, which
+    // bent corners the wrong way relative to spawn heading and made
+    // custom tracks ("oval" etc.) un-driveable in online mode.
+    mesh.rotation.y = -((p.r || 0) % 4) * (Math.PI / 2);
     root.add(mesh);
   }
   scene.add(root);

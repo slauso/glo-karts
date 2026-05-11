@@ -58,7 +58,12 @@ export function buildWorldFromTrackData(world, trackData) {
       y: 0,
       z: (p.z ?? 0) * TILE * S,
     };
-    const worldRotY = ((p.r ?? 0) % 4) * (Math.PI / 2);
+    // Sign matches SP playtest: `play-main.js` builds segment bodies
+    // with `-p.rot * Math.PI / 2`. Using the opposite sign here would
+    // place the cannon-es colliders mirrored relative to the visuals
+    // the client renders, breaking corner geometry on every saved
+    // custom track.
+    const worldRotY = -((p.r ?? 0) % 4) * (Math.PI / 2);
     const body = buildSegmentBody(p.k, worldPos, worldRotY);
     if (body) {
       // Apply the world's ground material so the wheel/ground contact pair
@@ -101,7 +106,7 @@ export function buildWorldFromTrackData(world, trackData) {
       x: (first.x ?? 0) * TILE * S,
       y: getDrivableTopY(first.k) + KART_HOVER_M * S,
       z: (first.z ?? 0) * TILE * S,
-      heading: ((first.r ?? 0) % 4) * (Math.PI / 2),
+      heading: -((first.r ?? 0) % 4) * (Math.PI / 2),
     });
   }
 
