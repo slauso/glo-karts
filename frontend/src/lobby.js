@@ -1319,6 +1319,24 @@ class RacingLobby {
       option.classList.toggle('selected', option.getAttribute('data-map-id') === this.selectedMap);
     });
 
+    // Mirror the host's track selection on the condensed studio picker
+    // (templates / remix / my saves tabs). The picker auto-switches to
+    // the tab containing the selected track id so guests see the same
+    // tile highlighted that the host clicked, in real time.
+    if (this.selectedMap) {
+      getLobbyStudioPicker()?.setSelectedId(this.selectedMap);
+    }
+
+    // Mirror the host's broadcast custom-track payload on guests so the
+    // matchStart navigation has the same JSON the host pre-cached. The
+    // host's own customTrackData is already in sessionStorage from the
+    // picker's _pick() handler; only guests need to copy from server
+    // state here.
+    if (!this.isHost && typeof state.customTrackData === 'string' && state.customTrackData.length > 2) {
+      try { sessionStorage.setItem('customTrackData', state.customTrackData); }
+      catch { /* quota */ }
+    }
+
     const battleTypeEl = document.getElementById('battle-type-select');
     if (battleTypeEl && battleTypeEl.value !== this.selectedBattleType) battleTypeEl.value = this.selectedBattleType;
     this._syncGlassDropdown(battleTypeEl);
@@ -1347,6 +1365,23 @@ class RacingLobby {
     }
 
     this._setPerformanceMode(state.performanceMode || this.performanceMode, { persist: true, sync: false });
+
+    // Mirror bot count + arena theme so guests see the same in their UI.
+    if (Number.isFinite(state.botCount)) {
+      this.selectedBotCount = Number(state.botCount) || 0;
+      const botCountEl = document.getElementById('race-bot-count');
+      if (botCountEl) botCountEl.value = String(this.selectedBotCount);
+      const battleBotCountEl = document.getElementById('battle-bot-count');
+      if (battleBotCountEl) battleBotCountEl.value = String(this.selectedBotCount);
+    }
+    if (state.arenaTheme) {
+      this.selectedGlofluxTheme = state.arenaTheme;
+      const themeEl = document.getElementById('gloflux-theme');
+      if (themeEl && themeEl.value !== state.arenaTheme) {
+        themeEl.value = state.arenaTheme;
+        this._syncGlassDropdown(themeEl);
+      }
+    }
 
     this._updateBattleSummary();
 

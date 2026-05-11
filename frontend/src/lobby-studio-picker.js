@@ -43,10 +43,45 @@ class LobbyStudioPicker {
   show() { this.root.classList.remove('hidden'); }
   hide() { this.root.classList.add('hidden'); }
 
-  /** Reflect a selection driven by another part of the lobby. */
+  /** Reflect a selection driven by another part of the lobby (e.g. the
+   *  host changed the track and the guest's state sync forwarded it
+   *  here). If the id lives in a tab that isn't currently active, we
+   *  switch to that tab so the highlighted tile is actually visible. */
   setSelectedId(id) {
+    const prev = this.selectedId;
     this.selectedId = id;
     this._refreshActiveStates();
+    if (!id || String(id) === String(prev)) return;
+    // Find which cached tab contains the id; load tabs we haven't yet
+    // visited so a guest joining mid-lobby still finds the host's pick.
+    const owningTab = this._findOwningTab(id);
+    if (owningTab && owningTab !== this.activeTab) {
+      this._switchTab(owningTab);
+    } else if (!owningTab) {
+      // Try loading every tab once; whichever load resolves with the id
+      // wins and we switch to it. Already-cached tabs short-circuit
+      // inside `_loadTab`.
+      for (const t of TABS) {
+        // Fire and forget — _loadTab repaints the active tab when it
+        // completes; _refreshActiveStates re-applies the highlight.
+        Promise.resolve(this._loadTab(t.id)).then(() => {
+          const found = this._findOwningTab(id);
+          if (found && found !== this.activeTab) this._switchTab(found);
+          else this._refreshActiveStates();
+        });
+      }
+    }
+  }
+
+  _findOwningTab(id) {
+    for (const t of TABS) {
+      const items = this._cache[t.id];
+      if (!items) continue;
+      // Local browser-draft id surfaces only on the My Saves tab.
+      if (id === LOCAL_DRAFT_TRACK_ID && t.id === 'mine') return 'mine';
+      if (items.some((it) => String(it.id) === String(id))) return t.id;
+    }
+    return null;
   }
 
   /** Force a fresh fetch (e.g. after the user publishes from the editor). */
