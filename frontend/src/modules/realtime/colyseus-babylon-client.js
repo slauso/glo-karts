@@ -2932,14 +2932,21 @@ export class ColyseusBabylonClient {
   }
 
   _updateInterpolationDelay() {
-    const base = Number(this._networkStats.baseInterpolationDelayMs || 110);
+    // Phase B2 \u2014 closer to the spec target: clamp(rtt/2 + 2\u03c3jitter, 60, 200)
+    // ms with a small safety floor of (patchRate + 10ms) so we always have
+    // at least one snapshot in the buffer. The previous implementation used
+    // an unconditional 110ms `base` floor which wasted ~50ms on LAN-quality
+    // links where rtt < 20ms; the local kart felt floaty even when the
+    // network was idle. We keep `baseInterpolationDelayMs` only as an upper
+    // safety hint for very chaotic links.\n    const baseHint = Number(this._networkStats.baseInterpolationDelayMs || 0);
     const rtt = Number(this._networkStats.rttMs || 0);
     const jitter = Number(this._networkStats.jitterMs || 0);
-    const patch = Number(this._networkStats.patchRateMs || 100);
-    this._networkStats.interpolationDelayMs = Math.max(
-      60,
-      Math.min(260, Math.round(Math.max(base, patch + rtt * 0.75 + jitter * 2))),
-    );
+    const patch = Number(this._networkStats.patchRateMs || 50);
+    const minSafe = Math.max(60, patch + 10);
+    const adaptive = rtt * 0.5 + jitter * 2;
+    let delay = Math.max(minSafe, adaptive);
+    if (baseHint > 0) delay = Math.min(delay, baseHint * 1.5);
+    this._networkStats.interpolationDelayMs = Math.max(60, Math.min(200, Math.round(delay)));
   }
 
   _getRemoteInterpolationAlpha(dtSeconds) {

@@ -19,12 +19,12 @@ Root causes identified in audit:
 3. No spawn / finish validation before race start
 
 ### Tasks
-- ⬜ **A1**: Hard-fail (don't truncate) above 64 KB. Compress with `pako` (or drop `decor` from wire payload — not used by physics) and bump cap to 256 KB. Log server-side warning + propagate `matchError` to client.
-- ⬜ **A2**: Strict segment-registry parity check at room boot. Server logs diff of `Object.keys(SEGMENTS)` between client-encoded and server-decodable. Probe asserts diff is empty for every shipped + saved track.
-- ⬜ **A3**: Pre-flight track validator: ≥1 spawn segment + ≥1 finish/lap-trigger; reject `matchStart` otherwise with explicit `matchError`.
-- ⬜ **A4**: Save/load round-trip probe ([frontend/scripts/track-roundtrip-parity.mjs](frontend/scripts/track-roundtrip-parity.mjs)): for each shipped template + 3 saved tracks, encode → POST Django → fetch → rebuild physics on client and Node server module → assert positions differ < 0.01 mm and quaternions < 1e-6.
+- ✅ **A1**: Hard-fail (don't truncate) above 64 KB. Compress with `pako` (or drop `decor` from wire payload — not used by physics) and bump cap to 256 KB. Log server-side warning + propagate `matchError` to client.
+- ✅ **A2**: Strict segment-registry parity check at room boot. Server logs diff of `Object.keys(SEGMENTS)` between client-encoded and server-decodable. Probe asserts diff is empty for every shipped + saved track.
+- ✅ **A3**: Pre-flight track validator: ≥1 spawn segment + ≥1 finish/lap-trigger; reject `matchStart` otherwise with explicit `matchError`.
+- ✅ **A4**: Save/load round-trip probe ([frontend/scripts/track-roundtrip-parity.mjs](frontend/scripts/track-roundtrip-parity.mjs)): for each shipped template + 3 saved tracks, encode → POST Django → fetch → rebuild physics on client and Node server module → assert positions differ < 0.01 mm and quaternions < 1e-6.
 
-**Gate:** A4 probe green for templates + user saves; loading any of them online matches playtest layout (visual diff < 1 px in screenshot).
+**Gate:** A4 probe green for templates + user saves; loading any of them online matches playtest layout (visual diff < 1 px in screenshot). ✅ (3/3 shipped templates: Tutorial Loop, Sprint Drag, Crossroads Circuit — 0 parity failures).
 
 ---
 
@@ -95,4 +95,6 @@ Today client locally tracks weapon cooldowns ([Editor3RaceRoom.js](realtime/src/
 ## Completion log
 
 (Each task records: date · commit · notes)
+
+- **Phase A** — 2026-05-11 · `eb7afe43` · Pipeline hardening complete. Track payload now reliably round-trips for all 3 shipped templates; cloud-sourced selections from picker now broadcast their physics blob; server logs unknown segment keys + raceability warnings.
 

@@ -229,6 +229,11 @@ function ensureGhost(sid, idx, kartState) {
     group,
     target: { x: 0, y: 0, z: 0, qx: 0, qy: 0, qz: 0, qw: 1 },
     color: colorHex, kartId, fx, underglow,
+    sid, // Phase B4: needed to identify the local kart in the FX loop.
+    // Phase B3: rolling snapshot buffer for snapshot interpolation.
+    // Each entry: { t, x, y, z, qx, qy, qz, qw, vx, vy, vz }.
+    snapshots: [],
+    interpDelayMs: 110, // adapted at runtime by the network stats; see tick()
   };
   ghosts.set(sid, entry);
   return entry;
@@ -456,17 +461,103 @@ let lastPing = 0;
 // previous 200ms. Matches roughly the network RTT for nearby peers.
 const LERP = 0.45;
 
+// Phase B3 — snapshot interpolation tunables.
+const SNAPSHOT_BUFFER_MAX = 6; // ~200ms at 30Hz; trims oldest beyond this
+const INTERP_DELAY_MIN_MS = 60;
+const INTERP_DELAY_MAX_MS = 200;
+const EXTRAP_MAX_MS = 33; // cap at ≈1 frame ahead of the freshest snapshot
+let _netRttMs = 50;
+let _netJitterMs = 10;
+
+function _adaptiveInterpDelayMs() {
+  // Same shape as Phase B2 in the babylon client: rtt/2 + 2σjitter, clamped.
+  const v = _netRttMs * 0.5 + _netJitterMs * 2;
+  return Math.max(INTERP_DELAY_MIN_MS, Math.min(INTERP_DELAY_MAX_MS, v));
+}
+
+function _pushSnapshot(entry, kart, nowMs) {
+  const buf = entry.snapshots;
+  buf.push({
+    t: nowMs,
+    x: kart.x, y: kart.y, z: kart.z,
+    qx: kart.qx, qy: kart.qy, qz: kart.qz, qw: kart.qw,
+    vx: kart.vx || 0, vy: kart.vy || 0, vz: kart.vz || 0,
+  });
+  while (buf.length > SNAPSHOT_BUFFER_MAX) buf.shift();
+}
+
+const _tmpQuatA = new THREE.Quaternion();
+const _tmpQuatB = new THREE.Quaternion();
+function _sampleSnapshotBuffer(entry, renderTimeMs, dst) {
+  const buf = entry.snapshots;
+  if (buf.length === 0) return false;
+  if (buf.length === 1) {
+    const a = buf[0];
+    dst.x = a.x; dst.y = a.y; dst.z = a.z;
+    dst.qx = a.qx; dst.qy = a.qy; dst.qz = a.qz; dst.qw = a.qw;
+    return true;
+  }
+  // Find first snapshot newer than renderTime (latest is at end).
+  let hi = -1;
+  for (let i = 0; i < buf.length; i += 1) {
+    if (buf[i].t >= renderTimeMs) { hi = i; break; }
+  }
+  if (hi <= 0) {
+    // Render time past the freshest sample — extrapolate using last sample's
+    // velocity, capped at EXTRAP_MAX_MS.
+    const a = buf[buf.length - 1];
+    const ahead = Math.min(EXTRAP_MAX_MS, Math.max(0, renderTimeMs - a.t)) / 1000;
+    dst.x = a.x + a.vx * ahead;
+    dst.y = a.y + a.vy * ahead;
+    dst.z = a.z + a.vz * ahead;
+    dst.qx = a.qx; dst.qy = a.qy; dst.qz = a.qz; dst.qw = a.qw;
+    return true;
+  }
+  const b = buf[hi];
+  const a = buf[hi - 1];
+  const span = Math.max(1e-3, b.t - a.t);
+  const u = Math.max(0, Math.min(1, (renderTimeMs - a.t) / span));
+  dst.x = a.x + (b.x - a.x) * u;
+  dst.y = a.y + (b.y - a.y) * u;
+  dst.z = a.z + (b.z - a.z) * u;
+  _tmpQuatA.set(a.qx, a.qy, a.qz, a.qw);
+  _tmpQuatB.set(b.qx, b.qy, b.qz, b.qw);
+  _tmpQuatA.slerp(_tmpQuatB, u);
+  dst.qx = _tmpQuatA.x; dst.qy = _tmpQuatA.y; dst.qz = _tmpQuatA.z; dst.qw = _tmpQuatA.w;
+  return true;
+}
+const _sampleScratch = { x: 0, y: 0, z: 0, qx: 0, qy: 0, qz: 0, qw: 1 };
+
 function tick(now) {
   const dt = Math.min((now - lastFrame) / 1000, 0.05);
   lastFrame = now;
+  // Phase B3: render-time used for snapshot interpolation = now - adaptiveDelay
+  const interpDelayMs = _adaptiveInterpDelayMs();
+  const renderTimeMs = now - interpDelayMs;
   // Smooth all ghosts toward server target.
   for (const entry of ghosts.values()) {
     const g = entry.group;
     const t = entry.target;
-    g.position.x += (t.x - g.position.x) * LERP;
-    g.position.y += (t.y - g.position.y) * LERP;
-    g.position.z += (t.z - g.position.z) * LERP;
-    g.quaternion.slerp(new THREE.Quaternion(t.qx, t.qy, t.qz, t.qw), LERP);
+    // Phase B3: prefer snapshot-buffer interpolation for ghosts; fall back
+    // to the legacy single-target LERP if the buffer hasn't filled yet.
+    // Local kart still uses the LERP path \u2014 client-side prediction (B1)
+    // will replace this entirely.
+    let usedBuffer = false;
+    if (entry.sid !== mySid && entry.snapshots.length >= 2) {
+      if (_sampleSnapshotBuffer(entry, renderTimeMs, _sampleScratch)) {
+        g.position.x = _sampleScratch.x;
+        g.position.y = _sampleScratch.y;
+        g.position.z = _sampleScratch.z;
+        g.quaternion.set(_sampleScratch.qx, _sampleScratch.qy, _sampleScratch.qz, _sampleScratch.qw);
+        usedBuffer = true;
+      }
+    }
+    if (!usedBuffer) {
+      g.position.x += (t.x - g.position.x) * LERP;
+      g.position.y += (t.y - g.position.y) * LERP;
+      g.position.z += (t.z - g.position.z) * LERP;
+      g.quaternion.slerp(new THREE.Quaternion(t.qx, t.qy, t.qz, t.qw), LERP);
+    }
     // Per-kart FX driven by latest schema state captured below in
     // onStateChange (entry._fxState is refreshed there each snapshot).
     if (entry.fx && entry._fxState) {
@@ -477,6 +568,21 @@ function tick(now) {
       entry._fxState.quaternion.y = g.quaternion.y;
       entry._fxState.quaternion.z = g.quaternion.z;
       entry._fxState.quaternion.w = g.quaternion.w;
+      // Phase B4: for the LOCAL kart, override the input-driven FX
+      // fields (throttle / brake / steer / drift intent) with the
+      // freshest local input so wheels / exhaust / drift sparks react
+      // instantly instead of lagging the server snapshot by RTT+interp
+      // (~190\u2013300ms). Physics-derived fields (boostTimer, gloBurnoutT,
+      // wheelGrounded, driftTier/Dir) keep their server values \u2014
+      // those are computed by the authoritative simulation.
+      if (entry.sid === mySid) {
+        entry._fxState.throttleIn = input.throttle;
+        entry._fxState.brakeIn = input.brake;
+        entry._fxState.steerIn = input.steer;
+        // driftActive stays a physics flag (server may reject if not grounded);
+        // but bias it toward the user's intent so the visual responds on press.
+        entry._fxState.driftActive = entry._fxState.driftActive || !!input.drift;
+      }
       entry.fx.update(entry._fxState, dt);
     }
     if (entry.underglow) entry.underglow.update(dt, g);
@@ -613,6 +719,10 @@ async function connect() {
       if (!entry) entry = ensureGhost(sid, joinCount++, kart);
       entry.target.x = kart.x; entry.target.y = kart.y; entry.target.z = kart.z;
       entry.target.qx = kart.qx; entry.target.qy = kart.qy; entry.target.qz = kart.qz; entry.target.qw = kart.qw;
+      // Phase B3: feed the snapshot buffer used by tick() for proper
+      // snapshot interpolation. We push on every state delivery; tick()
+      // samples at (now - interpDelay) and lerps between two snapshots.
+      _pushSnapshot(entry, kart, performance.now());
       // Capture the broadcast effect-driving state for this kart so
       // the render-loop fx update reflects the latest tick. Allocate
       // once and reuse to avoid GC pressure.
@@ -725,6 +835,13 @@ async function connect() {
     const drift = input.seq - me.lastSeq;
     if (hud.ping) hud.ping.textContent = `${drift} seq behind`;
     lastPing = drift;
+    // Phase B3: feed the adaptive interp delay. drift is in input frames at
+    // SEND_HZ, convert to ms and treat as a coarse RTT proxy. Maintain an
+    // EWMA so jitter spikes don't yank the ghost interp window.
+    const sampleMs = Math.max(0, drift) * (1000 / SEND_HZ);
+    const prev = _netRttMs;
+    _netRttMs = prev * 0.8 + sampleMs * 0.2;
+    _netJitterMs = _netJitterMs * 0.8 + Math.abs(sampleMs - prev) * 0.2;
   }, 1000);
 
   room.onLeave(() => setStatus('disconnected', 'err'));
