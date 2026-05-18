@@ -58,6 +58,59 @@
     .pause-card button:hover { border-color: #ff3aa1; background: #2a3340; }
     .pause-card button.primary { background: #ff3aa1; border-color: #ff3aa1; color: #fff; font-weight: 600; }
     .pause-card button.primary:hover { filter: brightness(1.1); }
+    /* ── Inventory HUD slot (Phase B) ─────────────────────────── */
+    .invslot {
+      position: fixed; right: 16px; bottom: 16px;
+      width: 96px; height: 96px;
+      background: linear-gradient(160deg, rgba(30,38,52,0.92), rgba(14,18,26,0.92));
+      border: 2px solid #2a3340; border-radius: 12px;
+      box-shadow: 0 0 0 1px rgba(255,255,255,0.04) inset, 0 6px 18px rgba(0,0,0,0.45);
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      font-family: 'Inter', system-ui, sans-serif;
+      transition: border-color 140ms ease, transform 140ms ease;
+      user-select: none; pointer-events: none;
+    }
+    .invslot.has { border-color: #ffd24a; box-shadow: 0 0 0 1px rgba(255,210,74,0.35) inset, 0 6px 22px rgba(255,160,40,0.32); }
+    .invslot.fire { transform: scale(1.10); border-color: #ff3aa1; }
+    .invslot .icon {
+      width: 56px; height: 56px; border-radius: 50%;
+      background: radial-gradient(circle at 35% 30%, #fff, #888 60%, #444 100%);
+      box-shadow: 0 0 14px currentColor;
+      display: flex; align-items: center; justify-content: center;
+      color: #fff; font-weight: 700; font-size: 22px; letter-spacing: 0.04em;
+    }
+    .invslot .label {
+      margin-top: 4px; font-size: 10px; color: #cdd6df; letter-spacing: 0.10em;
+      text-transform: uppercase; max-width: 92px; text-align: center;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .invslot .count {
+      position: absolute; top: 4px; right: 6px;
+      font-size: 11px; color: #ffd24a; font-weight: 700;
+    }
+    .invslot .key {
+      position: absolute; top: 4px; left: 6px;
+      font-size: 9px; color: #8b96a3; letter-spacing: 0.1em;
+    }
+    .invslot.empty .icon { background: #1a1f27; box-shadow: none; color: #3a4250; }
+    .invslot.empty .label { color: #4a5260; }
+    /* ── HP / coin HUD (Phase E3) ─────────────────────────── */
+    .hpbar {
+      position: fixed; right: 16px; bottom: 122px; width: 96px;
+      background: rgba(20,24,30,0.85); padding: 6px 8px; border-radius: 6px;
+      font-family: 'Inter', system-ui, sans-serif; font-size: 10px;
+      color: #cdd6df; letter-spacing: 0.08em; text-transform: uppercase;
+      pointer-events: none; user-select: none;
+    }
+    .hpbar .row { display: flex; justify-content: space-between; align-items: center; margin-top: 3px; }
+    .hpbar .meter {
+      height: 6px; border-radius: 3px; background: #1a1f27; overflow: hidden;
+      margin-top: 2px;
+    }
+    .hpbar .fill { height: 100%; background: linear-gradient(90deg, #ff3aa1, #ffd24a); transition: width 200ms ease; }
+    .hpbar.low .fill  { background: linear-gradient(90deg, #ff3a3a, #ffaa33); }
+    .hpbar.zero .fill { background: #ff3a3a; animation: hp-blink 220ms steps(2, end) infinite; }
+    @keyframes hp-blink { to { opacity: 0.25; } }
   </style>
 </head>
 <body>
@@ -70,7 +123,18 @@
     <div id="combatTicker" style="margin-top:6px;color:#ffd400;font-size:12px;min-height:14px;"></div>
   </div>
   <div class="controls">
-    <div><b>W A S D</b> drive · <b>Space</b> brake · <b>Shift</b> drift hop · <b>C</b> camera · <b>R</b> rewind 10s · <b>T</b> restart · <b>Esc</b> pause</div>
+    <div><b>W A S D</b> drive · <b>Space</b> brake · <b>Shift</b> drift hop · <b>Q</b> use item · <b>C</b> camera · <b>R</b> rewind 10s · <b>T</b> restart · <b>Esc</b> pause</div>
+  </div>
+  <div class="invslot empty" id="invSlot">
+    <div class="key">Q</div>
+    <div class="count" id="invCount"></div>
+    <div class="icon" id="invIcon">·</div>
+    <div class="label" id="invLabel">empty</div>
+  </div>
+  <div class="hpbar" id="hpBar">
+    <div class="row"><span>HP</span><span id="hpVal">100</span></div>
+    <div class="meter"><div class="fill" id="hpFill" style="width:100%"></div></div>
+    <div class="row"><span>Coins</span><span id="coinVal">0</span></div>
   </div>
   <div class="toolbar">
     <button id="backBtn">← Back to Editor</button>

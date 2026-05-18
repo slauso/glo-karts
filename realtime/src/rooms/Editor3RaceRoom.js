@@ -97,6 +97,23 @@ type("number")(KartState.prototype, "steerIn");        // -1..1 (smoothed)
 type("uint8")(KartState.prototype, "wheelGrounded");   // bitmask 4 bits
 type("int8")(KartState.prototype, "driftDir");         // -1, 0, +1
 type("boolean")(KartState.prototype, "engineExploded"); // true while lockout active
+// Slice 2 — PvP combat state. Drives buff VFX, knockback resolution,
+// scoring, and HUD overlays. All effect timestamps are absolute server
+// epoch milliseconds (Date.now()) so the client can compare directly.
+type("uint16")(KartState.prototype, "score");
+type("number")(KartState.prototype, "boostUntilMs");      // mushroom / golden / star speed boost
+type("number")(KartState.prototype, "boostMul");          // active multiplier (1.0 if none)
+type("number")(KartState.prototype, "immuneUntilMs");     // star + bullet bill invuln
+type("number")(KartState.prototype, "stunUntilMs");       // shell hits / explosions
+type("number")(KartState.prototype, "spinUntilMs");       // banana spinout
+type("number")(KartState.prototype, "bulletBillUntilMs"); // bullet bill auto-pilot
+type("number")(KartState.prototype, "starUntilMs");       // star (separate so client can paint rainbow)
+type("uint8")(KartState.prototype, "chargeCount");        // golden mushroom remaining charges
+// Slice 3 — economy + V8 buff state
+type("uint8")(KartState.prototype, "hp");             // 0-100 health
+type("uint8")(KartState.prototype, "coins");          // coin count (top-speed economy)
+type("uint8")(KartState.prototype, "shieldActive");   // 1 = v8_shield absorb pending
+type("number")(KartState.prototype, "doubleDmgUntilMs"); // v8_double_dmg active until
 
 class PickupState extends Schema {}
 type("number")(PickupState.prototype, "x");
@@ -105,20 +122,39 @@ type("number")(PickupState.prototype, "z");
 type("boolean")(PickupState.prototype, "active");
 type("string")(PickupState.prototype, "kind");
 
+// Slice 2 — server-authoritative projectile entity. One per live shell /
+// bomb / banana drop. Client subscribes via state.projectiles MapSchema
+// and renders meshes by subType.
+class ProjectileState extends Schema {}
+type("string")(ProjectileState.prototype, "ownerId");
+type("string")(ProjectileState.prototype, "subType"); // green_shell|red_shell|blue_shell|bobomb|banana
+type("number")(ProjectileState.prototype, "x");
+type("number")(ProjectileState.prototype, "y");
+type("number")(ProjectileState.prototype, "z");
+type("number")(ProjectileState.prototype, "vx");
+type("number")(ProjectileState.prototype, "vy");
+type("number")(ProjectileState.prototype, "vz");
+type("string")(ProjectileState.prototype, "targetId"); // for homing
+type("uint8")(ProjectileState.prototype, "bouncesLeft");
+type("uint8")(ProjectileState.prototype, "armed"); // 1 = can damage owner (post fuse)
+
 class Editor3WorldState extends Schema {
   constructor() {
     super();
     this.karts = new MapSchema();
     this.pickups = new MapSchema();
+    this.projectiles = new MapSchema();
   }
 }
 type({ map: KartState })(Editor3WorldState.prototype, "karts");
 type({ map: PickupState })(Editor3WorldState.prototype, "pickups");
+type({ map: ProjectileState })(Editor3WorldState.prototype, "projectiles");
 type("string")(Editor3WorldState.prototype, "trackId");
 type("string")(Editor3WorldState.prototype, "trackName");
 type("string")(Editor3WorldState.prototype, "lobbyCode");
 type("uint8")(Editor3WorldState.prototype, "totalLaps");
 type("string")(Editor3WorldState.prototype, "status"); // "racing" | "finished"
+type("uint16")(Editor3WorldState.prototype, "matchSecondsLeft"); // 0–180; 0 = no timer
 
 // ── Helpers ─────────────────────────────────────────────────────────
 function clamp01(n) { return Math.max(0, Math.min(1, Number(n) || 0)); }
@@ -218,6 +254,15 @@ export class Editor3RaceRoom extends Room {
       : RACE_WEAPON_POOL;
     if (!this.weaponPool.length) this.weaponPool = RACE_WEAPON_POOL;
 
+    // Slice 2 — projectile sim state. _projId is a monotonic counter used
+    // as the MapSchema key so each projectile gets a stable unique id for
+    // the duration of the room. _projMeta holds volatile per-projectile data
+    // (expiry, fuse timer, homing delay) that doesn't need schema sync.
+    this._projId = 0;
+    this._projMeta = new Map(); // projKey -> { expiresMs, fuseMs, homingArmedMs, def, ownerId }
+    this._matchStartMs = 0; // set on first _writeSnapshot while status=racing
+    this.state.matchSecondsLeft = 180;
+
     let trackData = parseTrackOption(options);
     let trackId = options.trackId ?? "";
     if (!trackData && trackId) {
@@ -300,6 +345,40 @@ export class Editor3RaceRoom extends Room {
       this._respawnKart(client.sessionId, { reason: "manual" });
     });
 
+    // Slice 4 — rematch: reset all state and restart the match timer.
+    this.onMessage("rematch", (_client) => {
+      if (this.state.status !== "finished") return;
+      const nowMs = Date.now();
+      for (const [sid, ks] of this.state.karts.entries()) {
+        ks.score = 0;
+        ks.hp = 100;
+        ks.coins = 0;
+        ks.shieldActive = 0;
+        ks.doubleDmgUntilMs = 0;
+        ks.boostUntilMs = 0;
+        ks.boostMul = 1.0;
+        ks.immuneUntilMs = 0;
+        ks.stunUntilMs = 0;
+        ks.spinUntilMs = 0;
+        ks.bulletBillUntilMs = 0;
+        ks.starUntilMs = 0;
+        ks.chargeCount = 0;
+        ks.weapon2 = "";
+        ks.weapon3 = "";
+        ks.ammo2 = 0;
+        ks.ammo3 = 0;
+        this._respawnKart(sid, { reason: "rematch" });
+      }
+      // Clear live projectiles.
+      const projKeys = [...this.state.projectiles.keys()];
+      for (const k of projKeys) this.state.projectiles.delete(k);
+      this._projMeta.clear();
+      this._matchStartMs = 0;
+      this.state.matchSecondsLeft = 180;
+      this.state.status = "racing";
+      this.broadcast("matchReset", { ts: nowMs });
+    });
+
     this.onMessage("pickupItem", (client, data) => {
       const sid = client.sessionId;
       const kart = this.state.karts.get(sid);
@@ -347,25 +426,53 @@ export class Editor3RaceRoom extends Room {
       if (!weaponId || ammo <= 0) return;
       const def = WEAPONS[weaponId];
       if (!def) return;
-      // Phase C1 \u2014 server-authoritative weapon cooldown. Without this, a
-      // misbehaving / fast-fingered client could spam fireWeapon every tick
-      // and exhaust ammo (or worse, broadcast a flood of projectileFired
-      // events). We track per-kart per-slot lastFireMs and reject anything
-      // inside the weapon's cooldownMs window (defaults to 200ms).
+      // Phase C1 — server-authoritative weapon cooldown.
       const nowMs = Date.now();
       if (!this._weaponLastFire) this._weaponLastFire = new Map();
       const key = `${client.sessionId}:${slot}`;
       const lastMs = this._weaponLastFire.get(key) || 0;
-      const cooldownMs = Number(def.cooldownMs) > 0 ? Number(def.cooldownMs) : 200;
-      if (nowMs - lastMs < cooldownMs) {
-        // Silent reject (don't tell potentially malicious clients exactly
-        // when they can fire next; they have the cooldown table client-side
-        // for their HUD anyway).
-        return;
-      }
+      const cooldownMs = Number(def.cooldownMs) > 0 ? Number(def.cooldownMs)
+        : Number(def.cooldown) > 0 ? Number(def.cooldown)
+        : 200;
+      if (nowMs - lastMs < cooldownMs) return;
+      // Cannot fire while stunned / spinning.
+      if (nowMs < (kart.stunUntilMs || 0) || nowMs < (kart.spinUntilMs || 0)) return;
       this._weaponLastFire.set(key, nowMs);
+
+      // Decrement ammo.
       if (slot === "reserve") kart.ammo3 = Math.max(0, ammo - 1);
       else kart.ammo2 = Math.max(0, ammo - 1);
+
+      // ── Slice 2 dispatch ──────────────────────────────────────────
+      // Buff weapons: apply self-buff timers immediately. No projectile.
+      if (def.category === "buff") {
+        this._applySelfBuff(client.sessionId, kart, weaponId, def, nowMs);
+        return;
+      }
+      // Projectile weapons (shells / bombs): spawn ProjectileState.
+      if (def.category === "projectile" && def.subType) {
+        this._spawnProjectile(client.sessionId, kart, weaponId, def, data, nowMs);
+        return;
+      }
+      // Spread weapons (v8_firethrower): spawn N projectiles in a cone.
+      if (def.category === "spread" && def.subType) {
+        const count = def.spreadCount || 5;
+        const halfAngle = (def.spreadAngle || 0.4) / 2;
+        for (let i = 0; i < count; i++) {
+          const angleOff = count > 1
+            ? -halfAngle + (i / (count - 1)) * (def.spreadAngle || 0.4)
+            : 0;
+          this._spawnProjectile(client.sessionId, kart, weaponId, def, { ...data, spreadAngleOff: angleOff }, nowMs);
+        }
+        return;
+      }
+      // Trap (any trap category — banana, v8_mine, v8_dynamite, etc.)
+      if (def.category === "trap") {
+        this._spawnBanana(client.sessionId, kart, def, data, nowMs);
+        return;
+      }
+      // Legacy fallthrough — keep prior projectileFired event for any
+      // weapons that haven't been migrated to the schema-projectile path.
       this.broadcast("projectileFired", {
         ownerId: client.sessionId,
         weapon: weaponId,
@@ -373,12 +480,6 @@ export class Editor3RaceRoom extends Room {
         x: kart.x, y: kart.y, z: kart.z,
         qx: kart.qx, qy: kart.qy, qz: kart.qz, qw: kart.qw,
       });
-      // Phase C2 \u2014 minimal server-authoritative impact resolution. For
-      // hitscan / front-cone weapons we do an immediate forward-ray check
-      // against the other karts and broadcast a single kartImpact so all
-      // clients display the same VFX. Full ballistic projectile physics
-      // (homing missiles, arcing bombs) remain client-visual-only until
-      // the server-side projectile sim ships; mark those by category.
       const isHitscan = (def.category === 'hitscan' || def.category === 'cone' || def.range === 'short');
       if (isHitscan) {
         const target = this._findForwardCarTarget(kart, Number(def.rangeM) || 18);
@@ -387,7 +488,7 @@ export class Editor3RaceRoom extends Room {
           this.broadcast("kartImpact", {
             sourceId: client.sessionId,
             targetId: target.sid,
-            weapon: weaponId,
+            subType: weaponId,
             x: target.kart.x, y: target.kart.y, z: target.kart.z,
             stunMs,
             ts: Date.now(),
@@ -483,6 +584,19 @@ export class Editor3RaceRoom extends Room {
     ks.engineExploded = false;
     ks.weapon2 = ""; ks.ammo2 = 0;
     ks.weapon3 = ""; ks.ammo3 = 0;
+    ks.score = 0;
+    ks.boostUntilMs = 0;
+    ks.boostMul = 1;
+    ks.immuneUntilMs = 0;
+    ks.stunUntilMs = 0;
+    ks.spinUntilMs = 0;
+    ks.bulletBillUntilMs = 0;
+    ks.starUntilMs = 0;
+    ks.chargeCount = 0;
+    ks.hp = 100;
+    ks.coins = 0;
+    ks.shieldActive = 0;
+    ks.doubleDmgUntilMs = 0;
     this.state.karts.set(client.sessionId, ks);
 
     this.inputs.set(client.sessionId, { seq: 0, throttle: 0, brake: 0, steer: 0, drift: false });
@@ -535,7 +649,11 @@ export class Editor3RaceRoom extends Room {
     if (opts.reason === "manual" && nowMs - last < 1500) return false;
     this._lastRespawnAt.set(sessionId, nowMs);
 
-    // Pick the nearest spawn ahead of (or at) the kart's current position.
+    // Pit-fall score penalty (spec: "lose score or stun on pit fall").
+    if (opts.reason === "fellOff") {
+      ks.score = Math.max(0, (ks.score || 0) - 1);
+      this.broadcast("penaltyApplied", { sessionId, reason: "fellOff", scoreDelta: -1 });
+    }
     // For multi-spawn templates this naturally puts you back near the most
     // recently passed checkpoint.
     const spawns = this.spawns && this.spawns.length ? this.spawns : [{ x: 0, y: M(1.5), z: 0, heading: 0 }];
@@ -582,6 +700,17 @@ export class Editor3RaceRoom extends Room {
     this.controlStates?.delete(sessionId);
     this.playerCombats?.delete(sessionId);
     this.state.karts.delete(sessionId);
+    // Clean up projectiles owned by the leaving player
+    if (this._projMeta) {
+      const ownedKeys = [];
+      for (const [key, meta] of this._projMeta.entries()) {
+        if (meta.ownerId === sessionId) ownedKeys.push(key);
+      }
+      for (const key of ownedKeys) {
+        this.state.projectiles.delete(key);
+        this._projMeta.delete(key);
+      }
+    }
     log("info", "editor3_room_leave", { roomId: this.roomId, sessionId, remaining: this.vehicles.size });
   }
 
@@ -646,32 +775,71 @@ export class Editor3RaceRoom extends Room {
   }
 
   _tick() {
-    // Drive each kart through the SHARED physics core so handling is
-    // exactly identical to SP playtest. The core handles engine force,
-    // braking, steering, drift hop/commit/exit, mini-turbo boost and
-    // anti-pitch. Server only converts {throttle,brake,steer,drift}
-    // input messages into the keyboard-shape the core expects.
+    const nowMs = Date.now();
+
+    // ── Effect application: modify control inputs for stunned/spinning/boosted karts ──
     for (const [sid, input] of this.inputs.entries()) {
       const v = this.vehicles.get(sid);
       if (!v) continue;
       const cs = this.controlStates.get(sid);
       const pc = this.playerCombats.get(sid);
       if (!cs || !pc) continue;
+      const ks = this.state.karts.get(sid);
+
+      // Derive an effective input that reflects active status effects.
+      let effInput = input;
+      if (ks) {
+        const stunned  = nowMs < (ks.stunUntilMs || 0);
+        const spinning = nowMs < (ks.spinUntilMs || 0);
+        const billing  = nowMs < (ks.bulletBillUntilMs || 0);
+
+        if (stunned || spinning || billing) {
+          // During stun/spin/bullet-bill player has no control.
+          // For bullet bill we keep full throttle but auto-steer.
+          effInput = { seq: input.seq, throttle: billing ? 1 : 0, brake: 0, steer: billing ? this._billSteer(sid, ks) : 0, drift: false };
+        }
+
+        // Apply external speed boost from mushroom/star.
+        const boosting = nowMs < (ks.boostUntilMs || 0);
+        if (boosting && !stunned && !spinning) {
+          const mul = Number(ks.boostMul) || 1;
+          // Clamp to prevent physics explosion — max factor is 3.
+          if (mul > 1) {
+            const vel = v.chassisBody.velocity;
+            const spd = Math.sqrt(vel.x * vel.x + vel.y * vel.y + vel.z * vel.z);
+            if (spd > 0.1) {
+              // Nudge velocity magnitude toward target (not a hard clamp —
+              // smooth frame-over-frame is more stable with cannon-es).
+              const targetSpd = spd * mul;
+              const cappedMul = Math.min(targetSpd, spd * 1.08) / spd; // gentle ramp
+              vel.x *= cappedMul; vel.y *= cappedMul; vel.z *= cappedMul;
+            }
+          }
+        }
+
+        // Star contact damage: if star is active and we're touching another kart, knockback them.
+        const starActive = nowMs < (ks.starUntilMs || 0);
+        if (starActive) {
+          this._checkStarContact(sid, ks, nowMs);
+        }
+      }
+
       applyKartControls({
         chassisBody: v.chassisBody,
         vehicle: v,
         controlState: cs,
-        keys: inputsToKeys(input),
+        keys: inputsToKeys(effInput),
         playerCombat: pc,
       }, this.tickDt);
     }
+
     const t0 = process.hrtime.bigint();
     this.world.step(this.tickDt, this.tickDt, 3);
     const dur = Number(process.hrtime.bigint() - t0) / 1e6;
     this.tickDurations.push(dur);
     if (this.tickDurations.length > 1200) this.tickDurations.shift();
 
-    // Phase F1 — fall-through guard. Any kart that drops below the world
+    // Phase F1— fall-through guard. Any kart that drops below the world
     // floor (placed at y=-50m by makeWorld) is auto-respawned so the
     // player isn't stranded. Also catches NaN cases that would otherwise
     // poison the snapshot stream.
@@ -751,6 +919,378 @@ export class Editor3RaceRoom extends Room {
         this.pickupRespawnAt.set(pid, 0);
       }
     }
+
+    // Slice 2 — advance all live projectiles.
+    this._tickProjectiles(now);
+  }
+
+  // ── Slice 2 + 3: Self-buff weapons ──────────────────────────────────────
+
+  _applySelfBuff(sid, kart, weaponId, def, nowMs) {
+    const effect = def.effect;
+    if (effect === "mushroom") {
+      kart.boostUntilMs = Math.max(kart.boostUntilMs || 0, nowMs + def.effectDuration);
+      kart.boostMul = def.boostFactor;
+    } else if (effect === "star") {
+      kart.boostUntilMs = Math.max(kart.boostUntilMs || 0, nowMs + def.effectDuration);
+      kart.boostMul = def.boostFactor;
+      kart.starUntilMs = Math.max(kart.starUntilMs || 0, nowMs + def.effectDuration);
+      kart.immuneUntilMs = Math.max(kart.immuneUntilMs || 0, nowMs + def.effectDuration);
+    } else if (effect === "bullet_bill") {
+      kart.bulletBillUntilMs = Math.max(kart.bulletBillUntilMs || 0, nowMs + def.effectDuration);
+      kart.immuneUntilMs = Math.max(kart.immuneUntilMs || 0, nowMs + def.effectDuration);
+      const v = this.vehicles.get(sid);
+      if (v) {
+        const qx = kart.qx, qy = kart.qy, qz = kart.qz, qw = kart.qw;
+        const fx = 2 * (qx * qz + qw * qy);
+        const fy = 2 * (qy * qz - qw * qx);
+        const fz = 1 - 2 * (qx * qx + qy * qy);
+        const spd = M(def.targetSpeed || 92);
+        v.chassisBody.velocity.set(fx * spd, fy * spd, fz * spd);
+      }
+    // ── Slice 3: V8 buffs ──────────────────────────────────────────────
+    } else if (effect === "v8_shield") {
+      kart.shieldActive = 1;
+      kart.immuneUntilMs = Math.max(kart.immuneUntilMs || 0, nowMs + (def.effectDuration || 8000));
+    } else if (effect === "v8_repair") {
+      kart.hp = 100;
+    } else if (effect === "v8_double_dmg") {
+      kart.doubleDmgUntilMs = Math.max(kart.doubleDmgUntilMs || 0, nowMs + (def.effectDuration || 5000));
+    }
+    this.broadcast("effectApplied", {
+      sessionId: sid, effect, durationMs: def.effectDuration || 0, weaponId, ts: nowMs,
+    });
+  }
+
+  // ── Slice 2: Projectile spawn helpers ────────────────────────────────
+
+  _spawnProjectile(sid, kart, weaponId, def, data, nowMs) {
+    const key = "p" + (this._projId++);
+    const ps = new ProjectileState();
+    ps.ownerId = sid;
+    ps.subType = def.subType;
+    ps.bouncesLeft = def.bounces || 0;
+    ps.armed = 1;
+
+    // Forward direction from kart quaternion (rotate local +Z)
+    const qx = kart.qx, qy = kart.qy, qz = kart.qz, qw = kart.qw;
+    let fx = 2 * (qx * qz + qw * qy);
+    let fz = 1 - 2 * (qx * qx + qy * qy);
+    const backward = data?.dir === "back";
+    const dir = backward ? -1 : 1;
+    const spd = M(def.speed);
+
+    // Spread-angle offset for firethrower cone (radians in XZ plane)
+    const angleOff = data?.spreadAngleOff || 0;
+    if (angleOff !== 0) {
+      const cos = Math.cos(angleOff), sin = Math.sin(angleOff);
+      const ofx = fx * cos - fz * sin;
+      const ofz = fx * sin + fz * cos;
+      fx = ofx; fz = ofz;
+    }
+
+    ps.x = kart.x + fx * dir * M(1.5);
+    ps.y = kart.y + M(0.3);
+    ps.z = kart.z + fz * dir * M(1.5);
+    ps.vx = fx * dir * spd;
+    // launchUp: blue_shell, mortar, and any weapon with the field
+    ps.vy = def.launchUp ? M(def.launchUp) : 0;
+    ps.vz = fz * dir * spd;
+
+    let targetId = "";
+    if (def.homing) {
+      if (def.targetMode === "leader") {
+        let leaderSid = null, leaderScore = -1;
+        for (const [tsid, tk] of this.state.karts.entries()) {
+          if (tsid === sid) continue;
+          const s = (tk.lap || 0) * 100000 + (tk.score || 0);
+          if (s > leaderScore) { leaderScore = s; leaderSid = tsid; }
+        }
+        targetId = leaderSid || "";
+      } else {
+        let best = null, bestD2 = Infinity;
+        for (const [tsid, tk] of this.state.karts.entries()) {
+          if (tsid === sid) continue;
+          const dx = tk.x - kart.x, dz = tk.z - kart.z;
+          const d2 = dx * dx + dz * dz;
+          if (d2 < bestD2) { bestD2 = d2; best = tsid; }
+        }
+        targetId = best || "";
+      }
+    }
+    ps.targetId = targetId;
+
+    this.state.projectiles.set(key, ps);
+    this._projMeta.set(key, {
+      expiresMs: nowMs + (def.lifespan || 6500),
+      fuseMs: def.fuseMs ? nowMs + def.fuseMs : 0,
+      homingArmedMs: def.homingDelayMs ? nowMs + def.homingDelayMs : 0,
+      spawnProtectionMs: nowMs + 300,
+      def, ownerId: sid,
+      spawnX: kart.x, spawnY: kart.y, spawnZ: kart.z,
+    });
+    this.broadcast("projectileSpawned", {
+      key, ownerId: sid, subType: def.subType, targetId, ts: nowMs,
+    });
+    // Warn the targeted kart when a blue shell locks on.
+    if (def.subType === "blue_shell" && targetId) {
+      this.broadcast("blueShellWarning", { targetId, projKey: key, ts: nowMs });
+    }
+  }
+
+  _spawnBanana(sid, kart, def, data, nowMs) {
+    const key = "p" + (this._projId++);
+    const ps = new ProjectileState();
+    ps.ownerId = sid;
+    ps.subType = "banana";
+    ps.bouncesLeft = 0;
+    ps.armed = 1;
+
+    const qx = kart.qx, qy = kart.qy, qz = kart.qz, qw = kart.qw;
+    const fx = 2 * (qx * qz + qw * qy);
+    const fz = 1 - 2 * (qx * qx + qy * qy);
+
+    ps.x = kart.x - fx * M(1.8);
+    ps.y = kart.y;
+    ps.z = kart.z - fz * M(1.8);
+    ps.vx = 0; ps.vy = 0; ps.vz = 0;
+    ps.targetId = "";
+
+    this.state.projectiles.set(key, ps);
+    this._projMeta.set(key, {
+      expiresMs: nowMs + (def.lifespan || 18000),
+      fuseMs: 0, homingArmedMs: 0, spawnProtectionMs: 0,
+      def, ownerId: sid,
+      spawnX: kart.x, spawnY: kart.y, spawnZ: kart.z,
+    });
+    this.broadcast("projectileSpawned", {
+      key, ownerId: sid, subType: "banana", targetId: "", ts: nowMs,
+    });
+  }
+
+  // ── Slice 2: Per-tick projectile simulation ───────────────────────────
+
+  _tickProjectiles(nowMs) {
+    const dt = this.tickDt;
+    const toDestroy = [];
+
+    for (const [key, ps] of this.state.projectiles.entries()) {
+      const meta = this._projMeta.get(key);
+      if (!meta) { toDestroy.push(key); continue; }
+      const def = meta.def;
+
+      if (nowMs >= meta.expiresMs) { toDestroy.push(key); continue; }
+
+      // Out-of-bounds guard (no arena wall bouncing — destroy instead)
+      const sdx = ps.x - meta.spawnX, sdz = ps.z - meta.spawnZ;
+      if (sdx * sdx + sdz * sdz > M(80) * M(80) || ps.y < -M(10)) {
+        toDestroy.push(key); continue;
+      }
+
+      // Gravity: def.gravity is in m/s² (negative = down), SCALE converts to mm/s²
+      if (def.gravity) ps.vy += def.gravity * SCALE * dt;
+
+      // Ground bounce / resting
+      if (ps.y <= M(0.4) && ps.vy < 0) {
+        if (ps.bouncesLeft > 0) {
+          ps.y = M(0.4);
+          const retention = def.bounceRetention ?? (1 - (def.bounceLoss ?? 0));
+          ps.vy = -ps.vy * retention;
+          ps.vx *= retention; ps.vz *= retention;
+          ps.bouncesLeft--;
+        } else if (def.subType === "banana") {
+          ps.vy = 0; ps.y = M(0.4); // rest on ground
+        } else {
+          toDestroy.push(key); continue;
+        }
+      }
+
+      // Homing
+      if (def.homing && nowMs >= meta.homingArmedMs && ps.targetId) {
+        const tk = this.state.karts.get(ps.targetId);
+        if (tk) {
+          if (def.subType === "blue_shell") {
+            // 3D vector homing: converge on target, ramp speed to finalSpeed
+            const tDx = tk.x - ps.x, tDy = tk.y - ps.y, tDz = tk.z - ps.z;
+            const tLen = Math.sqrt(tDx * tDx + tDy * tDy + tDz * tDz) || 1;
+            const curSpd = Math.sqrt(ps.vx * ps.vx + ps.vy * ps.vy + ps.vz * ps.vz) || M(def.speed);
+            const targetSpd = Math.min(curSpd + M(10) * dt, M(def.finalSpeed || 72));
+            const alpha = Math.min(1, def.homingTurnRate * dt * 3);
+            ps.vx += ((tDx / tLen) * targetSpd - ps.vx) * alpha;
+            ps.vy += ((tDy / tLen) * targetSpd - ps.vy) * alpha;
+            ps.vz += ((tDz / tLen) * targetSpd - ps.vz) * alpha;
+          } else {
+            // 2D XZ angular homing (red_shell)
+            const hSpd = Math.sqrt(ps.vx * ps.vx + ps.vz * ps.vz) || M(def.speed);
+            const desiredAngle = Math.atan2(tk.x - ps.x, tk.z - ps.z);
+            const currentAngle = Math.atan2(ps.vx, ps.vz);
+            let dAngle = desiredAngle - currentAngle;
+            while (dAngle > Math.PI) dAngle -= 2 * Math.PI;
+            while (dAngle < -Math.PI) dAngle += 2 * Math.PI;
+            const maxTurn = def.homingTurnRate * dt;
+            const turn = Math.max(-maxTurn, Math.min(maxTurn, dAngle));
+            const newAngle = currentAngle + turn;
+            const newSpd = def.maxSpeed
+              ? Math.min(hSpd + M(3) * dt, M(def.maxSpeed))
+              : hSpd;
+            ps.vx = Math.sin(newAngle) * newSpd;
+            ps.vz = Math.cos(newAngle) * newSpd;
+          }
+        }
+      }
+
+      // Integrate
+      ps.x += ps.vx * dt;
+      ps.y += ps.vy * dt;
+      ps.z += ps.vz * dt;
+
+      // Bob-omb fuse detonation (after movement so blast is at final pos)
+      if (meta.fuseMs > 0 && nowMs >= meta.fuseMs) {
+        for (const [vsid, vk] of this.state.karts.entries()) {
+          const dx = vk.x - ps.x, dy = vk.y - ps.y, dz = vk.z - ps.z;
+          if (Math.sqrt(dx * dx + dy * dy + dz * dz) < M(def.explosionRadius || 8.5)) {
+            this._applyKnockback(vsid, vk, meta.ownerId, def, nowMs,
+              { x: ps.x, y: ps.y, z: ps.z });
+          }
+        }
+        this.broadcast("projectileExploded", {
+          key, x: ps.x, y: ps.y, z: ps.z, subType: ps.subType, ts: nowMs,
+        });
+        toDestroy.push(key);
+        continue;
+      }
+
+      // Direct hit detection (owner protected during spawn grace window)
+      const hitR = M(def.radius || 0.65);
+      let hit = false;
+      for (const [vsid, vk] of this.state.karts.entries()) {
+        if (vsid === meta.ownerId && nowMs < meta.spawnProtectionMs) continue;
+        const dx = vk.x - ps.x, dy = vk.y - ps.y, dz = vk.z - ps.z;
+        if (dx * dx + dy * dy + dz * dz < hitR * hitR) {
+          this._applyKnockback(vsid, vk, meta.ownerId, def, nowMs, null);
+          this.broadcast("projectileExploded", {
+            key, x: ps.x, y: ps.y, z: ps.z, subType: ps.subType, ts: nowMs,
+          });
+          toDestroy.push(key);
+          hit = true;
+          break;
+        }
+      }
+      if (hit) continue;
+    }
+
+    for (const key of toDestroy) {
+      this.state.projectiles.delete(key);
+      this._projMeta.delete(key);
+    }
+  }
+
+  // ── Slice 2: Combat resolution helpers ────────────────────────────────
+
+  _applyKnockback(victimSid, victimKart, attackerSid, def, nowMs, explosionOrigin) {
+    if (nowMs < (victimKart.immuneUntilMs || 0)) return;
+
+    // V8 Shield: absorb one hit
+    if (victimKart.shieldActive) {
+      victimKart.shieldActive = 0;
+      victimKart.immuneUntilMs = 0;
+      this.broadcast("effectApplied", {
+        sessionId: victimSid, effect: "shield_broken", durationMs: 0, weaponId: "", ts: nowMs,
+      });
+      return;
+    }
+
+    if (def.stunMs) {
+      victimKart.stunUntilMs = Math.max(victimKart.stunUntilMs || 0, nowMs + def.stunMs);
+    }
+    if (def.effect === "spinout" && def.effectDuration) {
+      victimKart.spinUntilMs = Math.max(victimKart.spinUntilMs || 0, nowMs + def.effectDuration);
+    }
+
+    // V8 Double Damage: attacker inflicts 2× knockback
+    const atkKart = attackerSid ? this.state.karts.get(attackerSid) : null;
+    const ddActive = atkKart && nowMs < (atkKart.doubleDmgUntilMs || 0);
+
+    const v = this.vehicles.get(victimSid);
+    let knockback = Number(def.knockback) || 0;
+    if (ddActive) knockback *= 2;
+    if (v && knockback > 0) {
+      let impulseX = 0, impulseZ = 0;
+      if (explosionOrigin) {
+        const dx = victimKart.x - explosionOrigin.x;
+        const dz = victimKart.z - explosionOrigin.z;
+        const d = Math.sqrt(dx * dx + dz * dz) || 1;
+        impulseX = dx / d; impulseZ = dz / d;
+      } else {
+        if (atkKart) {
+          const dx = victimKart.x - atkKart.x, dz = victimKart.z - atkKart.z;
+          const d = Math.sqrt(dx * dx + dz * dz) || 1;
+          impulseX = dx / d; impulseZ = dz / d;
+        } else {
+          const vx = v.chassisBody.velocity.x, vz = v.chassisBody.velocity.z;
+          const d = Math.sqrt(vx * vx + vz * vz) || 1;
+          impulseX = -vx / d; impulseZ = -vz / d;
+        }
+      }
+      const force = M(knockback);
+      v.chassisBody.velocity.x += impulseX * force;
+      v.chassisBody.velocity.y += M(6);
+      v.chassisBody.velocity.z += impulseZ * force;
+    }
+
+    if (attackerSid && attackerSid !== victimSid) {
+      if (atkKart) atkKart.score = Math.min(65535, (atkKart.score || 0) + 1);
+    }
+
+    this.broadcast("kartImpact", {
+      sourceId: attackerSid || "",
+      targetId: victimSid,
+      subType: def.subType || def.effect || "unknown",
+      x: victimKart.x, y: victimKart.y, z: victimKart.z,
+      stunMs: def.stunMs || 0,
+      screenShake: !!def.screenShake,
+      ts: nowMs,
+    });
+  }
+
+  _checkStarContact(sid, ks, nowMs) {
+    if (!this._starCooldowns) this._starCooldowns = new Map();
+    const CONTACT_DIST = M(4);
+    const COOLDOWN_MS = 600;
+    for (const [vsid, vk] of this.state.karts.entries()) {
+      if (vsid === sid) continue;
+      const dx = vk.x - ks.x, dy = vk.y - ks.y, dz = vk.z - ks.z;
+      if (dx * dx + dy * dy + dz * dz < CONTACT_DIST * CONTACT_DIST) {
+        const coolKey = sid + ":" + vsid;
+        const last = this._starCooldowns.get(coolKey) || 0;
+        if (nowMs - last < COOLDOWN_MS) continue;
+        this._starCooldowns.set(coolKey, nowMs);
+        this._applyKnockback(vsid, vk, sid,
+          { knockback: 45, stunMs: 400, screenShake: false, effect: null, subType: "star" },
+          nowMs, null);
+      }
+    }
+  }
+
+  _billSteer(sid, ks) {
+    let nearestSid = null, nearestD2 = Infinity;
+    for (const [tsid, tk] of this.state.karts.entries()) {
+      if (tsid === sid) continue;
+      const dx = tk.x - ks.x, dz = tk.z - ks.z;
+      const d2 = dx * dx + dz * dz;
+      if (d2 < nearestD2) { nearestD2 = d2; nearestSid = tsid; }
+    }
+    if (!nearestSid) return 0;
+    const tk = this.state.karts.get(nearestSid);
+    if (!tk) return 0;
+    const qx = ks.qx, qy = ks.qy, qz = ks.qz, qw = ks.qw;
+    const fx = 2 * (qx * qz + qw * qy);
+    const fz = 1 - 2 * (qx * qx + qy * qy);
+    // Right vector perpendicular to forward in XZ plane
+    const rx = fz, rz = -fx;
+    const dx = tk.x - ks.x, dz = tk.z - ks.z;
+    const d = Math.sqrt(dx * dx + dz * dz) || 1;
+    return Math.max(-1, Math.min(1, ((dx / d) * rx + (dz / d) * rz) * 2));
   }
 
   _countFinished() {
@@ -758,6 +1298,7 @@ export class Editor3RaceRoom extends Room {
     for (const k of this.state.karts.values()) if (k.finished) n++;
     return n;
   }
+
   _allFinished() {
     if (this.state.karts.size === 0) return false;
     for (const k of this.state.karts.values()) if (!k.finished) return false;
@@ -800,6 +1341,21 @@ export class Editor3RaceRoom extends Room {
         if (vehicle.wheelInfos[i].isInContact) mask |= (1 << i);
       }
       ks.wheelGrounded = mask;
+    }
+    // Slice 2 — match timer countdown (updated every snapshot, ~30Hz).
+    if (this.state.status === "racing") {
+      if (this._matchStartMs === 0) this._matchStartMs = nowMs;
+      const elapsed = Math.floor((nowMs - this._matchStartMs) / 1000);
+      const left = Math.max(0, 180 - elapsed);
+      if (left !== this.state.matchSecondsLeft) {
+        this.state.matchSecondsLeft = left;
+        if (left === 0) {
+          this.state.status = "finished";
+          const scores = {};
+          for (const [sid, ks] of this.state.karts.entries()) scores[sid] = ks.score || 0;
+          this.broadcast("matchOver", { scores });
+        }
+      }
     }
   }
 }

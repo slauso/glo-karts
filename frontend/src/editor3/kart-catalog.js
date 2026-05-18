@@ -57,6 +57,16 @@ export const KARTS = [
   { id: 'transmission',    label: 'Switch',      modelPath: '/models/stk/karts/transmission/kart.glb',    weight: 'medium', accent: '#7777aa' },
   { id: 'wilber',          label: 'Mia',         modelPath: '/models/stk/karts/wilber/kart.glb',          weight: 'heavy',  accent: '#ff9933' },
   { id: 'xue',             label: 'Pat',         modelPath: '/models/stk/karts/xue/kart.glb',             weight: 'light',  accent: '#ffffff' },
+  // Standard kart from Unity asset pack (OBJ with MK8-style textures)
+  {
+    id: 'standard-kart',
+    label: 'Standard',
+    modelPath: '/kart%20assets/3D%20Kart/Assets/Models/Kart/Standard%20Kart.obj',
+    albedoPath: '/kart%20assets/3D%20Kart/Assets/Models/Kart/Materials/bodyk_std_mro_alb.png',
+    normalPath: '/kart%20assets/3D%20Kart/Assets/Models/Kart/Materials/bodyk_std_nrm.png',
+    weight: 'medium',
+    accent: '#ff3a00',
+  },
 ];
 
 export const KART_BY_ID = Object.fromEntries(KARTS.map((k) => [k.id, k]));

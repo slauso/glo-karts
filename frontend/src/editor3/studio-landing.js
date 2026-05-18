@@ -20,9 +20,19 @@
 
 import { StudioAPI } from './studio-api.js';
 import { renderTrackThumb } from './track-thumb.js';
+import { generateRandomTrack } from './track-randomizer.js';
 
 const STORAGE_KEY = 'gloKartsStudio.lastTrack';
 const BUNDLED_TEMPLATES_URL = '/templates/bundled.json';
+
+function dismissBootSplash() {
+  if (typeof window === 'undefined' || typeof window.__gkSplashHide !== 'function') return;
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      try { window.__gkSplashHide(); } catch {}
+    });
+  });
+}
 
 export function showStudioLanding() {
   // Honor URL shortcuts that bypass the landing.
@@ -66,6 +76,7 @@ export function showStudioLanding() {
       // re-open from the menu builds a fresh node instead of finding
       // this stale one.
       overlay.removeAttribute('data-preshown');
+      syncOverlayScaffold(overlay);
     }
 
     // ── Continue card: enable + populate from autosave ───────────────
@@ -88,10 +99,12 @@ export function showStudioLanding() {
       if (tab.dataset.tab === 'templates') hydrateTemplates(overlay);
       else if (tab.dataset.tab === 'community') hydrateCommunity(overlay);
       else if (tab.dataset.tab === 'mine') hydrateMine(overlay);
+      // randomize pane needs no pre-hydration
     }));
 
     // Eager-load whichever tab starts active (Templates by default).
     hydrateTemplates(overlay);
+    dismissBootSplash();
 
     // ── Card-level actions ───────────────────────────────────────────
     overlay.addEventListener('click', async (e) => {
@@ -114,6 +127,8 @@ export function showStudioLanding() {
         resolve({ action: 'continue' });
       } else if (action === 'lobby') {
         location.href = '/index.html';
+      } else if (action === 'randomize') {
+        onRandomize(overlay, resolve);
       }
     });
   });
@@ -121,6 +136,19 @@ export function showStudioLanding() {
   function close(overlay) {
     overlay.classList.add('closing');
     setTimeout(() => overlay.remove(), 220);
+  }
+
+  function onRandomize(overlay, resolve) {
+    const btn = overlay.querySelector('[data-action="randomize"]');
+    const spinner = overlay.querySelector('.sl-rand-generating');
+    if (btn) btn.disabled = true;
+    if (spinner) spinner.hidden = false;
+    // Cosmetic delay so the animation registers before the editor opens.
+    setTimeout(() => {
+      const json = generateRandomTrack();
+      close(overlay);
+      resolve({ action: 'load', json });
+    }, 380);
   }
 
   async function onPickTrack(id, asRemix, overlay, resolve) {
@@ -175,27 +203,38 @@ function readAutosave() {
 
 async function hydrateTemplates(overlay) {
   const grid = overlay.querySelector('[data-pane="templates"] .sl-grid');
+  if (!grid) return;
   if (grid.dataset.hydrated === '1') return;
   grid.dataset.hydrated = '1';
   grid.innerHTML = `<div class="sl-empty">Loading templates…</div>`;
-  let items = [];
-  try {
-    const res = await StudioAPI.templates({ sort: 'newest' });
-    items = res.results || [];
-  } catch {
-    try {
-      const bundled = await fetch(BUNDLED_TEMPLATES_URL).then((r) => r.json());
-      items = bundled.map((t) => ({
-        id: t.pk,
-        name: t.fields.name,
-        author_name: t.fields.author_name,
-        description: t.fields.description,
-        tags: t.fields.tags,
-        is_template: true,        preview_placements: t.fields.track_data?.track?.placements || [],      }));
-    } catch {}
+  const bundledPromise = loadBundledTemplates();
+  const apiPromise = StudioAPI.templates({ sort: 'newest' })
+    .then((res) => res.results || [])
+    .catch(() => null);
+
+  const bundledItems = await bundledPromise;
+  if (bundledItems.length) {
+    grid.innerHTML = bundledItems.map((t) => trackTile(t, { primaryLabel: 'Use Template' })).join('');
   }
-  if (!items.length) { grid.innerHTML = `<div class="sl-empty">No templates available.</div>`; return; }
-  grid.innerHTML = items.map((t) => trackTile(t, { primaryLabel: 'Use Template' })).join('');
+
+  const apiItems = await apiPromise;
+  // Merge by id: prefer API metadata (newer descriptions, counts, etc.) but
+  // keep any bundled templates the backend hasn't been seeded with yet.
+  // Previously the API list silently overwrote the bundled list, hiding
+  // newer client-side templates whenever the backend fixture lagged behind.
+  const byId = new Map();
+  for (const t of bundledItems) if (t?.id != null) byId.set(t.id, t);
+  if (apiItems?.length) {
+    for (const t of apiItems) if (t?.id != null) byId.set(t.id, t);
+  }
+  const merged = [...byId.values()];
+  if (merged.length) {
+    grid.innerHTML = merged.map((t) => trackTile(t, { primaryLabel: 'Use Template' })).join('');
+    return;
+  }
+  if (!bundledItems.length) {
+    grid.innerHTML = `<div class="sl-empty">No templates available.</div>`;
+  }
 }
 
 async function hydrateCommunity(overlay) {
@@ -280,6 +319,58 @@ function flash(overlay, message) {
 function escapeHtml(s) { return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c])); }
 function escapeAttr(s) { return escapeHtml(s); }
 
+async function loadBundledTemplates() {
+  try {
+    const bundled = await fetch(BUNDLED_TEMPLATES_URL).then((r) => r.json());
+    return bundled.map((t) => ({
+      id: t.pk,
+      name: t.fields.name,
+      author_name: t.fields.author_name,
+      description: t.fields.description,
+      tags: t.fields.tags,
+      is_template: true,
+      preview_placements: t.fields.track_data?.track?.placements || [],
+    }));
+  } catch {
+    return [];
+  }
+}
+
+function syncOverlayScaffold(overlay) {
+  const templatesPane = overlay.querySelector('[data-pane="templates"]');
+  if (templatesPane && !templatesPane.querySelector('.sl-grid')) {
+    templatesPane.innerHTML = '<div class="sl-grid"></div>';
+  }
+
+  const communityPane = overlay.querySelector('[data-pane="community"]');
+  if (communityPane && !communityPane.querySelector('.sl-grid')) {
+    communityPane.innerHTML = '<div class="sl-grid"></div>';
+  }
+
+  const minePane = overlay.querySelector('[data-pane="mine"]');
+  if (minePane && !minePane.querySelector('.sl-grid')) {
+    minePane.innerHTML = '<div class="sl-grid"></div>';
+  }
+
+  const randomizePane = overlay.querySelector('[data-pane="randomize"]');
+  if (randomizePane && !randomizePane.querySelector('[data-action="randomize"]')) {
+    randomizePane.innerHTML = RANDOMIZE_PANE_HTML;
+  }
+}
+
+const RANDOMIZE_PANE_HTML = `
+  <div class="sl-rand-body">
+    <div class="sl-rand-icon">⚡</div>
+    <h3 class="sl-rand-title">Random Track Generator</h3>
+    <p class="sl-rand-desc">Instantly builds a unique closed-loop circuit — oval, s-curve, mountain pass, or hairpin — ready to race and remix.</p>
+    <button class="sl-rand-btn" data-action="randomize" type="button">Generate Track</button>
+    <div class="sl-rand-generating" hidden>
+      <div class="sl-rand-spinner"></div>
+      <span>Generating circuit…</span>
+    </div>
+  </div>
+`;
+
 const HTML = `
   <div class="sl-bg"></div>
   <div class="sl-shell" role="dialog" aria-modal="true" aria-label="Track Studio">
@@ -313,6 +404,7 @@ const HTML = `
       <button class="sl-tab active" data-tab="templates" type="button">Templates</button>
       <button class="sl-tab" data-tab="community" type="button">Remix Community</button>
       <button class="sl-tab" data-tab="mine" type="button">My Saves</button>
+      <button class="sl-tab" data-tab="randomize" type="button">⚡ Randomize</button>
     </nav>
 
     <section class="sl-pane active" data-pane="templates">
@@ -323,6 +415,9 @@ const HTML = `
     </section>
     <section class="sl-pane" data-pane="mine">
       <div class="sl-grid"></div>
+    </section>
+    <section class="sl-pane" data-pane="randomize">
+      ${RANDOMIZE_PANE_HTML}
     </section>
   </div>
 `;

@@ -5,137 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>GLO KARTS — Track Studio</title>
   <link rel="icon" href="data:," />
-  <!-- ============================================================
-       SPLASH BRIDGE
-       ============================================================
-       Painted before *anything* else (no font fetch, no external CSS,
-       no JS) so the user sees a branded interstitial within the first
-       16 ms of the new HTML parsing. Bridges the cold-load gap between
-       the lobby's exit fade and the inline studio landing without ever
-       showing a black void. The splash auto-removes once the landing's
-       interactive layer is mounted (or after a 2.5 s safety timeout).
-       ============================================================ -->
-  <style id="gk-splash-style">
-    html, body { background: #05050a; }
-    /* Visible immediately; CSS-only animations keep paint cheap. */
-    #gkSplash {
-      position: fixed; inset: 0; z-index: 2147483647;
-      display: flex; align-items: center; justify-content: center;
-      background:
-        radial-gradient(ellipse 90% 60% at 50% 40%, rgba(255,0,128,0.22) 0%, transparent 55%),
-        radial-gradient(ellipse 70% 50% at 50% 80%, rgba(120,0,80,0.18) 0%, transparent 60%),
-        #05050a;
-      color: #fff;
-      font-family: 'Exo 2', 'Segoe UI', sans-serif;
-      transition: opacity 280ms cubic-bezier(.4,0,.2,1);
-      animation: gkSplashIn 220ms cubic-bezier(.22,1,.36,1) both;
-      will-change: opacity;
-    }
-    #gkSplash.gk-splash-out { opacity: 0; pointer-events: none; }
-    @keyframes gkSplashIn { from { opacity: 0; } to { opacity: 1; } }
-    .gk-splash-stack {
-      display: flex; flex-direction: column; align-items: center; gap: 28px;
-      animation: gkSplashRise 520ms cubic-bezier(.22,1,.36,1) both;
-    }
-    @keyframes gkSplashRise {
-      from { opacity: 0; transform: translateY(14px) scale(.985); }
-      to   { opacity: 1; transform: none; }
-    }
-    .gk-splash-ring-wrap {
-      position: relative;
-      width: 168px; height: 168px;
-      display: flex; align-items: center; justify-content: center;
-    }
-    .gk-splash-ring {
-      position: absolute; inset: 0;
-      border-radius: 50%;
-      border: 2px solid transparent;
-      border-top-color: #ff0080;
-      border-right-color: rgba(255,0,128,.55);
-      box-shadow:
-        0 0 24px rgba(255,0,128,.55),
-        0 0 60px rgba(255,0,128,.25),
-        inset 0 0 18px rgba(255,0,128,.20);
-      animation: gkSpin 1.4s linear infinite;
-    }
-    .gk-splash-ring.gk-ring-2 {
-      inset: 16px;
-      border-top-color: rgba(255,255,255,.8);
-      border-right-color: rgba(255,255,255,.20);
-      box-shadow: none;
-      animation: gkSpinReverse 2.1s linear infinite;
-      opacity: .55;
-    }
-    @keyframes gkSpin        { to { transform: rotate(360deg); } }
-    @keyframes gkSpinReverse { to { transform: rotate(-360deg); } }
-    .gk-splash-mark {
-      position: relative;
-      font-family: 'Bungee', 'Exo 2', sans-serif;
-      font-size: 26px; line-height: 1;
-      letter-spacing: 1px; color: #fff;
-      text-align: center;
-      text-shadow: 0 0 18px rgba(255,0,128,.65), 0 0 40px rgba(255,0,128,.35);
-      animation: gkPulse 2.2s ease-in-out infinite;
-    }
-    .gk-splash-mark span { display: block; }
-    .gk-splash-mark .gk-mark-glo   { color: #fff; }
-    .gk-splash-mark .gk-mark-karts { color: #ff0080; }
-    @keyframes gkPulse {
-      0%, 100% { text-shadow: 0 0 14px rgba(255,0,128,.55), 0 0 32px rgba(255,0,128,.25); }
-      50%      { text-shadow: 0 0 22px rgba(255,0,128,.85), 0 0 48px rgba(255,0,128,.45); }
-    }
-    .gk-splash-title {
-      font-family: 'Bungee', 'Exo 2', sans-serif;
-      font-size: 22px; letter-spacing: 4px;
-      color: #fff;
-      text-shadow: 0 0 18px rgba(255,0,128,.55);
-    }
-    .gk-splash-tagline {
-      font-size: 13px; letter-spacing: 3px;
-      text-transform: uppercase;
-      color: rgba(255,255,255,.62);
-      display: inline-flex; align-items: center; gap: 10px;
-      min-height: 18px;
-    }
-    .gk-splash-tagline .gk-dot {
-      display: inline-block; width: 6px; height: 6px; border-radius: 50%;
-      background: #ff0080; box-shadow: 0 0 10px rgba(255,0,128,.8);
-      animation: gkDot 1.2s ease-in-out infinite;
-    }
-    .gk-splash-tagline .gk-dot:nth-child(2) { animation-delay: .15s; }
-    .gk-splash-tagline .gk-dot:nth-child(3) { animation-delay: .30s; }
-    @keyframes gkDot {
-      0%, 80%, 100% { opacity: .25; transform: translateY(0); }
-      40%           { opacity: 1;   transform: translateY(-3px); }
-    }
-    .gk-splash-bar {
-      width: 240px; height: 3px;
-      background: rgba(255,255,255,.08);
-      border-radius: 999px;
-      overflow: hidden;
-      position: relative;
-    }
-    .gk-splash-bar::after {
-      content: '';
-      position: absolute; inset: 0;
-      width: 40%; left: -40%;
-      background: linear-gradient(90deg,
-        transparent,
-        rgba(255,0,128,.95) 30%,
-        rgba(255,80,180,1) 50%,
-        rgba(255,0,128,.95) 70%,
-        transparent);
-      box-shadow: 0 0 14px rgba(255,0,128,.75);
-      animation: gkSweep 1.4s cubic-bezier(.4,0,.2,1) infinite;
-    }
-    @keyframes gkSweep { to { left: 100%; } }
-    @media (prefers-reduced-motion: reduce) {
-      #gkSplash, .gk-splash-stack, .gk-splash-ring, .gk-splash-ring.gk-ring-2,
-      .gk-splash-mark, .gk-splash-bar::after, .gk-splash-tagline .gk-dot {
-        animation: none !important;
-      }
-    }
-  </style>
+  <!-- Ensure first-paint background is dark before main styles parse -->
+  <style>html,body{background:#05050a}</style>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <!-- Non-render-blocking font load: fetch the stylesheet with media="print"
@@ -453,6 +324,52 @@
     .right-panel { display: flex; flex-direction: column; flex: 1; min-height: 0; }
     .right-panel[hidden] { display: none; }
     .kart-panel { padding-bottom: 0; }
+
+    /* ── GLOSET sky-tone picker ─────────────────────────────────────── */
+    .gloset-panel { padding: 0; }
+    .gloset-grid {
+      flex: 1;
+      display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px; padding: 8px 12px 12px;
+      overflow-y: auto; align-content: start;
+    }
+    .gloset-card {
+      position: relative;
+      background: var(--panel-2); color: var(--text);
+      border: 1px solid var(--line); border-radius: 6px;
+      padding: 6px 6px 7px;
+      cursor: pointer;
+      display: flex; flex-direction: column; align-items: stretch; gap: 4px;
+      box-shadow: var(--shadow-sm);
+      text-align: left; font: inherit;
+    }
+    .gloset-card:hover {
+      border-color: var(--accent);
+      transform: translateY(-1px);
+      box-shadow: var(--shadow-md);
+    }
+    .gloset-card.active {
+      border: 2px solid var(--accent);
+      background: var(--accent-soft);
+      padding: 5px 5px 6px;
+    }
+    .gloset-card .gloset-thumb {
+      width: 100%; aspect-ratio: 16 / 9;
+      border-radius: 4px; overflow: hidden;
+      background: #0a0e16;
+    }
+    .gloset-card .gloset-thumb canvas {
+      width: 100%; height: 100%; display: block;
+    }
+    .gloset-card .gloset-label {
+      font-size: 11px; font-weight: 600;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .gloset-card .gloset-meta {
+      font-size: 10px; color: var(--muted);
+      letter-spacing: 0.04em; text-transform: uppercase;
+    }
+    .gloset-card.active .gloset-meta { color: var(--accent-2, var(--accent)); }
     .kart-grid {
       flex: 1;
       display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -607,7 +524,9 @@
       padding: 2px 6px; border-radius: 3px; margin-bottom: 2px;
       visibility: hidden; white-space: nowrap;
     }
-    .dm-raise.dragging .raise-readout { visibility: visible; }
+    .dm-raise.dragging .raise-readout,
+    .dm-raise:has(.raise-cone:hover) .raise-readout,
+    .dm-raise:has(.raise-stem:hover) .raise-readout { visibility: visible; }
     .dm-raise .raise-cone {
       width: 0; height: 0;
       border-left: 8px solid transparent;
@@ -1482,13 +1401,15 @@
       position: fixed; inset: 0; z-index: 9000;
       display: flex; align-items: stretch; justify-content: center;
       overflow-y: auto;
-      animation: slFadeIn 0.22s ease forwards;
+      animation: slFadeIn 0.32s cubic-bezier(0.22, 1, 0.36, 1) forwards;
       font-family: var(--font-ui);
       color: var(--text);
     }
-    .studio-landing.closing { animation: slFadeOut 0.18s ease forwards; }
-    @keyframes slFadeIn  { from { opacity: 0; } to { opacity: 1; } }
-    @keyframes slFadeOut { from { opacity: 1; } to { opacity: 0; } }
+    /* Pre-rendered landing should appear instantly — no fade-in from transparent */
+    .studio-landing[data-preshown="1"] { animation: none; }
+    .studio-landing.closing { animation: slFadeOut 0.22s ease forwards; }
+    @keyframes slFadeIn  { from { opacity: 0; transform: scale(0.985); } to { opacity: 1; transform: scale(1); } }
+    @keyframes slFadeOut { from { opacity: 1; transform: scale(1); }    to { opacity: 0; transform: scale(1.015); } }
     .studio-landing .sl-bg {
       position: fixed; inset: 0; z-index: -1;
       background:
@@ -1608,7 +1529,14 @@
 
     /* Tab panes */
     .studio-landing .sl-pane { display: none; }
-    .studio-landing .sl-pane.active { display: block; }
+    .studio-landing .sl-pane.active {
+      display: block;
+      animation: slPaneIn 260ms cubic-bezier(0.22, 1, 0.36, 1) both;
+    }
+    @keyframes slPaneIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
     .studio-landing .sl-grid {
       display: grid; gap: 14px;
       grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
@@ -1712,6 +1640,48 @@
     }
     .studio-landing .sl-flash.show { opacity: 1; }
 
+    /* Randomizer pane */
+    .studio-landing .sl-rand-body {
+      display: flex; flex-direction: column; align-items: center;
+      gap: 14px; padding: 48px 24px; text-align: center;
+    }
+    .studio-landing .sl-rand-icon { font-size: 52px; line-height: 1; }
+    .studio-landing .sl-rand-title {
+      margin: 0;
+      font-family: var(--font-display);
+      font-size: 16px; letter-spacing: 0.16em; text-transform: uppercase;
+      color: #fff; text-shadow: 0 0 14px rgba(109,40,217,0.6);
+    }
+    .studio-landing .sl-rand-desc {
+      margin: 0; max-width: 420px;
+      color: var(--muted); font-size: 13px; line-height: 1.55;
+    }
+    .studio-landing .sl-rand-btn {
+      padding: 13px 40px;
+      background: linear-gradient(135deg, #6d28d9, #00e5ff);
+      border: none; border-radius: 10px;
+      color: #fff; font: 700 14px/1 var(--font-ui);
+      letter-spacing: 0.10em; text-transform: uppercase;
+      cursor: pointer;
+      box-shadow: 0 0 24px rgba(109,40,217,0.45), 0 0 0 1px rgba(255,255,255,0.18) inset;
+      transition: transform 0.12s, filter 0.12s, opacity 0.12s;
+    }
+    .studio-landing .sl-rand-btn:hover  { filter: brightness(1.10); transform: translateY(-2px); }
+    .studio-landing .sl-rand-btn:active { transform: scale(0.97); }
+    .studio-landing .sl-rand-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+    .studio-landing .sl-rand-generating {
+      display: flex; align-items: center; gap: 10px;
+      color: var(--muted); font-size: 13px;
+    }
+    .studio-landing .sl-rand-spinner {
+      width: 22px; height: 22px; flex: 0 0 auto;
+      border: 2.5px solid rgba(255,255,255,0.15);
+      border-top-color: #00e5ff;
+      border-radius: 50%;
+      animation: slRandSpin 0.7s linear infinite;
+    }
+    @keyframes slRandSpin { to { transform: rotate(360deg); } }
+
     @media (max-width: 720px) {
       .studio-landing .sl-quickrow { grid-template-columns: 1fr; }
       .studio-landing .sl-shell { padding: 18px 14px 40px; }
@@ -1808,79 +1778,7 @@
   </style>
 </head>
 <body class="studio-booting">
-  <!-- ============================================================
-       SPLASH BRIDGE MARKUP
-       ============================================================
-       Sits ABOVE the inline studio landing in z-order. Removed by
-       window.__gkSplashHide() which is called by the inline pre-boot
-       script (after the landing has rendered + autosave is checked)
-       and again by editor-main.js once _bootstrapFromChoice runs.
-       Either path triggers a 280 ms cross-fade into the landing.
-       A 2.5 s safety timeout guarantees removal even if both fail.
-       ============================================================ -->
-  <div id="gkSplash" role="status" aria-live="polite" aria-label="Loading Track Studio">
-    <div class="gk-splash-stack">
-      <div class="gk-splash-ring-wrap">
-        <div class="gk-splash-ring"></div>
-        <div class="gk-splash-ring gk-ring-2"></div>
-        <div class="gk-splash-mark">
-          <span class="gk-mark-glo">GLO</span>
-          <span class="gk-mark-karts">KARTS</span>
-        </div>
-      </div>
-      <div class="gk-splash-title">TRACK STUDIO</div>
-      <div class="gk-splash-bar" aria-hidden="true"></div>
-      <div class="gk-splash-tagline" id="gkSplashTagline">
-        Tuning karts<span class="gk-dot"></span><span class="gk-dot"></span><span class="gk-dot"></span>
-      </div>
-    </div>
-  </div>
-  <script>
-    // Splash dismissal helper — installed before any module so the
-    // inline landing pre-boot script (further down) and editor-main.js
-    // can both call it. Idempotent: extra calls are no-ops.
-    (function () {
-      var splashShownAt = performance.now();
-      var taglineEl = document.getElementById('gkSplashTagline');
-      var taglines = [
-        'Tuning karts',
-        'Polishing chrome',
-        'Charging the GLO',
-        'Aligning the workplane',
-        'Loading templates',
-      ];
-      var idx = 0;
-      var rot = setInterval(function () {
-        if (!taglineEl || !taglineEl.isConnected) { clearInterval(rot); return; }
-        idx = (idx + 1) % taglines.length;
-        // Replace only the leading text node so the animated dots stay put.
-        var first = taglineEl.firstChild;
-        if (first && first.nodeType === 3) first.nodeValue = taglines[idx] + ' ';
-      }, 900);
 
-      window.__gkSplashHide = function () {
-        var s = document.getElementById('gkSplash');
-        if (!s || s.dataset.hiding === '1') return;
-        s.dataset.hiding = '1';
-        // Enforce a minimum visible duration so the splash always
-        // reads as an intentional brand beat instead of a one-frame
-        // flash on warm-cache loads. ~700 ms lets the rotating ring
-        // make a full revolution and the loading bar sweep once.
-        var MIN_VISIBLE_MS = 700;
-        var elapsed = performance.now() - splashShownAt;
-        var wait = Math.max(0, MIN_VISIBLE_MS - elapsed);
-        setTimeout(function () {
-          clearInterval(rot);
-          s.classList.add('gk-splash-out');
-          setTimeout(function () { s.remove(); }, 320);
-        }, wait);
-      };
-
-      // Safety net — never let the splash trap the user if the editor
-      // module fails to load or hits an exception during bootstrap.
-      setTimeout(function () { try { window.__gkSplashHide(); } catch (e) {} }, 4500);
-    })();
-  </script>
   <!-- ============================================================
        INLINE STUDIO LANDING
        ============================================================
@@ -1924,10 +1822,23 @@
         <button class="sl-tab active" data-tab="templates" type="button">Templates</button>
         <button class="sl-tab" data-tab="community" type="button">Remix Community</button>
         <button class="sl-tab" data-tab="mine" type="button">My Saves</button>
+        <button class="sl-tab" data-tab="randomize" type="button">⚡ Randomize</button>
       </nav>
       <section class="sl-pane active" data-pane="templates"><div class="sl-grid"><div class="sl-empty">Loading templates…</div></div></section>
       <section class="sl-pane" data-pane="community"><div class="sl-grid"></div></section>
       <section class="sl-pane" data-pane="mine"><div class="sl-grid"></div></section>
+      <section class="sl-pane" data-pane="randomize">
+        <div class="sl-rand-body">
+          <div class="sl-rand-icon">⚡</div>
+          <h3 class="sl-rand-title">Random Track Generator</h3>
+          <p class="sl-rand-desc">Instantly builds a unique closed-loop circuit — oval, s-curve, mountain pass, or hairpin — ready to race and remix.</p>
+          <button class="sl-rand-btn" data-action="randomize" type="button">Generate Track</button>
+          <div class="sl-rand-generating" hidden>
+            <div class="sl-rand-spinner"></div>
+            <span>Generating circuit…</span>
+          </div>
+        </div>
+      </section>
     </div>
   </div>
   <script>
@@ -1977,16 +1888,10 @@
       } catch (e) { /* localStorage may be blocked; non-fatal */ }
       var landing = document.querySelector('.studio-landing[data-preshown="1"]');
       if (!landing) return;
-      // Landing markup is parsed and present — fade the splash out so
-      // the user lands on the interactive cards. We wait one paint so
-      // the landing actually composites before the splash starts its
-      // 280 ms cross-fade out (otherwise the user sees a black flicker
-      // between the two layers on first paint).
-      requestAnimationFrame(function () {
-        requestAnimationFrame(function () {
-          if (window.__gkSplashHide) window.__gkSplashHide();
-        });
-      });
+      // Leave the splash up until studio-landing.js has adopted this
+      // inline overlay and wired the live event handlers. That keeps the
+      // branded buffer on-screen through module parse instead of flashing
+      // away as soon as the bare HTML shell exists.
       landing.addEventListener('click', function (e) {
         var t = e.target.closest('[data-action]');
         if (!t) return;
@@ -2428,6 +2333,10 @@
           <!-- Steering-wheel glyph denoting the Kart selection sub-menu. -->
           <svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 100 20 10 10 0 000-20zm0 4a6 6 0 015.65 4H6.35A6 6 0 0112 6zm-6 6h2v6.32A8 8 0 016 12zm10 6.32V12h2a8 8 0 01-2 6.32zM10 12h4v8h-4z"/></svg>
         </button>
+        <button title="GLOSETS — sky tone" id="tabGloset">
+          <!-- Sun / sky horizon glyph -->
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 4a1 1 0 001-1V2a1 1 0 00-2 0v1a1 1 0 001 1zm6.36 2.05l.7-.7a1 1 0 10-1.41-1.41l-.71.7a1 1 0 001.41 1.41zM20 11h-1a1 1 0 000 2h1a1 1 0 000-2zm-14 1a1 1 0 00-1-1H4a1 1 0 000 2h1a1 1 0 001-1zm1.64-4.95a1 1 0 001.41-1.41l-.7-.7A1 1 0 006.94 6.4l.7.65zM12 6a5 5 0 100 10A5 5 0 0012 6zm-9 8h18a1 1 0 010 2H3a1 1 0 010-2zm2 3h14a1 1 0 010 2H5a1 1 0 010-2z"/></svg>
+        </button>
         <button title="Workplane" id="tabWorkplane">
           <svg viewBox="0 0 24 24"><path d="M3 18h18v2H3zm0-7h18v2H3zm0-7h18v2H3z"/></svg>
         </button>
@@ -2442,6 +2351,7 @@
           <option value="shape">Basic Shapes</option>
           <option value="nature">Nature</option>
           <option value="urban">Props</option>
+          <option value="scenery_props">Scenery + Props</option>
         </select>
         <button class="search-btn" id="searchBtn" title="Search shapes">
           <svg viewBox="0 0 24 24" fill="currentColor"><path d="M15.5 14h-.79l-.28-.27a6.5 6.5 0 10-.7.7l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0a4.5 4.5 0 110-9 4.5 4.5 0 010 9z"/></svg>
@@ -2458,6 +2368,12 @@
       <div id="kartPanel" class="right-panel kart-panel" hidden>
         <input id="kartSearch" type="text" placeholder="Search karts…" class="palette-search show" />
         <div class="kart-grid" id="kartGrid"></div>
+      </div>
+
+      <!-- GLOSET sky-tone panel. Hidden by default. 10 sky tones rendered
+           as mini WebGL 3D sphere previews. -->
+      <div id="glosetPanel" class="right-panel gloset-panel" hidden>
+        <div class="gloset-grid" id="glosetGrid"></div>
       </div>
       <!-- Track Info panel hidden for Tinkercad parity. Compat shims below. -->
       <div class="right-summary" style="display:none">

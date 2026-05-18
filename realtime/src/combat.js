@@ -195,8 +195,133 @@ export const WEAPONS = {
     gravity: 0,
     bounces: 0,
     effect: "spinout",
-    effectDuration: 1400,
+    effectDuration: 1000,
     desc: "Classic banana peel — spins out whoever hits it",
+  },
+
+  /* ─── Mario-Kart-style core set (Slice 2) ─────────────────────────────
+   *
+   * These power the active online_arena / Editor3RaceRoom flow. Each
+   * carries the exact ballistic / buff parameters from the gameplay
+   * outline so server projectile tick + client VFX can read off one
+   * source-of-truth per weapon. Categories distinguish behaviour:
+   *   - "buff"       → self-targeted; consumes ammo, sets boost/star/etc
+   *   - "projectile" → spawns a server-authoritative ProjectileState
+   *   - "trap"       → existing banana flow (drop behind)
+   */
+  mushroom: {
+    category: "buff",
+    effect: "mushroom",
+    boostFactor: 1.85,
+    effectDuration: 2400,
+    ammo: 1,
+    cooldown: 300,
+    desc: "One-shot speed mushroom — 1.85× top speed for 2.4s",
+  },
+  golden_mushroom: {
+    category: "buff",
+    effect: "mushroom",
+    boostFactor: 1.85,
+    effectDuration: 2000,
+    ammo: 3,
+    cooldown: 300,
+    desc: "Three-charge mushroom — 1.85× top speed for 2.0s per use",
+  },
+  star: {
+    category: "buff",
+    effect: "star",
+    boostFactor: 1.45,
+    effectDuration: 7000,
+    ammo: 1,
+    cooldown: 500,
+    immune: true,
+    contactDamage: true,
+    desc: "Invincibility star — 1.45× speed, immune, contact-knockback",
+  },
+  green_shell: {
+    category: "projectile",
+    subType: "green_shell",
+    speed: 48,
+    lifespan: 6500,
+    cooldown: 500,
+    ammo: 1,
+    gravity: 0,
+    bounces: 3,
+    bounceLoss: 0.08,
+    knockback: 45,
+    stunMs: 400,
+    radius: 0.65,
+    desc: "Bouncing shell — straight line, walls bounce, knockback hit",
+  },
+  red_shell: {
+    category: "projectile",
+    subType: "red_shell",
+    speed: 42,
+    maxSpeed: 55,
+    lifespan: 6500,
+    cooldown: 500,
+    ammo: 1,
+    gravity: 0,
+    bounces: 2,
+    bounceLoss: 0.10,
+    homing: true,
+    homingDelayMs: 500,
+    homingTurnRate: 1.484, // 85°/s
+    knockback: 52,
+    stunMs: 600,
+    radius: 0.65,
+    desc: "Homing shell — locks on to nearest opponent ahead",
+  },
+  blue_shell: {
+    category: "projectile",
+    subType: "blue_shell",
+    speed: 35,
+    finalSpeed: 72,
+    launchUp: 40,
+    lifespan: 9000,
+    cooldown: 800,
+    ammo: 1,
+    gravity: 0,
+    bounces: 0,
+    homing: true,
+    homingDelayMs: 1200,
+    homingTurnRate: 2.094, // 120°/s
+    targetMode: "leader",
+    knockback: 70,
+    stunMs: 1200,
+    radius: 0.85,
+    screenShake: true,
+    desc: "Spiny shell — seeks the leader, devastating impact",
+  },
+  bobomb: {
+    category: "projectile",
+    subType: "bobomb",
+    speed: 38,
+    lifespan: 4000,
+    cooldown: 400,
+    ammo: 1,
+    gravity: -25,
+    bounces: 1,
+    bounceRetention: 0.32,
+    fuseMs: 1200,
+    explosionRadius: 8.5,
+    explosionImpulse: 65,
+    knockback: 65,
+    stunMs: 800,
+    radius: 0.55,
+    desc: "Bob-omb — arcs, fuses, and detonates with radial knockback",
+  },
+  bullet_bill: {
+    category: "buff",
+    effect: "bullet_bill",
+    boostFactor: 1.0,
+    targetSpeed: 92,
+    effectDuration: 6500,
+    ammo: 1,
+    cooldown: 800,
+    immune: true,
+    autoHomingTurnRate: 1.13,
+    desc: "Bullet Bill — auto-pilot rocket form, immune, max speed",
   },
 
   /* ─── Melee (close range) ────────────────────────────────────────────── */
@@ -506,6 +631,177 @@ export const WEAPONS = {
     streamSpreadGrowth: 0.22,
     desc: "Rapid-fire tracer stream with growing spread over distance.",
   },
+
+  /* ─── V8-style arena weapons (Slice 3) ────────────────────────────────────
+   *
+   * Direct counterparts of the V8-2nd-Offense pickup IDs listed in the
+   * game-design outline.  They use the same spawn / tick pipeline as the
+   * MK core set so no new server code is required.
+   *
+   * Weapon IDs map: v8_missile = pk_v8_missile pickup, etc.
+   */
+  v8_missile: {
+    category: "projectile",
+    subType: "v8_missile",
+    speed: 62,
+    lifespan: 7000,
+    cooldown: 500,
+    ammo: 1,
+    gravity: 0,
+    bounces: 0,
+    homing: true,
+    homingDelayMs: 300,
+    homingTurnRate: 0.838, // 48°/s
+    knockback: 50,
+    stunMs: 600,
+    radius: 0.6,
+    desc: "V8 Missile — medium-speed homing warhead with delayed lock-on",
+  },
+  v8_cannon: {
+    category: "projectile",
+    subType: "v8_cannon",
+    speed: 78,
+    lifespan: 4000,
+    cooldown: 600,
+    ammo: 1,
+    gravity: -8,
+    bounces: 0,
+    knockback: 60,
+    stunMs: 500,
+    radius: 0.70,
+    desc: "V8 Cannon — heavy straight-line shot with a slight gravity drop",
+  },
+  v8_rocket: {
+    category: "projectile",
+    subType: "v8_rocket",
+    speed: 78,
+    lifespan: 3500,
+    cooldown: 500,
+    ammo: 1,
+    gravity: 0,
+    bounces: 0,
+    homing: true,
+    homingDelayMs: 800,
+    homingTurnRate: 0.17, // ~10°/s — almost no turn
+    knockback: 58,
+    stunMs: 600,
+    radius: 0.65,
+    desc: "V8 Rocket — very fast, nearly straight; barely steers",
+  },
+  v8_mortar: {
+    category: "projectile",
+    subType: "v8_mortar",
+    speed: 36,
+    lifespan: 5500,
+    cooldown: 700,
+    ammo: 1,
+    gravity: -30,         // steep arc
+    launchUp: 28,         // upward component on spawn
+    bounces: 0,
+    homing: true,
+    homingDelayMs: 2000,  // homing only kicks in on descent
+    homingTurnRate: 0.559, // 32°/s
+    knockback: 62,
+    stunMs: 700,
+    radius: 0.75,
+    desc: "V8 Mortar — high-arc shell that corrects toward the target on descent",
+  },
+  v8_mine: {
+    category: "trap",
+    subType: "v8_mine",
+    speed: 0,
+    lifespan: 25000,
+    cooldown: 400,
+    ammo: 1,
+    gravity: 0,
+    bounces: 0,
+    fuseMs: 0,            // detonates on contact (handled via direct-hit radius)
+    explosionRadius: 6.0,
+    explosionImpulse: 55,
+    knockback: 55,
+    stunMs: 700,
+    radius: 0.90,
+    desc: "V8 Mine — drops a contact-triggered mine behind the kart",
+  },
+  v8_dynamite: {
+    category: "trap",
+    subType: "v8_dynamite",
+    speed: 0,
+    lifespan: 30000,
+    cooldown: 500,
+    ammo: 1,
+    gravity: 0,
+    bounces: 0,
+    fuseMs: 3500,         // timed fuse detonation
+    explosionRadius: 10.0,
+    explosionImpulse: 72,
+    knockback: 72,
+    stunMs: 900,
+    radius: 0.85,
+    desc: "V8 Dynamite — placed explosive with a 3.5-second fuse",
+  },
+  v8_firethrower: {
+    category: "spread",
+    subType: "v8_firethrower",
+    speed: 55,
+    lifespan: 1200,
+    cooldown: 150,
+    ammo: 30,             // ~4.5s @ 150ms cooldown
+    gravity: 0,
+    bounces: 0,
+    spreadCount: 5,
+    spreadAngle: 0.45,    // ~26° total cone
+    knockback: 22,
+    stunMs: 200,
+    radius: 0.55,
+    desc: "V8 Firethrower — rapid-fire cone of flame projectiles",
+  },
+  v8_shield: {
+    category: "buff",
+    effect: "v8_shield",
+    shieldHp: 1,          // absorbs one hit
+    effectDuration: 8000,
+    ammo: 1,
+    cooldown: 500,
+    desc: "V8 Shield — forcefield that absorbs the next incoming hit",
+  },
+  v8_repair: {
+    category: "buff",
+    effect: "v8_repair",
+    hpRestore: 100,
+    effectDuration: 0,
+    ammo: 1,
+    cooldown: 400,
+    desc: "V8 Repair — instantly restores kart HP to full",
+  },
+  v8_double_dmg: {
+    category: "buff",
+    effect: "v8_double_dmg",
+    damageMul: 2.0,
+    effectDuration: 5000,
+    ammo: 1,
+    cooldown: 400,
+    desc: "V8 Double Damage — all outgoing hits deal 2× knockback for 5s",
+  },
+
+  /* ─── Instant-grant items (not held — activate on pickup) ──────────────── */
+  health_orb: {
+    category: "instant",
+    effect: "heal",
+    hpRestore: 60,
+    ammo: 1,
+    cooldown: 0,
+    desc: "Health Orb — instantly restores 60 HP on pickup",
+  },
+  coin: {
+    category: "instant",
+    effect: "coin",
+    coinValue: 1,
+    boostFactor: 1.02,    // each coin nudges top-speed cap up slightly
+    ammo: 1,
+    cooldown: 0,
+    desc: "Coin — +1 coin; small top-speed economy bonus",
+  },
 };
 
 const WEAPON_KEYS = Object.keys(WEAPONS);
@@ -529,6 +825,16 @@ export const RACE_WEAPON_POOL = [
   "bowling_ball", "cake", "plunger", "nitro", "missile",
   "bubblegum", "banana", "swatter", "parachute", "anchor",
   "ludicrous_mode", "shield",
+  // Slice 2 — Mario-Kart core
+  "mushroom", "golden_mushroom", "star",
+  "green_shell", "red_shell", "blue_shell",
+  "bobomb", "bullet_bill",
+  // Slice 3 — V8 arena series
+  "v8_missile", "v8_cannon", "v8_rocket", "v8_mortar",
+  "v8_mine", "v8_dynamite", "v8_firethrower",
+  "v8_shield", "v8_repair", "v8_double_dmg",
+  // Instant pickups (activate on grant)
+  "health_orb", "coin", "coin", "coin",
 ];
 
 // ---------------------------------------------------------------------------
@@ -542,6 +848,15 @@ const BACK_WEIGHTS = {
   fireball: 3, toxic_spread: 2, ice_lance: 3, tornado: 2,
   super_nova: 2, rock_barrage: 3, lightning_bolt: 2, wind_slash: 2, toxic_cloud: 1,
   glow_thrower: 3, glo_burst: 0,
+  // MK core — back of the pack favours catch-up tools.
+  mushroom: 5, golden_mushroom: 3, star: 3,
+  green_shell: 2, red_shell: 5, blue_shell: 2.5,
+  bobomb: 3, bullet_bill: 2,
+  // V8 arena series — back gets offense + recovery
+  v8_missile: 4, v8_cannon: 3, v8_rocket: 3, v8_mortar: 2,
+  v8_mine: 2, v8_dynamite: 2, v8_firethrower: 3,
+  v8_shield: 2, v8_repair: 4, v8_double_dmg: 3,
+  health_orb: 3.5, coin: 4,
 };
 const MID_WEIGHTS = {
   bowling_ball: 3, cake: 2, missile: 2, crimson_hydra: 2, nitro: 2, plunger: 2,
@@ -551,6 +866,14 @@ const MID_WEIGHTS = {
   fireball: 4, toxic_spread: 3, ice_lance: 4, tornado: 3,
   super_nova: 2, rock_barrage: 3, lightning_bolt: 3, wind_slash: 4, toxic_cloud: 1,
   glow_thrower: 3, glo_burst: 0,
+  mushroom: 4, golden_mushroom: 1.5, star: 1,
+  green_shell: 4, red_shell: 4, blue_shell: 0.5,
+  bobomb: 3, bullet_bill: 0.5,
+  // V8 mid-tier mix
+  v8_missile: 3, v8_cannon: 2.5, v8_rocket: 2.5, v8_mortar: 2,
+  v8_mine: 3, v8_dynamite: 2, v8_firethrower: 2.5,
+  v8_shield: 2.5, v8_repair: 2, v8_double_dmg: 2,
+  health_orb: 2, coin: 3,
 };
 const FRONT_WEIGHTS = {
   bowling_ball: 1, cake: 1, missile: 1, crimson_hydra: 0.6, nitro: 1, plunger: 1,
@@ -560,6 +883,15 @@ const FRONT_WEIGHTS = {
   fireball: 1, toxic_spread: 1, ice_lance: 1, tornado: 1,
   super_nova: 1, rock_barrage: 1, lightning_bolt: 1, wind_slash: 1, toxic_cloud: 2,
   glow_thrower: 1, glo_burst: 0,
+  // Front of the pack: defensive traps & light boosts only.
+  mushroom: 1.5, golden_mushroom: 0.5, star: 0.25,
+  green_shell: 3, red_shell: 0.5, blue_shell: 0,
+  bobomb: 1.5, bullet_bill: 0,
+  // V8 front — mostly defense
+  v8_missile: 0.8, v8_cannon: 1, v8_rocket: 1, v8_mortar: 0.5,
+  v8_mine: 3.5, v8_dynamite: 3, v8_firethrower: 1,
+  v8_shield: 4, v8_repair: 1.5, v8_double_dmg: 1,
+  health_orb: 1.5, coin: 3,
 };
 const BATTLE_POOL_SET = new Set(BATTLE_WEAPON_POOL);
 const BATTLE_PICKUP_WEIGHTS = {
@@ -624,6 +956,16 @@ export function grantWeapon(player, positionRatio = 0.5, options = {}) {
 
   const rolled = weightedRandom(filteredWeights);
   const def = WEAPONS[rolled];
+
+  // Instant-grant items (health_orb, coin) activate on pickup — never stored.
+  if (def.category === "instant") {
+    if (def.effect === "heal") {
+      player.hp = Math.min(100, (player.hp || 0) + (def.hpRestore || 60));
+    } else if (def.effect === "coin") {
+      player.coins = Math.min(255, (player.coins || 0) + (def.coinValue || 1));
+    }
+    return rolled; // room broadcasts itemReceived but no slot is filled
+  }
 
   // MK-style dual pickup: if secondary is occupied, fill reserve (weapon3)
   if (player.weapon2 && player.ammo2 > 0) {

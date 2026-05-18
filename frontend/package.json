@@ -21,7 +21,10 @@
     "test:e2e:builder-parity": "node scripts/builder-live-parity-audit.mjs",
     "test:e2e:builder-direct-playtest": "node scripts/builder-direct-playtest-smoke.mjs",
     "test:e2e:builder-direct-playtest:ci": "node scripts/builder-direct-playtest-ci.mjs",
-    "test:e2e:playtest-perf": "node scripts/playtest-perf-smoke.mjs"
+    "test:e2e:playtest-perf": "node scripts/playtest-perf-smoke.mjs",
+    "test:e2e:playtest-combat": "node scripts/playtest-combat-smoke.mjs",
+    "v8:convert": "node scripts/convert-v8-assets.mjs",
+    "v8:convert:apply": "node scripts/convert-v8-assets.mjs --apply"
   },
   "devDependencies": {
     "@playwright/test": "^1.58.2",

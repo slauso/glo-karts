@@ -130,6 +130,7 @@ class LobbyStudioPicker {
     this._loading[tabId] = true;
     list.innerHTML = `<div class="lsp-empty">Loading…</div>`;
     let items = [];
+    let apiOk = false;
     try {
       const fn = tabId === 'templates' ? StudioAPI.templates
               : tabId === 'community' ? StudioAPI.community
@@ -137,24 +138,31 @@ class LobbyStudioPicker {
       const args = tabId === 'community' ? { sort: 'popular', page: 1 } : { page: 1 };
       const res = await fn(args);
       items = res.results || [];
+      apiOk = true;
     } catch {
-      // Templates fall back to bundled JSON so the picker still shows
-      // something when the backend is offline (matches the standalone
-      // Studio landing behaviour).
-      if (tabId === 'templates') {
-        try {
-          const bundled = await fetch(BUNDLED_TEMPLATES_URL).then((r) => r.json());
-          items = bundled.map((t) => ({
-            id: t.pk,
-            name: t.fields.name,
-            author_name: t.fields.author_name,
-            description: t.fields.description,
-            tags: t.fields.tags,
-            preview_placements: t.fields.track_data?.track?.placements || [],
-          }));
-        } catch { /* ignore */ }
-      }
+      // handled below
     }
+    // Templates: union the API list with the bundled JSON so newer client-side
+    // templates show up even when the backend fixture lags behind, and so the
+    // picker still has content when the backend is offline entirely.
+    if (tabId === 'templates') {
+      try {
+        const bundled = await fetch(BUNDLED_TEMPLATES_URL).then((r) => r.json());
+        const bundledItems = bundled.map((t) => ({
+          id: t.pk,
+          name: t.fields.name,
+          author_name: t.fields.author_name,
+          description: t.fields.description,
+          tags: t.fields.tags,
+          preview_placements: t.fields.track_data?.track?.placements || [],
+        }));
+        const byId = new Map();
+        for (const t of bundledItems) if (t?.id != null) byId.set(t.id, t);
+        for (const t of items) if (t?.id != null) byId.set(t.id, t);
+        items = [...byId.values()];
+      } catch { /* ignore */ }
+    }
+    void apiOk;
     this._loading[tabId] = false;
     this._cache[tabId] = items;
     this._renderList(items, tabId);

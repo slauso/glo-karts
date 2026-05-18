@@ -39,7 +39,7 @@ import {
 
 initPageTransitions();
 
-// NOTE: Phase 1.x refactor — constants & pure helpers moved to ./lobby/constants.js.
+// NOTE: Phase 1.x refactor— constants & pure helpers moved to ./lobby/constants.js.
 // A previous duplicate `_initLensEngine` definition (Apple `.lens-card` tilt) was removed
 // here: the second definition further down (operating on `.lens-stack`) silently overrode
 // it at class evaluation time, so the Apple-card code never ran. See git log for history.
@@ -626,6 +626,7 @@ class RacingLobby {
         ? (state.arenaId || state.trackId || this.selectedMap)
         : (state.trackId || this.selectedMap);
 
+      // Cheap synchronous field copies — no DOM work here
       this.currentLobbyCode = state.lobbyCode || this.currentLobbyCode;
       this.currentLobbyPrivacy = state.privacy || this.currentLobbyPrivacy;
       this.selectedMode = state.gameMode || this.selectedMode;
@@ -655,11 +656,22 @@ class RacingLobby {
       this.isHost = !!me?.isHost;
       this.isReady = !!me?.isReady;
 
-      this.applyStateToUI(state);
-      this.updatePlayerList();
-      this.refreshActionButtons();
-      this.refreshBattleControls();
-      this._applyGuestLock();
+      // Debounce the expensive DOM-update work: coalesce rapid server
+      // packets (e.g. player joins → ready → host starts) into a single
+      // paint call ≤60ms later, preventing multiple synchronous reflows
+      // per second during lobby setup.
+      if (!this._stateChangePending) {
+        this._stateChangePending = true;
+        const stateSnap = state; // closure over latest state copy
+        setTimeout(() => {
+          this._stateChangePending = false;
+          this.applyStateToUI(stateSnap);
+          this.updatePlayerList();
+          this.refreshActionButtons();
+          this.refreshBattleControls();
+          this._applyGuestLock();
+        }, 60);
+      }
     });
 
     room.onMessage('joined', (payload) => {
@@ -813,6 +825,15 @@ class RacingLobby {
   }
 
   resetLobbyState(statusText = '') {
+    // Stop the placeholder-cycling interval (leaks if not cleared on re-entry)
+    if (this._placeholderTimer) {
+      clearInterval(this._placeholderTimer);
+      this._placeholderTimer = null;
+    }
+    // Cancel any pending debounced state-change renders
+    if (this._stateChangePending) {
+      this._stateChangePending = false;
+    }
     this.room = null;
     this.isHost = false;
     this.isReady = false;

@@ -16,14 +16,16 @@
  *   players[] (for own identity by sessionId)
  */
 import * as THREE from 'three';
+import * as CANNON from 'cannon-es';
 import { Client } from 'colyseus.js';
-import { buildSegmentMesh } from './editor3/segment-builder.js';
+import { buildSegmentMesh, buildSegmentBody, getDrivableTopY } from './editor3/segment-builder.js';
 import { SEGMENTS, TILE } from './editor3/segments.js';
 import { WORLD_UNITS_PER_M } from './editor3/units.js';
 import { cloneKart, resolveKartWheels } from './editor3/kart-loader.js';
 import { DEFAULT_KART_ID, KART_BY_ID } from './editor3/kart-catalog.js';
 import { KartFxRig, spawnPickupBurst } from './editor3/kart-fx-rig.js';
 import { createKartUnderglow, DEFAULT_GLO_EFFECT, DEFAULT_GLO_COLOR, DEFAULT_GLO_COLOR2 } from './kart-glo.js';
+import { createPhysicsBridge } from './editor3/physics-bridge.js';
 
 // Match the shared physics module so the visual offset for the cloned
 // kart GLB places the wheels on the contact patch instead of leaving
@@ -51,6 +53,74 @@ import { createKartAudio, STD_KIT } from './editor3/kart-audio.js';
 const S = WORLD_UNITS_PER_M;
 const SEND_HZ = 60;
 const TUTORIAL_LOOP_ID = '11111111-1111-1111-1111-111111111111';
+
+// ── B1 — Client-side physics prediction ─────────────────────────────
+// Serializes a cannon-es CANNON.Body built on the main thread into the
+// portable descriptor format that physics-worker.js rebuilds worker-side.
+// Mirrors the identically-named function in play-main.js.
+function _serializeCannonBody(body) {
+  const shapes = [];
+  for (let i = 0; i < body.shapes.length; i++) {
+    const sh = body.shapes[i];
+    const off = body.shapeOffsets[i];
+    const oq  = body.shapeOrientations[i];
+    if (sh instanceof CANNON.Box) {
+      shapes.push({ type: 'box',
+        halfExtents: [sh.halfExtents.x, sh.halfExtents.y, sh.halfExtents.z],
+        offset: [off.x, off.y, off.z], quat: [oq.x, oq.y, oq.z, oq.w] });
+    } else if (sh instanceof CANNON.Plane) {
+      shapes.push({ type: 'plane',
+        offset: [off.x, off.y, off.z], quat: [oq.x, oq.y, oq.z, oq.w] });
+    } else if (sh instanceof CANNON.Trimesh) {
+      shapes.push({ type: 'trimesh',
+        vertices: Array.from(sh.vertices), indices: Array.from(sh.indices),
+        offset: [off.x, off.y, off.z], quat: [oq.x, oq.y, oq.z, oq.w] });
+    }
+  }
+  return {
+    mass: body.mass,
+    pos:  [body.position.x, body.position.y, body.position.z],
+    quat: [body.quaternion.x, body.quaternion.y, body.quaternion.z, body.quaternion.w],
+    shapes,
+  };
+}
+
+// Build portable static-body descriptors + find spawn for the prediction worker.
+function buildTrackPhysicsDescriptors(trackData) {
+  const placements = trackData?.track?.placements || trackData?.placements || [];
+  const staticBodies = [];
+  let spawnPos = null;
+  let spawnRot = 0;
+  for (const p of placements) {
+    const def = SEGMENTS[p.k];
+    if (!def) continue;
+    const wx   = (p.x || 0) * TILE * S;
+    const wz   = (p.z || 0) * TILE * S;
+    const rotY = -((p.r || 0) % 4) * (Math.PI / 2);
+    const body = buildSegmentBody(p.k, { x: wx, y: 0, z: wz }, rotY);
+    if (body) staticBodies.push(_serializeCannonBody(body));
+    if (def.isSpawn || p.k === 'spawn') {
+      spawnPos = { x: wx, y: getDrivableTopY(p.k) + S * 1.0, z: wz };
+      spawnRot = rotY;
+    }
+  }
+  if (!spawnPos) spawnPos = { x: 0, y: S * 1.5, z: 0 };
+  return { staticBodies, spawnPos, spawnRot };
+}
+
+// Prediction bridge — null until connect() loads the track.
+let _predBridge = null;
+// Raw track physics descriptors stored until we know the kart spawn pos.
+let _trackPhysDesc = null;
+// Whether the bridge has been initialised with the server spawn pose.
+let _predBridgeSeeded = false;
+// Rolling input history keyed by seq — used for reconciliation replay.
+// Holds { w, a, s, d, space, drift } in the worker 'keys' format.
+const _inputHistory = new Map();
+const _INPUT_HISTORY_MAX = 128;
+// B5 reconcile diagnostics surface.
+let _reconcileCount = 0;
+let _reconcileMaxDeltaMm = 0;
 
 const params = new URLSearchParams(window.location.search);
 
@@ -102,6 +172,31 @@ const hud = {
   weapon: document.getElementById('hud-weapon'),
   reserve: document.getElementById('hud-reserve'),
   ping: document.getElementById('hud-ping'),
+  // Slice 2 — PvP battle HUD
+  pvpTimer:       document.getElementById('hud-match-timer'),
+  pvpScoreMe:     document.getElementById('hud-score-me'),
+  pvpScoreOpp:    document.getElementById('hud-score-opp'),
+  pvpLabelOpp:    document.getElementById('hud-score-label-opp'),
+  pvpEffect:      document.getElementById('hud-active-effect'),
+  hitFlash:       document.getElementById('hit-flash'),
+  floaters:       document.getElementById('hud-floaters'),
+  slotMain:       document.getElementById('hud-slot-main'),
+  slotMainIcon:   document.getElementById('hud-slot-main-icon'),
+  slotMainName:   document.getElementById('hud-slot-main-name'),
+  slotMainCharge: document.getElementById('hud-slot-main-charge'),
+  slotRes:        document.getElementById('hud-slot-reserve'),
+  slotResIcon:    document.getElementById('hud-slot-reserve-icon'),
+  slotResName:    document.getElementById('hud-slot-reserve-name'),
+  results:        document.getElementById('overlay-results'),
+  resultsTitle:   document.getElementById('results-title'),
+  resultsScores:  document.getElementById('results-scores'),
+  // Slice 3 — minimap + vitals
+  minimap:        document.getElementById('hud-minimap'),
+  hpFill:         document.getElementById('hud-hp-bar-fill'),
+  hpVal:          document.getElementById('hud-hp-val'),
+  coinCount:      document.getElementById('hud-coin-count'),
+  // Slice 4 — speed-lines boost overlay
+  speedLines:     document.getElementById('speed-lines-canvas'),
 };
 function setStatus(text, cls = 'warn') {
   if (!hud.status) return;
@@ -159,6 +254,12 @@ scene.fog = new THREE.Fog(0x0a0d12, 80 * S, 200 * S);
 const camera = new THREE.PerspectiveCamera(60, 1, 0.1 * S, 400 * S);
 camera.position.set(0, 12 * S, 18 * S);
 const CAM_FOV_BASE = 60;
+
+// ── Per-frame scratch objects (never re-allocated to avoid GC pressure) ─
+const _camTargetVec  = new THREE.Vector3();
+const _camFwdVec     = new THREE.Vector3();
+const _camUpOffset   = new THREE.Vector3(0, 8 * S, 0);
+const _camLookAtVec  = new THREE.Vector3();
 
 // ── Burnout camera punch (local kart only) ─────────────────────────
 // Mirrors the SP playtest beats:
@@ -237,6 +338,54 @@ function buildTrackVisuals(trackData) {
   }
   scene.add(root);
   return { root, placementCount: placements.length };
+}
+
+// Async track mesh builder — yields to the browser event loop every
+// CHUNK_SIZE segments so the page stays responsive while a large track
+// is being assembled. Returns a Promise that resolves with the same
+// { root, placementCount } shape as the synchronous version.
+const TRACK_BUILD_CHUNK = 8;   // segments processed per yielded batch
+function buildTrackVisualsAsync(trackData) {
+  return new Promise((resolve) => {
+    const placements = trackData?.track?.placements || trackData?.placements || [];
+    const root = new THREE.Group();
+    root.name = 'track-root';
+    scene.add(root); // add immediately so the scene isn't empty during build
+    let i = 0;
+    function processChunk() {
+      const end = Math.min(i + TRACK_BUILD_CHUNK, placements.length);
+      for (; i < end; i++) {
+        const p = placements[i];
+        const def = SEGMENTS[p.k];
+        if (!def) continue;
+        const mesh = buildSegmentMesh(p.k);
+        mesh.position.set((p.x || 0) * TILE * S, 0, (p.z || 0) * TILE * S);
+        mesh.rotation.y = -((p.r || 0) % 4) * (Math.PI / 2);
+        root.add(mesh);
+      }
+      if (i < placements.length) {
+        setTimeout(processChunk, 0); // yield, then continue
+      } else {
+        resolve({ root, placementCount: placements.length });
+      }
+    }
+    processChunk();
+  });
+}
+
+// Disposes all Three.js geometries / materials in the track root to
+// free GPU memory when disconnecting or loading a new track.
+function disposeTrackVisuals(root) {
+  if (!root) return;
+  root.traverse((obj) => {
+    if (!obj.isMesh) return;
+    if (obj.geometry) obj.geometry.dispose();
+    const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
+    for (const m of mats) {
+      if (m && !m._shared) m.dispose(); // don't dispose shared cached materials
+    }
+  });
+  scene.remove(root);
 }
 
 // ── Kart ghosts ─────────────────────────────────────────────────────
@@ -382,6 +531,15 @@ function ensurePickupMesh(id, x, y, z, active) {
         });
         if (upd) pickupBursts.push(upd);
       }
+      // Inactive→active transition = item box respawning. Show a cool
+      // cyan sparkle so it's obvious to both players that a new item is available.
+      if (!entry.active && active) {
+        const upd = spawnPickupBurst({
+          scene, position: entry.mesh.position.clone(),
+          color: 0x88ffdd, lifeS: 0.5,
+        });
+        if (upd) pickupBursts.push(upd);
+      }
       entry.mesh.material = active ? PICKUP_MAT_ACTIVE : PICKUP_MAT_INACTIVE;
       entry.active = active;
     }
@@ -403,7 +561,195 @@ function spawnProjectileFx(x, y, z, color) {
   fxBodies.push({ mesh: m, life: 0.8 });
 }
 
+// ── Slice 2: PvP projectile mesh + screen-effects helpers ────────────────
+const projMeshes = new Map(); // projKey → { mesh, color }
+
+const PROJ_COLORS = {
+  green_shell:  0x22ff44, red_shell:  0xff2233, blue_shell: 0x00aaff,
+  bobomb:       0x222222, bullet_bill: 0x444444, banana: 0xffdd00,
+  missile: 0xff6600, rocket: 0x00ccff, mortar: 0x886644,
+  // V8 series
+  v8_missile: 0xff8800, v8_cannon: 0xcc4400, v8_rocket: 0x00ddff,
+  v8_mortar: 0x997755, v8_mine: 0x111111, v8_dynamite: 0xff2200,
+  v8_firethrower: 0xff5500,
+  default: 0xffffff,
+};
+const PROJ_RADII = {
+  green_shell: 0.22, red_shell: 0.22, blue_shell: 0.28,
+  bobomb: 0.30, bullet_bill: 0.60, banana: 0.18,
+  missile: 0.20, rocket: 0.22, mortar: 0.25,
+  v8_missile: 0.22, v8_cannon: 0.28, v8_rocket: 0.22,
+  v8_mortar: 0.28, v8_mine: 0.32, v8_dynamite: 0.30,
+  v8_firethrower: 0.14,
+  default: 0.20,
+};
+
+const WEAPON_ICONS = {
+  mushroom: '🍄', golden_mushroom: '🌟', star: '⭐', green_shell: '🐢',
+  red_shell: '🔴', blue_shell: '💙', banana: '🍌', bobomb: '💣',
+  bullet_bill: '🚀', missile: '🎯', rocket: '⚡', mortar: '💥',
+  mine: '🔲', dynamite: '🧨', firethrower: '🔥', shield: '🛡️',
+  repair: '🔧', double_dmg: '⚔️', health_orb: '❤️', coin: '🪙',
+  // V8 series
+  v8_missile: '🎯', v8_cannon: '💥', v8_rocket: '🚀', v8_mortar: '☄️',
+  v8_mine: '💀', v8_dynamite: '🧨', v8_firethrower: '🔥',
+  v8_shield: '🛡', v8_repair: '💊', v8_double_dmg: '✖2',
+  default: '❓',
+};
+
+function ensureProjMesh(key, subType) {
+  if (projMeshes.has(key)) return projMeshes.get(key).mesh;
+  const col = PROJ_COLORS[subType] ?? PROJ_COLORS.default;
+  const r   = (PROJ_RADII[subType] ?? PROJ_RADII.default) * S;
+  const geo = new THREE.SphereGeometry(r, 10, 8);
+  const mat = new THREE.MeshBasicMaterial({ color: col });
+  const mesh = new THREE.Mesh(geo, mat);
+  scene.add(mesh);
+  projMeshes.set(key, { mesh, color: col });
+  return mesh;
+}
+
+function removeProjMesh(key) {
+  const entry = projMeshes.get(key);
+  if (!entry) return;
+  scene.remove(entry.mesh);
+  entry.mesh.geometry.dispose();
+  entry.mesh.material.dispose();
+  projMeshes.delete(key);
+}
+
+let _hitFlashTimer = 0;
+let _shakeTimer    = 0;
+let _shakeAmp      = 0;
+
+function triggerHitFlash() {
+  if (hud.hitFlash) hud.hitFlash.style.opacity = '1';
+  _hitFlashTimer = 0.35;
+}
+
+function triggerScreenShake(amp = 0.8, dur = 0.4) {
+  _shakeAmp   = amp * S;
+  _shakeTimer = dur;
+}
+
+let _floaterIdCounter = 0;
+function showFloater(text, color = '#fff') {
+  if (!hud.floaters) return;
+  const el = document.createElement('div');
+  el.style.cssText = `font-family:var(--font-display,"Bungee",sans-serif);font-size:28px;font-weight:400;
+    letter-spacing:0.06em;color:${color};text-shadow:0 0 12px ${color}80;
+    pointer-events:none;animation:floaterUp 1.6s ease-out forwards;`;
+  el.textContent = text;
+  el.id = 'floater-' + (_floaterIdCounter++);
+  // add keyframe once
+  if (!document.getElementById('floater-keyframe')) {
+    const s = document.createElement('style');
+    s.id = 'floater-keyframe';
+    s.textContent = '@keyframes floaterUp{0%{transform:translateY(0) scale(1);opacity:1}' +
+                    '60%{transform:translateY(-40px) scale(1.1);opacity:1}' +
+                    '100%{transform:translateY(-90px) scale(0.8);opacity:0}}';
+    document.head.appendChild(s);
+  }
+  hud.floaters.appendChild(el);
+  setTimeout(() => el.remove(), 1700);
+}
+
+function _updateWeaponSlot(slot, name, charge) {
+  const isEmpty = !name;
+  const slotEl   = slot === 'main' ? hud.slotMain : hud.slotRes;
+  const iconEl   = slot === 'main' ? hud.slotMainIcon : hud.slotResIcon;
+  const nameEl   = slot === 'main' ? hud.slotMainName : hud.slotResName;
+  const chargeEl = slot === 'main' ? hud.slotMainCharge : null;
+  if (!slotEl) return;
+  if (isEmpty) {
+    slotEl.classList.add('empty');
+    if (iconEl)   iconEl.textContent = '—';
+    if (nameEl)   nameEl.textContent = slot === 'main' ? 'No Weapon' : 'Reserve';
+    if (chargeEl) chargeEl.textContent = '';
+  } else {
+    slotEl.classList.remove('empty');
+    if (iconEl)   iconEl.textContent = WEAPON_ICONS[name] ?? WEAPON_ICONS.default;
+    if (nameEl)   nameEl.textContent = name.replace('_', ' ').replace('pk ', '').replace('weapon:', '');
+    if (chargeEl) chargeEl.textContent = (charge && charge > 1) ? '✕' + charge : '';
+  }
+}
+
 // ── Render loop additions ───────────────────────────────────────────
+// ── Slice 3: Minimap rendering ─────────────────────────────────────────────
+const MINIMAP_RANGE_M  = 100;
+const MINIMAP_RANGE_WU = MINIMAP_RANGE_M * S;
+const blueShellRings = new Map(); // projKey → { mesh }
+let _lastMinimapDrawMs = 0; // throttle minimap to 15Hz
+
+function _drawMinimap(state, mySid) {
+  const canvas = hud.minimap;
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  const CX = W / 2, CY = H / 2;
+
+  ctx.clearRect(0, 0, W, H);
+  ctx.fillStyle = 'rgba(10,10,24,0.82)';
+  ctx.beginPath();
+  if (ctx.roundRect) ctx.roundRect(0, 0, W, H, 10);
+  else { ctx.rect(0, 0, W, H); }
+  ctx.fill();
+
+  ctx.strokeStyle = 'rgba(255,255,255,0.12)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.arc(CX, CY, CX * 0.92, 0, Math.PI * 2);
+  ctx.stroke();
+
+  const toMM = (wx, wz) => ({
+    px: CX + (wx / MINIMAP_RANGE_WU) * CX * 0.9,
+    py: CY - (wz / MINIMAP_RANGE_WU) * CY * 0.9,
+  });
+
+  if (state && state.pickups) {
+    state.pickups.forEach((pu) => {
+      const p = toMM(pu.x, pu.z);
+      ctx.beginPath();
+      ctx.arc(p.px, p.py, 3.5, 0, Math.PI * 2);
+      ctx.fillStyle = pu.active ? '#ffd700' : 'rgba(255,215,0,0.25)';
+      ctx.fill();
+    });
+  }
+
+  for (const { mesh } of projMeshes.values()) {
+    const p = toMM(mesh.position.x, mesh.position.z);
+    ctx.beginPath();
+    ctx.arc(p.px, p.py, 2.5, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255,120,0,0.85)';
+    ctx.fill();
+  }
+
+  if (state && state.karts) {
+    state.karts.forEach((ks, sid) => {
+      const p = toMM(ks.x, ks.z);
+      const isMe = sid === mySid;
+      const yaw = Math.atan2(
+        2 * ((ks.qw || 1) * (ks.qy || 0) + (ks.qx || 0) * (ks.qz || 0)),
+        1 - 2 * ((ks.qy || 0) * (ks.qy || 0) + (ks.qx || 0) * (ks.qx || 0))
+      );
+      ctx.save();
+      ctx.translate(p.px, p.py);
+      ctx.rotate(-yaw);
+      ctx.beginPath();
+      ctx.moveTo(0, -6);
+      ctx.lineTo(4.5, 5);
+      ctx.lineTo(0, 2.5);
+      ctx.lineTo(-4.5, 5);
+      ctx.closePath();
+      ctx.fillStyle = isMe ? '#00e5ff' : '#ff4da6';
+      ctx.shadowColor = isMe ? '#00e5ff' : '#ff4da6';
+      ctx.shadowBlur  = 6;
+      ctx.fill();
+      ctx.restore();
+    });
+  }
+}
+
 let roomRef = null; // populated once room joined
 const PICKUP_PROXIMITY_MM = 16 * S; // client-side trigger to send pickupItem
 
@@ -444,10 +790,14 @@ function startCountdown(onDone) {
   let n = 3;
   overlays.countdown?.classList.remove('hidden');
   if (overlays.countdownNum) overlays.countdownNum.textContent = String(n);
+  // Play countdown beep on the first tick.
+  try { ensureKartAudio(); kartAudio.playOneShot('preStart', { gain: 0.85 }); } catch {}
   const tickN = () => {
     n--;
     if (n <= 0) {
       if (overlays.countdownNum) overlays.countdownNum.textContent = 'GO!';
+      // Race-start horn fires on "GO!" — auditory confirmation for all players.
+      try { ensureKartAudio(); kartAudio.playOneShot('startRaceHorn', { gain: 1.0 }); } catch {}
       setTimeout(() => {
         overlays.countdown?.classList.add('hidden');
         onDone && onDone();
@@ -462,6 +812,7 @@ function startCountdown(onDone) {
       overlays.countdownNum.offsetHeight;
       overlays.countdownNum.style.animation = '';
     }
+    try { ensureKartAudio(); kartAudio.playOneShot('preStart', { gain: 0.75 }); } catch {}
     setTimeout(tickN, 1000);
   };
   setTimeout(tickN, 1000);
@@ -537,6 +888,10 @@ window.addEventListener('keydown', (e) => {
 });
 window.addEventListener('keyup', (e) => { keys.delete(e.code); });
 
+// Gamepad fire-button state — prevent repeat fires per press.
+let _gpFireHeld = false;
+let _gpSwapHeld = false;
+
 function pollInput() {
   if (inputLocked) {
     input.throttle = 0;
@@ -555,9 +910,9 @@ function pollInput() {
   const drift = keys.has('ShiftLeft') || keys.has('ShiftRight');
   // Send RAW digital intent. The server's shared physics core
   // (`applyKartControls`) already smooths binary keys into a 0..1
-  // throttle ramp over ~167 ms \u2014 identical to SP playtest. A second
+  // throttle ramp over ~167 ms — identical to SP playtest. A second
   // client-side ramp here was producing ~530 ms total throttle delay
-  // vs SP, breaking SP\u2194MP feel parity. Visual smoothing for body roll /
+  // vs SP, breaking SP↔MP feel parity. Visual smoothing for body roll /
   // wheel steer lives in `_updateKartVisuals` (entry.smoothedSteer
   // low-pass), so the wheels and chassis still look weighted even
   // though the wire-level intent is binary.
@@ -565,6 +920,38 @@ function pollInput() {
   input.throttle = fwd ? 1 : (back ? -1 : 0);
   input.brake = brake ? 1 : 0;
   input.drift = drift;
+
+  // ── Gamepad overlay (standard mapping) ─────────────────────────────
+  // Axes: 0=Left stick X, 1=Left stick Y. Buttons: 0=A/Cross, 1=B/Circle,
+  // 2=X/Square, 3=Y/Triangle, 4=LB, 5=RB, 6=LT, 7=RT (as axis value 0–1).
+  const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
+  for (const gp of gamepads) {
+    if (!gp || !gp.connected) continue;
+    const lx = gp.axes[0] || 0;
+    const rt = gp.buttons[7]?.value ?? 0;  // right trigger → throttle
+    const lt = gp.buttons[6]?.value ?? 0;  // left trigger  → brake
+    const driftBtn = gp.buttons[4]?.pressed || gp.buttons[5]?.pressed; // LB/RB
+    const fireBtn  = gp.buttons[0]?.pressed; // A / Cross = fire
+    const swapBtn  = gp.buttons[2]?.pressed; // X / Square = swap
+
+    if (Math.abs(lx) > 0.12) input.steer   = lx;
+    if (rt > 0.08)            input.throttle = rt;
+    if (lt > 0.08)            input.brake    = lt;
+    if (driftBtn)             input.drift    = true;
+
+    // Edge-triggered fire (one send per press cycle).
+    if (fireBtn && !_gpFireHeld) {
+      if (roomRef) try { roomRef.send('fireWeapon', { slot: 'secondary' }); } catch {}
+      _gpFireHeld = true;
+    } else if (!fireBtn) { _gpFireHeld = false; }
+
+    if (swapBtn && !_gpSwapHeld) {
+      if (roomRef) try { roomRef.send('swapSecondaryWeapon'); } catch {}
+      _gpSwapHeld = true;
+    } else if (!swapBtn) { _gpSwapHeld = false; }
+
+    break; // first connected gamepad wins
+  }
 }
 
 // ── Render loop ─────────────────────────────────────────────────────
@@ -576,6 +963,42 @@ let lastPing = 0;
 // factor of 0.45 catches 95% in ~5 frames (≈83ms) instead of the
 // previous 200ms. Matches roughly the network RTT for nearby peers.
 const LERP = 0.45;
+
+// Slice 4 — speed-lines canvas (lazy init on first boost frame).
+let _speedLinesCtx = null;
+let _speedLinesW = 0;
+let _speedLinesH = 0;
+let _speedLinesT = 0; // accumulated time for ray angle animation
+function _drawSpeedLines(boostActive, dt2) {
+  const canvas = hud.speedLines;
+  if (!canvas) return;
+  if (!_speedLinesCtx) _speedLinesCtx = canvas.getContext('2d');
+  if (!_speedLinesCtx) return;
+  const W = window.innerWidth, H = window.innerHeight;
+  if (W !== _speedLinesW || H !== _speedLinesH) {
+    canvas.width = W; canvas.height = H;
+    _speedLinesW = W; _speedLinesH = H;
+  }
+  _speedLinesCtx.clearRect(0, 0, W, H);
+  if (!boostActive) return;
+  _speedLinesT = (_speedLinesT + dt2 * 2.2) % (Math.PI * 2);
+  const cx = W / 2, cy = H / 2;
+  const N = 20;
+  for (let i = 0; i < N; i++) {
+    const baseAngle = (i / N) * Math.PI * 2 + _speedLinesT * 0.18;
+    const jitter = Math.sin(i * 7.3 + _speedLinesT * 3.1) * 0.12;
+    const angle = baseAngle + jitter;
+    const r1 = W * 0.30 + Math.sin(i * 2.7 + _speedLinesT * 2) * W * 0.04;
+    const r2 = r1 + W * 0.06 + Math.sin(i * 3.1 + _speedLinesT) * W * 0.04;
+    const alpha = 0.18 + 0.22 * Math.abs(Math.sin(i + _speedLinesT * 1.5));
+    _speedLinesCtx.strokeStyle = `rgba(255,200,80,${alpha.toFixed(2)})`;
+    _speedLinesCtx.lineWidth = 2 + Math.sin(i * 1.4) * 1;
+    _speedLinesCtx.beginPath();
+    _speedLinesCtx.moveTo(cx + Math.cos(angle) * r1, cy + Math.sin(angle) * r1);
+    _speedLinesCtx.lineTo(cx + Math.cos(angle) * r2, cy + Math.sin(angle) * r2);
+    _speedLinesCtx.stroke();
+  }
+}
 
 // Phase B3 — snapshot interpolation tunables.
 const SNAPSHOT_BUFFER_MAX = 6; // ~200ms at 30Hz; trims oldest beyond this
@@ -797,31 +1220,51 @@ function tick(now) {
       let tx = t.x, ty = t.y, tz = t.z;
       let tqx = t.qx, tqy = t.qy, tqz = t.qz, tqw = t.qw;
       if (entry.sid === mySid) {
-        const buf = entry.snapshots;
-        const last = buf.length ? buf[buf.length - 1] : null;
-        if (last) {
-          const ageSec = Math.max(0, (now - last.t) / 1000);
-          const halfRttSec = Math.min(0.12, (_netRttMs * 0.5) / 1000);
-          const leadSec = Math.min(0.18, ageSec + halfRttSec);
-          tx = last.x + last.vx * leadSec;
-          ty = last.y + last.vy * leadSec;
-          tz = last.z + last.vz * leadSec;
-          tqx = last.qx; tqy = last.qy; tqz = last.qz; tqw = last.qw;
+        // B1 full — Use physics-worker prediction bridge for the local kart.
+        // Falls back to B1b velocity extrapolation if the bridge hasn't
+        // received its first snap yet (first few frames after connect).
+        if (_predBridge && _predBridge.snapCount > 0) {
+          _predBridge.interpolate(now);
+          const ip = _predBridge.chassisBody.interpolatedPosition;
+          const iq = _predBridge.chassisBody.interpolatedQuaternion;
+          g.position.set(ip.x, ip.y, ip.z);
+          g.quaternion.set(iq.x, iq.y, iq.z, iq.w);
+        } else {
+          // B1b fallback: simple velocity extrapolation until bridge is ready.
+          const buf = entry.snapshots;
+          const last = buf.length ? buf[buf.length - 1] : null;
+          if (last) {
+            const ageSec = Math.max(0, (now - last.t) / 1000);
+            const halfRttSec = Math.min(0.12, (_netRttMs * 0.5) / 1000);
+            const leadSec = Math.min(0.18, ageSec + halfRttSec);
+            tx = last.x + last.vx * leadSec;
+            ty = last.y + last.vy * leadSec;
+            tz = last.z + last.vz * leadSec;
+            tqx = last.qx; tqy = last.qy; tqz = last.qz; tqw = last.qw;
+            const POS_RATE = 12;
+            const ROT_RATE = 18;
+            const aPos = 1 - Math.exp(-POS_RATE * dt);
+            const aRot = 1 - Math.exp(-ROT_RATE * dt);
+            g.position.x += (tx - g.position.x) * aPos;
+            g.position.y += (ty - g.position.y) * aPos;
+            g.position.z += (tz - g.position.z) * aPos;
+            _tmpQuatA.set(tqx, tqy, tqz, tqw);
+            g.quaternion.slerp(_tmpQuatA, aRot);
+          }
         }
+      } else {
+        // Remote kart (buffer miss): smooth toward the latest server target.
+        const POS_RATE = 12;
+        const ROT_RATE = 18;
+        const aPos = 1 - Math.exp(-POS_RATE * dt);
+        const aRot = 1 - Math.exp(-ROT_RATE * dt);
+        g.position.x += (tx - g.position.x) * aPos;
+        g.position.y += (ty - g.position.y) * aPos;
+        g.position.z += (tz - g.position.z) * aPos;
+        _tmpQuatA.set(tqx, tqy, tqz, tqw);
+        g.quaternion.slerp(_tmpQuatA, aRot);
       }
-      // Frame-rate-independent exponential smoothing toward the
-      // (predicted) target. ALPHA picks ~LERP at 60 fps but stays
-      // well-behaved at 30 / 144 / 240 fps (no over-shoot).
-      const POS_RATE = 12; // 1/s; e^(-12*0.0167) \u2248 0.82, i.e. ~18% per 60 fps frame
-      const ROT_RATE = 18;
-      const aPos = 1 - Math.exp(-POS_RATE * dt);
-      const aRot = 1 - Math.exp(-ROT_RATE * dt);
-      g.position.x += (tx - g.position.x) * aPos;
-      g.position.y += (ty - g.position.y) * aPos;
-      g.position.z += (tz - g.position.z) * aPos;
-      _tmpQuatA.set(tqx, tqy, tqz, tqw);
-      g.quaternion.slerp(_tmpQuatA, aRot);
-    }
+    }   // end if (!usedBuffer)
     // Visual feel rig: spin wheels, steer the front pair, apply
     // body roll/pitch + suspension bob. Runs for every kart, local
     // and remote, using the smoothed render quaternion + the latest
@@ -855,6 +1298,39 @@ function tick(now) {
       entry.fx.update(entry._fxState, dt);
     }
     if (entry.underglow) entry.underglow.update(dt, g);
+
+    // Slice 4 — Star aura: pulsing rainbow torus spun around the kart.
+    const efx = entry._effectState;
+    if (efx) {
+      const nowMs4 = Date.now();
+      const starOn = (efx.starUntilMs || 0) > nowMs4;
+      if (starOn && !entry.starAura) {
+        const aura = new THREE.Mesh(
+          new THREE.TorusGeometry(2.0 * S, 0.35 * S, 8, 32),
+          new THREE.MeshStandardMaterial({
+            color: 0xffd700, emissive: 0xffd700, emissiveIntensity: 2.0,
+            transparent: true, opacity: 0.88, depthWrite: false,
+          }),
+        );
+        entry.group.add(aura);
+        entry.starAura = aura;
+        entry.starAuraHue = 0;
+      } else if (!starOn && entry.starAura) {
+        entry.group.remove(entry.starAura);
+        entry.starAura.geometry.dispose();
+        entry.starAura.material.dispose();
+        entry.starAura = null;
+      }
+      if (entry.starAura) {
+        entry.starAuraHue = ((entry.starAuraHue || 0) + dt * 0.9) % 1;
+        entry.starAura.material.color.setHSL(entry.starAuraHue, 1.0, 0.6);
+        entry.starAura.material.emissive.setHSL(entry.starAuraHue, 1.0, 0.5);
+        const pulse = 1 + 0.14 * Math.sin(Date.now() * 0.009);
+        entry.starAura.scale.setScalar(pulse);
+        entry.starAura.rotation.y += dt * 2.8;
+        entry.starAura.rotation.z = Math.PI * 0.15;
+      }
+    }
   }
   // Spin pickup boxes.
   for (const { mesh, active } of pickupMeshes.values()) {
@@ -876,6 +1352,42 @@ function tick(now) {
       fxBodies.splice(i, 1);
     }
   }
+  // Slice 2 — spin active projectile meshes so they visually stand out.
+  for (const { mesh } of projMeshes.values()) {
+    mesh.rotation.y += dt * 3.8;
+    mesh.rotation.x += dt * 1.6;
+  }
+  // Slice 3 — pulse + track blue-shell floor rings.
+  for (const entry of blueShellRings.values()) {
+    const tgt = ghosts.get(entry.targetId);
+    if (tgt) {
+      entry.mesh.position.x = tgt.group.position.x;
+      entry.mesh.position.z = tgt.group.position.z;
+    }
+    const pulse = 0.88 + 0.24 * Math.sin(Date.now() * 0.009);
+    entry.mesh.scale.setScalar(pulse);
+    entry.mesh.material.opacity = 0.45 + 0.4 * Math.abs(Math.sin(Date.now() * 0.006));
+  }
+  // Slice 2 — decay hit-flash overlay.
+  if (_hitFlashTimer > 0) {
+    _hitFlashTimer -= dt;
+    if (hud.hitFlash) {
+      const t = Math.max(0, _hitFlashTimer / 0.35);
+      hud.hitFlash.style.opacity = String(t);
+    }
+    if (_hitFlashTimer <= 0 && hud.hitFlash) hud.hitFlash.style.opacity = '0';
+  }
+  // Slice 2 — screen shake: offset camera target by random amount.
+  if (_shakeTimer > 0) {
+    _shakeTimer -= dt;
+    if (_shakeTimer <= 0) { _shakeAmp = 0; }
+  }
+  // Slice 3 — update minimap at 15 Hz max (every ~66 ms) to cut canvas
+  // 2D draw cost: minimap doesn't need 60 Hz refresh.
+  if (roomRef && roomRef.state && (now - _lastMinimapDrawMs) >= 66) {
+    _lastMinimapDrawMs = now;
+    _drawMinimap(roomRef.state, mySid);
+  }
   // Client-side proximity check → request pickup (server validates).
   const meEntry = mySid ? ghosts.get(mySid) : null;
   if (meEntry && roomRef) {
@@ -891,16 +1403,21 @@ function tick(now) {
   // Camera follow: track our own ghost if known, else look at scene origin.
   const me = mySid ? ghosts.get(mySid) : null;
   if (me) {
-    const targetCam = new THREE.Vector3(
-      me.group.position.x - 14 * S * Math.sin(0),
-      me.group.position.y + 8 * S,
-      me.group.position.z - 14 * S * Math.cos(0),
+    // Reuse pre-allocated vectors — no per-frame GC allocation.
+    _camFwdVec.set(0, 0, 1).applyQuaternion(me.group.quaternion);
+    _camTargetVec.copy(me.group.position)
+      .addScaledVector(_camFwdVec, -14 * S)
+      .add(_camUpOffset);
+    camera.position.lerp(_camTargetVec, 0.12);
+    // Slice 2 — apply screen shake offset to camera look-at point.
+    const shakeX = _shakeAmp > 0 ? (Math.random() - 0.5) * 2 * _shakeAmp : 0;
+    const shakeY = _shakeAmp > 0 ? (Math.random() - 0.5) * 2 * _shakeAmp : 0;
+    _camLookAtVec.set(
+      me.group.position.x + shakeX,
+      me.group.position.y + 1 * S + shakeY,
+      me.group.position.z,
     );
-    // Behind-the-kart: derive heading from quaternion.
-    const fwd = new THREE.Vector3(0, 0, 1).applyQuaternion(me.group.quaternion);
-    targetCam.copy(me.group.position).addScaledVector(fwd, -14 * S).add(new THREE.Vector3(0, 8 * S, 0));
-    camera.position.lerp(targetCam, 0.12);
-    camera.lookAt(me.group.position.x, me.group.position.y + 1 * S, me.group.position.z);
+    camera.lookAt(_camLookAtVec);
 
     // ── Burnout camera punch ────────────────────────────────────
     // Drive off the LOCAL kart's broadcast burnout state. Edge-detect
@@ -948,6 +1465,15 @@ function tick(now) {
   } else {
     camera.lookAt(0, 0, 0);
   }
+  // Slice 4 — draw speed-lines overlay when local kart has an active boost.
+  const _slMe = mySid && roomRef?.state?.karts?.get(mySid);
+  const _slNow = Date.now();
+  const _slBoost = !!_slMe && (
+    (_slMe.boostUntilMs || 0) > _slNow ||
+    (_slMe.bulletBillUntilMs || 0) > _slNow ||
+    (_slMe.starUntilMs || 0) > _slNow
+  );
+  _drawSpeedLines(_slBoost, dt);
   renderer.render(scene, camera);
   requestAnimationFrame(tick);
 }
@@ -967,10 +1493,17 @@ async function connect() {
     hud.track.textContent = '(none)';
     return;
   }
-  const { placementCount } = buildTrackVisuals(trackData);
-  hud.track.textContent = `${trackData.track?.name || trackData.name || '(custom)'} (${placementCount} segs)`;
-  if (hud.lap) hud.lap.textContent = `0 / ${TOTAL_LAPS}`;
+  // Use the async chunked builder — yields every 8 segments so the page
+  // stays interactive while the track mesh is assembled. Also kicks off
+  // the server join in parallel (join can proceed while meshes build;
+  // the track is visible once joining is done in either order).
+  const trackBuildPromise = buildTrackVisualsAsync(trackData);
 
+  // B1 — Build physics descriptors OFF the critical path: start the
+  // network join immediately, then build physics descriptors async so
+  // the UI doesn't freeze waiting for physics setup before connecting.
+  // Descriptors are ready before onStateChange needs them (first state
+  // change arrives after network round-trip which is slower than the CPU work).
   setStatus('connecting…', 'warn');
   const client = new Client(REALTIME_URL);
   let room;
@@ -1002,6 +1535,15 @@ async function connect() {
     window.__mySid = mySid;
   }
   setStatus(`connected as ${mySid.slice(0, 6)}`, 'ok');
+
+  // Await the chunked track-mesh build (already in progress) and then
+  // build physics descriptors using idle time so the initial frames are
+  // smooth. Both operations are off the hot path now.
+  const { placementCount } = await trackBuildPromise;
+  hud.track.textContent = `${trackData.track?.name || trackData.name || '(custom)'} (${placementCount} segs)`;
+  if (hud.lap) hud.lap.textContent = `0 / ${TOTAL_LAPS}`;
+  // B1 physics descriptors — run after visuals are built (CPU is idle).
+  setTimeout(() => { _trackPhysDesc = buildTrackPhysicsDescriptors(trackData); }, 0);
   // Surface lobby code and laps the moment we know our session id.
   if (overlays.lobbyCode) overlays.lobbyCode.textContent = ROOM_CODE || '— OPEN —';
   if (overlays.lobbyLaps) overlays.lobbyLaps.textContent = String(TOTAL_LAPS);
@@ -1061,6 +1603,11 @@ async function connect() {
       fs.throttleIn = +kart.throttleIn || 0;
       fs.brakeIn = +kart.brakeIn || 0;
       fs.steerIn = +kart.steerIn || 0;
+      // Slice 4 — cache combat effect timestamps for star/boost VFX in tick().
+      if (!entry._effectState) entry._effectState = { starUntilMs: 0, bulletBillUntilMs: 0, boostUntilMs: 0 };
+      entry._effectState.starUntilMs       = kart.starUntilMs       || 0;
+      entry._effectState.bulletBillUntilMs = kart.bulletBillUntilMs || 0;
+      entry._effectState.boostUntilMs      = kart.boostUntilMs      || 0;
     });
     // Remove ghosts whose karts left.
     for (const sid of [...ghosts.keys()]) {
@@ -1072,6 +1619,19 @@ async function connect() {
     if (!raceStarted) renderLobbyPlayers(state);
     // Pickups.
     state.pickups.forEach((p, id) => { ensurePickupMesh(id, p.x, p.y, p.z, !!p.active); });
+    // Slice 2 — projectile mesh sync.
+    if (state.projectiles) {
+      const liveKeys = new Set();
+      state.projectiles.forEach((proj, key) => {
+        liveKeys.add(key);
+        const mesh = ensureProjMesh(key, proj.subType || 'default');
+        mesh.position.set(proj.px || 0, proj.py || 0, proj.pz || 0);
+      });
+      // Remove stale projectile meshes.
+      for (const k of projMeshes.keys()) {
+        if (!liveKeys.has(k)) removeProjMesh(k);
+      }
+    }
     // Local kart HUD (lap, weapon) + audio.
     const me = state.karts.get(mySid);
     if (me) {
@@ -1079,6 +1639,9 @@ async function connect() {
       if (overlays.pauseLap) overlays.pauseLap.textContent = `${me.lap || 0} / ${state.totalLaps || TOTAL_LAPS}`;
       if (hud.weapon) hud.weapon.textContent = me.weapon2 ? `${me.weapon2} ×${me.ammo2}` : '—';
       if (hud.reserve) hud.reserve.textContent = me.weapon3 ? `${me.weapon3} ×${me.ammo3}` : '—';
+      // Slice 2 — weapon slot panel.
+      _updateWeaponSlot('main',    me.weapon2 || null, me.ammo2 || 0);
+      _updateWeaponSlot('reserve', me.weapon3 || null, me.ammo3 || 0);
       // Drive audio rig from the local kart's authoritative state so
       // engine pitch / skid loop / boost SFX track exactly what the
       // server-side physics computed.
@@ -1111,10 +1674,104 @@ async function connect() {
         _prevDriftTier = tier;
       }
     }
+    // Slice 2 — PvP scores (top corners) + match timer.
+    if (hud.pvpScoreMe || hud.pvpScoreOpp) {
+      let myScore = 0, oppScore = 0, oppName = 'Opp';
+      state.karts.forEach((ks, sid) => {
+        if (sid === mySid)  { myScore = ks.score || 0; }
+        else                { oppScore = ks.score || 0; oppName = sid.slice(0, 6); }
+      });
+      if (hud.pvpScoreMe)  hud.pvpScoreMe.textContent  = myScore;
+      if (hud.pvpScoreOpp) hud.pvpScoreOpp.textContent = oppScore;
+      if (hud.pvpLabelOpp) hud.pvpLabelOpp.textContent = oppName;
+    }
+    if (hud.pvpTimer && state.matchSecondsLeft !== undefined) {
+      const s = state.matchSecondsLeft || 0;
+      const mm = Math.floor(s / 60).toString().padStart(1, '0');
+      const ss = (s % 60).toString().padStart(2, '0');
+      hud.pvpTimer.textContent = `${mm}:${ss}`;
+      hud.pvpTimer.classList.toggle('danger', s <= 30);
+    }
+    // Slice 3 — HP bar + coin counter from local kart state.
+    if (me) {
+      const hp = Math.max(0, Math.min(100, me.hp !== undefined ? me.hp : 100));
+      const coins = me.coins || 0;
+      if (hud.hpFill) {
+        hud.hpFill.style.width = hp + '%';
+        hud.hpFill.style.background = hp > 50
+          ? 'linear-gradient(90deg,#22ff88,#00e5ff)'
+          : hp > 20
+          ? 'linear-gradient(90deg,#ffcc00,#ff8800)'
+          : 'linear-gradient(90deg,#ff3333,#ff6600)';
+      }
+      if (hud.hpVal)    hud.hpVal.textContent = hp;
+      if (hud.coinCount) hud.coinCount.textContent = coins;
+      // Active-effect readout: include V8 buffs.
+      if (hud.pvpEffect) {
+        const nowMs2 = Date.now();
+        let effectText2 = '';
+        if      ((me.starUntilMs || 0) > nowMs2)          effectText2 = '⭐ STAR';
+        else if ((me.bulletBillUntilMs || 0) > nowMs2)    effectText2 = '🚀 BULLET BILL';
+        else if ((me.doubleDmgUntilMs || 0) > nowMs2)     effectText2 = '✖2 DOUBLE DMG';
+        else if (me.shieldActive)                          effectText2 = '🛡 SHIELD';
+        else if ((me.boostUntilMs || 0) > nowMs2)         effectText2 = '🍄 BOOST';
+        hud.pvpEffect.textContent = effectText2;
+      }
+    }
+
+    // ── B1 full client-side physics prediction ───────────────────────
+    // 1) Seed the prediction bridge on the very first local-kart state.
+    // 2) Every subsequent update: compare server position vs prediction;
+    //    reconcile (server-correct + replay un-acked inputs) if diverged.
+    if (me && _trackPhysDesc) {
+      if (!_predBridgeSeeded) {
+        _predBridgeSeeded = true;
+        // Derive spawn yaw from the server quaternion.
+        const spawnYaw = Math.atan2(
+          2 * ((me.qw || 1) * (me.qy || 0) + (me.qx || 0) * (me.qz || 0)),
+          1 - 2 * ((me.qy || 0) ** 2 + (me.qx || 0) ** 2)
+        );
+        _predBridge = createPhysicsBridge({
+          staticBodies: _trackPhysDesc.staticBodies,
+          drivableCells: new Set(),
+          tile: TILE * S,
+          spawnPos: { x: me.x, y: me.y, z: me.z },
+          spawnRot: spawnYaw,
+        });
+      } else if (_predBridge && _predBridge.snapCount > 0) {
+        // Gather the current prediction position for divergence test.
+        _predBridge.interpolate(performance.now());
+        const pp = _predBridge.chassisBody.interpolatedPosition;
+        const dx = me.x - pp.x;
+        const dy = me.y - pp.y;
+        const dz = me.z - pp.z;
+        const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+        // Reconcile when server and prediction are more than 0.5 m apart.
+        if (dist > 500) {
+          _reconcileCount++;
+          if (dist > _reconcileMaxDeltaMm) _reconcileMaxDeltaMm = dist;
+          // Collect all inputs the server has not acknowledged yet.
+          const ackedSeq = me.lastSeq || 0;
+          const replayInputs = [];
+          for (const [seq, ikeys] of _inputHistory) {
+            if (seq > ackedSeq) replayInputs.push({ seq, keys: ikeys });
+          }
+          replayInputs.sort((a, b) => a.seq - b.seq);
+          _predBridge.reconcile({
+            x: me.x, y: me.y, z: me.z,
+            qx: me.qx || 0, qy: me.qy || 0, qz: me.qz || 0, qw: me.qw || 1,
+            vx: me.vx || 0, vy: me.vy || 0, vz: me.vz || 0,
+            wx: 0, wy: 0, wz: 0,
+            replayInputs,
+          });
+        }
+      }
+    }
   });
 
   room.onMessage('itemReceived', (msg) => {
     console.log('[mp-editor3] item', msg);
+    try { ensureKartAudio(); kartAudio.playOneShot('itemGet', { gain: 0.9 }); } catch {}
   });
   room.onMessage('secondaryWeaponSwapped', (msg) => {
     console.log('[mp-editor3] swap', msg);
@@ -1163,6 +1820,159 @@ async function connect() {
     }
   });
 
+  // ── Slice 2: weapon + combat message handlers ──────────────────────────
+  room.onMessage('projectileSpawned', (msg) => {
+    // `msg.key` matches the ProjectileState MapSchema key.
+    // Pre-warm the mesh so it's ready before the first onStateChange arrives.
+    if (msg.key) ensureProjMesh(msg.key, msg.subType || 'default');
+    try { ensureKartAudio(); kartAudio.playOneShot('shoot', { gain: 0.7 }); } catch {}
+  });
+
+  room.onMessage('projectileExploded', (msg) => {
+    // Remove mesh + spawn burst VFX.
+    if (msg.key) removeProjMesh(msg.key);
+    // Remove blue shell floor ring if present
+    if (msg.key && blueShellRings.has(msg.key)) {
+      const entry = blueShellRings.get(msg.key);
+      scene.remove(entry.mesh);
+      entry.mesh.geometry.dispose();
+      entry.mesh.material.dispose();
+      blueShellRings.delete(msg.key);
+    }
+    const col = PROJ_COLORS[msg.subType] ?? PROJ_COLORS.default;
+    spawnProjectileFx(msg.x || 0, msg.y || 0, msg.z || 0, col);
+    if (msg.subType === 'bobomb' || msg.subType === 'blue_shell') {
+      spawnProjectileFx((msg.x || 0) + 0.5 * S, msg.y || 0, (msg.z || 0) + 0.5 * S, 0xffaa00);
+      spawnProjectileFx((msg.x || 0) - 0.5 * S, msg.y || 0, (msg.z || 0) - 0.5 * S, 0xff6600);
+    }
+    try { ensureKartAudio(); kartAudio.playOneShot('explode_item', { gain: 0.9 }); } catch {}
+  });
+
+  room.onMessage('shellBounced', () => {
+    try { ensureKartAudio(); kartAudio.playOneShot('shellBounce', { gain: 0.65 }); } catch {}
+  });
+
+  room.onMessage('kartImpact', (msg) => {
+    // msg: { targetId, sourceId, subType, x, y, z }
+    if (msg.targetId === mySid) {
+      triggerHitFlash();
+      triggerScreenShake(msg.subType === 'blue_shell' ? 1.2 : 0.8,
+                         msg.subType === 'blue_shell' ? 0.6 : 0.4);
+      showFloater('💥 HIT!', '#ff4d6d');
+      try { ensureKartAudio(); kartAudio.playOneShot('hitTaken', { gain: 1.0 }); } catch {}
+    } else if (msg.sourceId === mySid) {
+      showFloater('+1', '#00e5ff');
+    }
+    if (msg.subType === 'banana' && msg.targetId === mySid) {
+      try { ensureKartAudio(); kartAudio.playOneShot('spinout', { gain: 0.9 }); } catch {}
+    }
+  });
+
+  room.onMessage('effectApplied', (msg) => {
+    if (msg.sessionId !== mySid) return;
+    const icons = {
+      star: '⭐ STAR!', boost: '🍄 BOOST!', bullet_bill: '🚀 BULLET BILL!',
+      mushroom: '🍄 BOOST!', golden_mushroom: '🍄🍄 SHROOM!',
+      v8_shield: '🛡 SHIELD!', shield_broken: '💔 SHIELD BROKEN',
+      v8_repair: '💊 REPAIRED!', v8_double_dmg: '✖2 POWER UP!',
+    };
+    const col = {
+      star: '#ffd166', boost: '#ff6b35', bullet_bill: '#00e5ff',
+      mushroom: '#ff6b35', golden_mushroom: '#ffaa00',
+      v8_shield: '#88ccff', shield_broken: '#ff4d4d',
+      v8_repair: '#22ff88', v8_double_dmg: '#ff3333',
+    };
+    showFloater(icons[msg.effect] || msg.effect, col[msg.effect] || '#fff');
+    if (msg.effect === 'star')        try { ensureKartAudio(); kartAudio.playOneShot('starLoop',  { gain: 0.8, loop: false }); } catch {}
+    if (msg.effect === 'bullet_bill') try { ensureKartAudio(); kartAudio.playOneShot('billLoop',  { gain: 0.8, loop: false }); } catch {}
+    if (msg.effect === 'v8_shield')   try { ensureKartAudio(); kartAudio.playOneShot('shoot',     { gain: 0.5 }); } catch {}
+    if (msg.effect === 'v8_repair')   try { ensureKartAudio(); kartAudio.playOneShot('itemGet',   { gain: 0.9 }); } catch {}
+  });
+
+  room.onMessage('blueShellWarning', (msg) => {
+    // Show warning floater to target
+    if (msg.targetId === mySid) {
+      showFloater('🔵 INCOMING!', '#00aaff');
+      try { ensureKartAudio(); kartAudio.playOneShot('warningBlue', { gain: 1.0 }); } catch {}
+    }
+    // Spawn a pulsing floor ring at the target kart's position
+    const targetGhost = ghosts.get(msg.targetId);
+    if (targetGhost && !blueShellRings.has(msg.projKey)) {
+      const ring = new THREE.Mesh(
+        new THREE.RingGeometry(1.8 * S, 2.4 * S, 32),
+        new THREE.MeshBasicMaterial({
+          color: 0x00aaff, side: THREE.DoubleSide,
+          transparent: true, opacity: 0.7, depthWrite: false,
+        })
+      );
+      ring.rotation.x = -Math.PI / 2;
+      ring.position.copy(targetGhost.group.position);
+      ring.position.y += 0.05 * S;
+      scene.add(ring);
+      blueShellRings.set(msg.projKey, { mesh: ring, targetId: msg.targetId });
+    }
+  });
+
+  room.onMessage('matchOver', (msg) => {
+    // Freeze input.
+    inputLocked = true;
+    // Build results overlay.
+    const scores = msg.scores || {};
+    let winnerSid = null, highScore = -1;
+    for (const [sid, sc] of Object.entries(scores)) {
+      if (sc > highScore) { highScore = sc; winnerSid = sid; }
+    }
+    if (hud.resultsTitle) hud.resultsTitle.textContent = winnerSid === mySid ? '🏆 VICTORY!' : '💀 DEFEAT';
+    if (hud.resultsScores) {
+      hud.resultsScores.innerHTML = '';
+      for (const [sid, sc] of Object.entries(scores)) {
+        const block = document.createElement('div');
+        const isWinner = sid === winnerSid;
+        const isMe = sid === mySid;
+        block.className = 'results-score-block' + (isWinner ? ' winner' : '');
+        block.innerHTML = `
+          <div class="rs-crown">${isWinner ? '👑' : ''}</div>
+          <div class="rs-label">${isMe ? 'You' : 'Opponent'}</div>
+          <div class="rs-num">${sc}</div>
+          <div class="rs-name">${sid.slice(0, 8)}</div>`;
+        hud.resultsScores.appendChild(block);
+      }
+    }
+    if (hud.results) hud.results.classList.remove('hidden');
+    // SFX: victory fanfare for winner, consolation for loser.
+    if (winnerSid === mySid) {
+      try { ensureKartAudio(); kartAudio.playOneShot('raceFinish',     { gain: 1.0 }); } catch {}
+    } else {
+      try { ensureKartAudio(); kartAudio.playOneShot('raceFinishLoss', { gain: 0.85 }); } catch {}
+    }
+    // Rematch / Exit buttons.
+    const rematch = document.getElementById('results-rematch');
+    const exit    = document.getElementById('results-exit');
+    if (rematch) rematch.onclick = () => {
+      if (hud.results) hud.results.classList.add('hidden');
+      // Tell the server to reset the match for everyone.
+      if (roomRef) try { roomRef.send('rematch'); } catch {}
+    };
+    if (exit)    exit.onclick    = () => { window.location.href = '/'; };
+  });
+
+  // Slice 4 — match reset: server reset all state, restart countdown for all clients.
+  room.onMessage('matchReset', () => {
+    if (hud.pvpTimer) { hud.pvpTimer.textContent = '3:00'; hud.pvpTimer.classList.remove('danger'); }
+    if (hud.pvpScoreMe)  hud.pvpScoreMe.textContent  = '0';
+    if (hud.pvpScoreOpp) hud.pvpScoreOpp.textContent = '0';
+    raceStarted = false;
+    inputLocked = true;
+    startCountdown(() => { inputLocked = false; });
+  });
+
+  // Slice 4 — pit-fall penalty notification.
+  room.onMessage('penaltyApplied', (msg) => {
+    if (msg.sessionId === mySid && msg.reason === 'fellOff') {
+      showFloater('💀 -1 FELL OFF!', '#ff4d4d');
+    }
+  });
+
   // Input send loop (30Hz).
   setInterval(() => {
     pollInput();
@@ -1170,6 +1980,24 @@ async function connect() {
     try {
       room.send('input', { seq: input.seq, throttle: input.throttle, brake: input.brake, steer: input.steer, drift: input.drift });
     } catch { /* dropped frame */ }
+
+    // B1 — also drive the local prediction bridge and store in history.
+    if (_predBridge && _predBridgeSeeded) {
+      const ikeys = {
+        w:     input.throttle > 0.5,
+        s:     input.throttle < -0.5,
+        a:     input.steer    < -0.3,
+        d:     input.steer    >  0.3,
+        space: input.brake    > 0.5,
+        drift: !!input.drift,
+      };
+      _predBridge.sendKeys(ikeys);
+      _inputHistory.set(input.seq, ikeys);
+      // Evict oldest entry if ring buffer is full.
+      if (_inputHistory.size > _INPUT_HISTORY_MAX) {
+        _inputHistory.delete(_inputHistory.keys().next().value);
+      }
+    }
   }, 1000 / SEND_HZ);
 
   // Lightweight ping (round-trip via state — server stamps lastSeq).
@@ -1203,6 +2031,10 @@ async function connect() {
         seqBehind: drift,
         ghostCount,
         avgSnapDepth: ghostCount ? (snapDepth / ghostCount) : 0,
+        // B1 reconcile diagnostics — assertions in the B5 probe harness.
+        reconcileCount: _reconcileCount,
+        reconcileMaxDeltaMm: _reconcileMaxDeltaMm,
+        predBridgeReady: _predBridgeSeeded && !!_predBridge,
         ts: Date.now(),
       };
     } catch { /* probe-only diagnostics */ }
@@ -1219,6 +2051,9 @@ async function connect() {
         `Snapshot depth  ${(ghostCount ? (snapDepth / ghostCount) : 0).toFixed(1).padStart(6)} (\u00d7${ghostCount})`,
         `Send rate       ${SEND_HZ.toString().padStart(6)} Hz`,
         `Seq behind      ${drift.toString().padStart(6)}`,
+        `B1 pred bridge  ${_predBridgeSeeded ? 'READY' : 'INIT  '}`,
+        `Reconciles      ${_reconcileCount.toString().padStart(6)}`,
+        `Max delta       ${(_reconcileMaxDeltaMm / 1000).toFixed(2).padStart(6)} m`,
       ]);
     }
   }, 1000);

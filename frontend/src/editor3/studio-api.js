@@ -18,17 +18,40 @@ export function getOwnerToken() {
   return token;
 }
 
-async function apiFetch(path, { method = 'GET', body, signal } = {}) {
+async function apiFetch(path, { method = 'GET', body, signal, timeoutMs = 4000 } = {}) {
   const headers = { 'Accept': 'application/json' };
   if (body !== undefined) headers['Content-Type'] = 'application/json';
   const ownerToken = getOwnerToken();
   if (ownerToken) headers['X-Owner-Token'] = ownerToken;
-  const res = await fetch(`${API_BASE}${path}`, {
-    method,
-    headers,
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-    signal,
-  });
+
+  // Local AbortController so a dead/slow backend can't freeze menus.
+  // If the caller passed a signal, chain it so external aborts still work.
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(new Error('apiFetch timeout')), timeoutMs);
+  if (signal) {
+    if (signal.aborted) controller.abort(signal.reason);
+    else signal.addEventListener('abort', () => controller.abort(signal.reason), { once: true });
+  }
+
+  let res;
+  try {
+    res = await fetch(`${API_BASE}${path}`, {
+      method,
+      headers,
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+      signal: controller.signal,
+    });
+  } catch (netErr) {
+    clearTimeout(timer);
+    // Network failure or timeout — surface as status 0 so callers can
+    // gracefully render an empty state instead of hanging the UI.
+    const err = new Error(`API ${method} ${path} → unreachable (${netErr?.message || netErr})`);
+    err.status = 0;
+    err.offline = true;
+    throw err;
+  }
+  clearTimeout(timer);
+
   if (!res.ok) {
     let detail = '';
     try { detail = (await res.json()).error || JSON.stringify(await res.json()); } catch {}

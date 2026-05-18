@@ -2654,8 +2654,17 @@ input::placeholder { color: var(--text-muted); font-size: 0.88rem; }
   background: none;
   border: none;
   box-shadow: none;
-  overflow: visible;
+  overflow: hidden; /* clips content while collapsing via max-height */
   isolation: auto;
+  /* Collapsed default — transitions to expanded when .mode-initial is present */
+  max-height: 0;
+  opacity: 0;
+  transform: translateY(-10px) scale(0.98);
+  pointer-events: none;
+  transition:
+    max-height 340ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 260ms ease,
+    transform 280ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 .mode-selector-container::before {
   display: none;
@@ -3219,10 +3228,9 @@ input::placeholder { color: var(--text-muted); font-size: 0.88rem; }
   box-shadow: var(--panel-shadow);
 }
 
-/* ── Active Mode State (Hide modes list when a mode is picked) ── */
-.simplified-left-panel:not(.mode-initial) .mode-selector-container {
-  display: none !important;
-}
+/* ── Active Mode State: mode-selector-container collapses via max-height + opacity transition ──
+   No display:none needed — the collapsed state is the default on .mode-selector-container;
+   .mode-initial overrides to expanded below. ── */
 
 /* ── Inline Setup Back Button Header ── */
 .setup-header {
@@ -3328,6 +3336,11 @@ input::placeholder { color: var(--text-muted); font-size: 0.88rem; }
   flex: 1 1 auto;
   display: flex;
   flex-direction: column;
+  /* Expanded state — overrides the default collapsed values */
+  max-height: 1000px;
+  opacity: 1;
+  transform: none;
+  pointer-events: auto;
 }
 .mode-initial .mode-selector-title {
   display: none;
@@ -3868,9 +3881,13 @@ input::placeholder { color: var(--text-muted); font-size: 0.88rem; }
   overflow-x: hidden;
   padding: 8px 4px 10px;
   border-top: 1px solid rgba(var(--glo-rgb), 0.12);
-  animation: inlineSetupReveal 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
+  /* animation is on :not(.hidden) so it re-fires each time the panel is revealed */
   scrollbar-width: thin;
   scrollbar-color: rgba(var(--glo-rgb), 0.25) transparent;
+}
+/* Re-trigger reveal animation every time .hidden is removed */
+.inline-setup:not(.hidden) {
+  animation: inlineSetupReveal 0.42s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 .inline-setup::-webkit-scrollbar {
@@ -3894,13 +3911,28 @@ input::placeholder { color: var(--text-muted); font-size: 0.88rem; }
 @keyframes inlineSetupReveal {
   from {
     opacity: 0;
-    transform: translateY(-8px);
+    transform: translateY(12px); /* slides in from below — natural after mode cards exit upward */
   }
   to {
     opacity: 1;
     transform: translateY(0);
   }
 }
+
+/* ── Mode card staggered entrance (initial load & return to mode selection) ── */
+@keyframes modeCardReveal {
+  from { opacity: 0; transform: translateY(16px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0)    scale(1);    }
+}
+.mode-initial .mode-cards-row .mode-card {
+  animation: modeCardReveal 400ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.mode-initial .mode-cards-row .mode-card:nth-child(1) { animation-delay:  20ms; }
+.mode-initial .mode-cards-row .mode-card:nth-child(2) { animation-delay:  80ms; }
+.mode-initial .mode-cards-row .mode-card:nth-child(3) { animation-delay: 140ms; }
+.mode-initial .mode-cards-row .mode-card:nth-child(4) { animation-delay: 200ms; }
+.mode-initial .mode-cards-row .mode-card:nth-child(5) { animation-delay: 260ms; }
+.mode-initial .mode-cards-row .mode-card:nth-child(6) { animation-delay: 320ms; }
 
 /* Map Dropdown */
 .map-selector-container { text-align: center; margin-bottom: 6px; }
@@ -6429,7 +6461,7 @@ select option {
 
 
 /* ---------------------------------------------------
-   GUEST LOCK � read-only mirror for non-host players
+   GUEST LOCK � read-only mirror for non-host players
    Applied to .simplified-left-panel when connected as
    guest. Mode cards, track picker, and race/battle
    settings render normally (so guests see the host's
@@ -6502,7 +6534,7 @@ select option {
 
 
 /* ---------------------------------------------------
-   IN-LOBBY LEFT PANEL � compact mode strip
+   IN-LOBBY LEFT PANEL � compact mode strip
    While connected to any lobby (host or guest), hide
    the giant initial mode cards (irrelevant; the mode
    is already determined by the lobby) and show a

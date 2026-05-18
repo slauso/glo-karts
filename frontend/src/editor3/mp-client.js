@@ -179,12 +179,69 @@ export async function joinRoom({ roomCode, track, chassisBody, scene, camera }) 
     }
   });
 
+  // ── PvP weapon-fire fan-out ───────────────────────────────────
+  // The host broadcasts every kart's weapon-fire so projectiles spawn
+  // visually + physically on every client. Damage attribution still
+  // routes through the local applyHitToLocal callback (peers can only
+  // damage the local kart; ghosts are dumb). The runtime tags peer
+  // entities with `ownerId: 'peer:<sessionId>'` so its self-grace check
+  // never blocks the local kart from being hit by a remote shot.
+  room.onMessage('weaponFire', (msg) => {
+    if (!msg || msg.from === room.sessionId) return;
+    const pr = (typeof window !== 'undefined' && window.__play && window.__play.projectileRuntime) || null;
+    const WEAPONS = (typeof window !== 'undefined' && window.__play && window.__play.WEAPONS) || null;
+    if (!pr || !WEAPONS) return;
+    const def = WEAPONS[msg.name];
+    if (!def) return;
+    const firedDef = (msg.dmgMul && def.dmg) ? { ...def, dmg: Math.round(def.dmg * msg.dmgMul) } : def;
+    const ownerId = `peer:${msg.from}`;
+    try {
+      if (msg.kind === 'hazard') {
+        pr.spawnHazard({ weapon: firedDef, name: msg.name, origin: msg.origin, ownerId });
+      } else {
+        pr.spawnProjectile({
+          weapon: firedDef, name: msg.name,
+          origin: msg.origin,
+          forward: msg.forward || { x: 0, y: 0, z: 1 },
+          ownerId,
+        });
+      }
+    } catch (err) { console.warn('[mp-client] weaponFire spawn failed', err); }
+  });
+
+  // Expose a tiny send API so play-main.js can fan its local fires
+  // out to the room without importing colyseus directly. We attach to
+  // window.__mp so the import graph stays one-way (play-main never
+  // imports mp-client; mp-client decorates window).
+  if (typeof window !== 'undefined') {
+    window.__mp = window.__mp || {};
+    window.__mp.sendWeaponFire = (payload) => {
+      try { room.send('weaponFire', { ...payload, from: room.sessionId }); }
+      catch (err) { /* room may have closed; swallow */ }
+    };
+  }
+
   // Smooth-follow loop for ghosts
   let raf;
   function smooth() {
     for (const g of ghosts.values()) {
       g.group.position.lerp(g.target, 0.25);
       g.group.quaternion.slerp(g.targetQuat, 0.25);
+    }
+    // Phase E2 — feed ghost positions to the projectile runtime so red
+    // and blue shells can lock on / blast remote players. We push a
+    // fresh array each frame because peers can join/leave any tick.
+    if (typeof window !== 'undefined' && window.__play && typeof window.__play.setCombatPeers === 'function') {
+      const peers = [];
+      for (const [id, g] of ghosts.entries()) {
+        peers.push({
+          id: `peer:${id}`,
+          isLocal: false,
+          invuln: false,
+          position: { x: g.group.position.x, y: g.group.position.y, z: g.group.position.z },
+        });
+      }
+      window.__play.setCombatPeers(peers);
     }
     raf = requestAnimationFrame(smooth);
   }

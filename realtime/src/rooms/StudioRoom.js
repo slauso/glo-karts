@@ -31,6 +31,16 @@ const TICK_HZ = 20;
 const COMBAT_HZ = 30;        // sweep often enough to catch fast karts
 const RESPAWN_HZ = 5;        // re-arm pickups in coarse ticks
 
+function _safeVec3(v) {
+  if (!v || typeof v !== "object") return null;
+  const x = Number(v.x), y = Number(v.y), z = Number(v.z);
+  if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) return null;
+  // Hard clamp to ±50km so a malicious client can't ask the room to
+  // broadcast +Inf-ish coords that crash other clients' projectile sim.
+  const clamp = (n) => Math.max(-50000, Math.min(50000, n));
+  return { x: clamp(x), y: clamp(y), z: clamp(z) };
+}
+
 export class StudioRoom extends Room {
   onCreate(options = {}) {
     this.maxClients = 8;
@@ -55,6 +65,24 @@ export class StudioRoom extends Room {
       }
       t.t = Date.now();
       peer.transform = t;
+    });
+
+    // PvP weapon-fire passthrough — every client broadcasts its local
+    // fires here; we re-fan to all *other* clients so projectiles spawn
+    // with identical origin/forward on every screen. Lightweight:
+    // ~20-40 messages/sec across an 8-player room even in heavy combat.
+    this.onMessage("weaponFire", (client, data = {}) => {
+      if (!data || typeof data.name !== "string") return;
+      // Stamp authoritative sender id to prevent client spoofing.
+      const safe = {
+        from: client.sessionId,
+        kind: data.kind === "hazard" ? "hazard" : "projectile",
+        name: data.name.slice(0, 40),
+        origin: _safeVec3(data.origin),
+        forward: _safeVec3(data.forward) || { x: 0, y: 0, z: 1 },
+        dmgMul: Number.isFinite(data.dmgMul) ? Math.max(0.1, Math.min(8, data.dmgMul)) : 1,
+      };
+      this.broadcast("weaponFire", safe, { except: client });
     });
 
     this.onMessage("track", (client, data = {}) => {

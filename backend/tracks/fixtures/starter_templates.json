@@ -1,112 +1,1367 @@
 [
-  {
-    "model": "tracks.track",
-    "pk": "11111111-1111-1111-1111-111111111111",
-    "fields": {
-      "name": "Tutorial Loop",
-      "author_name": "GLO KARTS",
-      "description": "A closed rectangular circuit. Spawn at the south, run the straights, sweep four corners, and cross the finish line back at the start.",
-      "track_data": {
-        "track": {
-          "v": 1,
-          "name": "Tutorial Loop",
-          "placements": [
-            { "k": "spawn",    "x":  0, "z":  0, "r": 0 },
-            { "k": "straight", "x":  0, "z":  1, "r": 0 },
-            { "k": "straight", "x":  0, "z":  2, "r": 0 },
-            { "k": "corner",   "x":  0, "z":  3, "r": 0 },
-            { "k": "straight", "x": -1, "z":  3, "r": 1 },
-            { "k": "straight", "x": -2, "z":  3, "r": 1 },
-            { "k": "corner",   "x": -3, "z":  3, "r": 1 },
-            { "k": "straight", "x": -3, "z":  2, "r": 0 },
-            { "k": "straight", "x": -3, "z":  1, "r": 0 },
-            { "k": "straight", "x": -3, "z":  0, "r": 0 },
-            { "k": "straight", "x": -3, "z": -1, "r": 0 },
-            { "k": "corner",   "x": -3, "z": -2, "r": 2 },
-            { "k": "straight", "x": -2, "z": -2, "r": 1 },
-            { "k": "straight", "x": -1, "z": -2, "r": 1 },
-            { "k": "corner",   "x":  0, "z": -2, "r": 3 },
-            { "k": "finish",   "x":  0, "z": -1, "r": 0 }
-          ]
-        },
-        "decor": []
-      },
-      "thumbnail": "",
-      "tags": "tutorial,loop,beginner",
-      "is_template": true,
-      "is_public": true,
-      "remix_of": null,
-      "owner_token": "",
-      "play_count": 0
+    {
+        "model":  "tracks.track",
+        "pk":  "11111111-1111-1111-1111-111111111111",
+        "fields":  {
+                       "name":  "Tutorial Loop",
+                       "author_name":  "GLO KARTS",
+                       "description":  "A closed rectangular circuit. Spawn at the south, run the straights, sweep four corners, and cross the finish line back at the start.",
+                       "track_data":  {
+                                          "track":  {
+                                                        "v":  1,
+                                                        "name":  "Tutorial Loop",
+                                                        "placements":  [
+                                                                           {
+                                                                               "k":  "spawn",
+                                                                               "x":  0,
+                                                                               "z":  0,
+                                                                               "r":  0
+                                                                           },
+                                                                           {
+                                                                               "k":  "straight",
+                                                                               "x":  0,
+                                                                               "z":  1,
+                                                                               "r":  0
+                                                                           },
+                                                                           {
+                                                                               "k":  "straight",
+                                                                               "x":  0,
+                                                                               "z":  2,
+                                                                               "r":  0
+                                                                           },
+                                                                           {
+                                                                               "k":  "corner",
+                                                                               "x":  0,
+                                                                               "z":  3,
+                                                                               "r":  0
+                                                                           },
+                                                                           {
+                                                                               "k":  "straight",
+                                                                               "x":  -1,
+                                                                               "z":  3,
+                                                                               "r":  1
+                                                                           },
+                                                                           {
+                                                                               "k":  "straight",
+                                                                               "x":  -2,
+                                                                               "z":  3,
+                                                                               "r":  1
+                                                                           },
+                                                                           {
+                                                                               "k":  "corner",
+                                                                               "x":  -3,
+                                                                               "z":  3,
+                                                                               "r":  1
+                                                                           },
+                                                                           {
+                                                                               "k":  "straight",
+                                                                               "x":  -3,
+                                                                               "z":  2,
+                                                                               "r":  0
+                                                                           },
+                                                                           {
+                                                                               "k":  "straight",
+                                                                               "x":  -3,
+                                                                               "z":  1,
+                                                                               "r":  0
+                                                                           },
+                                                                           {
+                                                                               "k":  "straight",
+                                                                               "x":  -3,
+                                                                               "z":  0,
+                                                                               "r":  0
+                                                                           },
+                                                                           {
+                                                                               "k":  "straight",
+                                                                               "x":  -3,
+                                                                               "z":  -1,
+                                                                               "r":  0
+                                                                           },
+                                                                           {
+                                                                               "k":  "corner",
+                                                                               "x":  -3,
+                                                                               "z":  -2,
+                                                                               "r":  2
+                                                                           },
+                                                                           {
+                                                                               "k":  "straight",
+                                                                               "x":  -2,
+                                                                               "z":  -2,
+                                                                               "r":  1
+                                                                           },
+                                                                           {
+                                                                               "k":  "straight",
+                                                                               "x":  -1,
+                                                                               "z":  -2,
+                                                                               "r":  1
+                                                                           },
+                                                                           {
+                                                                               "k":  "corner",
+                                                                               "x":  0,
+                                                                               "z":  -2,
+                                                                               "r":  3
+                                                                           },
+                                                                           {
+                                                                               "k":  "finish",
+                                                                               "x":  0,
+                                                                               "z":  -1,
+                                                                               "r":  0
+                                                                           }
+                                                                       ]
+                                                    },
+                                          "decor":  [
+
+                                                    ]
+                                      },
+                       "thumbnail":  "",
+                       "tags":  "tutorial,loop,beginner",
+                       "is_template":  true,
+                       "is_public":  true,
+                       "remix_of":  null,
+                       "owner_token":  "",
+                       "play_count":  0,
+                       "created_at":  "2026-01-01T00:00:00Z",
+                       "updated_at":  "2026-01-01T00:00:00Z"
+                   }
+    },
+    {
+        "model":  "tracks.track",
+        "pk":  "22222222-2222-2222-2222-222222222222",
+        "fields":  {
+                       "name":  "Sprint Drag",
+                       "author_name":  "GLO KARTS",
+                       "description":  "Open-ended drag strip with a ramp up to a short plateau and a ramp back down. Great springboard to drop boost pads and decor on.",
+                       "track_data":  {
+                                          "track":  {
+                                                        "v":  1,
+                                                        "name":  "Sprint Drag",
+                                                        "placements":  [
+                                                                           {
+                                                                               "k":  "spawn",
+                                                                               "x":  0,
+                                                                               "z":  0,
+                                                                               "r":  0
+                                                                           },
+                                                                           {
+                                                                               "k":  "straight",
+                                                                               "x":  0,
+                                                                               "z":  1,
+                                                                               "r":  0
+                                                                           },
+                                                                           {
+                                                                               "k":  "straight",
+                                                                               "x":  0,
+                                                                               "z":  2,
+                                                                               "r":  0
+                                                                           },
+                                                                           {
+                                                                               "k":  "straight",
+                                                                               "x":  0,
+                                                                               "z":  3,
+                                                                               "r":  0
+                                                                           },
+                                                                           {
+                                                                               "k":  "ramp_up",
+                                                                               "x":  0,
+                                                                               "z":  4,
+                                                                               "r":  0
+                                                                           },
+                                                                           {
+                                                                               "k":  "plateau",
+                                                                               "x":  0,
+                                                                               "z":  6,
+                                                                               "r":  0
+                                                                           },
+                                                                           {
+                                                                               "k":  "plateau",
+                                                                               "x":  0,
+                                                                               "z":  7,
+                                                                               "r":  0
+                                                                           },
+                                                                           {
+                                                                               "k":  "ramp_down",
+                                                                               "x":  0,
+                                                                               "z":  8,
+                                                                               "r":  0
+                                                                           },
+                                                                           {
+                                                                               "k":  "straight",
+                                                                               "x":  0,
+                                                                               "z":  10,
+                                                                               "r":  0
+                                                                           },
+                                                                           {
+                                                                               "k":  "straight",
+                                                                               "x":  0,
+                                                                               "z":  11,
+                                                                               "r":  0
+                                                                           },
+                                                                           {
+                                                                               "k":  "finish",
+                                                                               "x":  0,
+                                                                               "z":  12,
+                                                                               "r":  0
+                                                                           }
+                                                                       ]
+                                                    },
+                                          "decor":  [
+
+                                                    ]
+                                      },
+                       "thumbnail":  "",
+                       "tags":  "sprint,drag,straight,ramp",
+                       "is_template":  true,
+                       "is_public":  true,
+                       "remix_of":  null,
+                       "owner_token":  "",
+                       "play_count":  0,
+                       "created_at":  "2026-01-01T00:00:00Z",
+                       "updated_at":  "2026-01-01T00:00:00Z"
+                   }
+    },
+    {
+        "model":  "tracks.track",
+        "pk":  "33333333-3333-3333-3333-333333333333",
+        "fields":  {
+                       "name":  "Crossroads Circuit",
+                       "author_name":  "GLO KARTS",
+                       "description":  "A compact 3Ã—3 loop wrapped around a 4-way crossroads. Spawn on the west straight, finish on the east â€” perfect for adding side branches.",
+                       "track_data":  {
+                                          "track":  {
+                                                        "v":  1,
+                                                        "name":  "Crossroads Circuit",
+                                                        "placements":  [
+                                                                           {
+                                                                               "k":  "crossroads",
+                                                                               "x":  0,
+                                                                               "z":  0,
+                                                                               "r":  0
+                                                                           },
+                                                                           {
+                                                                               "k":  "cornerR",
+                                                                               "x":  1,
+                                                                               "z":  0,
+                                                                               "r":  2
+                                                                           },
+                                                                           {
+                                                                               "k":  "finish",
+                                                                               "x":  1,
+                                                                               "z":  1,
+                                                                               "r":  0
+                                                                           },
+                                                                           {
+                                                                               "k":  "corner",
+                                                                               "x":  1,
+                                                                               "z":  2,
+                                                                               "r":  0
+                                                                           },
+                                                                           {
+                                                                               "k":  "straight",
+                                                                               "x":  0,
+                                                                               "z":  2,
+                                                                               "r":  1
+                                                                           },
+                                                                           {
+                                                                               "k":  "corner",
+                                                                               "x":  -1,
+                                                                               "z":  2,
+                                                                               "r":  1
+                                                                           },
+                                                                           {
+                                                                               "k":  "spawn",
+                                                                               "x":  -1,
+                                                                               "z":  1,
+                                                                               "r":  0
+                                                                           },
+                                                                           {
+                                                                               "k":  "corner",
+                                                                               "x":  -1,
+                                                                               "z":  0,
+                                                                               "r":  2
+                                                                           }
+                                                                       ]
+                                                    },
+                                          "decor":  [
+
+                                                    ]
+                                      },
+                       "thumbnail":  "",
+                       "tags":  "crossroads,loop,intermediate",
+                       "is_template":  true,
+                       "is_public":  true,
+                       "remix_of":  null,
+                       "owner_token":  "",
+                       "play_count":  0,
+                       "created_at":  "2026-01-01T00:00:00Z",
+                       "updated_at":  "2026-01-01T00:00:00Z"
+                   }
+    },
+    {
+        "model":  "tracks.track",
+        "pk":  "44444444-4444-4444-4444-444444444444",
+        "fields":  {
+                       "name":  "S-Curve Sprint",
+                       "author_name":  "GLO KARTS",
+                       "description":  "A closed S-shaped loop that snakes left then right. Perfect for practicing smooth cornering and clean racing lines through back-to-back curves.",
+                       "track_data":  {
+                                          "track":  {
+                                                        "v":  1,
+                                                        "name":  "S-Curve Sprint",
+                                                        "placements":  [
+                                                                           {
+                                                                               "k":  "spawn",
+                                                                               "x":  0,
+                                                                               "z":  0,
+                                                                               "r":  0
+                                                                           },
+                                                                           {
+                                                                               "k":  "straight",
+                                                                               "x":  0,
+                                                                               "z":  1,
+                                                                               "r":  0
+                                                                           },
+                                                                           {
+                                                                               "k":  "corner",
+                                                                               "x":  0,
+                                                                               "z":  2,
+                                                                               "r":  0
+                                                                           },
+                                                                           {
+                                                                               "k":  "cornerR",
+                                                                               "x":  -1,
+                                                                               "z":  2,
+                                                                               "r":  1
+                                                                           },
+                                                                           {
+                                                                               "k":  "straight",
+                                                                               "x":  -1,
+                                                                               "z":  3,
+                                                                               "r":  0
+                                                                           },
+                                                                           {
+                                                                               "k":  "corner",
+                                                                               "x":  -1,
+                                                                               "z":  4,
+                                                                               "r":  0
+                                                                           },
+                                                                           {
+                                                                               "k":  "cornerR",
+                                                                               "x":  -2,
+                                                                               "z":  4,
+                                                                               "r":  1
+                                                                           },
+                                                                           {
+                                                                               "k":  "straight",
+                                                                               "x":  -2,
+                                                                               "z":  5,
+                                                                               "r":  0
+                                                                           },
+                                                                           {
+                                                                               "k":  "straight",
+                                                                               "x":  -2,
+                                                                               "z":  6,
+                                                                               "r":  0
+                                                                           },
+                                                                           {
+                                                                               "k":  "corner",
+                                                                               "x":  -2,
+                                                                               "z":  7,
+                                                                               "r":  0
+                                                                           },
+                                                                           {
+                                                                               "k":  "straight",
+                                                                               "x":  -3,
+                                                                               "z":  7,
+                                                                               "r":  1
+                                                                           },
+                                                                           {
+                                                                               "k":  "straight",
+                                                                               "x":  -4,
+                                                                               "z":  7,
+                                                                               "r":  1
+                                                                           },
+                                                                           {
+                                                                               "k":  "corner",
+                                                                               "x":  -5,
+                                                                               "z":  7,
+                                                                               "r":  1
+                                                                           },
+                                                                           {
+                                                                               "k":  "straight",
+                                                                               "x":  -5,
+                                                                               "z":  6,
+                                                                               "r":  0
+                                                                           },
+                                                                           {
+                                                                               "k":  "straight",
+                                                                               "x":  -5,
+                                                                               "z":  5,
+                                                                               "r":  0
+                                                                           },
+                                                                           {
+                                                                               "k":  "straight",
+                                                                               "x":  -5,
+                                                                               "z":  4,
+                                                                               "r":  0
+                                                                           },
+                                                                           {
+                                                                               "k":  "straight",
+                                                                               "x":  -5,
+                                                                               "z":  3,
+                                                                               "r":  0
+                                                                           },
+                                                                           {
+                                                                               "k":  "straight",
+                                                                               "x":  -5,
+                                                                               "z":  2,
+                                                                               "r":  0
+                                                                           },
+                                                                           {
+                                                                               "k":  "straight",
+                                                                               "x":  -5,
+                                                                               "z":  1,
+                                                                               "r":  0
+                                                                           },
+                                                                           {
+                                                                               "k":  "straight",
+                                                                               "x":  -5,
+                                                                               "z":  0,
+                                                                               "r":  0
+                                                                           },
+                                                                           {
+                                                                               "k":  "straight",
+                                                                               "x":  -5,
+                                                                               "z":  -1,
+                                                                               "r":  0
+                                                                           },
+                                                                           {
+                                                                               "k":  "corner",
+                                                                               "x":  -5,
+                                                                               "z":  -2,
+                                                                               "r":  2
+                                                                           },
+                                                                           {
+                                                                               "k":  "straight",
+                                                                               "x":  -4,
+                                                                               "z":  -2,
+                                                                               "r":  1
+                                                                           },
+                                                                           {
+                                                                               "k":  "straight",
+                                                                               "x":  -3,
+                                                                               "z":  -2,
+                                                                               "r":  1
+                                                                           },
+                                                                           {
+                                                                               "k":  "straight",
+                                                                               "x":  -2,
+                                                                               "z":  -2,
+                                                                               "r":  1
+                                                                           },
+                                                                           {
+                                                                               "k":  "straight",
+                                                                               "x":  -1,
+                                                                               "z":  -2,
+                                                                               "r":  1
+                                                                           },
+                                                                           {
+                                                                               "k":  "corner",
+                                                                               "x":  0,
+                                                                               "z":  -2,
+                                                                               "r":  3
+                                                                           },
+                                                                           {
+                                                                               "k":  "finish",
+                                                                               "x":  0,
+                                                                               "z":  -1,
+                                                                               "r":  0
+                                                                           }
+                                                                       ]
+                                                    },
+                                          "decor":  [
+
+                                                    ]
+                                      },
+                       "thumbnail":  "",
+                       "tags":  "curves,cornering,racing,intermediate",
+                       "is_template":  true,
+                       "is_public":  true,
+                       "remix_of":  null,
+                       "owner_token":  "",
+                       "play_count":  0,
+                       "created_at":  "2026-01-01T00:00:00Z",
+                       "updated_at":  "2026-01-01T00:00:00Z"
+                   }
+    },
+    {
+        "model":  "tracks.track",
+        "pk":  "55555555-5555-5555-5555-555555555555",
+        "fields":  {
+                       "name":  "Oval Track",
+                       "author_name":  "GLO KARTS",
+                       "description":  "A smooth symmetric oval circuit perfect for high-speed racing. Two long straights connected by sweeping corners at each end.",
+                       "track_data":  {
+                                          "track":  {
+                                                        "v":  1,
+                                                        "name":  "Oval Track",
+                                                        "placements":  [
+                                                                           {
+                                                                               "k":  "spawn",
+                                                                               "x":  0,
+                                                                               "z":  0,
+                                                                               "r":  0
+                                                                           },
+                                                                           {
+                                                                               "k":  "straight",
+                                                                               "x":  0,
+                                                                               "z":  1,
+                                                                               "r":  0
+                                                                           },
+                                                                           {
+                                                                               "k":  "straight",
+                                                                               "x":  0,
+                                                                               "z":  2,
+                                                                               "r":  0
+                                                                           },
+                                                                           {
+                                                                               "k":  "straight",
+                                                                               "x":  0,
+                                                                               "z":  3,
+                                                                               "r":  0
+                                                                           },
+                                                                           {
+                                                                               "k":  "corner",
+                                                                               "x":  0,
+                                                                               "z":  4,
+                                                                               "r":  0
+                                                                           },
+                                                                           {
+                                                                               "k":  "straight",
+                                                                               "x":  -1,
+                                                                               "z":  4,
+                                                                               "r":  1
+                                                                           },
+                                                                           {
+                                                                               "k":  "straight",
+                                                                               "x":  -2,
+                                                                               "z":  4,
+                                                                               "r":  1
+                                                                           },
+                                                                           {
+                                                                               "k":  "corner",
+                                                                               "x":  -3,
+                                                                               "z":  4,
+                                                                               "r":  1
+                                                                           },
+                                                                           {
+                                                                               "k":  "straight",
+                                                                               "x":  -3,
+                                                                               "z":  3,
+                                                                               "r":  0
+                                                                           },
+                                                                           {
+                                                                               "k":  "straight",
+                                                                               "x":  -3,
+                                                                               "z":  2,
+                                                                               "r":  0
+                                                                           },
+                                                                           {
+                                                                               "k":  "straight",
+                                                                               "x":  -3,
+                                                                               "z":  1,
+                                                                               "r":  0
+                                                                           },
+                                                                           {
+                                                                               "k":  "straight",
+                                                                               "x":  -3,
+                                                                               "z":  0,
+                                                                               "r":  0
+                                                                           },
+                                                                           {
+                                                                               "k":  "straight",
+                                                                               "x":  -3,
+                                                                               "z":  -1,
+                                                                               "r":  0
+                                                                           },
+                                                                           {
+                                                                               "k":  "corner",
+                                                                               "x":  -3,
+                                                                               "z":  -2,
+                                                                               "r":  2
+                                                                           },
+                                                                           {
+                                                                               "k":  "straight",
+                                                                               "x":  -2,
+                                                                               "z":  -2,
+                                                                               "r":  1
+                                                                           },
+                                                                           {
+                                                                               "k":  "straight",
+                                                                               "x":  -1,
+                                                                               "z":  -2,
+                                                                               "r":  1
+                                                                           },
+                                                                           {
+                                                                               "k":  "corner",
+                                                                               "x":  0,
+                                                                               "z":  -2,
+                                                                               "r":  3
+                                                                           },
+                                                                           {
+                                                                               "k":  "finish",
+                                                                               "x":  0,
+                                                                               "z":  -1,
+                                                                               "r":  0
+                                                                           }
+                                                                       ]
+                                                    },
+                                          "decor":  [
+
+                                                    ]
+                                      },
+                       "thumbnail":  "",
+                       "tags":  "oval,racing,speed,loop",
+                       "is_template":  true,
+                       "is_public":  true,
+                       "remix_of":  null,
+                       "owner_token":  "",
+                       "play_count":  0,
+                       "created_at":  "2026-01-01T00:00:00Z",
+                       "updated_at":  "2026-01-01T00:00:00Z"
+                   }
+    },
+    {
+        "model":  "tracks.track",
+        "pk":  "66666666-6666-6666-6666-666666666666",
+        "fields":  {
+                       "name":  "Figure Eight",
+                       "author_name":  "GLO KARTS",
+                       "description":  "Two connected rectangular loops sharing a crossroads in the center. On each lap the car crosses the intersection twice, creating a true figure-eight circuit.",
+                       "track_data":  {
+                                          "track":  {
+                                                        "v":  1,
+                                                        "name":  "Figure Eight",
+                                                        "placements":  [
+                                                                           {
+                                                                               "k":  "spawn",
+                                                                               "x":  0,
+                                                                               "z":  0,
+                                                                               "r":  0
+                                                                           },
+                                                                           {
+                                                                               "k":  "straight",
+                                                                               "x":  0,
+                                                                               "z":  1,
+                                                                               "r":  0
+                                                                           },
+                                                                           {
+                                                                               "k":  "crossroads",
+                                                                               "x":  0,
+                                                                               "z":  2,
+                                                                               "r":  0
+                                                                           },
+                                                                           {
+                                                                               "k":  "straight",
+                                                                               "x":  0,
+                                                                               "z":  3,
+                                                                               "r":  0
+                                                                           },
+                                                                           {
+                                                                               "k":  "corner",
+                                                                               "x":  0,
+                                                                               "z":  4,
+                                                                               "r":  0
+                                                                           },
+                                                                           {
+                                                                               "k":  "straight",
+                                                                               "x":  -1,
+                                                                               "z":  4,
+                                                                               "r":  1
+                                                                           },
+                                                                           {
+                                                                               "k":  "straight",
+                                                                               "x":  -2,
+                                                                               "z":  4,
+                                                                               "r":  1
+                                                                           },
+                                                                           {
+                                                                               "k":  "corner",
+                                                                               "x":  -3,
+                                                                               "z":  4,
+                                                                               "r":  1
+                                                                           },
+                                                                           {
+                                                                               "k":  "straight",
+                                                                               "x":  -3,
+                                                                               "z":  3,
+                                                                               "r":  0
+                                                                           },
+                                                                           {
+                                                                               "k":  "corner",
+                                                                               "x":  -3,
+                                                                               "z":  2,
+                                                                               "r":  2
+                                                                           },
+                                                                           {
+                                                                               "k":  "straight",
+                                                                               "x":  -2,
+                                                                               "z":  2,
+                                                                               "r":  1
+                                                                           },
+                                                                           {
+                                                                               "k":  "straight",
+                                                                               "x":  -1,
+                                                                               "z":  2,
+                                                                               "r":  1
+                                                                           },
+                                                                           {
+                                                                               "k":  "straight",
+                                                                               "x":  1,
+                                                                               "z":  2,
+                                                                               "r":  1
+                                                                           },
+                                                                           {
+                                                                               "k":  "straight",
+                                                                               "x":  2,
+                                                                               "z":  2,
+                                                                               "r":  1
+                                                                           },
+                                                                           {
+                                                                               "k":  "corner",
+                                                                               "x":  3,
+                                                                               "z":  2,
+                                                                               "r":  1
+                                                                           },
+                                                                           {
+                                                                               "k":  "straight",
+                                                                               "x":  3,
+                                                                               "z":  1,
+                                                                               "r":  0
+                                                                           },
+                                                                           {
+                                                                               "k":  "straight",
+                                                                               "x":  3,
+                                                                               "z":  0,
+                                                                               "r":  0
+                                                                           },
+                                                                           {
+                                                                               "k":  "straight",
+                                                                               "x":  3,
+                                                                               "z":  -1,
+                                                                               "r":  0
+                                                                           },
+                                                                           {
+                                                                               "k":  "straight",
+                                                                               "x":  3,
+                                                                               "z":  -2,
+                                                                               "r":  0
+                                                                           },
+                                                                           {
+                                                                               "k":  "cornerR",
+                                                                               "x":  3,
+                                                                               "z":  -3,
+                                                                               "r":  2
+                                                                           },
+                                                                           {
+                                                                               "k":  "straight",
+                                                                               "x":  2,
+                                                                               "z":  -3,
+                                                                               "r":  1
+                                                                           },
+                                                                           {
+                                                                               "k":  "straight",
+                                                                               "x":  1,
+                                                                               "z":  -3,
+                                                                               "r":  1
+                                                                           },
+                                                                           {
+                                                                               "k":  "cornerR",
+                                                                               "x":  0,
+                                                                               "z":  -3,
+                                                                               "r":  1
+                                                                           },
+                                                                           {
+                                                                               "k":  "straight",
+                                                                               "x":  0,
+                                                                               "z":  -2,
+                                                                               "r":  0
+                                                                           },
+                                                                           {
+                                                                               "k":  "finish",
+                                                                               "x":  0,
+                                                                               "z":  -1,
+                                                                               "r":  0
+                                                                           }
+                                                                       ]
+                                                    },
+                                          "decor":  [
+
+                                                    ]
+                                      },
+                       "thumbnail":  "",
+                       "tags":  "figure-eight,loops,advanced,complex",
+                       "is_template":  true,
+                       "is_public":  true,
+                       "remix_of":  null,
+                       "owner_token":  "",
+                       "play_count":  0,
+                       "created_at":  "2026-01-01T00:00:00Z",
+                       "updated_at":  "2026-01-01T00:00:00Z"
+                   }
+    },
+    {
+        "model":  "tracks.track",
+        "pk":  "77777777-7777-7777-7777-777777777777",
+        "fields":  {
+                       "name":  "Mountain Pass",
+                       "author_name":  "GLO KARTS",
+                       "description":  "A closed loop that climbs a plateau and descends back. Straight approach, ramp up, plateau corner, ramp down, and a sweeping return straight â€” momentum management is key.",
+                       "track_data":  {
+                                          "track":  {
+                                                        "v":  1,
+                                                        "name":  "Mountain Pass",
+                                                        "placements":  [
+                                                                           {
+                                                                               "k":  "spawn",
+                                                                               "x":  0,
+                                                                               "z":  0,
+                                                                               "r":  0
+                                                                           },
+                                                                           {
+                                                                               "k":  "straight",
+                                                                               "x":  0,
+                                                                               "z":  1,
+                                                                               "r":  0
+                                                                           },
+                                                                           {
+                                                                               "k":  "straight",
+                                                                               "x":  0,
+                                                                               "z":  2,
+                                                                               "r":  0
+                                                                           },
+                                                                           {
+                                                                               "k":  "ramp_up",
+                                                                               "x":  0,
+                                                                               "z":  3,
+                                                                               "r":  0
+                                                                           },
+                                                                           {
+                                                                               "k":  "plateau",
+                                                                               "x":  0,
+                                                                               "z":  5,
+                                                                               "r":  0
+                                                                           },
+                                                                           {
+                                                                               "k":  "plateau",
+                                                                               "x":  0,
+                                                                               "z":  6,
+                                                                               "r":  0
+                                                                           },
+                                                                           {
+                                                                               "k":  "ramp_down",
+                                                                               "x":  0,
+                                                                               "z":  7,
+                                                                               "r":  0
+                                                                           },
+                                                                           {
+                                                                               "k":  "straight",
+                                                                               "x":  0,
+                                                                               "z":  9,
+                                                                               "r":  0
+                                                                           },
+                                                                           {
+                                                                               "k":  "corner",
+                                                                               "x":  0,
+                                                                               "z":  10,
+                                                                               "r":  0
+                                                                           },
+                                                                           {
+                                                                               "k":  "straight",
+                                                                               "x":  -1,
+                                                                               "z":  10,
+                                                                               "r":  1
+                                                                           },
+                                                                           {
+                                                                               "k":  "straight",
+                                                                               "x":  -2,
+                                                                               "z":  10,
+                                                                               "r":  1
+                                                                           },
+                                                                           {
+                                                                               "k":  "straight",
+                                                                               "x":  -3,
+                                                                               "z":  10,
+                                                                               "r":  1
+                                                                           },
+                                                                           {
+                                                                               "k":  "corner",
+                                                                               "x":  -4,
+                                                                               "z":  10,
+                                                                               "r":  1
+                                                                           },
+                                                                           {
+                                                                               "k":  "straight",
+                                                                               "x":  -4,
+                                                                               "z":  9,
+                                                                               "r":  0
+                                                                           },
+                                                                           {
+                                                                               "k":  "straight",
+                                                                               "x":  -4,
+                                                                               "z":  8,
+                                                                               "r":  0
+                                                                           },
+                                                                           {
+                                                                               "k":  "straight",
+                                                                               "x":  -4,
+                                                                               "z":  7,
+                                                                               "r":  0
+                                                                           },
+                                                                           {
+                                                                               "k":  "straight",
+                                                                               "x":  -4,
+                                                                               "z":  6,
+                                                                               "r":  0
+                                                                           },
+                                                                           {
+                                                                               "k":  "straight",
+                                                                               "x":  -4,
+                                                                               "z":  5,
+                                                                               "r":  0
+                                                                           },
+                                                                           {
+                                                                               "k":  "straight",
+                                                                               "x":  -4,
+                                                                               "z":  4,
+                                                                               "r":  0
+                                                                           },
+                                                                           {
+                                                                               "k":  "straight",
+                                                                               "x":  -4,
+                                                                               "z":  3,
+                                                                               "r":  0
+                                                                           },
+                                                                           {
+                                                                               "k":  "straight",
+                                                                               "x":  -4,
+                                                                               "z":  2,
+                                                                               "r":  0
+                                                                           },
+                                                                           {
+                                                                               "k":  "straight",
+                                                                               "x":  -4,
+                                                                               "z":  1,
+                                                                               "r":  0
+                                                                           },
+                                                                           {
+                                                                               "k":  "straight",
+                                                                               "x":  -4,
+                                                                               "z":  0,
+                                                                               "r":  0
+                                                                           },
+                                                                           {
+                                                                               "k":  "straight",
+                                                                               "x":  -4,
+                                                                               "z":  -1,
+                                                                               "r":  0
+                                                                           },
+                                                                           {
+                                                                               "k":  "corner",
+                                                                               "x":  -4,
+                                                                               "z":  -2,
+                                                                               "r":  2
+                                                                           },
+                                                                           {
+                                                                               "k":  "straight",
+                                                                               "x":  -3,
+                                                                               "z":  -2,
+                                                                               "r":  1
+                                                                           },
+                                                                           {
+                                                                               "k":  "straight",
+                                                                               "x":  -2,
+                                                                               "z":  -2,
+                                                                               "r":  1
+                                                                           },
+                                                                           {
+                                                                               "k":  "straight",
+                                                                               "x":  -1,
+                                                                               "z":  -2,
+                                                                               "r":  1
+                                                                           },
+                                                                           {
+                                                                               "k":  "corner",
+                                                                               "x":  0,
+                                                                               "z":  -2,
+                                                                               "r":  3
+                                                                           },
+                                                                           {
+                                                                               "k":  "finish",
+                                                                               "x":  0,
+                                                                               "z":  -1,
+                                                                               "r":  0
+                                                                           }
+                                                                       ]
+                                                    },
+                                          "decor":  [
+
+                                                    ]
+                                      },
+                       "thumbnail":  "",
+                       "tags":  "elevation,ramps,plateau,loop",
+                       "is_template":  true,
+                       "is_public":  true,
+                       "remix_of":  null,
+                       "owner_token":  "",
+                       "play_count":  0,
+                       "created_at":  "2026-01-01T00:00:00Z",
+                       "updated_at":  "2026-01-01T00:00:00Z"
+                   }
+    },
+    {
+        "model":  "tracks.track",
+        "pk":  "88888888-8888-8888-8888-888888888888",
+        "fields":  {
+                       "name":  "Horseshoe",
+                       "author_name":  "GLO KARTS",
+                       "description":  "A wide horseshoe-shaped circuit with long parallel straights connected by a tight U-turn hairpin. Great for overtaking on the straights and defending on the hairpin.",
+                       "track_data":  {
+                                          "track":  {
+                                                        "v":  1,
+                                                        "name":  "Horseshoe",
+                                                        "placements":  [
+                                                                           {
+                                                                               "k":  "spawn",
+                                                                               "x":  0,
+                                                                               "z":  0,
+                                                                               "r":  0
+                                                                           },
+                                                                           {
+                                                                               "k":  "straight",
+                                                                               "x":  0,
+                                                                               "z":  1,
+                                                                               "r":  0
+                                                                           },
+                                                                           {
+                                                                               "k":  "straight",
+                                                                               "x":  0,
+                                                                               "z":  2,
+                                                                               "r":  0
+                                                                           },
+                                                                           {
+                                                                               "k":  "straight",
+                                                                               "x":  0,
+                                                                               "z":  3,
+                                                                               "r":  0
+                                                                           },
+                                                                           {
+                                                                               "k":  "straight",
+                                                                               "x":  0,
+                                                                               "z":  4,
+                                                                               "r":  0
+                                                                           },
+                                                                           {
+                                                                               "k":  "straight",
+                                                                               "x":  0,
+                                                                               "z":  5,
+                                                                               "r":  0
+                                                                           },
+                                                                           {
+                                                                               "k":  "corner",
+                                                                               "x":  0,
+                                                                               "z":  6,
+                                                                               "r":  0
+                                                                           },
+                                                                           {
+                                                                               "k":  "corner",
+                                                                               "x":  -1,
+                                                                               "z":  6,
+                                                                               "r":  1
+                                                                           },
+                                                                           {
+                                                                               "k":  "straight",
+                                                                               "x":  -1,
+                                                                               "z":  5,
+                                                                               "r":  0
+                                                                           },
+                                                                           {
+                                                                               "k":  "straight",
+                                                                               "x":  -1,
+                                                                               "z":  4,
+                                                                               "r":  0
+                                                                           },
+                                                                           {
+                                                                               "k":  "straight",
+                                                                               "x":  -1,
+                                                                               "z":  3,
+                                                                               "r":  0
+                                                                           },
+                                                                           {
+                                                                               "k":  "straight",
+                                                                               "x":  -1,
+                                                                               "z":  2,
+                                                                               "r":  0
+                                                                           },
+                                                                           {
+                                                                               "k":  "straight",
+                                                                               "x":  -1,
+                                                                               "z":  1,
+                                                                               "r":  0
+                                                                           },
+                                                                           {
+                                                                               "k":  "straight",
+                                                                               "x":  -1,
+                                                                               "z":  0,
+                                                                               "r":  0
+                                                                           },
+                                                                           {
+                                                                               "k":  "straight",
+                                                                               "x":  -1,
+                                                                               "z":  -1,
+                                                                               "r":  0
+                                                                           },
+                                                                           {
+                                                                               "k":  "corner",
+                                                                               "x":  -1,
+                                                                               "z":  -2,
+                                                                               "r":  2
+                                                                           },
+                                                                           {
+                                                                               "k":  "corner",
+                                                                               "x":  0,
+                                                                               "z":  -2,
+                                                                               "r":  3
+                                                                           },
+                                                                           {
+                                                                               "k":  "finish",
+                                                                               "x":  0,
+                                                                               "z":  -1,
+                                                                               "r":  0
+                                                                           }
+                                                                       ]
+                                                    },
+                                          "decor":  [
+
+                                                    ]
+                                      },
+                       "thumbnail":  "",
+                       "tags":  "hairpin,straights,overtaking,intermediate",
+                       "is_template":  true,
+                       "is_public":  true,
+                       "remix_of":  null,
+                       "owner_token":  "",
+                       "play_count":  0,
+                       "created_at":  "2026-01-01T00:00:00Z",
+                       "updated_at":  "2026-01-01T00:00:00Z"
+                   }
+    },
+    {
+        "model":  "tracks.track",
+        "pk":  "99999999-9999-9999-9999-999999999999",
+        "fields":  {
+                       "name":  "Stadium Circuit",
+                       "author_name":  "GLO KARTS",
+                       "description":  "A technical multi-corner stadium circuit. Short straights, frequent direction changes, and multiple chicane-style sections reward precise line choice every lap.",
+                       "track_data":  {
+                                          "track":  {
+                                                        "v":  1,
+                                                        "name":  "Stadium Circuit",
+                                                        "placements":  [
+                                                                           {
+                                                                               "k":  "spawn",
+                                                                               "x":  0,
+                                                                               "z":  0,
+                                                                               "r":  0
+                                                                           },
+                                                                           {
+                                                                               "k":  "straight",
+                                                                               "x":  0,
+                                                                               "z":  1,
+                                                                               "r":  0
+                                                                           },
+                                                                           {
+                                                                               "k":  "straight",
+                                                                               "x":  0,
+                                                                               "z":  2,
+                                                                               "r":  0
+                                                                           },
+                                                                           {
+                                                                               "k":  "straight",
+                                                                               "x":  0,
+                                                                               "z":  3,
+                                                                               "r":  0
+                                                                           },
+                                                                           {
+                                                                               "k":  "straight",
+                                                                               "x":  0,
+                                                                               "z":  4,
+                                                                               "r":  0
+                                                                           },
+                                                                           {
+                                                                               "k":  "corner",
+                                                                               "x":  0,
+                                                                               "z":  5,
+                                                                               "r":  0
+                                                                           },
+                                                                           {
+                                                                               "k":  "straight",
+                                                                               "x":  -1,
+                                                                               "z":  5,
+                                                                               "r":  1
+                                                                           },
+                                                                           {
+                                                                               "k":  "straight",
+                                                                               "x":  -2,
+                                                                               "z":  5,
+                                                                               "r":  1
+                                                                           },
+                                                                           {
+                                                                               "k":  "straight",
+                                                                               "x":  -3,
+                                                                               "z":  5,
+                                                                               "r":  1
+                                                                           },
+                                                                           {
+                                                                               "k":  "corner",
+                                                                               "x":  -4,
+                                                                               "z":  5,
+                                                                               "r":  1
+                                                                           },
+                                                                           {
+                                                                               "k":  "straight",
+                                                                               "x":  -4,
+                                                                               "z":  4,
+                                                                               "r":  0
+                                                                           },
+                                                                           {
+                                                                               "k":  "straight",
+                                                                               "x":  -4,
+                                                                               "z":  3,
+                                                                               "r":  0
+                                                                           },
+                                                                           {
+                                                                               "k":  "corner",
+                                                                               "x":  -4,
+                                                                               "z":  2,
+                                                                               "r":  0
+                                                                           },
+                                                                           {
+                                                                               "k":  "straight",
+                                                                               "x":  -5,
+                                                                               "z":  2,
+                                                                               "r":  1
+                                                                           },
+                                                                           {
+                                                                               "k":  "straight",
+                                                                               "x":  -6,
+                                                                               "z":  2,
+                                                                               "r":  1
+                                                                           },
+                                                                           {
+                                                                               "k":  "corner",
+                                                                               "x":  -7,
+                                                                               "z":  2,
+                                                                               "r":  1
+                                                                           },
+                                                                           {
+                                                                               "k":  "straight",
+                                                                               "x":  -7,
+                                                                               "z":  1,
+                                                                               "r":  0
+                                                                           },
+                                                                           {
+                                                                               "k":  "straight",
+                                                                               "x":  -7,
+                                                                               "z":  0,
+                                                                               "r":  0
+                                                                           },
+                                                                           {
+                                                                               "k":  "straight",
+                                                                               "x":  -7,
+                                                                               "z":  -1,
+                                                                               "r":  0
+                                                                           },
+                                                                           {
+                                                                               "k":  "straight",
+                                                                               "x":  -7,
+                                                                               "z":  -2,
+                                                                               "r":  0
+                                                                           },
+                                                                           {
+                                                                               "k":  "corner",
+                                                                               "x":  -7,
+                                                                               "z":  -3,
+                                                                               "r":  2
+                                                                           },
+                                                                           {
+                                                                               "k":  "straight",
+                                                                               "x":  -6,
+                                                                               "z":  -3,
+                                                                               "r":  1
+                                                                           },
+                                                                           {
+                                                                               "k":  "straight",
+                                                                               "x":  -5,
+                                                                               "z":  -3,
+                                                                               "r":  1
+                                                                           },
+                                                                           {
+                                                                               "k":  "straight",
+                                                                               "x":  -4,
+                                                                               "z":  -3,
+                                                                               "r":  1
+                                                                           },
+                                                                           {
+                                                                               "k":  "straight",
+                                                                               "x":  -3,
+                                                                               "z":  -3,
+                                                                               "r":  1
+                                                                           },
+                                                                           {
+                                                                               "k":  "straight",
+                                                                               "x":  -2,
+                                                                               "z":  -3,
+                                                                               "r":  1
+                                                                           },
+                                                                           {
+                                                                               "k":  "straight",
+                                                                               "x":  -1,
+                                                                               "z":  -3,
+                                                                               "r":  1
+                                                                           },
+                                                                           {
+                                                                               "k":  "corner",
+                                                                               "x":  0,
+                                                                               "z":  -3,
+                                                                               "r":  3
+                                                                           },
+                                                                           {
+                                                                               "k":  "straight",
+                                                                               "x":  0,
+                                                                               "z":  -2,
+                                                                               "r":  0
+                                                                           },
+                                                                           {
+                                                                               "k":  "finish",
+                                                                               "x":  0,
+                                                                               "z":  -1,
+                                                                               "r":  0
+                                                                           }
+                                                                       ]
+                                                    },
+                                          "decor":  [
+
+                                                    ]
+                                      },
+                       "thumbnail":  "",
+                       "tags":  "technical,stadium,mixed,intermediate",
+                       "is_template":  true,
+                       "is_public":  true,
+                       "remix_of":  null,
+                       "owner_token":  "",
+                       "play_count":  0,
+                       "created_at":  "2026-01-01T00:00:00Z",
+                       "updated_at":  "2026-01-01T00:00:00Z"
+                   }
     }
-  },
-  {
-    "model": "tracks.track",
-    "pk": "22222222-2222-2222-2222-222222222222",
-    "fields": {
-      "name": "Sprint Drag",
-      "author_name": "GLO KARTS",
-      "description": "Open-ended drag strip with a ramp up to a short plateau and a ramp back down. Great springboard to drop boost pads and decor on.",
-      "track_data": {
-        "track": {
-          "v": 1,
-          "name": "Sprint Drag",
-          "placements": [
-            { "k": "spawn",     "x": 0, "z":  0, "r": 0 },
-            { "k": "straight",  "x": 0, "z":  1, "r": 0 },
-            { "k": "straight",  "x": 0, "z":  2, "r": 0 },
-            { "k": "straight",  "x": 0, "z":  3, "r": 0 },
-            { "k": "ramp_up",   "x": 0, "z":  4, "r": 0 },
-            { "k": "plateau",   "x": 0, "z":  6, "r": 0 },
-            { "k": "plateau",   "x": 0, "z":  7, "r": 0 },
-            { "k": "ramp_down", "x": 0, "z":  8, "r": 0 },
-            { "k": "straight",  "x": 0, "z": 10, "r": 0 },
-            { "k": "straight",  "x": 0, "z": 11, "r": 0 },
-            { "k": "finish",    "x": 0, "z": 12, "r": 0 }
-          ]
-        },
-        "decor": []
-      },
-      "thumbnail": "",
-      "tags": "sprint,drag,straight,ramp",
-      "is_template": true,
-      "is_public": true,
-      "remix_of": null,
-      "owner_token": "",
-      "play_count": 0
-    }
-  },
-  {
-    "model": "tracks.track",
-    "pk": "33333333-3333-3333-3333-333333333333",
-    "fields": {
-      "name": "Crossroads Circuit",
-      "author_name": "GLO KARTS",
-      "description": "A compact 3×3 loop wrapped around a 4-way crossroads. Spawn on the west straight, finish on the east — perfect for adding side branches.",
-      "track_data": {
-        "track": {
-          "v": 1,
-          "name": "Crossroads Circuit",
-          "placements": [
-            { "k": "crossroads", "x":  0, "z":  0, "r": 0 },
-            { "k": "cornerR",    "x":  1, "z":  0, "r": 2 },
-            { "k": "finish",     "x":  1, "z":  1, "r": 0 },
-            { "k": "corner",     "x":  1, "z":  2, "r": 0 },
-            { "k": "straight",   "x":  0, "z":  2, "r": 1 },
-            { "k": "corner",     "x": -1, "z":  2, "r": 1 },
-            { "k": "spawn",      "x": -1, "z":  1, "r": 0 },
-            { "k": "corner",     "x": -1, "z":  0, "r": 2 }
-          ]
-        },
-        "decor": []
-      },
-      "thumbnail": "",
-      "tags": "crossroads,loop,intermediate",
-      "is_template": true,
-      "is_public": true,
-      "remix_of": null,
-      "owner_token": "",
-      "play_count": 0
-    }
-  }
 ]

@@ -8,11 +8,53 @@
  */
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js';
 import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js';
 import { getKart, KARTS } from './kart-catalog.js';
 
 const loader = new GLTFLoader();
-/** @type {Map<string, Promise<THREE.Group>>} */
+const _objLoader = new OBJLoader();
+
+/**
+ * Load an OBJ kart and manually apply textures from catalog entry fields
+ * `albedoPath` and `normalPath`. Used for karts sourced from .obj files.
+ */
+function loadObjKartTemplate(id, kartEntry) {
+  return new Promise((resolve, reject) => {
+    _objLoader.load(
+      kartEntry.modelPath,
+      (obj) => {
+        const texLoader = new THREE.TextureLoader();
+        obj.traverse((child) => {
+          if (child.isMesh) {
+            const matOpts = { roughness: 0.55, metalness: 0.25 };
+            if (kartEntry.albedoPath) {
+              const alb = texLoader.load(kartEntry.albedoPath);
+              alb.colorSpace = THREE.SRGBColorSpace;
+              alb.flipY = false;
+              matOpts.map = alb;
+            }
+            if (kartEntry.normalPath) {
+              const nrm = texLoader.load(kartEntry.normalPath);
+              nrm.flipY = false;
+              matOpts.normalMap = nrm;
+            }
+            child.material = new THREE.MeshStandardMaterial(matOpts);
+            child.castShadow = true;
+            child.receiveShadow = true;
+          }
+        });
+        resolve(prepareKartScene(obj, id));
+      },
+      undefined,
+      (err) => {
+        console.warn(`[kart-loader] OBJ load failed for ${id}:`, err);
+        reject(err);
+      },
+    );
+  });
+}
+
 const cache = new Map();
 
 /**
@@ -58,18 +100,25 @@ export function loadKartTemplate(kartId) {
   const id = getKart(kartId).id;
   if (cache.has(id)) return cache.get(id);
 
-  const promise = new Promise((resolve, reject) => {
-    const path = getKart(id).modelPath;
-    loader.load(
-      path,
-      (gltf) => resolve(prepareKartScene(gltf.scene, id)),
-      undefined,
-      (err) => {
-        console.warn(`[kart-loader] failed to load ${id} at ${path}:`, err);
-        reject(err);
-      },
-    );
-  });
+  const kartEntry = getKart(id);
+  const path = kartEntry.modelPath;
+
+  let promise;
+  if (path.endsWith('.obj')) {
+    promise = loadObjKartTemplate(id, kartEntry).catch(() => makePlaceholderKart(0xff3a00));
+  } else {
+    promise = new Promise((resolve, reject) => {
+      loader.load(
+        path,
+        (gltf) => resolve(prepareKartScene(gltf.scene, id)),
+        undefined,
+        (err) => {
+          console.warn(`[kart-loader] failed to load ${id} at ${path}:`, err);
+          reject(err);
+        },
+      );
+    });
+  }
 
   cache.set(id, promise);
   return promise;

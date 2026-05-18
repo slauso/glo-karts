@@ -93,6 +93,7 @@ export function buildWorldFromTrackData(world, trackData) {
         z: worldPos.z,
         kind: p.k,
         payload: def.runtime.payload || 'weapon_random',
+        amount: Number(def.runtime.amount) > 0 ? Number(def.runtime.amount) : 1,
         radius: (def.runtime.radius || 14) * S,
         respawnMs: def.runtime.respawnMs || 5000,
       });

@@ -45,8 +45,8 @@
       font-size: 13px;
       letter-spacing: 0.04em;
     }
-    .hud { left: 16px; top: 16px; min-width: 220px; }
-    .controls { left: 16px; bottom: 16px; font-size: 12px; color: var(--text-sub, rgba(255,255,255,0.65)); }
+    .hud { left: 16px; top: 102px; min-width: 220px; opacity: 0.86; }
+    .controls { left: 16px; bottom: 164px; font-size: 12px; color: var(--text-sub, rgba(255,255,255,0.65)); }
     .hud b { color: var(--accent, #ff0080); }
     .hud .row { display: flex; justify-content: space-between; gap: 12px; padding: 2px 0; }
     .hud .ok   { color: #00e5ff; }
@@ -289,10 +289,228 @@
       30%  { transform: scale(1.18); opacity: 1; }
       100% { transform: scale(1.00); opacity: 1; }
     }
+
+    .match-hud {
+      position: fixed;
+      inset: 0;
+      z-index: 24;
+      pointer-events: none;
+      font-family: var(--font-ui, "Exo 2", sans-serif);
+      color: #fff;
+    }
+    .score-card, .match-timer, .item-panel, .minimap-panel {
+      position: absolute;
+      border-radius: 8px;
+      background: rgba(8, 10, 18, 0.72);
+      border: 1px solid rgba(255,255,255,0.16);
+      box-shadow: 0 12px 32px rgba(0,0,0,0.42);
+      backdrop-filter: blur(10px) saturate(130%);
+      -webkit-backdrop-filter: blur(10px) saturate(130%);
+    }
+    .score-card {
+      top: 16px;
+      width: min(210px, 38vw);
+      padding: 10px 12px;
+    }
+    .score-card.left { left: 16px; }
+    .score-card.right { right: 16px; text-align: right; }
+    .score-name {
+      font-size: 11px;
+      line-height: 1.2;
+      color: rgba(255,255,255,0.68);
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .score-value {
+      margin-top: 2px;
+      font-family: var(--font-display, "Bungee", sans-serif);
+      font-size: 42px;
+      line-height: 0.95;
+      letter-spacing: 0;
+    }
+    .match-timer {
+      top: 16px;
+      left: 50%;
+      min-width: 156px;
+      transform: translateX(-50%);
+      padding: 10px 18px;
+      text-align: center;
+    }
+    .timer-label {
+      font-size: 10px;
+      color: rgba(255,255,255,0.62);
+      text-transform: uppercase;
+      letter-spacing: 0.16em;
+    }
+    .timer-value {
+      font-family: var(--font-display, "Bungee", sans-serif);
+      font-size: 36px;
+      line-height: 1;
+      letter-spacing: 0;
+    }
+    .match-timer.danger .timer-value { color: #ff4d6d; text-shadow: 0 0 18px rgba(255,77,109,0.65); }
+    .item-panel {
+      right: 16px;
+      bottom: 16px;
+      padding: 10px;
+      display: flex;
+      gap: 10px;
+    }
+    .item-slot {
+      width: 76px;
+      height: 76px;
+      border-radius: 8px;
+      border: 1px solid rgba(255,255,255,0.18);
+      background: linear-gradient(180deg, rgba(255,255,255,0.08), rgba(0,0,0,0.18));
+      display: grid;
+      grid-template-rows: 1fr auto;
+      align-items: center;
+      justify-items: center;
+      overflow: hidden;
+    }
+    .item-slot.empty { opacity: 0.45; }
+    .item-icon {
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      background: var(--item-color, #6aa8ff);
+      color: #061018;
+      font-weight: 900;
+      font-size: 14px;
+      box-shadow: 0 0 20px color-mix(in srgb, var(--item-color, #6aa8ff), transparent 35%);
+    }
+    .item-name {
+      width: 100%;
+      padding: 3px 4px 5px;
+      font-size: 10px;
+      line-height: 1;
+      color: rgba(255,255,255,0.78);
+      text-align: center;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .minimap-panel {
+      left: 16px;
+      bottom: 16px;
+      width: 180px;
+      height: 132px;
+      padding: 8px;
+    }
+    .minimap-title {
+      font-size: 10px;
+      color: rgba(255,255,255,0.62);
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      margin-bottom: 5px;
+    }
+    .minimap {
+      position: relative;
+      width: 100%;
+      height: 106px;
+      border-radius: 6px;
+      background: rgba(255,255,255,0.055);
+      overflow: hidden;
+      border: 1px solid rgba(255,255,255,0.08);
+    }
+    .map-dot {
+      position: absolute;
+      width: 8px;
+      height: 8px;
+      margin-left: -4px;
+      margin-top: -4px;
+      border-radius: 50%;
+      background: #fff;
+      box-shadow: 0 0 12px currentColor;
+    }
+    .map-dot.me { width: 11px; height: 11px; margin-left: -5.5px; margin-top: -5.5px; background: #00e5ff; color: #00e5ff; }
+    .map-dot.opponent { background: #ff4d6d; color: #ff4d6d; }
+    .map-dot.pickup { width: 5px; height: 5px; margin-left: -2.5px; margin-top: -2.5px; background: #ffd166; color: #ffd166; opacity: 0.78; }
+    .event-feed {
+      position: fixed;
+      left: 50%;
+      top: 34%;
+      transform: translateX(-50%);
+      z-index: 35;
+      pointer-events: none;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+    }
+    .event-text {
+      padding: 8px 14px;
+      border-radius: 8px;
+      background: rgba(5,8,16,0.72);
+      border: 1px solid rgba(255,255,255,0.18);
+      color: #fff;
+      font-weight: 900;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      animation: eventFloat 1.35s ease forwards;
+    }
+    @keyframes eventFloat {
+      0% { opacity: 0; transform: translateY(14px) scale(0.94); }
+      18% { opacity: 1; transform: translateY(0) scale(1); }
+      100% { opacity: 0; transform: translateY(-40px) scale(1.02); }
+    }
+    .damage-flash {
+      position: fixed;
+      inset: 0;
+      z-index: 34;
+      pointer-events: none;
+      background: rgba(255,32,64,0.0);
+      transition: background 160ms ease;
+    }
+    .damage-flash.hit { background: rgba(255,32,64,0.28); }
+    .end-score-list {
+      margin: 22px 0 18px;
+      display: grid;
+      gap: 8px;
+    }
+    .end-score-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 12px;
+      border-radius: 8px;
+      background: rgba(255,255,255,0.045);
+      border: 1px solid rgba(255,255,255,0.10);
+      font-weight: 800;
+    }
+    .end-score-row.winner { border-color: rgba(255,209,102,0.55); box-shadow: 0 0 24px rgba(255,209,102,0.14); }
+    @media (max-width: 720px) {
+      .score-card { width: 118px; }
+      .score-value { font-size: 30px; }
+      .match-timer { min-width: 112px; padding: 8px 12px; }
+      .timer-value { font-size: 28px; }
+      .minimap-panel { width: 132px; height: 104px; }
+      .minimap { height: 78px; }
+      .item-slot { width: 62px; height: 62px; }
+      .item-icon { width: 34px; height: 34px; font-size: 12px; }
+    }
   </style>
 </head>
 <body>
   <canvas id="canvas"></canvas>
+
+  <div id="match-hud" class="match-hud">
+    <div class="score-card left"><div class="score-name" id="score-left-name">Player 1</div><div class="score-value" id="score-left-value">0</div></div>
+    <div class="match-timer" id="match-timer"><div class="timer-label">Time</div><div class="timer-value" id="match-time-value">3:00</div></div>
+    <div class="score-card right"><div class="score-name" id="score-right-name">Player 2</div><div class="score-value" id="score-right-value">0</div></div>
+    <div class="minimap-panel"><div class="minimap-title">Mini Map</div><div class="minimap" id="minimap"></div></div>
+    <div class="item-panel" id="item-panel">
+      <div class="item-slot empty" id="item-slot-1"><div class="item-icon">-</div><div class="item-name">Empty</div></div>
+      <div class="item-slot empty" id="item-slot-2"><div class="item-icon">-</div><div class="item-name">Empty</div></div>
+    </div>
+  </div>
+  <div class="event-feed" id="event-feed"></div>
+  <div class="damage-flash" id="damage-flash"></div>
 
   <!-- Pregame lobby overlay -->
   <div id="overlay-lobby" class="overlay">
@@ -329,6 +547,18 @@
         <button class="overlay-btn danger"  id="pause-leave">Leave Match</button>
       </div>
       <div class="overlay-hint">leaving disconnects you · the race continues for others</div>
+    </div>
+  </div>
+
+  <div id="overlay-end" class="overlay hidden">
+    <div class="overlay-card">
+      <h1 class="overlay-title" id="end-title">Match Complete</h1>
+      <div class="overlay-sub" id="end-subtitle">Final scores</div>
+      <div class="end-score-list" id="end-score-list"></div>
+      <div class="overlay-buttons">
+        <button class="overlay-btn primary" id="end-rematch">Rematch</button>
+        <button class="overlay-btn secondary" id="end-exit">Exit</button>
+      </div>
     </div>
   </div>
 

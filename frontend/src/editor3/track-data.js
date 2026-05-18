@@ -69,7 +69,7 @@ export class Track {
     return true;
   }
 
-  place(key, gx, gz, rot) {
+  place(key, gx, gz, rot, opts = null) {
     if (!SEGMENTS[key]) return null;
     const overlay = this.isOverlay(key);
     if (!overlay && !this.isClear(key, gx, gz, rot)) return null;
@@ -82,6 +82,11 @@ export class Track {
     const id = _nextId++;
     const safeRot = Number.isFinite(rot) ? rot : 0;
     const placement = { id, key, gx, gz, rot: ((safeRot % 4) + 4) % 4 };
+    // Optional sub-cell offset (world units, relative to cell centre). Only
+    // meaningful for overlays/pickups so the user can drop multiple coins or
+    // item boxes inside one grid square at distinct positions.
+    if (opts && Number.isFinite(opts.ox)) placement.ox = opts.ox;
+    if (opts && Number.isFinite(opts.oz)) placement.oz = opts.oz;
     this.placements.set(id, placement);
     if (!overlay) {
       for (const [cx, cz, tier] of this.occupiedCells(key, gx, gz, rot)) {
@@ -144,22 +149,31 @@ export class Track {
   }
 
   toJSON() {
-    return {
+    const obj = {
       v: 1,
       name: this.name,
-      placements: Array.from(this.placements.values()).map(p => ({
-        k: p.key, x: p.gx, z: p.gz, r: p.rot,
-      })),
+      placements: Array.from(this.placements.values()).map(p => {
+        const out = { k: p.key, x: p.gx, z: p.gz, r: p.rot };
+        if (Number.isFinite(p.ox) && p.ox !== 0) out.ox = p.ox;
+        if (Number.isFinite(p.oz) && p.oz !== 0) out.oz = p.oz;
+        return out;
+      }),
     };
+    if (this.sky != null) obj.sky = this.sky;
+    return obj;
   }
 
   static fromJSON(json) {
     const t = new Track();
     if (!json) return t;
     t.name = json.name || 'Untitled Track';
+    if (json.sky != null) t.sky = json.sky;
     const list = Array.isArray(json.placements) ? json.placements : [];
     for (const item of list) {
-      t.place(item.k, item.x | 0, item.z | 0, item.r | 0);
+      const opts = {};
+      if (Number.isFinite(item.ox)) opts.ox = item.ox;
+      if (Number.isFinite(item.oz)) opts.oz = item.oz;
+      t.place(item.k, item.x | 0, item.z | 0, item.r | 0, opts);
     }
     return t;
   }

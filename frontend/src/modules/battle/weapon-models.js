@@ -953,59 +953,19 @@ function _spawnCarouselItem(carouselNode, scene) {
 }
 
 /**
- * Create a DynamicTexture with a sleek tech-panel look for item box faces.
- * Radial glow, fine grid lines, corner accents — no text glyph.
+ * Imported item-box face texture from the asset pack.
+ * This keeps the runtime box visually aligned with the editor preview.
  */
 function _createItemBoxFaceTexture(scene) {
-  const size = 256;
-  const tex = new DynamicTexture('itemBoxFaceTex', size, scene, true);
-  const ctx = tex.getContext();
-  const cx = size / 2;
-
-  // Deep blue-purple base
-  ctx.fillStyle = '#0a1428';
-  ctx.fillRect(0, 0, size, size);
-
-  // Radial glow from center
-  const grad = ctx.createRadialGradient(cx, cx, 0, cx, cx, cx);
-  grad.addColorStop(0, 'rgba(60,140,255,0.35)');
-  grad.addColorStop(0.5, 'rgba(30,80,200,0.12)');
-  grad.addColorStop(1, 'rgba(0,10,40,0)');
-  ctx.fillStyle = grad;
-  ctx.fillRect(0, 0, size, size);
-
-  // Fine grid lines
-  ctx.strokeStyle = 'rgba(80,160,255,0.08)';
-  ctx.lineWidth = 1;
-  const step = 32;
-  for (let i = step; i < size; i += step) {
-    ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, size); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(size, i); ctx.stroke();
-  }
-
-  // Inset border with rounded corners
-  ctx.strokeStyle = 'rgba(100,180,255,0.25)';
-  ctx.lineWidth = 3;
-  ctx.beginPath();
-  ctx.roundRect(10, 10, size - 20, size - 20, 14);
-  ctx.stroke();
-
-  // Corner accent dots
-  const dotR = 4;
-  ctx.fillStyle = 'rgba(120,200,255,0.5)';
-  for (const [dx, dy] of [[18, 18], [size - 18, 18], [18, size - 18], [size - 18, size - 18]]) {
-    ctx.beginPath(); ctx.arc(dx, dy, dotR, 0, Math.PI * 2); ctx.fill();
-  }
-
-  // Subtle inner diamond highlight
-  ctx.strokeStyle = 'rgba(140,200,255,0.1)';
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(cx, 30); ctx.lineTo(size - 30, cx);
-  ctx.lineTo(cx, size - 30); ctx.lineTo(30, cx);
-  ctx.closePath(); ctx.stroke();
-
-  tex.update();
+  const tex = new Texture(
+    '/kart%20assets/3D%20Kart/Assets/Models/Items/Item%20Box/ItemBox_Alb%20.png',
+    scene,
+    true,
+    false,
+    Texture.TRILINEAR_SAMPLINGMODE,
+  );
+  tex.wrapU = Texture.CLAMP_ADDRESSMODE;
+  tex.wrapV = Texture.CLAMP_ADDRESSMODE;
   return tex;
 }
 
@@ -1036,10 +996,11 @@ export function createItemBoxModel(scene, options = {}) {
   const box = MeshBuilder.CreateBox('itemBox', { size: 1.6, updatable: false }, scene);
   const boxMat = new StandardMaterial('itemBoxMat', scene);
   boxMat.diffuseTexture = faceTexture;
-  boxMat.emissiveColor = new Color3(0.08, 0.3, 0.8);
-  boxMat.specularColor = new Color3(0.5, 0.5, 0.7);
-  boxMat.specularPower = 80;
-  boxMat.alpha = 0.72;
+  boxMat.useAlphaFromDiffuseTexture = true;
+  boxMat.emissiveColor = new Color3(0.18, 0.34, 0.8);
+  boxMat.specularColor = new Color3(0.2, 0.2, 0.35);
+  boxMat.specularPower = 48;
+  boxMat.alpha = 0.88;
   boxMat.backFaceCulling = false;
   box.material = boxMat;
   box.parent = root;

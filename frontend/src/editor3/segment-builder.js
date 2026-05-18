@@ -18,9 +18,11 @@ const S = WORLD_UNITS_PER_M;
 const materialCache = new Map();
 function getMaterial(color) {
   if (!materialCache.has(color)) {
-    materialCache.set(color, new THREE.MeshStandardMaterial({
+    const mat = new THREE.MeshStandardMaterial({
       color, roughness: 0.85, metalness: 0.05,
-    }));
+    });
+    mat._shared = true; // flag: don't dispose on track clear — shared across all placements
+    materialCache.set(color, mat);
   }
   return materialCache.get(color);
 }

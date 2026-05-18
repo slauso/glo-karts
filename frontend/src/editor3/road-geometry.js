@@ -10,7 +10,13 @@ import * as THREE from 'three';
 import { TILE, ROAD_WIDTH, ROAD_THICK, WALL_HEIGHT, WALL_THICK, PLATEAU_HEIGHT, BRIDGE_DECK_HEIGHT, BRIDGE_RAMP_CELLS, SEGMENTS } from './segments.js';
 
 // ── Materials (cached, shared) ────────────────────────────────────
-const TEX = (() => {
+// Textures are generated lazily on first access (IIFE deferred behind a
+// getter) to avoid 3 × 256×256 canvas pixel-write loops at module import
+// time — those used to fire synchronously while the editor was loading,
+// stalling the browser for ~50 ms before any frame was painted.
+let _TEX = null;
+function getTEX() {
+  if (_TEX) return _TEX;
   const make = (size, fn) => {
     const c = document.createElement('canvas');
     c.width = c.height = size;
@@ -49,58 +55,78 @@ const TEX = (() => {
       data[i * 4] = v; data[i * 4 + 1] = v; data[i * 4 + 2] = v - 4; data[i * 4 + 3] = 255;
     }
   });
-  return { asphalt, asphaltRough, concrete };
-})();
+  _TEX = { asphalt, asphaltRough, concrete };
+  return _TEX;
+}
 
-const MATS = {
-  // Use DoubleSide on the asphalt: the extruded-ribbon top/bottom face
-  // winding depends on path tangent direction and is inverted for some
-  // segment shapes (straight had top quads CCW-from-below, so backface
-  // culling hid the deck top from above). DoubleSide is robust regardless
-  // of curve orientation and the perf cost is trivial for road geometry.
-  asphalt: new THREE.MeshStandardMaterial({
-    color: 0x2a2d33, map: TEX.asphalt, roughnessMap: TEX.asphaltRough,
-    roughness: 0.95, metalness: 0.02, side: THREE.DoubleSide,
-  }),
-  asphaltDark: new THREE.MeshStandardMaterial({
-    color: 0x1a1c20, map: TEX.asphalt, roughness: 0.92, metalness: 0.02,
-    side: THREE.DoubleSide,
-  }),
-  concrete: new THREE.MeshStandardMaterial({
-    color: 0x8b8e95, map: TEX.concrete, roughness: 0.78, metalness: 0.05,
-    side: THREE.DoubleSide,
-  }),
-  curbRed: new THREE.MeshStandardMaterial({
-    color: 0xd0312d, roughness: 0.5, metalness: 0.0, emissive: 0x2a0000, emissiveIntensity: 0.4,
-  }),
-  curbWhite: new THREE.MeshStandardMaterial({
-    color: 0xf2f2f2, roughness: 0.5, metalness: 0.0, emissive: 0x222222, emissiveIntensity: 0.3,
-  }),
-  paintYellow: new THREE.MeshStandardMaterial({
-    color: 0xfbbf24, roughness: 0.45, metalness: 0.0, emissive: 0x3a2a00, emissiveIntensity: 0.6,
-  }),
-  paintWhite: new THREE.MeshStandardMaterial({
-    color: 0xeeeeee, roughness: 0.45, metalness: 0.0, emissive: 0x222222, emissiveIntensity: 0.3,
-  }),
-  guardrail: new THREE.MeshStandardMaterial({
-    color: 0xaab0bb, roughness: 0.55, metalness: 0.45,
-  }),
-  truss: new THREE.MeshStandardMaterial({
-    color: 0x6c727f, roughness: 0.6, metalness: 0.5,
-  }),
-  finish: new THREE.MeshStandardMaterial({
-    color: 0xfbbf24, roughness: 0.5, metalness: 0.2, emissive: 0x664400, emissiveIntensity: 0.7,
-  }),
-  spawn: new THREE.MeshStandardMaterial({
-    color: 0x00e5ff, roughness: 0.3, metalness: 0.1, emissive: 0x006688, emissiveIntensity: 1.0,
-  }),
-  tunnelRoof: new THREE.MeshStandardMaterial({
-    color: 0x21252c, roughness: 0.7, metalness: 0.2, side: THREE.DoubleSide,
-  }),
-  warning: new THREE.MeshStandardMaterial({
-    color: 0xffcc00, roughness: 0.5, metalness: 0.0, emissive: 0x442200, emissiveIntensity: 0.5,
-  }),
-};
+let _MATS = null;
+function getMats() {
+  if (_MATS) return _MATS;
+  const TEX = getTEX();
+  _MATS = {
+    // Use DoubleSide on the asphalt: the extruded-ribbon top/bottom face
+    // winding depends on path tangent direction and is inverted for some
+    // segment shapes (straight had top quads CCW-from-below, so backface
+    // culling hid the deck top from above). DoubleSide is robust regardless
+    // of curve orientation and the perf cost is trivial for road geometry.
+    asphalt: new THREE.MeshStandardMaterial({
+      color: 0x2a2d33, map: TEX.asphalt, roughnessMap: TEX.asphaltRough,
+      roughness: 0.95, metalness: 0.02, side: THREE.DoubleSide,
+    }),
+    asphaltDark: new THREE.MeshStandardMaterial({
+      color: 0x1a1c20, map: TEX.asphalt, roughness: 0.92, metalness: 0.02,
+      side: THREE.DoubleSide,
+    }),
+    concrete: new THREE.MeshStandardMaterial({
+      color: 0x8b8e95, map: TEX.concrete, roughness: 0.78, metalness: 0.05,
+      side: THREE.DoubleSide,
+    }),
+    curbRed: new THREE.MeshStandardMaterial({
+      color: 0xd0312d, roughness: 0.5, metalness: 0.0, emissive: 0x2a0000, emissiveIntensity: 0.4,
+    }),
+    curbWhite: new THREE.MeshStandardMaterial({
+      color: 0xf2f2f2, roughness: 0.5, metalness: 0.0, emissive: 0x222222, emissiveIntensity: 0.3,
+    }),
+    paintYellow: new THREE.MeshStandardMaterial({
+      color: 0xfbbf24, roughness: 0.45, metalness: 0.0, emissive: 0x3a2a00, emissiveIntensity: 0.6,
+    }),
+    paintWhite: new THREE.MeshStandardMaterial({
+      color: 0xeeeeee, roughness: 0.45, metalness: 0.0, emissive: 0x222222, emissiveIntensity: 0.3,
+    }),
+    guardrail: new THREE.MeshStandardMaterial({
+      color: 0xaab0bb, roughness: 0.55, metalness: 0.45,
+    }),
+    truss: new THREE.MeshStandardMaterial({
+      color: 0x6c727f, roughness: 0.6, metalness: 0.5,
+    }),
+    finish: new THREE.MeshStandardMaterial({
+      color: 0xfbbf24, roughness: 0.5, metalness: 0.2, emissive: 0x664400, emissiveIntensity: 0.7,
+    }),
+    spawn: new THREE.MeshStandardMaterial({
+      color: 0x00e5ff, roughness: 0.3, metalness: 0.1, emissive: 0x006688, emissiveIntensity: 1.0,
+    }),
+    tunnelRoof: new THREE.MeshStandardMaterial({
+      color: 0x21252c, roughness: 0.7, metalness: 0.2, side: THREE.DoubleSide,
+    }),
+    warning: new THREE.MeshStandardMaterial({
+      color: 0xffcc00, roughness: 0.5, metalness: 0.0, emissive: 0x442200, emissiveIntensity: 0.5,
+    }),
+    wallConcrete: new THREE.MeshStandardMaterial({
+      color: 0x9aa0a8, map: TEX.concrete, roughness: 0.85, metalness: 0.04,
+    }),
+    wallCap: new THREE.MeshStandardMaterial({
+      color: 0x40464e, roughness: 0.7, metalness: 0.18,
+    }),
+    wallReflector: new THREE.MeshStandardMaterial({
+      color: 0xfbbf24, emissive: 0xfbbf24, emissiveIntensity: 0.85,
+      roughness: 0.45, metalness: 0.1,
+    }),
+  };
+  return _MATS;
+}
+// Backward-compatible alias — functions that reference MATS.xxx get the
+// lazily-initialised instance on first call instead of at import time.
+const MATS = new Proxy({}, { get: (_t, k) => getMats()[k] });
 
 // ── Road cross-section profile ────────────────────────────────────
 function makeDeckProfile(width = ROAD_WIDTH, thickness = ROAD_THICK, chamfer = 0.18) {
@@ -1390,6 +1416,912 @@ function buildPlaza() {
   return grp;
 }
 
+// ── Modifier & Hazard visual builders ────────────────────────────────────────
+// Each builder returns a textured overlay that sits on top of any road segment.
+// Visuals come directly from the game's baked asset textures — minimal geometry.
+
+// Shared texture cache — one entry per distinct source file.
+const MOD_TEX = (() => {
+  // Public asset filenames were bulk-normalized to lowercase to keep
+  // Vite/Vercel case-sensitive serving happy. The hardcoded URLs below
+  // preserve the original mixed-case names from the source bundle, so
+  // route them through a LoadingManager that lowercases the basename.
+  const _texMgr = new THREE.LoadingManager();
+  _texMgr.setURLModifier((url) => url.replace(
+    /([^/]+)\.(png|jpe?g|tga|bmp|webp)(\?[^/]*)?$/i,
+    (_full, name, ext, qs) => `${name.toLowerCase()}.${ext.toLowerCase()}${qs || ''}`,
+  ));
+  const loader = new THREE.TextureLoader(_texMgr);
+  const JUMP = '/kart%20assets/3D%20Kart/Assets/Models/JumpBoardReg/Tex/';
+  const GCYC = '/kart%20assets/3D%20Kart/Assets/Models/Other%20Common%20Files/';
+
+  function load(url, repeat = [1, 1], srgb = true) {
+    return loader.load(url, tex => {
+      tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+      tex.repeat.set(repeat[0], repeat[1]);
+      tex.anisotropy = 16;
+      if (srgb) tex.colorSpace = THREE.SRGBColorSpace;
+    });
+  }
+  // Loaded + rotated 90° CCW so right-pointing arrows face +Z (forward along road)
+  function loadRot(url, repeat = [1, 1], srgb = true) {
+    return loader.load(url, tex => {
+      tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+      tex.repeat.set(repeat[0], repeat[1]);
+      tex.anisotropy = 16;
+      if (srgb) tex.colorSpace = THREE.SRGBColorSpace;
+      tex.rotation = Math.PI / 2;
+      tex.center.set(0.5, 0.5);
+    });
+  }
+
+  return {
+    // Boost Pad — top-down view: wood planks with 2 white chevron arrows baked in
+    jumpAlb:    load(JUMP + 'bd_jumpboard_Alb.png',  [1, 1]),
+    jumpNrm:    load(JUMP + 'bd_jumpboard_Nrm.png',  [1, 1], false),
+    jumpSpm:    load(JUMP + 'bd_jumpboard_Spm.png',  [1, 1], false),
+    jumpFrame:  load(JUMP + 'bd_jumpboard2_Alb.png', [1, 1]),
+    // Pickup / crate assets
+    itemBoxAlb: load('/kart%20assets/3D%20Kart/Assets/Models/Items/Item%20Box/ItemBox_Alb%20.png', [1, 1]),
+    itemBoxNrm: load('/kart%20assets/3D%20Kart/Assets/Models/Items/Item%20Box/ItemBox_Nrm%20.png', [1, 1], false),
+    itemBoxRef: load('/kart%20assets/3D%20Kart/Assets/Models/Items/Item%20Box/ItemBoxRefraction_Alb%20.png', [1, 1]),
+    itemBoxFontAlb: load('/kart%20assets/3D%20Kart/Assets/Models/Items/Item%20Box/ItemBoxFont_Alb%20.png', [1, 1]),
+    itemBoxFontNrm: load('/kart%20assets/3D%20Kart/Assets/Models/Items/Item%20Box/ItemBoxFont_Nrm%20.png', [1, 1], false),
+    crateAlb:   load('/kart%20assets/3D%20Kart/Assets/Models/Wii%20U%20-%20Mario%20Kart%208%20-%20Toad%20Harbor/Crate/CrashBox_Alb.png', [1, 1]),
+    crateNrm:   load('/kart%20assets/3D%20Kart/Assets/Models/Wii%20U%20-%20Mario%20Kart%208%20-%20Toad%20Harbor/Crate/CrashBox_Nrm.png', [1, 1], false),
+    crateSpm:   load('/kart%20assets/3D%20Kart/Assets/Models/Wii%20U%20-%20Mario%20Kart%208%20-%20Toad%20Harbor/Crate/CrashBox_Spm.png', [1, 1], false),
+    coinAlb:    load('/kart%20assets/3D%20Kart/Assets/Models/Items/Coin/itemcoin_alb.png', [1, 1]),
+    coinNrm:    load('/kart%20assets/3D%20Kart/Assets/Models/Items/Coin/itemcoin_nrm.png', [1, 1], false),
+    coinSpm:    load('/kart%20assets/3D%20Kart/Assets/Models/Items/Coin/itemcoin_spm.png', [1, 1], false),
+    starAlb:    load('/kart%20assets/3D%20Kart/Assets/Models/Items/Starman/ItemStar_Alb.png', [1, 1]),
+    starNrm:    load('/kart%20assets/3D%20Kart/Assets/Models/Items/Starman/ItemStar_Nrm.png', [1, 1], false),
+    starSpm:    load('/kart%20assets/3D%20Kart/Assets/Models/Items/Starman/ItemStar_Spm.png', [1, 1], false),
+    // Hazard surfaces — sourced from Water Park / MooMoo Meadows / Other Common Files
+    waterAlb:   load('/kart%20assets/3D%20Kart/Assets/Models/Water%20Park/Track/GWP_CompD_Water_Alb.png', [2, 2]),
+    waterNrm:   load('/kart%20assets/3D%20Kart/Assets/Models/Water%20Park/Track/GWP_CompD_Water_Nrm.png', [2, 2], false),
+    waterSpm:   load('/kart%20assets/3D%20Kart/Assets/Models/Water%20Park/Track/GWP_CompD_Water_Spm.png', [2, 2], false),
+    sandAlb:    load('/kart%20assets/3D%20Kart/Assets/Models/Water%20Park/Track/GWP_Water_Sand01_Alb.png', [2, 2]),
+    sandNrm:    load('/kart%20assets/3D%20Kart/Assets/Models/Water%20Park/Track/GWP_Water_Sand01_Nrm.png', [2, 2], false),
+    sandSpm:    load('/kart%20assets/3D%20Kart/Assets/Models/Water%20Park/Track/GWP_Water_Sand01_Spm.png', [2, 2], false),
+    iceAlb:     load('/kart%20assets/3D%20Kart/Assets/Models/Water%20Park/Fountain/ef_water01_Alb.png', [2, 2]),
+    iceNrm:     load('/kart%20assets/3D%20Kart/Assets/Models/Water%20Park/Fountain/ef_water01_Nrm.png', [2, 2], false),
+    // Super Boost Pad — yellow metal plate + 3 arrows (rotated to face +Z)
+    bankAlb:    loadRot(GCYC + 'gcyc_banknewjump_alb.png', [1, 1]),
+    bankNrm:    loadRot(GCYC + 'gcyc_banknewjump_nrm.png', [1, 1], false),
+    bankSpm:    loadRot(GCYC + 'gcyc_banknewjump_spm.png', [1, 1], false),
+    // Oil Slick — actual sea/fluid surface texture, tinted near-black for oil
+    seaAlb:     load(GCYC + 'ef_sea05_alb.png',      [2, 2]),
+    seaNrm:     load(GCYC + 'ef_sea05_nrm.png',      [2, 2], false),
+    // Slow Strip — red/white warning chevron banner (rotated to face forward)
+    warnAlb:    loadRot(GCYC + 'gcyc_arrowbanner_t01_alb.png', [1, 1]),
+    warnNrm:    loadRot(GCYC + 'gcyc_arrowbanner_t01_nrm.png', [1, 1], false),
+    warnSpm:    loadRot(GCYC + 'gcyc_arrowbanner_t01_spm.png', [1, 1], false),
+    // Repair Strip — Yoshi Circuit start-grid checker pattern (real medical/grid look)
+    repairAlb:  load(GCYC + 'gcyc_startgridcheck_alb.png', [1, 2]),
+    repairNrm:  load(GCYC + 'gcyc_startgridcheck_nrm.png', [1, 2], false),
+    repairSpm:  load(GCYC + 'gcyc_startgridcheck_spm.png', [1, 2], false),
+    // Shared border/frame textures
+    asphaltAlb: load(GCYC + 'gcyc_asphalt_t01_alb.png', [2, 2]),
+    asphaltNrm: load(GCYC + 'gcyc_asphalt_t01_nrm.png', [2, 2], false),
+    metalAlb:   load(GCYC + 'gcyc_metal_m01_alb.png',   [1, 1]),
+    metalNrm:   load(GCYC + 'gcyc_metal_m01_nrm.png',   [1, 1], false),
+    // Plaza / junction — proper paving + civic detail
+    roadAlb:    load(GCYC + 'gcyc_road_t01_alb.png',     [2, 2]),
+    roadNrm:    load(GCYC + 'gcyc_road_t01_nrm.png',     [2, 2], false),
+    roadSpm:    load(GCYC + 'gcyc_road_t01_spm.png',     [2, 2], false),
+    tileAlb:    load(GCYC + 'gcyc_tile_m01_alb.png',     [3, 3]),
+    tileNrm:    load(GCYC + 'gcyc_tile_m01_nrm.png',     [3, 3], false),
+    circuitAlb: load(GCYC + 'gcyc_circuitmap_m01_alb.png', [1, 1]),
+    circuitNrm: load(GCYC + 'gcyc_circuitmap_m01_nrm.png', [1, 1], false),
+    concreteAlb:load(GCYC + 'gcyc_concrete_t01_alb.png', [2, 2]),
+    concreteNrm:load(GCYC + 'gcyc_concrete_t01_nrm.png', [2, 2], false),
+    curbAlb:    load(GCYC + 'gcyc_curbstone_t01_alb.png',[1, 4]),
+    curbNrm:    load(GCYC + 'gcyc_curbstone_t01_nrm.png',[1, 4], false),
+    grassAlb:   load(GCYC + 'gcyc_grass_m01_alb.png',    [2, 2]),
+    grassNrm:   load(GCYC + 'gcyc_grass_m01_nrm.png',    [2, 2], false),
+    metalPlate: load(GCYC + 'gcyc_metal_m02_alb.png',    [1, 1]),
+    metalParts: load(GCYC + 'gcyc_metalparts_m01_alb.png',[1, 1]),
+    lightEmm:   load(GCYC + 'gcyc_light_t01_emm.png',    [1, 1]),
+    signAlb:    load(GCYC + 'gcyc_signboard_m01_alb.png',[1, 1]),
+  };
+})();
+
+// ── STK asset texture cache ──────────────────────────────────────────────────
+// SuperTuxKart bundle (CC-BY-SA / GPL) lives at /stk%20assets/textures/. Used
+// to give modifier pads, hazards, junctions and intersections a distinct
+// hand-painted/PBR look that complements the Yoshi-Circuit-derived MOD_TEX
+// bank. Files on disk preserve mixed-case names (extracted from the STK
+// archive verbatim), so we DO NOT lowercase URLs here — doing so produced
+// hundreds of 404s on Vite/Vercel for files like stktex_generic_tilesA.png.
+// Failed loads now silently fall back to a 1x1 pixel so they don't spam.
+const _STK_FALLBACK = (() => {
+  const c = (typeof document !== 'undefined') ? document.createElement('canvas') : null;
+  if (!c) return null;
+  c.width = c.height = 2; const g = c.getContext('2d');
+  g.fillStyle = '#444'; g.fillRect(0,0,2,2);
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  return t;
+})();
+const STK_TEX = (() => {
+  const loader = new THREE.TextureLoader();
+  const STK = '/stk%20assets/textures/';
+
+  function load(url, repeat = [1, 1], srgb = true, rotation = 0) {
+    const tex = loader.load(
+      url,
+      t => {
+        t.wrapS = t.wrapT = THREE.RepeatWrapping;
+        t.repeat.set(repeat[0], repeat[1]);
+        t.anisotropy = 16;
+        if (srgb) t.colorSpace = THREE.SRGBColorSpace;
+        if (rotation) { t.center.set(0.5, 0.5); t.rotation = rotation; }
+      },
+      undefined,
+      // onError: swap in the silent fallback so console stays clean.
+      () => { if (_STK_FALLBACK) Object.assign(tex.image = _STK_FALLBACK.image, {}); },
+    );
+    return tex;
+  }
+  return {
+    // Boost / launch flag textures
+    boostOrange: load(STK + 'stkflag_orangeBooster_a.png'),
+    boostBlue:   load(STK + 'stkflag_blueBooster_a.png'),
+    boostRed:    load(STK + 'stkflag_redBooster_a.png'),
+    boosterFx:   load(STK + 'gfx_booster_AlphaTest.png'),
+    jumpRamp:    load(STK + 'stkflag_jumpRamp_a.png'),
+    // Warning / stop / direction patterns
+    warnPattern: load(STK + 'stktex_warning_a.png',         [1, 2]),
+    stopPattern: load(STK + 'stktex_stopPattern_a.png',     [1, 2]),
+    dirPattern:  load(STK + 'stktex_directionPattern_a.png',[1, 2]),
+    // Wood (boost-pad frame)
+    woodA:       load(STK + 'stktex_generic_WoodA.png',  [1, 1]),
+    woodA_n:     load(STK + 'stktex_generic_WoodA.png',  [1, 1], false), // diffuse-as-normal fallback
+    woodPlanks:  load(STK + 'wood_planks1.jpg',       [1, 1]),
+    // Hazards — water
+    waterOcean:  load(STK + 'oceanicWater.png',       [2, 2]),
+    waterOasis:  load(STK + 'oasis-water.png',        [2, 2]),
+    waterJungle: load(STK + 'jungleWater.png',        [2, 2]),
+    waterNrm:    load(STK + 'waternormals.jpg',       [3, 3], false),
+    waterNrm2:   load(STK + 'waternormals2.jpg',      [2, 2], false),
+    caustics:    load(STK + 'caustics.png',           [2, 2]),
+    // Hazards — ice
+    iceA:        load(STK + 'stk_generic_ice_a.png',         [2, 2]),
+    iceA_n:      load(STK + 'stk_generic_ice_a_Normal.png',  [2, 2], false),
+    iceA_g:      load(STK + 'stk_generic_ice_a_gloss.png',   [2, 2], false),
+    iceEdges:    load(STK + 'stktex_iceEdges_a.png'),
+    frozenFall:  load(STK + 'stktex_frozenWaterFall_a.png',  [2, 2]),
+    // Hazards — lava
+    lavaA:       load(STK + 'stktex_generic_lavaA.png',         [2, 2]),
+    lavaA_n:     load(STK + 'stktex_generic_lavaA_Normal.png',  [2, 2], false),
+    lavaA_g:     load(STK + 'stktex_generic_lava_gloss.png',    [2, 2], false),
+    bedRockLava: load(STK + 'stk_generic_bedRockLava_a.png',    [1, 1]),
+    fireAnim:    load(STK + 'stktex_animatedFire_a.png'),
+    // Hazards — sand
+    sandA:       load(STK + 'stk_generic_sand_a.png',     [2, 2]),
+    sandB:       load(STK + 'stk_generic_sand_b.png',     [2, 2]),
+    sandRoad:    load(STK + 'stk_generic_sandRoad_a.png', [2, 2]),
+    sandGrass:   load(STK + 'sandgrass.png',              [2, 2]),
+    // Hazards — oil (improvised from black rock + water shimmer)
+    blackRock:   load(STK + 'blackrock.jpg',  [1, 1]),
+    tarmac:      load(STK + 'tarmac.jpg',     [2, 2]),
+    distort:     load(STK + 'gfx_distord_AlphaTested.png', [2, 2]),
+    // Junctions / intersections — surfaces
+    stkRoad:     load(STK + 'stklama_road_a.png',       [1, 4]),
+    stkGravelRd: load(STK + 'stklama_gravelRoad_a.png', [1, 4]),
+    stkGravelSd: load(STK + 'stklama_gravelSide_a.png', [1, 4]),
+    stkGravelSdN:load(STK + 'stklama_gravelSide_a_nm.jpg',[1, 4], false),
+    stkAsphalt:  load(STK + 'racetrack_asphalt.jpg',    [3, 3]),
+    stkAsphaltAlt: load(STK + 'tarmac.jpg',             [3, 3]),
+    cityAsphalt1:load(STK + 'city_asphalt_1.jpg',       [3, 3]),
+    cityAsphalt2:load(STK + 'city_asphalt_2.jpg',       [3, 3]),
+    cityChecker: load(STK + 'city_checker.png',         [2, 2]),
+    cityConcrete:load(STK + 'city_concrete.png',        [2, 2]),
+    cityBricks:  load(STK + 'city_bricks.png',          [2, 2]),
+    cityGrass:   load(STK + 'city_grass.png',           [3, 3]),
+    cityGround:  load(STK + 'city_ground.jpg',          [3, 3]),
+    cityMetal:   load(STK + 'city_metal.png',           [1, 1]),
+    grassA:      load(STK + 'stk_generic_grassA.png',   [3, 3]),
+    grassB:      load(STK + 'stk_generic_grassB.png',   [3, 3]),
+    grassB_n:    load(STK + 'stk_generic_grassB_Normal.png', [3, 3], false),
+    grassDark:   load(STK + 'grass_dark.jpg',           [3, 3]),
+    concreteA:   load(STK + 'stktex_generic_concreteA.png',[2, 2]),
+    concretePlain:load(STK + 'concrete_plain.png',     [2, 2]),
+    brickA:      load(STK + 'stk_generic_brickA.png',   [2, 2]),
+    brickA_n:    load(STK + 'stk_generic_brickA_Normal.png', [2, 2], false),
+    brickRoad:   load(STK + 'stk_generic_brickRoad_a.png', [2, 2]),
+    cobble:      load(STK + 'stktex_generic_cobbleStoneA.png', [2, 2]),
+    cobble_n:    load(STK + 'stktex_generic_cobbleStoneA_Normal.png', [2, 2], false),
+    tilesA:      load(STK + 'stktex_generic_tilesA.png', [2, 2]),
+    tilesB:      load(STK + 'stktex_generic_tilesB.png', [2, 2]),
+    marbleA:     load(STK + 'stktex_generic_marbleA.png',[2, 2]),
+    paving:      load(STK + 'Paving_stones_2.jpg',       [3, 3]),
+    metalRusted: load(STK + 'stkt_rustedMetal_a.png',   [1, 1]),
+    metalBlue:   load(STK + 'stk_blueMetal_a.png',      [1, 1]),
+    metalGold:   load(STK + 'stk_goldMetal_a.png',      [1, 1]),
+    metalGrey:   load(STK + 'stk_greyMetal_a.png',      [1, 1]),
+    plates:      load(STK + 'metal_plates.png',         [1, 1]),
+    rustedMetal: load(STK + 'stk_metalRustedBlue_a.png',[1, 1]),
+    // Decorative emissive
+    lantern:     load(STK + 'lantern.jpg',              [1, 1]),
+    starParticle:load(STK + 'starparticle.png'),
+    flagAsianLan:load(STK + 'stkflag_asianPaperLantern_a.png'),
+    // Sky / radial — used as soft glow halos under junctions
+    sunRay:      load(STK + 'stk_asianSunRay_a.png'),
+  };
+})();
+
+// Per-instance texture clone — each animated hazard surface MUST own its
+// own texture object, otherwise scrolling its `offset` mutates the shared
+// MOD_TEX entry and every other mesh that references it inherits the
+// crawl. Use this for any material that will be passed to
+// `registerSurfaceScroll`. Image data + GPU upload remain shared so the
+// memory cost is negligible.
+function cloneTex(tex, opts = {}) {
+  if (!tex) return null;
+  const c = tex.clone();
+  c.needsUpdate = true;
+  c.wrapS = c.wrapT = THREE.RepeatWrapping;
+  if (opts.repeat) c.repeat.set(opts.repeat[0], opts.repeat[1]);
+  if (opts.rotation != null) {
+    c.center.set(0.5, 0.5);
+    c.rotation = opts.rotation;
+  }
+  if (opts.offset) c.offset.set(opts.offset[0], opts.offset[1]);
+  return c;
+}
+
+// ── BOOST PAD ────────────────────────────────────────────────────────────────
+// STK orange-booster banner texture forms the chevron face; reclaimed-plank
+// frame in real STK wood gives the pad a hand-built, racing-paddock feel.
+// A subtle emissive overlay makes the booster glow read at any TOD.
+function buildBoostPad() {
+  const T = TILE, RW = ROAD_WIDTH, RT = ROAD_THICK;
+  const grp = new THREE.Group();
+
+  // Booster face — STK orange flag, oriented so chevrons point along +Z.
+  const padTex   = cloneTex(STK_TEX.boostOrange, { rotation: Math.PI / 2 });
+  const padMat = new THREE.MeshStandardMaterial({
+    map: padTex, color: 0xffffff,
+    emissiveMap: padTex, emissive: 0xff7a18, emissiveIntensity: 0.55,
+    roughness: 0.42, metalness: 0.18,
+  });
+  const pad = new THREE.Mesh(new THREE.BoxGeometry(RW * 0.90, 0.14, T * 0.86), padMat);
+  pad.position.y = RT + 0.07; pad.receiveShadow = true; pad.castShadow = true; grp.add(pad);
+
+  // Additive scrolling glow strip — sells the "live" booster read.
+  const glowTex = cloneTex(STK_TEX.boosterFx, { rotation: Math.PI / 2 });
+  const glowMat = new THREE.MeshBasicMaterial({
+    map: glowTex, color: 0xffd58a,
+    transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending,
+    depthWrite: false,
+  });
+  const glow = new THREE.Mesh(new THREE.PlaneGeometry(RW * 0.86, T * 0.82), glowMat);
+  glow.rotation.x = -Math.PI / 2;
+  glow.position.y = RT + 0.155; glow.renderOrder = 3;
+  grp.add(glow);
+  registerSurfaceScroll(glow, { u: 0, v: -1.4 });
+
+  // Reclaimed-plank frame using STK wood texture.
+  const frameMat = new THREE.MeshStandardMaterial({
+    map: STK_TEX.woodPlanks, color: 0xb88a4a,
+    roughness: 0.84, metalness: 0.02,
+  });
+  const FH = 0.28, FD = 1.6;
+  for (const sz of [-1, +1]) {
+    const b = new THREE.Mesh(new THREE.BoxGeometry(RW * 0.94, FH, FD), frameMat);
+    b.position.set(0, RT + 0.21, sz * T * 0.46); b.castShadow = true; grp.add(b);
+  }
+  for (const sx of [-1, +1]) {
+    const b = new THREE.Mesh(new THREE.BoxGeometry(FD, FH, T * 0.86 - FD), frameMat);
+    b.position.set(sx * RW * 0.46, RT + 0.21, 0); b.castShadow = true; grp.add(b);
+  }
+  return grp;
+}
+
+// ── SUPER BOOST PAD ──────────────────────────────────────────────────────────
+// STK blue-booster banner running the full two-tile span, sandwiched between
+// two scrolling additive `gfx_booster` overlays (cyan inferno read), recessed
+// in a brushed-rusted-metal frame with twin emissive cyan LED rails.
+function buildSuperBoostPad() {
+  const T = TILE, RW = ROAD_WIDTH, RT = ROAD_THICK;
+  const LZ = T * 2, czOff = T / 2;
+  const grp = new THREE.Group();
+
+  // Brushed STK blue-metal base plate (full footprint).
+  const baseMat = new THREE.MeshStandardMaterial({
+    map: STK_TEX.metalBlue, color: 0x4a525c, roughness: 0.32, metalness: 0.88,
+  });
+  const base = new THREE.Mesh(new THREE.BoxGeometry(RW * 0.96, 0.10, LZ * 0.96), baseMat);
+  base.position.set(0, RT + 0.05, czOff); base.receiveShadow = true; grp.add(base);
+
+  // STK blue-booster decal — repeated along the long axis so chevrons read
+  // clearly across the entire two-tile run. Per-instance clone keeps the
+  // repeat/rotation independent of every other consumer of STK_TEX.boostBlue.
+  const sbAlb = cloneTex(STK_TEX.boostBlue, { rotation: Math.PI / 2, repeat: [1, 2] });
+  const padMat = new THREE.MeshStandardMaterial({
+    map: sbAlb, color: 0xffffff,
+    emissiveMap: sbAlb, emissive: 0x00aaff, emissiveIntensity: 0.85,
+    roughness: 0.28, metalness: 0.45,
+  });
+  const pad = new THREE.Mesh(new THREE.BoxGeometry(RW * 0.86, 0.14, LZ * 0.92), padMat);
+  pad.position.set(0, RT + 0.13, czOff); pad.receiveShadow = true; grp.add(pad);
+
+  // Scrolling booster glow — additive overlay rips along +Z at warp speed
+  // so the pad reads as actively pumping energy.
+  const glowTex = cloneTex(STK_TEX.boosterFx, { rotation: Math.PI / 2, repeat: [1, 2] });
+  const glow = new THREE.Mesh(
+    new THREE.PlaneGeometry(RW * 0.84, LZ * 0.92),
+    new THREE.MeshBasicMaterial({
+      map: glowTex, color: 0x88e6ff,
+      transparent: true, opacity: 0.65, blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    }),
+  );
+  glow.rotation.x = -Math.PI / 2;
+  glow.position.set(0, RT + 0.21, czOff); glow.renderOrder = 3;
+  grp.add(glow);
+  registerSurfaceScroll(glow, { u: 0, v: -3.0 });
+
+  // Cyan LED rails along both long edges.
+  const ledMat = new THREE.MeshStandardMaterial({
+    color: 0x00ddff, emissive: 0x00ccff, emissiveIntensity: 2.4, roughness: 0.18,
+  });
+  for (const sx of [-1, +1]) {
+    const led = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.18, LZ * 0.92), ledMat);
+    led.position.set(sx * RW * 0.46, RT + 0.18, czOff); grp.add(led);
+  }
+  return grp;
+}
+
+// ── OIL SLICK ────────────────────────────────────────────────────────────────
+// Black mirror of the lava pool — same MK64-style boiling/spitting layout
+// but rendered in dark tones. Uses STK black-rock surface tinted near-black
+// with a distortion overlay for the slick "wet asphalt" sheen, plus the
+// STK water normal map for ripple flow. Reads as a tar/oil hazard while
+// still telegraphing "wet, animated, dangerous" through the bubble-pop motion.
+function buildOilSlick() {
+  return _buildBoilingPool({
+    surface: { color: 0x080808, emissive: 0x140a04, emissiveIntensity: 0.45,
+               roughness: 0.18, metalness: 0.85,
+               map: STK_TEX.blackRock, mapRepeat: [1.5, 1.5],
+               normalMap: STK_TEX.waterNrm, normalRepeat: [3, 3] },
+    crust:   { color: 0x1a1410, emissive: 0x080404, emissiveIntensity: 0.20,
+               roughness: 0.55, metalness: 0.40 },
+    bubble:  { color: 0x222020, emissive: 0x110800, emissiveIntensity: 0.40 },
+    flare:   { color: 0x444038, emissive: 0x221a0a, emissiveIntensity: 0.60 },
+    smoke:   { color: 0x222024, opacity: 0.25 },
+    bubbleCount: 5,
+    flareCount:  2,
+    scroll: { u: 0.03, v: -0.02 },
+  });
+}
+
+// ── SLOW STRIP ───────────────────────────────────────────────────────────────
+// STK red/white stop-pattern banner (oriented to face traffic) bordered by
+// cobblestone curbs — reads as a paved low-speed control zone you'd see at
+// a downtown tram crossing. Faint emissive on the red bands so it stays
+// legible under any lighting.
+function buildSlowStrip() {
+  const T = TILE, RW = ROAD_WIDTH, RT = ROAD_THICK;
+  const grp = new THREE.Group();
+
+  const stopTex = cloneTex(STK_TEX.stopPattern, { rotation: Math.PI / 2, repeat: [2, 1] });
+  const surfMat = new THREE.MeshStandardMaterial({
+    map: stopTex, color: 0xffffff,
+    emissiveMap: stopTex, emissive: 0xff2a1a, emissiveIntensity: 0.32,
+    roughness: 0.62, metalness: 0.06,
+  });
+  const pad = new THREE.Mesh(new THREE.BoxGeometry(RW * 0.92, 0.14, T * 0.88), surfMat);
+  pad.position.y = RT + 0.07; pad.receiveShadow = true; pad.castShadow = true; grp.add(pad);
+
+  // STK cobblestone curbs flanking the strip — physical "slow zone" rumble.
+  const curbMat = new THREE.MeshStandardMaterial({
+    map: STK_TEX.cobble, normalMap: STK_TEX.cobble_n,
+    color: 0xb8b1a3, roughness: 0.85, metalness: 0.04,
+  });
+  for (const sx of [-1, +1]) {
+    const curb = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.32, T * 0.92), curbMat);
+    curb.position.set(sx * RW * 0.46, RT + 0.16, 0); curb.castShadow = true; grp.add(curb);
+  }
+  // Red reflector posts at the four corners — supplies extra "caution" read.
+  const reflMat = new THREE.MeshStandardMaterial({
+    color: 0xff2a1a, emissive: 0xff2a1a, emissiveIntensity: 1.4, roughness: 0.18,
+  });
+  for (const sx of [-1, +1]) for (const sz of [-1, +1]) {
+    const refl = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.14, 0.55, 10), reflMat);
+    refl.position.set(sx * RW * 0.46, RT + 0.42, sz * T * 0.42);
+    grp.add(refl);
+  }
+  return grp;
+}
+
+// ── REPAIR STRIP ─────────────────────────────────────────────────────────────
+// F-Zero / Mute City-style health regeneration pad: dark recessed bay with
+// rapidly scrolling neon chevron bars travelling in the direction of traffic
+// flow. The bars alternate hot pink + cyan + lime — F-Zero's classic
+// "pit zone" palette — so the pad reads as "energy flowing into your kart"
+// rather than as a medical icon. A faint static "+" hologram in the centre
+// reinforces the recovery semantics without breaking the neon aesthetic.
+//
+// The scrolling bars are a procedural CanvasTexture wrapped along the
+// drive axis. Per-instance via cloneTex so multiple repair pads on the
+// same track scroll independently (and never bleed into each other's UV
+// offset).
+function _buildHealBarTexture() {
+  const w = 64, h = 256;          // tall texture; V axis = drive direction
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  const g = c.getContext('2d');
+  // Dark base — almost black with a faint blue tint so emissive bars pop.
+  g.fillStyle = '#080a14';
+  g.fillRect(0, 0, w, h);
+  // Faint vertical pin-stripes for tech detail.
+  g.fillStyle = '#101428';
+  for (let x = 0; x < w; x += 8) g.fillRect(x, 0, 1, h);
+  // Expanded 80s neon-light palette — every hue lifted from real-world
+  // sources of the era: Miami Vice signage, arcade bezels, Lisa Frank
+  // stationery, synthwave grids. Strict rule: no muddy mid-tones, no
+  // greens darker than electric mint, no warm whites. Cycling 6 hues
+  // gives the bar field a richer Saturday-night-strip read than 3.
+  const HUES = [
+    { core: '#ff2bd6', glow: '#ff8ce6' }, // hot pink
+    { core: '#1ee9ff', glow: '#9af1ff' }, // electric cyan
+    { core: '#b026ff', glow: '#d98cff' }, // magenta-violet
+    { core: '#ff6a00', glow: '#ffb877' }, // sunset orange
+    { core: '#39ff8c', glow: '#b3ffd1' }, // electric mint
+    { core: '#ffe617', glow: '#fff39a' }, // arcade yellow
+  ];
+  const BAR_H = 36;               // height of each bar in px
+  const GAP   = 28;               // dark gap between bars
+  const PITCH = BAR_H + GAP;
+  for (let y = -PITCH; y < h + PITCH; y += PITCH) {
+    const hue = HUES[(((y / PITCH) | 0) + HUES.length * 8) % HUES.length];
+    // Glow halo
+    const grad = g.createLinearGradient(0, y, 0, y + BAR_H);
+    grad.addColorStop(0.0,  '#00000000');
+    grad.addColorStop(0.20, hue.glow);
+    grad.addColorStop(0.50, hue.core);
+    grad.addColorStop(0.80, hue.glow);
+    grad.addColorStop(1.0,  '#00000000');
+    g.fillStyle = grad;
+    g.fillRect(0, y, w, BAR_H);
+    // Bright leading edge — a 2px highlight so the bar reads as moving
+    // forward even on a still frame.
+    g.fillStyle = '#ffffff';
+    g.fillRect(0, y + BAR_H * 0.20, w, 2);
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 16;
+  tex.needsUpdate = true;
+  return tex;
+}
+// Cache the canvas — every repair strip clones from this template so they
+// all share one rasterisation cost but maintain independent UV offsets.
+const _HEAL_BAR_TPL = (typeof document !== 'undefined') ? _buildHealBarTexture() : null;
+
+function buildRepairStrip() {
+  const T = TILE, RW = ROAD_WIDTH, RT = ROAD_THICK;
+  const grp = new THREE.Group();
+
+  // Recessed dark bay — the bars look brighter against a near-black
+  // surface, and the slight inset implies a "pit lane" channel.
+  const bayMat = new THREE.MeshStandardMaterial({
+    color: 0x05070d, roughness: 0.45, metalness: 0.40,
+  });
+  const bay = new THREE.Mesh(new THREE.BoxGeometry(RW * 0.94, 0.10, T * 0.90), bayMat);
+  bay.position.y = RT + 0.05; bay.receiveShadow = true; grp.add(bay);
+
+  // Scrolling neon bar plate — top-face UV V advances along the local
+  // +Z axis, which in editor space is the drive direction. Cloned per
+  // instance so the scroll offset is independent.
+  const barTex = _HEAL_BAR_TPL ? _HEAL_BAR_TPL.clone() : null;
+  if (barTex) {
+    barTex.needsUpdate = true;
+    barTex.wrapS = barTex.wrapT = THREE.RepeatWrapping;
+    // Repeat along V so several bars are visible across the pad's length.
+    barTex.repeat.set(1, 1.6);
+  }
+  const plateMat = new THREE.MeshStandardMaterial({
+    map: barTex,
+    emissiveMap: barTex,
+    color: 0xffffff,
+    emissive: 0xffffff, emissiveIntensity: 1.6,
+    roughness: 0.30, metalness: 0.20,
+  });
+  const plate = new THREE.Mesh(new THREE.BoxGeometry(RW * 0.88, 0.06, T * 0.86), plateMat);
+  plate.position.y = RT + 0.115;
+  grp.add(plate);
+  // Aggressive scroll along V — bars rip past at near-warp speed, selling
+  // the F-Zero pit-zone 'energy infusion' read. Negative V drives the
+  // texture toward +Z (the kart's forward direction).
+  registerSurfaceScroll(plate, { u: 0, v: -3.6 });
+
+  // Cheap glow halo — a second, slightly larger plate hovering 2cm above
+  // the main scroll, sharing the SAME texture (no extra rasterisation,
+  // no postFX), drawn with AdditiveBlending so its bright bars bloom into
+  // the surrounding air rather than dimming with distance. The added cost
+  // is one extra alpha-blended quad per repair pad — negligible vs a
+  // bloom postprocess pass that would hit the whole frame.
+  const haloMat = new THREE.MeshBasicMaterial({
+    map: barTex,
+    color: 0xffffff,
+    transparent: true, opacity: 0.55,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
+  });
+  const halo = new THREE.Mesh(new THREE.PlaneGeometry(RW * 0.94, T * 0.92), haloMat);
+  halo.rotation.x = -Math.PI / 2;
+  halo.position.y = RT + 0.155;
+  halo.renderOrder = 3;
+  grp.add(halo);
+
+  // Side LED rails — solid emissive cyan strips flanking the bay so the
+  // pad's silhouette pops even before the scroll catches the eye.
+  const railMat = new THREE.MeshStandardMaterial({
+    color: 0x00e6ff, emissive: 0x00ccff, emissiveIntensity: 2.6, roughness: 0.18,
+  });
+  for (const sx of [-1, +1]) {
+    const rail = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.20, T * 0.92), railMat);
+    rail.position.set(sx * RW * 0.46, RT + 0.18, 0); grp.add(rail);
+  }
+
+  // Brushed metal border frame — pulled outward and raised so it sits
+  // clearly *around* the bay, not inside it. STK rusted-metal sells the
+  // grimy "pit-lane" feel that complements the neon scroll.
+  const frameMat = new THREE.MeshStandardMaterial({
+    map: STK_TEX.rustedMetal,
+    color: 0x4a525c, roughness: 0.55, metalness: 0.78,
+  });
+  const FD = 0.6;
+  for (const sz of [-1, +1]) {
+    const b = new THREE.Mesh(new THREE.BoxGeometry(RW * 0.96 + FD * 2, 0.18, FD), frameMat);
+    b.position.set(0, RT + 0.16, sz * (T * 0.44 + FD / 2)); b.castShadow = true; grp.add(b);
+  }
+  for (const sx of [-1, +1]) {
+    const b = new THREE.Mesh(new THREE.BoxGeometry(FD, 0.18, T * 0.88), frameMat);
+    b.position.set(sx * (RW * 0.46 + FD / 2), RT + 0.16, 0); b.castShadow = true; grp.add(b);
+  }
+  return grp;
+}
+
+// ── ITEM BOX ────────────────────────────────────────────────────────────────
+// Mario-Kart classic floating ?-cube. Body uses the diamond `ItemBox_Alb`
+// pattern; six face decals stamp a bold orange `G` glyph drawn to a
+// procedural canvas (same chunky font feel as the original `?`) so the
+// pickup reads instantly from any angle. A soft refraction shell +
+// emissive core sell the rotating-glass look.
+
+// Procedural decal texture: transparent background + chunky orange
+// glyph with a darker outline + soft inner highlight. Mirrors the
+// look of the baked `ItemBoxFont_Alb.png` so the cube reads the same
+// from a distance.
+let _ITEM_BOX_GLYPH_CACHE = Object.create(null);
+function _buildItemBoxGlyphTexture(letter) {
+  if (_ITEM_BOX_GLYPH_CACHE[letter]) return _ITEM_BOX_GLYPH_CACHE[letter];
+  const S = 256;
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = S;
+  const ctx = cv.getContext('2d');
+  ctx.clearRect(0, 0, S, S);
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  // Heavy condensed sans — matches the MK item-box `?` weight.
+  const fam = '"Arial Black", "Helvetica Neue", Impact, sans-serif';
+  ctx.font = `900 ${Math.round(S * 0.78)}px ${fam}`;
+  const cx = S / 2, cy = S / 2 + S * 0.03;
+  // Dark outline pass for readability against the glass cube.
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
+  ctx.strokeStyle = '#04101c';
+  ctx.lineWidth = S * 0.10;
+  ctx.strokeText(letter, cx, cy);
+  // White fill — the per-frame `material.color` + `material.emissive`
+  // drive the actual hue so we can cycle through neon blues cheaply.
+  ctx.fillStyle = '#ffffff';
+  ctx.fillText(letter, cx, cy);
+  // Inner highlight for the glossy front face read.
+  ctx.fillStyle = 'rgba(220, 240, 255, 0.55)';
+  ctx.font = `900 ${Math.round(S * 0.74)}px ${fam}`;
+  ctx.fillText(letter, cx, cy - S * 0.04);
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 8;
+  tex.needsUpdate = true;
+  _ITEM_BOX_GLYPH_CACHE[letter] = tex;
+  return tex;
+}
+
+function buildItemBox() {
+  const grp = new THREE.Group();
+  pickupPedestal(grp, 0xddeeff, 0x3388ff, 1.55);
+
+  const SIZE = 1.55;
+  const cy = ROAD_THICK + 1.20;
+
+  // Wrap the cube + decals + glow shell in a single host so they all
+  // rotate together via the central pickup-spin registry.
+  const host = new THREE.Group();
+  host.position.set(0, cy, 0);
+  grp.add(host);
+
+  const bodyMat = new THREE.MeshStandardMaterial({
+    map: MOD_TEX.itemBoxAlb, normalMap: MOD_TEX.itemBoxNrm,
+    color: 0xffffff, roughness: 0.42, metalness: 0.10,
+    emissive: 0x224488, emissiveIntensity: 0.18,
+  });
+  const cube = new THREE.Mesh(new THREE.BoxGeometry(SIZE, SIZE, SIZE), bodyMat);
+  cube.castShadow = true; cube.receiveShadow = true; host.add(cube);
+
+  // Six `G` decals — one per face, slightly proud of the cube surface
+  // and depth-offset so they never z-fight with the diamond pattern.
+  // Procedural canvas texture so the glyph follows the same bold
+  // Mario-Kart-style font without needing a baked PNG. Hue is driven
+  // per-frame from `material.color`/`emissive` so the glyph slowly
+  // alternates between neon-blue tones with a soft glow pulse.
+  const glyphTex = _buildItemBoxGlyphTexture('G');
+  const decalMat = new THREE.MeshStandardMaterial({
+    map: glyphTex,
+    color: 0x66ccff, transparent: true, opacity: 1.0, alphaTest: 0.18,
+    roughness: 0.35, metalness: 0.05,
+    emissiveMap: glyphTex, emissive: 0x4488ff, emissiveIntensity: 1.4,
+    polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
+    side: THREE.DoubleSide,
+  });
+  const D = SIZE * 0.92, OFF = SIZE / 2 + 0.012;
+  const faces = [
+    { pos: [0, 0,  OFF], rot: [0, 0, 0] },
+    { pos: [0, 0, -OFF], rot: [0, Math.PI, 0] },
+    { pos: [ OFF, 0, 0], rot: [0, Math.PI / 2, 0] },
+    { pos: [-OFF, 0, 0], rot: [0, -Math.PI / 2, 0] },
+    { pos: [0,  OFF, 0], rot: [-Math.PI / 2, 0, 0] },
+    { pos: [0, -OFF, 0], rot: [Math.PI / 2, 0, 0] },
+  ];
+  for (const f of faces) {
+    const decal = new THREE.Mesh(new THREE.PlaneGeometry(D, D), decalMat);
+    decal.position.set(f.pos[0], f.pos[1], f.pos[2]);
+    decal.rotation.set(f.rot[0], f.rot[1], f.rot[2]);
+    decal.renderOrder = 2;
+    host.add(decal);
+  }
+
+  // Outer refraction shell — keeps the original "glass cube" silhouette.
+  const glowMat = new THREE.MeshStandardMaterial({
+    map: MOD_TEX.itemBoxRef, color: 0xdfeaff,
+    emissive: 0x66aaff, emissiveIntensity: 0.85,
+    roughness: 0.10, metalness: 0.0, transparent: true, opacity: 0.28,
+    side: THREE.DoubleSide, depthWrite: false,
+  });
+  const glow = new THREE.Mesh(new THREE.BoxGeometry(SIZE * 1.10, SIZE * 1.10, SIZE * 1.10), glowMat);
+  host.add(glow);
+
+  // Emissive inner core for the rotating "energy" feel — sits at host
+  // origin so it stays visually pinned even as the cube tumbles.
+  const core = new THREE.Mesh(
+    new THREE.SphereGeometry(0.28, 12, 8),
+    new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0x77bbff, emissiveIntensity: 2.6, roughness: 0.0 }),
+  );
+  grp.add(core);
+  core.position.set(0, cy, 0);
+
+  registerPickupSpin(host);
+
+  // Slow neon-blue hue cycle on the `G` glyph. One Color.setHSL +
+  // small intensity lerp per frame on a single shared material —
+  // negligible cost regardless of how many item boxes are placed.
+  // Hue sweeps cyan → azure → indigo → back; emissive intensity
+  // breathes for a soft glow pulse.
+  {
+    const _tmpFill = new THREE.Color();
+    const _tmpEmit = new THREE.Color();
+    const PERIOD = 4.5;       // seconds per full sweep
+    const HUE_LO = 0.48;      // ~cyan
+    const HUE_HI = 0.72;      // ~indigo
+    registerSurfaceTick({
+      host,
+      fn: (_dt, t) => {
+        const phase = (Math.sin((t / PERIOD) * Math.PI * 2) + 1) * 0.5;
+        const hue = HUE_LO + (HUE_HI - HUE_LO) * phase;
+        _tmpFill.setHSL(hue, 0.85, 0.62);
+        _tmpEmit.setHSL(hue, 1.00, 0.55);
+        decalMat.color.copy(_tmpFill);
+        decalMat.emissive.copy(_tmpEmit);
+        decalMat.emissiveIntensity = 1.05 + 0.55 * phase;
+      },
+    });
+  }
+  return grp;
+}
+
+// ── HEAVY CRATE ─────────────────────────────────────────────────────────────
+// Wii-U "CrashBox" wood crate. Wood faces use the album texture with a faint
+// amber emissive trim so the contents read as "explosive". Iron bands and
+// corner bolts use the metal_parts texture for a believable PBR look.
+function buildHeavyCrate() {
+  const grp = new THREE.Group();
+  pickupPedestal(grp, 0xc8b890, 0xff8822, 1.85);
+  const cy = ROAD_THICK + 1.16;
+  const bodyMat = new THREE.MeshStandardMaterial({
+    map: MOD_TEX.crateAlb, normalMap: MOD_TEX.crateNrm, roughnessMap: MOD_TEX.crateSpm,
+    color: 0xffffff, roughness: 0.72, metalness: 0.08,
+    emissive: 0x3a1b00, emissiveIntensity: 0.10,
+  });
+  const crate = new THREE.Mesh(new THREE.BoxGeometry(1.82, 1.72, 1.82), bodyMat);
+  crate.position.set(0, cy, 0);
+  crate.castShadow = true; crate.receiveShadow = true; grp.add(crate);
+
+  const bandMat = new THREE.MeshStandardMaterial({
+    map: MOD_TEX.metalParts, color: 0x2a2d34, roughness: 0.42, metalness: 0.88,
+  });
+  for (const [sx, sz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+    const band = new THREE.Mesh(
+      sx !== 0
+        ? new THREE.BoxGeometry(0.12, 1.58, 1.88)
+        : new THREE.BoxGeometry(1.88, 1.58, 0.12),
+      bandMat,
+    );
+    band.position.set(sx * 0.72, cy, sz * 0.72);
+    grp.add(band);
+  }
+  const boltMat = new THREE.MeshStandardMaterial({
+    map: MOD_TEX.metalAlb, color: 0x9aa0aa, roughness: 0.30, metalness: 0.95,
+  });
+  for (const sx of [-1, +1]) for (const sz of [-1, +1]) {
+    const bolt = new THREE.Mesh(new THREE.CylinderGeometry(0.10, 0.10, 0.10, 8), boltMat);
+    bolt.position.set(sx * 0.78, cy + 0.86, sz * 0.78); grp.add(bolt);
+  }
+  // Top "DANGER" striped warning chevrons — small thin mesh pinned to the lid.
+  const lidStripeMat = new THREE.MeshBasicMaterial({
+    color: 0xffcf2a, transparent: true, opacity: 0.85,
+  });
+  for (let i = -1; i <= 1; i++) {
+    const stripe = new THREE.Mesh(new THREE.PlaneGeometry(1.45, 0.12), lidStripeMat);
+    stripe.rotation.x = -Math.PI / 2;
+    stripe.position.set(0, cy + 0.87, i * 0.34);
+    grp.add(stripe);
+  }
+  return grp;
+}
+
+// ── HEALTH ORB ──────────────────────────────────────────────────────────────
+// Bright green pulsing orb with four medical-cross emblems facing the four
+// horizontal directions plus a halo ring on the ground. The whole stack
+// pulses + spins so it stays readable from any approach angle.
+function buildHealthOrb() {
+  const grp = new THREE.Group();
+  pickupPedestal(grp, 0xc8ffd6, 0x33dd55, 1.40);
+  const cy = ROAD_THICK + 1.20;
+
+  const host = new THREE.Group();
+  host.position.set(0, cy, 0);
+  grp.add(host);
+
+  const orbMat = new THREE.MeshStandardMaterial({
+    color: 0x8effb6, emissive: 0x48ff88, emissiveIntensity: 1.8,
+    roughness: 0.12, metalness: 0.0,
+    transparent: true, opacity: 0.92,
+  });
+  const orb = new THREE.Mesh(new THREE.SphereGeometry(0.82, 18, 14), orbMat);
+  orb.castShadow = true; host.add(orb);
+
+  // Four medical crosses — front / back / left / right — so the pickup
+  // identity is unmistakable from any approach.
+  const crossMat = new THREE.MeshStandardMaterial({
+    color: 0xffffff, emissive: 0x66ffaa, emissiveIntensity: 2.4, roughness: 0.18,
+    polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1,
+  });
+  const dirs = [
+    { rotY: 0,             pos: [0, 0,  0.86] },
+    { rotY: Math.PI,       pos: [0, 0, -0.86] },
+    { rotY: Math.PI / 2,   pos: [ 0.86, 0, 0] },
+    { rotY: -Math.PI / 2,  pos: [-0.86, 0, 0] },
+  ];
+  for (const d of dirs) {
+    const crossGrp = new THREE.Group();
+    crossGrp.position.set(d.pos[0], d.pos[1], d.pos[2]);
+    crossGrp.rotation.y = d.rotY;
+    const arm1 = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.95, 0.06), crossMat);
+    const arm2 = new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.22, 0.06), crossMat);
+    crossGrp.add(arm1); crossGrp.add(arm2);
+    host.add(crossGrp);
+  }
+
+  // Halo ring on the ground — pulses with the orb so designers see the
+  // pickup's footprint even when looking down from above.
+  const halo = new THREE.Mesh(
+    new THREE.TorusGeometry(0.95, 0.05, 8, 28),
+    new THREE.MeshStandardMaterial({ color: 0x88ffaa, emissive: 0x44ff88, emissiveIntensity: 1.4, roughness: 0.18 }),
+  );
+  halo.rotation.x = Math.PI / 2;
+  halo.position.set(0, ROAD_THICK + 0.06, 0);
+  grp.add(halo);
+
+  registerPickupSpin(host);
+  return grp;
+}
+
+// ── COIN ────────────────────────────────────────────────────────────────────
+// MK-style spinning gold coin. CylinderGeometry materials are indexed
+// [side, top, bottom] — we apply the coin album texture to the two caps
+// and a polished gold-metal material to the rim so the texture never
+// stretches across the side (the long-standing visual bug).
+function buildCoinPickup() {
+  const grp = new THREE.Group();
+  pickupPedestal(grp, 0xfff0c4, 0xffaa22, 1.20);
+  const cy = ROAD_THICK + 1.05;
+
+  const faceMat = new THREE.MeshStandardMaterial({
+    map: MOD_TEX.coinAlb, normalMap: MOD_TEX.coinNrm, roughnessMap: MOD_TEX.coinSpm,
+    color: 0xffffff, roughness: 0.32, metalness: 0.85,
+    emissive: 0x4a3300, emissiveIntensity: 0.18,
+  });
+  // Solid polished gold rim — no texture map. The lateral surface of a
+  // CylinderGeometry has a single-strip UV that stretches square textures
+  // into ugly bands, which was the source of the coin's old 'mistextured'
+  // look. A flat gold-metal material reads cleaner from every angle.
+  const rimMat = new THREE.MeshStandardMaterial({
+    color: 0xffcc40, roughness: 0.22, metalness: 0.95,
+    emissive: 0x553300, emissiveIntensity: 0.22,
+  });
+  // Material order for CylinderGeometry: [0]=lateral, [1]=top, [2]=bottom.
+  const coin = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.68, 0.68, 0.14, 28),
+    [rimMat, faceMat, faceMat],
+  );
+  coin.position.set(0, cy, 0);
+  coin.rotation.x = Math.PI / 2; // stand on edge
+  coin.castShadow = true; grp.add(coin);
+
+  // Subtle outer halo ring at the base so the coin reads even when the
+  // disc faces the camera edge-on.
+  const halo = new THREE.Mesh(
+    new THREE.TorusGeometry(0.92, 0.05, 8, 28),
+    new THREE.MeshStandardMaterial({ color: 0xffde80, emissive: 0xffc84d, emissiveIntensity: 1.6, roughness: 0.08 }),
+  );
+  halo.rotation.x = Math.PI / 2;
+  halo.position.set(0, ROAD_THICK + 0.06, 0);
+  grp.add(halo);
+
+  registerPickupSpin(coin);
+  return grp;
+}
+
+// Shared pickup pedestal helper — small tile disc with curbstone ring + ground glow.
+// Gives every pickup a consistent design-space "footprint" so designers can see
+// where a pickup sits even when the floating model is far above the road.
+function pickupPedestal(grp, baseColor, glowColor, radius) {
+  const RT = ROAD_THICK;
+  const tileMat = new THREE.MeshStandardMaterial({
+    map: MOD_TEX.tileAlb, normalMap: MOD_TEX.tileNrm,
+    color: baseColor, roughness: 0.62, metalness: 0.08,
+  });
+  const disc = new THREE.Mesh(
+    new THREE.CylinderGeometry(radius, radius, 0.08, 28), tileMat,
+  );
+  disc.position.set(0, RT + 0.04, 0); disc.receiveShadow = true; grp.add(disc);
+  const ringMat = new THREE.MeshStandardMaterial({
+    map: MOD_TEX.curbAlb, normalMap: MOD_TEX.curbNrm,
+    roughness: 0.66, metalness: 0.05,
+  });
+  const ring = new THREE.Mesh(
+    new THREE.TorusGeometry(radius, 0.10, 6, 28), ringMat,
+  );
+  ring.rotation.x = Math.PI / 2;
+  ring.position.set(0, RT + 0.08, 0); grp.add(ring);
+  const haloMat = new THREE.MeshStandardMaterial({
+    color: glowColor, emissive: glowColor, emissiveIntensity: 0.85,
+    transparent: true, opacity: 0.35, roughness: 0.20, side: THREE.DoubleSide,
+  });
+  const halo = new THREE.Mesh(
+    new THREE.RingGeometry(radius * 0.45, radius * 0.92, 28), haloMat,
+  );
+  halo.rotation.x = -Math.PI / 2;
+  halo.position.set(0, RT + 0.09, 0); grp.add(halo);
+}
+
 function buildCapEnd() {
   const grp = new THREE.Group();
   // Re-use straight deck for the cell
@@ -1512,7 +2444,962 @@ function buildSpawn() {
   return grp;
 }
 
+// ── ASSET-BACKED PICKUPS (Phase A) ─────────────────────────────────────────
+// Creates a pickup pedestal + a procedural sphere placeholder, and
+// asynchronously swaps the placeholder for the real .dae model from
+// `frontend/public/kart assets/`. Both the placeholder and the loaded
+// model are tagged `__pickupCube` so play-main's consume/respawn show/
+// hide logic continues to work seamlessly.
+function buildAssetPickup(modelName, opts = {}) {
+  const {
+    pedestalColor = 0xeef0ff,
+    glowColor     = 0x88aaff,
+    pedestalRad   = 1.45,
+    placeholderColor = 0xffffff,
+    floatY = ROAD_THICK + 1.20,
+  } = opts;
+  const grp = new THREE.Group();
+  pickupPedestal(grp, pedestalColor, glowColor, pedestalRad);
+
+  // Procedural placeholder — visible until the .dae streams in.
+  const ph = new THREE.Mesh(
+    new THREE.SphereGeometry(0.55, 16, 12),
+    new THREE.MeshStandardMaterial({
+      color: placeholderColor, emissive: placeholderColor, emissiveIntensity: 0.45,
+      roughness: 0.30, metalness: 0.10,
+    }),
+  );
+  ph.position.set(0, floatY, 0);
+  ph.castShadow = true;
+  ph.userData.__pickupCube = true;
+  ph.userData.__assetPickupPlaceholder = true;
+  grp.add(ph);
+  registerPickupSpin(ph);
+
+  const swapIn = (inst) => {
+    if (!inst) return;
+    inst.position.set(0, floatY, 0);
+    inst.userData.__pickupCube = true;
+    inst.userData.__assetPickupModel = modelName;
+    inst.traverse((o) => {
+      if (o.isMesh) {
+        o.castShadow = true;
+        o.userData.__pickupCube = true;
+      }
+    });
+    // Remove placeholder, add real model.
+    grp.remove(ph);
+    ph.geometry.dispose?.();
+    ph.material.dispose?.();
+    grp.add(inst);
+    registerPickupSpin(inst);
+  };
+
+  // Try cached first; otherwise kick off a load and listen. Both paths
+  // call instanceItemModel() so SkinnedMesh assets get a properly
+  // re-bound skeleton via SkeletonUtils.clone — a plain Object3D.clone
+  // would share bones with the cached template and the mesh would
+  // render at the template's location (i.e. invisible) instead of here.
+  const cached = instanceItemModel(modelName);
+  if (cached) {
+    swapIn(cached);
+  } else {
+    loadItemModel(modelName).then(() => {
+      // Only swap if the placeholder is still in the group (i.e. the
+      // group hasn't been disposed by the editor in the meantime).
+      if (ph.parent === grp) swapIn(instanceItemModel(modelName));
+    }).catch(() => { /* keep placeholder */ });
+  }
+
+  return grp;
+}
+
+// Generic reference-prop builders used by Phase E city/intersection items.
+// They keep the editor responsive by showing a tiny placeholder immediately,
+// then swap in a cached clone once the source model stream completes.
+function _fitAndPlaceAsset(obj, targetSize = 2.4, y = ROAD_THICK + 0.05, rotY = 0) {
+  if (!obj) return null;
+  obj.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(obj);
+  const size = new THREE.Vector3();
+  const center = new THREE.Vector3();
+  box.getSize(size);
+  box.getCenter(center);
+
+  if (!isFinite(size.x) || !isFinite(size.y) || !isFinite(size.z)) return obj;
+  const widest = Math.max(size.x, size.z, 0.001);
+  const scale = targetSize / widest;
+
+  const wrap = new THREE.Group();
+  wrap.add(obj);
+  obj.position.x -= center.x;
+  obj.position.z -= center.z;
+  obj.position.y -= box.min.y;
+  wrap.scale.setScalar(scale);
+  wrap.position.y = y;
+  wrap.rotation.y = rotY;
+  return wrap;
+}
+
+function buildReferenceDaeProp(modelName, opts = {}) {
+  const {
+    placeholderColor = 0x4f5762,
+    placeholderSize = 0.8,
+    targetSize = 2.4,
+    y = ROAD_THICK + 0.05,
+    rotY = 0,
+  } = opts;
+  const grp = new THREE.Group();
+  const ph = new THREE.Mesh(
+    new THREE.BoxGeometry(placeholderSize, placeholderSize, placeholderSize),
+    new THREE.MeshStandardMaterial({ color: placeholderColor, roughness: 0.7, metalness: 0.1 }),
+  );
+  ph.position.y = y + placeholderSize * 0.5;
+  ph.castShadow = true;
+  grp.add(ph);
+
+  const swapIn = (inst) => {
+    const fitted = _fitAndPlaceAsset(inst, targetSize, y, rotY);
+    if (!fitted) return;
+    grp.remove(ph);
+    ph.geometry.dispose?.();
+    ph.material.dispose?.();
+    grp.add(fitted);
+  };
+
+  const cached = instanceItemModel(modelName);
+  if (cached) {
+    swapIn(cached);
+  } else {
+    loadItemModel(modelName).then(() => {
+      if (ph.parent === grp) swapIn(instanceItemModel(modelName));
+    }).catch(() => { /* keep placeholder */ });
+  }
+  // Mark the vertical offset baked into the builder so model-decor wrappers
+  // (free-placement on the workplane) can subtract it and have the asset
+  // sit with its base at the wrap origin.
+  grp.userData.baseYOffset = y;
+  return grp;
+}
+
+function buildReferenceFbxProp(path, opts = {}) {
+  const {
+    placeholderColor = 0x5c6068,
+    placeholderSize = 1.2,
+    targetSize = 3.2,
+    y = ROAD_THICK + 0.05,
+    rotY = 0,
+  } = opts;
+  const grp = new THREE.Group();
+  const ph = new THREE.Mesh(
+    new THREE.BoxGeometry(placeholderSize, placeholderSize * 0.6, placeholderSize * 1.6),
+    new THREE.MeshStandardMaterial({ color: placeholderColor, roughness: 0.7, metalness: 0.2 }),
+  );
+  ph.position.y = y + placeholderSize * 0.3;
+  ph.castShadow = true;
+  grp.add(ph);
+
+  const swapIn = (inst) => {
+    const fitted = _fitAndPlaceAsset(inst, targetSize, y, rotY);
+    if (!fitted) return;
+    grp.remove(ph);
+    ph.geometry.dispose?.();
+    ph.material.dispose?.();
+    grp.add(fitted);
+  };
+
+  const cached = instanceFBX(path);
+  if (cached) {
+    swapIn(cached);
+  } else {
+    loadFBX(path).then(() => {
+      if (ph.parent === grp) swapIn(instanceFBX(path));
+    }).catch(() => { /* keep placeholder */ });
+  }
+  grp.userData.baseYOffset = y;
+  return grp;
+}
+
+function buildStkProp(path, opts = {}) {
+  const {
+    placeholderColor = 0x6e737c,
+    placeholderSize = 1.2,
+    targetSize = 3.5,
+    y = ROAD_THICK + 0.02,
+    rotY = 0,
+  } = opts;
+  const grp = new THREE.Group();
+  const ph = new THREE.Mesh(
+    new THREE.BoxGeometry(placeholderSize, placeholderSize * 0.6, placeholderSize),
+    new THREE.MeshStandardMaterial({ color: placeholderColor, roughness: 0.72, metalness: 0.08 }),
+  );
+  ph.position.y = y + placeholderSize * 0.3;
+  ph.castShadow = true;
+  grp.add(ph);
+
+  const swapIn = (inst) => {
+    const fitted = _fitAndPlaceAsset(inst, targetSize, y, rotY);
+    if (!fitted) return;
+    grp.remove(ph);
+    ph.geometry.dispose?.();
+    ph.material.dispose?.();
+    grp.add(fitted);
+  };
+
+  const cached = instanceStkSpm(path);
+  if (cached) {
+    swapIn(cached);
+  } else {
+    loadStkSpm(path).then(() => {
+      if (ph.parent === grp) swapIn(instanceStkSpm(path));
+    }).catch(() => { /* keep placeholder */ });
+  }
+  grp.userData.baseYOffset = y;
+  return grp;
+}
+
+// Per-segment pickup builders (Phase A).
+function buildPkMushroom()        { return buildAssetPickup('mushroom',        { pedestalColor: 0xffd6d6, glowColor: 0xff7777, placeholderColor: 0xff8888 }); }
+function buildPkGoldenMushroom()  { return buildAssetPickup('golden_mushroom', { pedestalColor: 0xfff2c4, glowColor: 0xffc24a, placeholderColor: 0xffd24a }); }
+function buildPkStar()            { return buildAssetPickup('star',            { pedestalColor: 0xfff7c4, glowColor: 0xffe04a, placeholderColor: 0xfff066 }); }
+function buildPkGreenShell()      { return buildAssetPickup('green_shell',     { pedestalColor: 0xd2ffd6, glowColor: 0x55ff66, placeholderColor: 0x55ff66 }); }
+function buildPkRedShell()        { return buildAssetPickup('red_shell',       { pedestalColor: 0xffd2d2, glowColor: 0xff5555, placeholderColor: 0xff5555 }); }
+function buildPkBlueShell()       { return buildAssetPickup('blue_shell',      { pedestalColor: 0xd2dbff, glowColor: 0x3a7bff, placeholderColor: 0x3a7bff }); }
+function buildPkBanana()          { return buildAssetPickup('banana',          { pedestalColor: 0xfff4c4, glowColor: 0xffe066, placeholderColor: 0xffe066 }); }
+function buildPkBulletBill()      { return buildAssetPickup('bullet_bill',     { pedestalColor: 0xc4c8d2, glowColor: 0x222831, placeholderColor: 0x444855 }); }
+function buildPkBobomb() {
+  // No .dae for Bobomb (only .blend) — render an enriched procedural fallback.
+  const grp = new THREE.Group();
+  pickupPedestal(grp, 0xc4c4c4, 0x222222, 1.45);
+  // Wrap rotating parts in a single host so the slow-spin reads as one
+  // rigid object rather than three independently spinning sub-meshes.
+  const host = new THREE.Group();
+  host.position.set(0, ROAD_THICK + 1.20, 0);
+  host.userData.__pickupCube = true;
+  const body = new THREE.Mesh(
+    new THREE.SphereGeometry(0.62, 18, 14),
+    new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.42, metalness: 0.55 }),
+  );
+  body.castShadow = true; body.userData.__pickupCube = true; host.add(body);
+  const fuse = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.06, 0.06, 0.42, 8),
+    new THREE.MeshStandardMaterial({ color: 0xc8a060, roughness: 0.85 }),
+  );
+  fuse.position.set(0, 0.65, 0); fuse.userData.__pickupCube = true; host.add(fuse);
+  const spark = new THREE.Mesh(
+    new THREE.SphereGeometry(0.10, 8, 6),
+    new THREE.MeshStandardMaterial({ color: 0xffd54a, emissive: 0xffaa22, emissiveIntensity: 2.2 }),
+  );
+  spark.position.set(0, 0.90, 0); spark.userData.__pickupCube = true; host.add(spark);
+  grp.add(host);
+  registerPickupSpin(host);
+  return grp;
+}
+
+// ── v8 / Vigilante procedural pickup builders ─────────────────────
+// No source DAEs for these — each gets a low-poly stylized icon
+// (≤ 4 meshes / ≤ 200 tris) with the pedestal halo for consistency.
+// All rotate as a single host group so the spin reads as one rigid
+// object.
+function _v8Host(floatY = ROAD_THICK + 1.20) {
+  const host = new THREE.Group();
+  host.position.set(0, floatY, 0);
+  host.userData.__pickupCube = true;
+  return host;
+}
+
+function buildPkV8Missile() {
+  const grp = new THREE.Group();
+  pickupPedestal(grp, 0xf2d0b4, 0xc25a14, 1.45);
+  const host = _v8Host();
+  const matBody = new THREE.MeshStandardMaterial({ color: 0xc25a14, metalness: 0.45, roughness: 0.45 });
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 1.10, 12), matBody);
+  body.rotation.z = Math.PI / 2;
+  body.userData.__pickupCube = true; host.add(body);
+  const tip = new THREE.Mesh(new THREE.ConeGeometry(0.18, 0.36, 12), new THREE.MeshStandardMaterial({ color: 0xffaa55, emissive: 0xff7a22, emissiveIntensity: 0.6 }));
+  tip.rotation.z = -Math.PI / 2; tip.position.x = 0.73; tip.userData.__pickupCube = true; host.add(tip);
+  const fin = new THREE.Mesh(new THREE.BoxGeometry(0.30, 0.05, 0.30), matBody);
+  fin.position.x = -0.42; fin.userData.__pickupCube = true; host.add(fin);
+  grp.add(host); registerPickupSpin(host); return grp;
+}
+
+function buildPkV8Cannon() {
+  const grp = new THREE.Group();
+  pickupPedestal(grp, 0xd6dae0, 0x8a8f99, 1.45);
+  const host = _v8Host();
+  const ball = new THREE.Mesh(new THREE.SphereGeometry(0.55, 18, 14), new THREE.MeshStandardMaterial({ color: 0x2a2d33, metalness: 0.7, roughness: 0.32 }));
+  ball.userData.__pickupCube = true; host.add(ball);
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.62, 0.08, 6, 24), new THREE.MeshStandardMaterial({ color: 0x8a8f99, metalness: 0.6, roughness: 0.4 }));
+  ring.rotation.x = Math.PI / 2; ring.userData.__pickupCube = true; host.add(ring);
+  grp.add(host); registerPickupSpin(host); return grp;
+}
+
+function buildPkV8Rocket() {
+  const grp = new THREE.Group();
+  pickupPedestal(grp, 0xffe2c4, 0xff7a00, 1.45);
+  const host = _v8Host();
+  const matBody = new THREE.MeshStandardMaterial({ color: 0xff7a00, emissive: 0xff5510, emissiveIntensity: 0.35, metalness: 0.35, roughness: 0.5 });
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(0.20, 0.20, 1.0, 14), matBody);
+  body.userData.__pickupCube = true; host.add(body);
+  const tip = new THREE.Mesh(new THREE.ConeGeometry(0.20, 0.40, 14), new THREE.MeshStandardMaterial({ color: 0xffe6c4 }));
+  tip.position.y = 0.70; tip.userData.__pickupCube = true; host.add(tip);
+  for (let i = 0; i < 3; i++) {
+    const fin = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.32, 0.32), matBody);
+    fin.position.y = -0.45;
+    fin.rotation.y = (i * Math.PI * 2) / 3;
+    fin.position.x = Math.cos(fin.rotation.y) * 0.20;
+    fin.position.z = Math.sin(fin.rotation.y) * 0.20;
+    fin.userData.__pickupCube = true; host.add(fin);
+  }
+  grp.add(host); registerPickupSpin(host); return grp;
+}
+
+function buildPkV8Mortar() {
+  const grp = new THREE.Group();
+  pickupPedestal(grp, 0xc4c8d0, 0x4a4a55, 1.45);
+  const host = _v8Host();
+  const matBody = new THREE.MeshStandardMaterial({ color: 0x3a3d44, metalness: 0.55, roughness: 0.45 });
+  const shell = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.40, 0.85, 14), matBody);
+  shell.userData.__pickupCube = true; host.add(shell);
+  const cap = new THREE.Mesh(new THREE.SphereGeometry(0.32, 14, 10, 0, Math.PI * 2, 0, Math.PI / 2), matBody);
+  cap.position.y = 0.42; cap.userData.__pickupCube = true; host.add(cap);
+  const stripe = new THREE.Mesh(new THREE.TorusGeometry(0.36, 0.045, 6, 18), new THREE.MeshStandardMaterial({ color: 0xffcc44, emissive: 0xffaa22, emissiveIntensity: 0.4 }));
+  stripe.rotation.x = Math.PI / 2; stripe.userData.__pickupCube = true; host.add(stripe);
+  grp.add(host); registerPickupSpin(host); return grp;
+}
+
+function buildPkV8Mine() {
+  const grp = new THREE.Group();
+  pickupPedestal(grp, 0xd0a0a4, 0x55202a, 1.45);
+  const host = _v8Host(ROAD_THICK + 0.55);
+  const matBody = new THREE.MeshStandardMaterial({ color: 0x55202a, metalness: 0.5, roughness: 0.55 });
+  const core = new THREE.Mesh(new THREE.SphereGeometry(0.42, 16, 12), matBody);
+  core.userData.__pickupCube = true; host.add(core);
+  // 6 spikes evenly distributed.
+  const spikeMat = new THREE.MeshStandardMaterial({ color: 0xb04020, metalness: 0.6, roughness: 0.4 });
+  for (let i = 0; i < 6; i++) {
+    const spike = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.30, 8), spikeMat);
+    const a = (i / 6) * Math.PI * 2;
+    spike.position.set(Math.cos(a) * 0.45, 0, Math.sin(a) * 0.45);
+    spike.rotation.z = -Math.PI / 2;
+    spike.rotation.y = -a;
+    spike.userData.__pickupCube = true; host.add(spike);
+  }
+  grp.add(host); registerPickupSpin(host); return grp;
+}
+
+function buildPkV8Dynamite() {
+  const grp = new THREE.Group();
+  pickupPedestal(grp, 0xf0c4b4, 0xb04020, 1.45);
+  const host = _v8Host();
+  const stickMat = new THREE.MeshStandardMaterial({ color: 0xb04020, roughness: 0.65 });
+  for (let i = -1; i <= 1; i++) {
+    const stick = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.13, 0.85, 10), stickMat);
+    stick.position.x = i * 0.20;
+    stick.userData.__pickupCube = true; host.add(stick);
+  }
+  const tape = new THREE.Mesh(new THREE.TorusGeometry(0.28, 0.05, 6, 18), new THREE.MeshStandardMaterial({ color: 0x202020 }));
+  tape.rotation.y = Math.PI / 2; tape.scale.set(1, 1, 0.4);
+  tape.userData.__pickupCube = true; host.add(tape);
+  const fuse = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.32, 6), new THREE.MeshStandardMaterial({ color: 0xc8a060 }));
+  fuse.position.set(0, 0.55, 0); fuse.userData.__pickupCube = true; host.add(fuse);
+  grp.add(host); registerPickupSpin(host); return grp;
+}
+
+function buildPkV8Firethrower() {
+  const grp = new THREE.Group();
+  pickupPedestal(grp, 0xffd6b4, 0xff4400, 1.45);
+  const host = _v8Host();
+  const matBody = new THREE.MeshStandardMaterial({ color: 0x404040, metalness: 0.6, roughness: 0.45 });
+  const tank = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.28, 0.72, 12), matBody);
+  tank.userData.__pickupCube = true; host.add(tank);
+  const nozzle = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.12, 0.50, 10), matBody);
+  nozzle.rotation.z = Math.PI / 2; nozzle.position.x = 0.45; nozzle.userData.__pickupCube = true; host.add(nozzle);
+  const flame = new THREE.Mesh(new THREE.ConeGeometry(0.18, 0.45, 10), new THREE.MeshStandardMaterial({ color: 0xff6600, emissive: 0xff3300, emissiveIntensity: 1.6, transparent: true, opacity: 0.85 }));
+  flame.rotation.z = -Math.PI / 2; flame.position.x = 0.85; flame.userData.__pickupCube = true; host.add(flame);
+  grp.add(host); registerPickupSpin(host); return grp;
+}
+
+function buildPkV8Shield() {
+  const grp = new THREE.Group();
+  pickupPedestal(grp, 0xc4e0ff, 0x66ccff, 1.45);
+  const host = _v8Host();
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.55, 0.10, 8, 28), new THREE.MeshStandardMaterial({ color: 0x66ccff, emissive: 0x2288cc, emissiveIntensity: 0.7, metalness: 0.4, roughness: 0.3 }));
+  ring.userData.__pickupCube = true; host.add(ring);
+  const inner = new THREE.Mesh(new THREE.SphereGeometry(0.42, 16, 12), new THREE.MeshStandardMaterial({ color: 0x88ddff, transparent: true, opacity: 0.30, emissive: 0x66ccff, emissiveIntensity: 0.5 }));
+  inner.userData.__pickupCube = true; host.add(inner);
+  grp.add(host); registerPickupSpin(host); return grp;
+}
+
+function buildPkV8Repair() {
+  const grp = new THREE.Group();
+  pickupPedestal(grp, 0xc4ffd2, 0x66ff99, 1.45);
+  const host = _v8Host();
+  const crossMat = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0x66ff99, emissiveIntensity: 0.5 });
+  const horiz = new THREE.Mesh(new THREE.BoxGeometry(0.85, 0.22, 0.22), crossMat);
+  horiz.userData.__pickupCube = true; host.add(horiz);
+  const vert = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.85, 0.22), crossMat);
+  vert.userData.__pickupCube = true; host.add(vert);
+  grp.add(host); registerPickupSpin(host); return grp;
+}
+
+function buildPkV8DoubleDmg() {
+  const grp = new THREE.Group();
+  pickupPedestal(grp, 0xffcce8, 0xff66cc, 1.45);
+  const host = _v8Host();
+  const matBody = new THREE.MeshStandardMaterial({ color: 0xff66cc, emissive: 0xcc3399, emissiveIntensity: 0.5, metalness: 0.3, roughness: 0.4 });
+  // Two stacked diamond-ish boxes to suggest "x2".
+  for (let i = 0; i < 2; i++) {
+    const dmd = new THREE.Mesh(new THREE.OctahedronGeometry(0.28, 0), matBody);
+    dmd.position.x = (i - 0.5) * 0.55;
+    dmd.userData.__pickupCube = true; host.add(dmd);
+  }
+  grp.add(host); registerPickupSpin(host); return grp;
+}
+
+// Jump panel — STK launch-ramp banner painted onto a magenta plate, with
+// brushed-metal spring coils at each corner. The banner already encodes the
+// "ramp + arrow" iconography baked at studio-quality resolution.
+function buildJumpPanel() {
+  const grp = new THREE.Group();
+  const W = TILE * 0.92, L = TILE * 0.55;
+  // STK jumpRamp banner — pre-rotated so its arrow points along +Z (drive
+  // direction). Per-instance clone keeps the rotation/repeat independent.
+  const rampTex = cloneTex(STK_TEX.jumpRamp, { rotation: Math.PI / 2 });
+  const baseMat = new THREE.MeshStandardMaterial({
+    map: rampTex, color: 0xffffff,
+    emissiveMap: rampTex, emissive: 0xff45c8, emissiveIntensity: 0.65,
+    roughness: 0.28, metalness: 0.22,
+  });
+  const plate = new THREE.Mesh(new THREE.BoxGeometry(W, 0.10, L), baseMat);
+  plate.position.set(0, ROAD_THICK + 0.06, 0);
+  plate.receiveShadow = true; grp.add(plate);
+  // Edge under-glow — magenta plane below the plate, additive, sells the
+  // "hover-launch pad" silhouette from low angles.
+  const halo = new THREE.Mesh(
+    new THREE.PlaneGeometry(W * 1.05, L * 1.20),
+    new THREE.MeshBasicMaterial({
+      color: 0xff45c8, transparent: true, opacity: 0.40,
+      blending: THREE.AdditiveBlending, depthWrite: false,
+    }),
+  );
+  halo.rotation.x = -Math.PI / 2;
+  halo.position.set(0, ROAD_THICK + 0.03, 0); halo.renderOrder = 2;
+  grp.add(halo);
+  // Four spring coils at the corners — STK grey-metal sheen.
+  const coilMat = new THREE.MeshStandardMaterial({
+    map: STK_TEX.metalGrey, color: 0xeaeaea, roughness: 0.30, metalness: 0.88,
+  });
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+    for (let i = 0; i < 3; i++) {
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(0.18, 0.04, 6, 14), coilMat);
+      ring.rotation.x = Math.PI / 2;
+      ring.position.set(sx * (W / 2 - 0.30), ROAD_THICK + 0.18 + i * 0.12, sz * (L / 2 - 0.30));
+      grp.add(ring);
+    }
+  }
+  return grp;
+}
+
+// Ice patch — frosted blue puddle with animated water normals + frost rim.
+// Uses the Water Park ice album tinted icy white-blue. The shimmer comes
+// from a subtle UV scroll registered with the ground-fx ticker so even
+// when the kart isn't on it the surface visibly "lives".
+function buildIcePatch() {
+  const grp = new THREE.Group();
+  // STK ice surface: real ice albedo + matching normal & gloss maps.
+  // Cloned per-instance so each patch's UV scroll is independent.
+  const iAlb = cloneTex(STK_TEX.iceA,   { repeat: [2, 2] });
+  const iNrm = cloneTex(STK_TEX.iceA_n, { repeat: [2, 2] });
+  const iGls = cloneTex(STK_TEX.iceA_g, { repeat: [2, 2] });
+  const baseMat = new THREE.MeshStandardMaterial({
+    map: iAlb, normalMap: iNrm, roughnessMap: iGls,
+    color: 0xc8e8ff, emissive: 0x6aa8ff, emissiveIntensity: 0.32,
+    roughness: 0.10, metalness: 0.40,
+    transparent: true, opacity: 0.94,
+  });
+  const disc = new THREE.Mesh(new THREE.CircleGeometry(TILE * 0.44, 32), baseMat);
+  disc.rotation.x = -Math.PI / 2;
+  disc.position.y = ROAD_THICK + 0.04;
+  disc.receiveShadow = true;
+  grp.add(disc);
+  registerSurfaceScroll(disc, { u: 0.04, v: 0.02 });
+
+  // Crackling shimmer — second ice layer with frozen-waterfall scrolling
+  // pattern, additive over the base disc.
+  const shimmerTex = cloneTex(STK_TEX.frozenFall, { repeat: [2, 2] });
+  const shimmer = new THREE.Mesh(
+    new THREE.CircleGeometry(TILE * 0.435, 32),
+    new THREE.MeshBasicMaterial({
+      map: shimmerTex, color: 0xeaf8ff,
+      transparent: true, opacity: 0.40, blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    }),
+  );
+  shimmer.rotation.x = -Math.PI / 2;
+  shimmer.position.y = ROAD_THICK + 0.052; shimmer.renderOrder = 3;
+  grp.add(shimmer);
+  registerSurfaceScroll(shimmer, { u: -0.05, v: 0.03 });
+
+  // Frost rim — STK iceEdges decal wrapped around the perimeter as a ring.
+  const rimMat = new THREE.MeshStandardMaterial({
+    map: STK_TEX.iceEdges, color: 0xeefaff,
+    emissive: 0xb6e6ff, emissiveIntensity: 0.85,
+    roughness: 0.10, metalness: 0.0,
+    transparent: true, opacity: 0.92, side: THREE.DoubleSide,
+    alphaTest: 0.05,
+  });
+  const ring = new THREE.Mesh(
+    new THREE.RingGeometry(TILE * 0.36, TILE * 0.46, 48), rimMat,
+  );
+  ring.rotation.x = -Math.PI / 2;
+  ring.position.y = ROAD_THICK + 0.06;
+  grp.add(ring);
+
+  // Subtle "snowflake" decals around the perimeter for readability
+  const flakeMat = new THREE.MeshBasicMaterial({
+    color: 0xffffff, transparent: true, opacity: 0.55,
+  });
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * Math.PI * 2;
+    const r = TILE * 0.34;
+    const flake = new THREE.Mesh(new THREE.CircleGeometry(0.10, 6), flakeMat);
+    flake.rotation.x = -Math.PI / 2;
+    flake.position.set(Math.cos(a) * r, ROAD_THICK + 0.07, Math.sin(a) * r);
+    grp.add(flake);
+  }
+  return grp;
+}
+
+// Shared factory for "boiling pool" hazards — bright emissive disc with
+// flowing normal map, raised crust ring, intermittently popping bubbles
+// (rising emissive spheres) and upward "spitting" flame flares. Used by
+// both lava (orange) and oil slick (black) so the two read as
+// thematically related but visually distinct hazards.
+//
+// Every animated component owns CLONED textures + its own per-instance
+// tick callbacks so multiple pools can coexist on a track without their
+// UV scrolls or bubble cycles interfering with each other.
+function _buildBoilingPool(opts) {
+  const grp = new THREE.Group();
+  const RT = ROAD_THICK;
+  const R = TILE * 0.44;
+
+  // 1. Boiling surface disc with flowing normal map.
+  // STK texture overrides win when supplied; fall back to MOD_TEX water normals.
+  const surfNrm = opts.surface.normalMap
+    ? cloneTex(opts.surface.normalMap, { repeat: opts.surface.normalRepeat || [2, 2] })
+    : cloneTex(MOD_TEX.waterNrm, { repeat: [2, 2] });
+  const surfAlb = opts.surface.map
+    ? cloneTex(opts.surface.map, { repeat: opts.surface.mapRepeat || [2, 2] })
+    : null;
+  const surfRgh = opts.surface.roughnessMap
+    ? cloneTex(opts.surface.roughnessMap, { repeat: opts.surface.normalRepeat || [2, 2] })
+    : null;
+  const surfMat = new THREE.MeshStandardMaterial({
+    color: opts.surface.color,
+    emissive: opts.surface.emissive,
+    emissiveIntensity: opts.surface.emissiveIntensity,
+    map: surfAlb,
+    emissiveMap: opts.surface.emissiveFromAlbedo ? surfAlb : null,
+    normalMap: surfNrm,
+    roughnessMap: surfRgh,
+    roughness: opts.surface.roughness,
+    metalness: opts.surface.metalness,
+  });
+  const disc = new THREE.Mesh(new THREE.CircleGeometry(R, 36), surfMat);
+  disc.rotation.x = -Math.PI / 2;
+  disc.position.y = RT + 0.04;
+  grp.add(disc);
+  registerSurfaceScroll(disc, opts.scroll);
+
+  // 2. Cooled crust ring around the perimeter.
+  const crustMat = new THREE.MeshStandardMaterial({
+    color: opts.crust.color,
+    emissive: opts.crust.emissive,
+    emissiveIntensity: opts.crust.emissiveIntensity,
+    roughness: opts.crust.roughness,
+    metalness: opts.crust.metalness,
+    side: THREE.DoubleSide,
+  });
+  const crust = new THREE.Mesh(
+    new THREE.RingGeometry(R, R * 1.14, 36), crustMat,
+  );
+  crust.rotation.x = -Math.PI / 2;
+  crust.position.y = RT + 0.05;
+  grp.add(crust);
+
+  // 3. Bubbles — small emissive spheres that rise from the surface,
+  // grow slightly, then pop and re-spawn at a random spot. Phase per
+  // bubble keeps them out of sync.
+  const bubbleMat = new THREE.MeshStandardMaterial({
+    color: opts.bubble.color,
+    emissive: opts.bubble.emissive,
+    emissiveIntensity: opts.bubble.emissiveIntensity,
+    roughness: 0.35, metalness: 0.0,
+  });
+  const bubbles = [];
+  for (let i = 0; i < opts.bubbleCount; i++) {
+    const b = new THREE.Mesh(new THREE.SphereGeometry(0.14, 10, 8), bubbleMat);
+    const a = (i / opts.bubbleCount) * Math.PI * 2;
+    const r = R * (0.30 + Math.random() * 0.55);
+    b.userData = {
+      home: [Math.cos(a) * r, Math.sin(a) * r],
+      phase: Math.random() * Math.PI * 2,
+      period: 1.2 + Math.random() * 1.4,
+    };
+    b.position.set(b.userData.home[0], RT + 0.06, b.userData.home[1]);
+    grp.add(b);
+    bubbles.push(b);
+  }
+  registerSurfaceTick({
+    host: grp,
+    fn: (dt, t) => {
+      for (const b of bubbles) {
+        const u = ((t + b.userData.phase) % b.userData.period) / b.userData.period;
+        // Rise + scale up + fade out + recycle position
+        const y = RT + 0.06 + u * 0.55;
+        const s = 0.6 + u * 0.9;
+        b.position.y = y;
+        b.scale.setScalar(s);
+        if (u > 0.95) {
+          // Pop: pick a fresh spot inside the disc
+          const a = Math.random() * Math.PI * 2;
+          const r = R * (0.20 + Math.random() * 0.65);
+          b.userData.home[0] = Math.cos(a) * r;
+          b.userData.home[1] = Math.sin(a) * r;
+        }
+        b.position.x = b.userData.home[0];
+        b.position.z = b.userData.home[1];
+      }
+    },
+  });
+
+  // 4. Spitting flares — upward-pointing cones with pulsing emissive,
+  // suggesting periodic eruptions. Each flare has its own pulse phase.
+  const flareMat = new THREE.MeshStandardMaterial({
+    color: opts.flare.color,
+    emissive: opts.flare.emissive,
+    emissiveIntensity: opts.flare.emissiveIntensity,
+    roughness: 0.30, metalness: 0.0,
+    transparent: true, opacity: 0.85, depthWrite: false,
+  });
+  const flares = [];
+  for (let i = 0; i < opts.flareCount; i++) {
+    const f = new THREE.Mesh(new THREE.ConeGeometry(0.14, 0.55, 10), flareMat.clone());
+    const a = (i / opts.flareCount) * Math.PI * 2 + 0.5;
+    const r = R * 0.25;
+    f.position.set(Math.cos(a) * r, RT + 0.30, Math.sin(a) * r);
+    f.userData = { phase: Math.random() * Math.PI * 2, period: 1.6 + Math.random() * 0.8 };
+    grp.add(f);
+    flares.push(f);
+  }
+  registerSurfaceTick({
+    host: grp,
+    fn: (dt, t) => {
+      for (const f of flares) {
+        const u = ((t + f.userData.phase) % f.userData.period) / f.userData.period;
+        // Sharp ramp up, slower fall — looks like a brief eruption.
+        const k = u < 0.25 ? (u / 0.25) : Math.max(0, 1 - (u - 0.25) / 0.75);
+        f.scale.set(1 + k * 0.4, 0.4 + k * 1.6, 1 + k * 0.4);
+        f.material.opacity = 0.20 + k * 0.70;
+        f.material.emissiveIntensity = opts.flare.emissiveIntensity * (0.4 + k * 1.4);
+      }
+    },
+  });
+
+  // 5. Smoke wisps — three faint upward quads that suggest heat shimmer
+  // (or oil vapour). Static; they only need to soften the silhouette.
+  const smokeMat = new THREE.MeshBasicMaterial({
+    color: opts.smoke.color, transparent: true, opacity: opts.smoke.opacity,
+    depthWrite: false,
+  });
+  for (let i = 0; i < 3; i++) {
+    const a = (i / 3) * Math.PI * 2;
+    const r = TILE * 0.20;
+    const puff = new THREE.Mesh(new THREE.PlaneGeometry(1.0, 1.4), smokeMat);
+    puff.position.set(Math.cos(a) * r, RT + 0.85, Math.sin(a) * r);
+    puff.rotation.y = -a;
+    grp.add(puff);
+  }
+  return grp;
+}
+
+// Lava pool — Mario Kart 64-style boiling magma. Now driven by the actual
+// SuperTuxKart `stktex_generic_lavaA` PBR set (albedo + normal + gloss) so
+// the surface reads as authentic flowing magma rather than a flat orange
+// disc. Bubbles + flares retain their per-instance phase animation.
+function buildLavaPool() {
+  return _buildBoilingPool({
+    surface:    { color: 0xff7833, emissive: 0xff7a18, emissiveIntensity: 2.4,
+                  roughness: 0.55, metalness: 0.0,
+                  map: STK_TEX.lavaA, mapRepeat: [2, 2],
+                  emissiveFromAlbedo: true,
+                  normalMap: STK_TEX.lavaA_n, normalRepeat: [2, 2],
+                  roughnessMap: STK_TEX.lavaA_g },
+    crust:      { color: 0x231410, emissive: 0x441100, emissiveIntensity: 0.55,
+                  roughness: 0.85, metalness: 0.0 },
+    bubble:     { color: 0xffaa22, emissive: 0xff5500, emissiveIntensity: 4.0 },
+    flare:      { color: 0xffcc55, emissive: 0xff5500, emissiveIntensity: 4.5 },
+    smoke:      { color: 0x886655, opacity: 0.30 },
+    bubbleCount: 5,
+    flareCount:  3,
+    scroll: { u: 0.04, v: -0.03 },
+  });
+}
+
+// Water pool — flat blue water surface with animated normal scroll, splash
+// rim and small water-warning quads at the corners. Uses GWP_CompD_Water_*
+// from the Water Park asset bank. Textures are CLONED so this pool's UV
+// drift doesn't mutate the shared MOD_TEX entries (which would crawl
+// through every other consumer — pickups, track surfaces, etc).
+function buildWaterPool() {
+  const grp = new THREE.Group();
+  // Primary surface — STK oceanicWater colour bed (cinematic deep-blue
+  // with embedded foam) modulated by waternormals.jpg for ripple flow.
+  // Per-instance clones so this pool's UV drift is independent.
+  const wAlb = cloneTex(STK_TEX.waterOcean, { repeat: [2, 2] });
+  const wNrm = cloneTex(STK_TEX.waterNrm,   { repeat: [3, 3] });
+  const waterMat = new THREE.MeshStandardMaterial({
+    map: wAlb, normalMap: wNrm,
+    color: 0x6fb8ff, emissive: 0x0e3a66, emissiveIntensity: 0.40,
+    roughness: 0.18, metalness: 0.45,
+    transparent: true, opacity: 0.92,
+  });
+  const disc = new THREE.Mesh(new THREE.CircleGeometry(TILE * 0.46, 36), waterMat);
+  disc.rotation.x = -Math.PI / 2;
+  disc.position.y = ROAD_THICK + 0.04;
+  disc.receiveShadow = true;
+  grp.add(disc);
+  registerSurfaceScroll(disc, { u: 0.05, v: 0.03 });
+
+  // Caustics layer — STK caustics.png hovering just above, additive,
+  // scrolling counter to the base for a real "underwater light" play.
+  const causticsTex = cloneTex(STK_TEX.caustics, { repeat: [3, 3] });
+  const caustics = new THREE.Mesh(
+    new THREE.CircleGeometry(TILE * 0.455, 36),
+    new THREE.MeshBasicMaterial({
+      map: causticsTex, color: 0xc0eaff,
+      transparent: true, opacity: 0.55,
+      blending: THREE.AdditiveBlending, depthWrite: false,
+    }),
+  );
+  caustics.rotation.x = -Math.PI / 2;
+  caustics.position.y = ROAD_THICK + 0.052;
+  caustics.renderOrder = 3;
+  grp.add(caustics);
+  registerSurfaceScroll(caustics, { u: -0.04, v: 0.05 });
+
+  // Splash rim — pale-cyan emissive ring
+  const rimMat = new THREE.MeshStandardMaterial({
+    color: 0xc4eaff, emissive: 0x88c8ff, emissiveIntensity: 0.85,
+    roughness: 0.12, metalness: 0.0, transparent: true, opacity: 0.80,
+    side: THREE.DoubleSide,
+  });
+  const rim = new THREE.Mesh(
+    new THREE.RingGeometry(TILE * 0.44, TILE * 0.50, 32), rimMat,
+  );
+  rim.rotation.x = -Math.PI / 2;
+  rim.position.y = ROAD_THICK + 0.06;
+  grp.add(rim);
+
+  // Two thin "spray" quads angled upward to suggest splashes
+  const sprayMat = new THREE.MeshBasicMaterial({
+    color: 0xddf2ff, transparent: true, opacity: 0.45, depthWrite: false,
+  });
+  for (let i = 0; i < 4; i++) {
+    const a = (i / 4) * Math.PI * 2 + Math.PI / 4;
+    const r = TILE * 0.30;
+    const spray = new THREE.Mesh(new THREE.PlaneGeometry(0.8, 0.45), sprayMat);
+    spray.position.set(Math.cos(a) * r, ROAD_THICK + 0.30, Math.sin(a) * r);
+    spray.rotation.y = -a;
+    grp.add(spray);
+  }
+  return grp;
+}
+
+// Sand pit — STK desert-grade sand albedo, with a sand-to-grass blend rim
+// (`sandgrass.png`) for the natural soft transition you see at real beach
+// edges. Footprint scatter dots on top break up the surface read.
+function buildSandPit() {
+  const grp = new THREE.Group();
+  const sandMat = new THREE.MeshStandardMaterial({
+    map: STK_TEX.sandA, color: 0xeacb88,
+    roughness: 0.96, metalness: 0.0,
+  });
+  const disc = new THREE.Mesh(new THREE.CircleGeometry(TILE * 0.46, 32), sandMat);
+  disc.rotation.x = -Math.PI / 2;
+  disc.position.y = ROAD_THICK + 0.03;
+  disc.receiveShadow = true;
+  grp.add(disc);
+
+  // Wet/coarser inner band — sandB at slight rotation to break tile uniformity.
+  const wetTex = cloneTex(STK_TEX.sandB, { repeat: [2, 2], rotation: Math.PI / 6 });
+  const wetMat = new THREE.MeshStandardMaterial({
+    map: wetTex, color: 0xc8a76a, roughness: 0.92, metalness: 0.0,
+    transparent: true, opacity: 0.75, depthWrite: false,
+  });
+  const wet = new THREE.Mesh(new THREE.CircleGeometry(TILE * 0.32, 28), wetMat);
+  wet.rotation.x = -Math.PI / 2;
+  wet.position.y = ROAD_THICK + 0.038;
+  grp.add(wet);
+
+  // STK sand-grass blend rim — natural soft edge instead of a hard ring.
+  const rimMat = new THREE.MeshStandardMaterial({
+    map: STK_TEX.sandGrass, color: 0xb89968,
+    roughness: 0.92, metalness: 0.0, side: THREE.DoubleSide,
+    transparent: true, alphaTest: 0.05,
+  });
+  const rim = new THREE.Mesh(
+    new THREE.RingGeometry(TILE * 0.42, TILE * 0.52, 36), rimMat,
+  );
+  rim.rotation.x = -Math.PI / 2;
+  rim.position.y = ROAD_THICK + 0.045;
+  grp.add(rim);
+
+  // Scattered "ripples" — tiny darker arcs to break up the surface
+  const dotMat = new THREE.MeshBasicMaterial({
+    color: 0x735a30, transparent: true, opacity: 0.45,
+  });
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2 + 0.35;
+    const r = (i % 2 === 0) ? TILE * 0.18 : TILE * 0.30;
+    const dot = new THREE.Mesh(new THREE.CircleGeometry(0.10 + (i % 3) * 0.04, 8), dotMat);
+    dot.rotation.x = -Math.PI / 2;
+    dot.position.set(Math.cos(a) * r, ROAD_THICK + 0.05, Math.sin(a) * r);
+    grp.add(dot);
+  }
+  return grp;
+}
+
 // ── Registry ──────────────────────────────────────────────────────
+// ─── 1×1 Runway tarmac builders ──────────────────────────────────────────────
+// Flat tarmac sized to a single grid tile (span {x:1, z:1}), centred at the
+// cell origin so it tiles cleanly next to road segments. Lay several end to
+// end to compose a longer landing strip; markings are scaled to fit one cell.
+const RUNWAY_MAT = new THREE.MeshStandardMaterial({
+  color: 0x282828, roughness: 0.92, metalness: 0.02, side: THREE.DoubleSide,
+});
+
+function _rwyBase() {
+  const T = TILE, RT = ROAD_THICK;
+  const W = T, cx = 0, cz = 0;
+  const edgeS = cz - W / 2, edgeN = cz + W / 2;
+  const edgeW = cx - W / 2, edgeE = cx + W / 2;
+  const grp = new THREE.Group();
+  const deck = new THREE.Mesh(new THREE.BoxGeometry(W, RT, W), RUNWAY_MAT);
+  deck.position.set(cx, RT / 2, cz);
+  deck.receiveShadow = true;
+  grp.add(deck);
+  return { grp, T, RT, W, cx, cz, edgeS, edgeN, edgeW, edgeE };
+}
+
+function _rwyCenterlineZ(grp, cx, RT, edgeS, edgeN) {
+  // One long centred dash so the marking reads cleanly at one-tile scale.
+  const dashLen = TILE * 0.72;
+  const geo = new THREE.BoxGeometry(0.45, 0.04, dashLen);
+  const d = new THREE.Mesh(geo, MATS.paintWhite);
+  d.position.set(cx, RT + 0.025, (edgeS + edgeN) * 0.5);
+  grp.add(d);
+}
+
+function _rwyCenterlineX(grp, cz, RT, edgeW, edgeE) {
+  const dashLen = TILE * 0.72;
+  const geo = new THREE.BoxGeometry(dashLen, 0.04, 0.45);
+  const d = new THREE.Mesh(geo, MATS.paintWhite);
+  d.position.set((edgeW + edgeE) * 0.5, RT + 0.025, cz);
+  grp.add(d);
+}
+
+function _rwyThresholdBars(grp, cx, RT, edgeS, edgeN, side) {
+  // Piano-key threshold scaled to one tile: 4 bars across.
+  const nBars = 4, barW = 0.55, gap = 0.50, barL = TILE * 0.20;
+  const totalX = nBars * barW + (nBars - 1) * gap;
+  const startX = cx - totalX * 0.5 + barW * 0.5;
+  const barCenterZ = side === 'south' ? edgeS + barL * 0.5 : edgeN - barL * 0.5;
+  const geo = new THREE.BoxGeometry(barW, 0.04, barL);
+  for (let i = 0; i < nBars; i++) {
+    const b = new THREE.Mesh(geo, MATS.paintWhite);
+    b.position.set(startX + i * (barW + gap), RT + 0.025, barCenterZ);
+    grp.add(b);
+  }
+}
+
+function _rwyTdZone(grp, cx, RT, edgeS, edgeN) {
+  // Pair of small touchdown-zone stripes flanking the centerline.
+  const markW = 0.55, markL = TILE * 0.18, offX = TILE * 0.18;
+  const geo = new THREE.BoxGeometry(markW, 0.04, markL);
+  for (const [edge, sign] of [[edgeS, +1], [edgeN, -1]]) {
+    const mz = edge + sign * (TILE * 0.30);
+    for (const sx of [-1, +1]) {
+      const m = new THREE.Mesh(geo, MATS.paintWhite);
+      m.position.set(cx + sx * offX, RT + 0.025, mz);
+      grp.add(m);
+    }
+  }
+}
+
+function _rwyAimingPoint(grp, cx, RT, edgeS, edgeN) {
+  // Short aim-point bars near each edge.
+  const aimW = 0.32, aimL = TILE * 0.22, offX = TILE * 0.22, dist = TILE * 0.42;
+  const geo = new THREE.BoxGeometry(aimW, 0.04, aimL);
+  for (const [edge, sign] of [[edgeS, +1], [edgeN, -1]]) {
+    const mz = edge + sign * dist;
+    for (const sx of [-1, +1]) {
+      const m = new THREE.Mesh(geo, MATS.paintWhite);
+      m.position.set(cx + sx * offX, RT + 0.025, mz);
+      grp.add(m);
+    }
+  }
+}
+
+function buildRunwayBlank()     { return _rwyBase().grp; }
+
+function buildRunwayCenter() {
+  const { grp, RT, cx, edgeS, edgeN } = _rwyBase();
+  _rwyCenterlineZ(grp, cx, RT, edgeS, edgeN);
+  return grp;
+}
+
+function buildRunwayThreshold() {
+  const { grp, RT, cx, edgeS, edgeN } = _rwyBase();
+  _rwyCenterlineZ(grp, cx, RT, edgeS, edgeN);
+  _rwyThresholdBars(grp, cx, RT, edgeS, edgeN, 'south');
+  _rwyThresholdBars(grp, cx, RT, edgeS, edgeN, 'north');
+  return grp;
+}
+
+function buildRunwayTouchdown() {
+  const { grp, RT, cx, edgeS, edgeN } = _rwyBase();
+  _rwyCenterlineZ(grp, cx, RT, edgeS, edgeN);
+  _rwyTdZone(grp, cx, RT, edgeS, edgeN);
+  return grp;
+}
+
+function buildRunwayFull() {
+  const { grp, RT, cx, edgeS, edgeN } = _rwyBase();
+  _rwyCenterlineZ(grp, cx, RT, edgeS, edgeN);
+  _rwyThresholdBars(grp, cx, RT, edgeS, edgeN, 'south');
+  _rwyThresholdBars(grp, cx, RT, edgeS, edgeN, 'north');
+  _rwyTdZone(grp, cx, RT, edgeS, edgeN);
+  _rwyAimingPoint(grp, cx, RT, edgeS, edgeN);
+  return grp;
+}
+
+function buildRunwayCross() {
+  const { grp, RT, cx, cz, edgeS, edgeN, edgeW, edgeE } = _rwyBase();
+  _rwyCenterlineZ(grp, cx, RT, edgeS, edgeN);
+  _rwyCenterlineX(grp, cz, RT, edgeW, edgeE);
+  const ring = new THREE.Mesh(
+    new THREE.RingGeometry(TILE * 0.12, TILE * 0.14, 48),
+    MATS.paintWhite,
+  );
+  ring.rotation.x = -Math.PI / 2;
+  ring.position.set(cx, RT + 0.025, cz);
+  grp.add(ring);
+  return grp;
+}
+
 export const VISUAL_BUILDERS = {
   straight:        () => buildStraight(TILE),
   corner:          () => buildCorner(false),
@@ -1581,6 +3468,99 @@ export const VISUAL_BUILDERS = {
   t_junction:      () => buildTJunction(),
   crossroads:      () => buildCrossroads(),
   wide:            () => buildPlaza(),
+  city_straight:   () => buildStraight(TILE, { noPaint: true }),
+  city_corner:     () => buildCorner(false, { noPaint: true }),
+  city_cornerR:    () => buildCorner(true,  { noPaint: true }),
+  runway_blank:     () => buildRunwayBlank(),
+  runway_center:    () => buildRunwayCenter(),
+  runway_threshold: () => buildRunwayThreshold(),
+  runway_touchdown: () => buildRunwayTouchdown(),
+  runway_full:      () => buildRunwayFull(),
+  runway_cross:     () => buildRunwayCross(),
+  boost_pad:       () => buildBoostPad(),
+  super_boost_pad: () => { const g = buildSuperBoostPad(); g.position.z = TILE / 2; return g; },
+  oil_slick:       () => buildOilSlick(),
+  slow_strip:      () => buildSlowStrip(),
+  repair_strip:    () => buildRepairStrip(),
+  item_box:        () => buildItemBox(),
+  weapon_crate_heavy: () => buildHeavyCrate(),
+  health_orb:      () => buildHealthOrb(),
+  coin_pickup:     () => buildCoinPickup(),
+  // Phase A — MK item pickups (asset-backed)
+  pk_mushroom:        () => buildPkMushroom(),
+  pk_golden_mushroom: () => buildPkGoldenMushroom(),
+  pk_star:            () => buildPkStar(),
+  pk_green_shell:     () => buildPkGreenShell(),
+  pk_red_shell:       () => buildPkRedShell(),
+  pk_blue_shell:      () => buildPkBlueShell(),
+  pk_banana:          () => buildPkBanana(),
+  pk_bullet_bill:     () => buildPkBulletBill(),
+  pk_bobomb:          () => buildPkBobomb(),
+  // Phase E — v8 weapon pickups (procedural low-poly)
+  pk_v8_missile:      () => buildPkV8Missile(),
+  pk_v8_cannon:       () => buildPkV8Cannon(),
+  pk_v8_rocket:       () => buildPkV8Rocket(),
+  pk_v8_mortar:       () => buildPkV8Mortar(),
+  pk_v8_mine:         () => buildPkV8Mine(),
+  pk_v8_dynamite:     () => buildPkV8Dynamite(),
+  pk_v8_firethrower:  () => buildPkV8Firethrower(),
+  pk_v8_shield:       () => buildPkV8Shield(),
+  pk_v8_repair:       () => buildPkV8Repair(),
+  pk_v8_double_dmg:   () => buildPkV8DoubleDmg(),
+  // Phase A — extra modifiers + hazards
+  jump_panel:         () => buildJumpPanel(),
+  ice_patch:          () => buildIcePatch(),
+  lava_pool:          () => buildLavaPool(),
+  water_pool:         () => buildWaterPool(),
+  sand_pit:           () => buildSandPit(),
+  // Phase E — 3D Kart reference props/scenery (DAE)
+  prop_traffic_cone:  () => buildReferenceDaeProp('mk8_pylon', { targetSize: 1.0, y: ROAD_THICK + 0.02 }),
+  scenery_city_boat:  () => buildReferenceDaeProp('mk8_cityboat', { targetSize: 12.0, y: ROAD_THICK + 0.02 }),
+  // Phase F — SuperTuxKart library props (.spm)
+  // Vegetation
+  stk_palm_tree:        () => buildStkProp('/stk assets/library/stklib_palmTree_a/stklib_palmTree_a_LOD_a.spm',   { targetSize: 5.0 }),
+  stk_low_palm_tree:    () => buildStkProp('/stk assets/library/stklib_lowPalmTree_a/stklib_lowPalmTree_a_main.spm', { targetSize: 3.6 }),
+  stk_pine_tree_a:      () => buildStkProp('/stk assets/library/stklib_pinetree_a/stklib_pinetree_a_lod_high.spm', { targetSize: 6.0 }),
+  stk_pine_tree_b:      () => buildStkProp('/stk assets/library/stklib_pinetree_b/stklib_pinetree_b_high.spm',   { targetSize: 6.0 }),
+  stk_pine_tree_c:      () => buildStkProp('/stk assets/library/stklib_pinetree_c/stklib_pintree_c_high.spm',    { targetSize: 5.5 }),
+  stk_autumn_tree:      () => buildStkProp('/stk assets/library/stklib_autumnTree_a/stklib_autumnTree_a_main.spm', { targetSize: 5.5 }),
+  stk_autumn_birch:     () => buildStkProp('/stk assets/library/stklib_autumnBirch_a/stklib_autumnBirch_a_high.spm', { targetSize: 6.0 }),
+  stk_autumn_willow:    () => buildStkProp('/stk assets/library/stklib_autumnWillow_a/stklib_autumnWillow_a_high.spm', { targetSize: 5.6 }),
+  stk_jungle_tree_a:    () => buildStkProp('/stk assets/library/stklib_jungleTree_a/stklib_jungleTree_a.spm',    { targetSize: 6.4 }),
+  stk_jungle_tree_b:    () => buildStkProp('/stk assets/library/stklib_jungleTree_b/stklib_jungleTree_b_main.spm', { targetSize: 6.4 }),
+  stk_cocoa_tree:       () => buildStkProp('/stk assets/library/stklib_cocoaTree_a/stklib_cocoaTree_a_main.spm', { targetSize: 4.6 }),
+  stk_cypress:          () => buildStkProp('/stk assets/library/stklib_cypress_a/stklib_cypress_a_high.spm',     { targetSize: 5.5 }),
+  stk_dead_tree:        () => buildStkProp('/stk assets/library/stklib_deadTree_a/stklib_deadTree_a_main.spm',   { targetSize: 5.0 }),
+  stk_red_flower_bush:  () => buildStkProp('/stk assets/library/stklib_redFlowerBush_a/stklib_redFlowerBush_a_main.spm', { targetSize: 1.6 }),
+  stk_tropical_plant:   () => buildStkProp('/stk assets/library/stklib_tropicalPlant_a/stklib_tropicalPlant_a_main_a.spm', { targetSize: 1.8 }),
+  stk_fern:             () => buildStkProp('/stk assets/library/stklib_fern_a/stklib_fern_a_a.spm',              { targetSize: 1.4 }),
+  stk_mushroom_a:       () => buildStkProp('/stk assets/library/stklib_mushroom_a/stklib_mushroom_a_main.spm',   { targetSize: 1.4 }),
+  stk_mushroom_b:       () => buildStkProp('/stk assets/library/stklib_mushroom_b/stklib_mushroom_b_main.spm',   { targetSize: 1.6 }),
+  // Structures
+  stk_aztec_fountain:   () => buildStkProp('/stk assets/library/stklib_aztecFountain_a/stklib_aztecFountain_a_main.spm', { targetSize: 4.4 }),
+  stk_aztec_house_a:    () => buildStkProp('/stk assets/library/stklib_aztecHouse_a/stklib_aztecHouse_a_main_high.spm', { targetSize: 6.0 }),
+  stk_aztec_house_b:    () => buildStkProp('/stk assets/library/stklib_aztecHouse_b/stklib_aztecHouse_b_main.spm', { targetSize: 6.0 }),
+  stk_aztec_hut:        () => buildStkProp('/stk assets/library/stklib_aztecHut_a/stklib_aztecHut_a_main.spm',   { targetSize: 5.0 }),
+  stk_silvian_house_a:  () => buildStkProp('/stk assets/library/stklib_silvianHouse_a/stklib_silvianHouse_a_high.spm', { targetSize: 6.4 }),
+  stk_silvian_house_b:  () => buildStkProp('/stk assets/library/stklib_silvianHouse_b/stklib_silvianHouse_b_main.spm', { targetSize: 6.4 }),
+  stk_silvian_tower:    () => buildStkProp('/stk assets/library/stklib_silvianTower_a/stklib_silvianTower_a_main.spm', { targetSize: 7.5 }),
+  stk_wood_bridge:      () => buildStkProp('/stk assets/library/stklib_woodLittleBridge_a/stklib_woodLittleBridge_a_main.spm', { targetSize: 4.8 }),
+  stk_igloo:            () => buildStkProp('/stk assets/library/stklib_igloo_a/stklib_igloo_a_main.spm',         { targetSize: 4.0 }),
+  // Props / decor
+  stk_lamp_modern:      () => buildStkProp('/stk assets/library/hd_modernStreetLamp_a/hd_modernStreetLamp_a_main.spm', { targetSize: 3.6 }),
+  stk_lamp_oldschool:   () => buildStkProp('/stk assets/library/stklib_oldschoolLamp_a/stklib_oldschoolLamp_a_main.spm', { targetSize: 3.4 }),
+  stk_lamp_storm:       () => buildStkProp('/stk assets/library/stklib_stormLantern_a/stklib_stormLantern_a_main.spm', { targetSize: 1.6 }),
+  stk_lamp_metal_post:  () => buildStkProp('/stk assets/library/stklib_metalPostLamp_a/stklib_metalPostLamp_a_main.spm', { targetSize: 3.4 }),
+  stk_lamp_industrial:  () => buildStkProp('/stk assets/library/stklib_industrialLamp_a/stklib_industrialLamp_a_main.spm', { targetSize: 3.0 }),
+  stk_lamp_wood_post:   () => buildStkProp('/stk assets/library/stklib_woodPostLamp_a/stklib_woodPostLamp_a_main.spm', { targetSize: 3.0 }),
+  stk_lamp_bug:         () => buildStkProp('/stk assets/library/stklib_bugLamp_a/stklib_bugLamp_a_main.spm',     { targetSize: 1.4 }),
+  stk_bench:            () => buildStkProp('/stk assets/library/stklib_bench_a/stklib_bench_a_main.spm',         { targetSize: 1.8 }),
+  stk_hay_ball:         () => buildStkProp('/stk assets/library/stklib_hayBall_a/stklib_hayBall_a_main.spm',     { targetSize: 1.5 }),
+  stk_tires_barrier:    () => buildStkProp('/stk assets/library/stklib_tiresBarrier_a/stklib_tiresBarrier_a_main.spm', { targetSize: 2.0 }),
+  stk_log_barrier:      () => buildStkProp('/stk assets/library/stklib_logBarrier_a/stklib_logBarrier_a_main.spm', { targetSize: 2.4 }),
+  stk_inflatable_fence: () => buildStkProp('/stk assets/library/stklib_inflatableFence_a/stklib_inflatableFence_a_main.spm', { targetSize: 3.2 }),
+  stk_party_flags:      () => buildStkProp('/stk assets/library/stklib_partyFlags_a/stklib_partyFlags_a_main.spm', { targetSize: 4.0 }),
+  stk_prayer_flags:     () => buildStkProp('/stk assets/library/stklib_prayerFlags_a/stklib_prayerFlags_a_main.spm', { targetSize: 3.6 }),
   cap_end:         () => buildCapEnd(),
   finish:          () => buildFinish(),
   spawn:           () => buildSpawn(),
@@ -1933,37 +3913,54 @@ function addWallOverlay(group, baseKey) {
     }
 
     case 'hill_complete': {
-      const peak = T * 0.25;
-      const cellLen = T;
-      // Up-slope walls (cell 0; wallRampVisual centres them at cz=0)
-      group.add(wallRampVisual(0, peak, cellLen, -1));
-      group.add(wallRampVisual(0, peak, cellLen, +1));
-      // Down-slope walls (cell 1; shift by +cellLen)
-      const dnL = wallRampVisual(peak, 0, cellLen, -1);
-      const dnR = wallRampVisual(peak, 0, cellLen, +1);
-      dnL.position.z += cellLen; dnR.position.z += cellLen;
-      group.add(dnL); group.add(dnR);
-      // Peak cap — short upright slab bridging the two opposing tilted
-      // walls at the apex so the silhouette reads as a continuous ridge.
+      // Walls hug the sin-arch profile y = sin(t·π)·peak over the full
+      // 2-cell span. peak matches buildHill (visual) and rollingHillBlocks
+      // (physics). The previous code used peak = T·0.25 with two separate
+      // smoothstep ramps — 10% shorter than the actual road and using the
+      // wrong curve, which caused the wall to sink into the road deck at
+      // the slope midpoints.
+      const peak = T * 0.275;
+      const lengthZ = T * 2;
+      const SEGS = 32;
+      // sin²(t·π): zero slope at endpoints, matches buildHill visual profile.
+      const hillProfile = (t) => { const s = Math.sin(t * Math.PI); return s * s * peak; };
       for (const sx of [-1, +1]) {
-        const cap = new THREE.Mesh(
-          new THREE.BoxGeometry(W2_TOP_T * 1.45, W2_TOP_H * 1.05, T * 0.42),
-          MATS.wallConcrete,
-        );
-        const yMid = peak + ROAD_THICK + W2_FOOT_H + (W2_TOP_H * 1.05) / 2;
-        cap.position.set(sx * halfEdge, yMid, cellLen / 2);
-        cap.castShadow = true; cap.receiveShadow = true;
-        group.add(cap);
-        const capTop = new THREE.Mesh(
-          new THREE.BoxGeometry(W2_TOP_T * 2.0, W2_CAP_H, T * 0.5),
-          MATS.wallCap,
-        );
-        capTop.position.set(
-          sx * halfEdge,
-          peak + ROAD_THICK + W2_FOOT_H + W2_TOP_H * 1.05 + W2_CAP_H / 2,
-          cellLen / 2,
-        );
-        group.add(capTop);
+        const cx = sx * halfEdge;
+        for (let i = 0; i < SEGS; i++) {
+          const t0 = i / SEGS;
+          const t1 = (i + 1) / SEGS;
+          const z0 = -T / 2 + lengthZ * t0;
+          const z1 = -T / 2 + lengthZ * t1;
+          const y0 = hillProfile(t0);
+          const y1 = hillProfile(t1);
+          const dz = z1 - z0;
+          const dy = y1 - y0;
+          const len = Math.sqrt(dy * dy + dz * dz);
+          const angle = Math.atan2(dy, dz);
+          const yDeckTop = (y0 + y1) * 0.5 + ROAD_THICK;
+          const cz = (z0 + z1) * 0.5;
+          const mFoot = new THREE.Mesh(
+            new THREE.BoxGeometry(W2_FOOT_T, W2_FOOT_H, len), MATS.wallConcrete,
+          );
+          mFoot.position.set(cx, yDeckTop + W2_FOOT_H / 2, cz);
+          mFoot.rotation.x = -angle;
+          mFoot.castShadow = true; mFoot.receiveShadow = true;
+          group.add(mFoot);
+          const mTop = new THREE.Mesh(
+            new THREE.BoxGeometry(W2_TOP_T, W2_TOP_H, len), MATS.wallConcrete,
+          );
+          mTop.position.set(cx, yDeckTop + W2_FOOT_H + W2_TOP_H / 2, cz);
+          mTop.rotation.x = -angle;
+          mTop.castShadow = true; mTop.receiveShadow = true;
+          group.add(mTop);
+          const mCap = new THREE.Mesh(
+            new THREE.BoxGeometry(W2_TOP_T * 1.45, W2_CAP_H, len), MATS.wallCap,
+          );
+          mCap.position.set(cx, yDeckTop + W2_FOOT_H + W2_TOP_H + W2_CAP_H / 2, cz);
+          mCap.rotation.x = -angle;
+          mCap.castShadow = true; mCap.receiveShadow = true;
+          group.add(mCap);
+        }
       }
       break;
     }

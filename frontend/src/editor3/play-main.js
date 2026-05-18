@@ -7,13 +7,18 @@
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
 import { TILE, decodeTrack, Track } from './track-data.js';
-import { SEGMENTS } from './segments.js';
+import { SEGMENTS, WEAPONS, ITEM_POOLS } from './segments.js';
 import { buildSegmentMesh, buildSegmentBody, getDrivableTopY } from './segment-builder.js';
 import { cloneKart, resolveKartWheels } from './kart-loader.js';
 import { resolveSelectedKartId, getKart, getKartTrailProfile } from './kart-catalog.js';
 import { DecorStore, buildDecorMesh } from './decor.js';
 import { WORLD_UNITS_PER_M, m as M, mm as MM } from './units.js';
 import { buildCombatState, sweepKart, tickRespawns } from './combat-runtime.js';
+import { playCombatSfx, preloadCombatSfx } from './combat-sfx.js';
+import { instanceItemModel, preloadItemModels } from './pickup-models.js';
+import { tickPickupSpin } from './pickup-spin.js';
+import { tickSurfaceScroll } from './surface-scroll.js';
+import { createProjectileRuntime } from './projectile-runtime.js';
 import { resolvePlaytestBudget } from './playtest-perf.js';
 import { mergeSegmentGroups } from './segment-merge.js';
 import { buildBatchedDecor } from './decor-batching.js';
@@ -98,8 +103,28 @@ renderer.shadowMap.enabled = PERF.shadowsEnabled;
 renderer.shadowMap.type = THREE.PCFShadowMap;
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(PERF.fogColor);
+scene.background = new THREE.Color(PERF.fogColor); // replaced by equirectangular sky once loaded
 scene.fog = new THREE.Fog(PERF.fogColor, TILE * PERF.fogNearTiles, TILE * PERF.fogFarTiles);
+
+// ── Skybox — seamless equirectangular panorama (no face seams) ──
+// Sky tone is driven by the GLOSET id saved in sessionStorage by the editor.
+// URL param ?sky=N also accepted (used when launching directly from share link).
+const _rawSky = (() => {
+  const qs = parseInt(new URLSearchParams(location.search).get('sky') || '', 10);
+  if (qs >= 1 && qs <= 10) return qs;
+  try { const v = parseInt(sessionStorage.getItem('studioGloset') || '', 10); return (v >= 1 && v <= 10) ? v : 2; } catch {}
+  return 2;
+})();
+new THREE.TextureLoader().load(
+  `/kart%20assets/3D%20Kart/Assets/8K%20Skybox%20Pack%20Free/Skyboxes/Texture/sky-${_rawSky}.png`,
+  (tex) => {
+    tex.mapping = THREE.EquirectangularReflectionMapping;
+    tex.colorSpace = THREE.SRGBColorSpace;
+    scene.background = tex;
+  },
+  undefined,
+  () => { /* fallback colour already set above */ },
+);
 
 const camera = new THREE.PerspectiveCamera(70, 1, M(0.1), M(2000));
 
@@ -224,7 +249,11 @@ const overlayMeshById = new Map();
 const staticSegmentRoots = [];
 for (const p of track.all()) {
   const mesh = buildSegmentMesh(p.key);
-  mesh.position.set(p.gx * TILE, 0, p.gz * TILE);
+  const ox = Number.isFinite(p.ox) ? p.ox : 0;
+  const oz = Number.isFinite(p.oz) ? p.oz : 0;
+  const wx = p.gx * TILE + ox;
+  const wz = p.gz * TILE + oz;
+  mesh.position.set(wx, 0, wz);
   mesh.rotation.y = -p.rot * Math.PI / 2;
   scene.add(mesh);
   if (!SEGMENTS[p.key]?.runtime) staticSegmentRoots.push(mesh);
@@ -236,7 +265,7 @@ for (const p of track.all()) {
   // adds it to a world.
   const segBody = buildSegmentBody(
     p.key,
-    { x: p.gx * TILE, y: 0, z: p.gz * TILE },
+    { x: wx, y: 0, z: wz },
     -p.rot * Math.PI / 2,
   );
   if (segBody) staticBodyDescriptors.push(serializeBody(segBody));
@@ -254,7 +283,7 @@ for (const p of track.all()) {
     finishLines.push({
       gx: p.gx, gz: p.gz, rot: p.rot,
       forward,
-      center: new THREE.Vector3(p.gx * TILE, 0, p.gz * TILE),
+      center: new THREE.Vector3(wx, 0, wz),
     });
   }
 }
@@ -2517,6 +2546,17 @@ window.addEventListener('keydown', (e) => {
   if (e.code === 'KeyT') respawn();
   if (e.code === 'KeyC') cycleCameraMode();
   if (e.code === 'KeyH') kartAudio.playOneShot('horn', { gain: 0.9 });
+  // Use / fire active inventory item.
+  //   - 'KeyQ' is the historical bind shown in the pickup ticker.
+  //   - e.key 'q'/'Q' covers non-QWERTY layouts (AZERTY 'q' physical
+  //     key emits e.code 'KeyA', so e.code-only matching silently
+  //     fails on those keyboards).
+  //   - 'KeyE' aligns with input-config.js `fireSecondary` so the
+  //     binding documented in the controls overlay actually works in
+  //     SP playtest too.
+  if (e.code === 'KeyQ' || e.code === 'KeyE' || (e.key && e.key.toLowerCase() === 'q')) {
+    useActiveItem();
+  }
   if (e.code === 'Escape') togglePause();
 });
 window.addEventListener('keyup', (e) => {
@@ -2613,9 +2653,18 @@ function triggerEngineExplosion() {
 // and post them along with the keys.
 function resolveCombatScalars(now) {
   let boostMult = 1, slowMult = 1;
-  if (now < playerCombat.boostUntil) boostMult = 1 + (playerCombat.boostStrength || 0);
+  // Stack the three boost sources (pad/strip pickups, Star, Bullet Bill).
+  // Highest single source wins so a Star + boost pad doesn't compound
+  // into a runaway 2.4× multiplier.
+  let bestBoost = 0;
+  if (now < playerCombat.boostUntil) bestBoost = Math.max(bestBoost, playerCombat.boostStrength || 0);
+  if (now < playerCombat.starUntil) bestBoost = Math.max(bestBoost, playerCombat.starStrength || 0);
+  if (now < playerCombat.bulletUntil) bestBoost = Math.max(bestBoost, playerCombat.bulletStrength || 0);
+  if (bestBoost > 0) boostMult = 1 + bestBoost;
   if (now < playerCombat.slowUntil) slowMult = 1 - (playerCombat.slowStrength || 0);
-  const oilNow = now < playerCombat.oilUntil;
+  // Star / Bullet Bill grant invuln — cancel the slow channel.
+  if (now < playerCombat.invulnUntil) slowMult = 1;
+  const oilNow = (now < playerCombat.oilUntil) && !(now < playerCombat.invulnUntil);
   return { boostMult, slowMult, oilNow };
 }
 
@@ -2894,6 +2943,19 @@ function updateCamera(dt) {
   const posAlpha = 1 - Math.exp(-cameraMode.posSpring * dt);
   camPos.lerp(desired, posAlpha);
   camera.position.copy(camPos);
+  // P2.5 \u2014 transient camera shake from explosions. Cheap: exits early
+  // when not shaking, magnitude in metres scaled to world units.
+  const _csNow = performance.now();
+  if (_csNow < _spShakeUntil && _spShakeMag > 0.001) {
+    const remain = (_spShakeUntil - _csNow) / 220;
+    const m = _spShakeMag * Math.max(0, Math.min(1, remain)) * WORLD_UNITS_PER_M;
+    camera.position.x += (Math.random() * 2 - 1) * m;
+    camera.position.y += (Math.random() * 2 - 1) * m * 0.5;
+    camera.position.z += (Math.random() * 2 - 1) * m;
+    _spShakeMag *= 0.92;
+  } else if (_spShakeMag !== 0) {
+    _spShakeMag = 0;
+  }
 
   // Look target: in front of the kart, height-locked, with speed-based
   // look-ahead so fast cornering shows the upcoming track.
@@ -3001,6 +3063,343 @@ function renderTicker(now) {
   hudTicker = hudTicker.filter(t => t.until > now);
   hudTickerEl.textContent = hudTicker.map(t => t.text).join('  ·  ');
 }
+
+// ── Phase B — Inventory HUD + use-item handler ──────────────────
+// Single-slot inventory mirrors Mario Kart. The slot displays the
+// pickup's color/initial. Pressing Q (or E, or any key whose
+// e.key matches 'q' — covers AZERTY/non-QWERTY layouts) triggers
+// useActiveItem() which
+// branches on the WEAPONS[name].class. Phase B implements the four
+// self-buff classes; projectile/homing classes log + no-op until the
+// projectile sim lands in Phase C.
+const _invSlotEl  = typeof document !== 'undefined' ? document.getElementById('invSlot')  : null;
+const _invIconEl  = typeof document !== 'undefined' ? document.getElementById('invIcon')  : null;
+const _invLabelEl = typeof document !== 'undefined' ? document.getElementById('invLabel') : null;
+const _invCountEl = typeof document !== 'undefined' ? document.getElementById('invCount') : null;
+let _invFireFlashUntil = 0;
+const ITEM_TINTS = {
+  mushroom:        { color: '#ff5577', glyph: 'M' },
+  golden_mushroom: { color: '#ffd24a', glyph: 'G' },
+  star:            { color: '#fff066', glyph: '★' },
+  bullet_bill:     { color: '#444855', glyph: '➤' },
+  green_shell:     { color: '#55ff66', glyph: 'S' },
+  red_shell:       { color: '#ff5555', glyph: 'S' },
+  blue_shell:      { color: '#3a7bff', glyph: 'S' },
+  banana:          { color: '#ffe066', glyph: 'B' },
+  bobomb:          { color: '#222831', glyph: '✸' },
+  // v8 / Vigilante set — distinct glyphs so the HUD reads at a glance.
+  v8_missile:      { color: '#c25a14', glyph: '↗' },
+  v8_cannon:       { color: '#8a8f99', glyph: '◉' },
+  v8_rocket:       { color: '#ff7a00', glyph: '⇗' },
+  v8_mortar:       { color: '#4a4a55', glyph: '⌒' },
+  v8_mine:         { color: '#55202a', glyph: '◈' },
+  v8_dynamite:     { color: '#b04020', glyph: '※' },
+  v8_firethrower:  { color: '#ff4400', glyph: '🔥' },
+  v8_shield:       { color: '#66ccff', glyph: '◊' },
+  v8_repair:       { color: '#66ff99', glyph: '✚' },
+  v8_double_dmg:   { color: '#ff66cc', glyph: '×2' },
+};
+function renderInventoryHud(now) {
+  if (!_invSlotEl) return;
+  const inv = playerCombat.inventory || { active: null, count: 0 };
+  const has = !!inv.active && inv.count > 0;
+  _invSlotEl.classList.toggle('empty', !has);
+  _invSlotEl.classList.toggle('has', has);
+  _invSlotEl.classList.toggle('fire', has && now < _invFireFlashUntil);
+  if (!has) {
+    if (_invIconEl)  { _invIconEl.textContent = '·'; _invIconEl.style.color = '#3a4250'; }
+    if (_invLabelEl) _invLabelEl.textContent = 'empty';
+    if (_invCountEl) _invCountEl.textContent = '';
+    return;
+  }
+  const tint = ITEM_TINTS[inv.active] || { color: '#cccccc', glyph: '?' };
+  const def  = WEAPONS[inv.active];
+  if (_invIconEl) {
+    _invIconEl.textContent = tint.glyph;
+    _invIconEl.style.color = tint.color;
+    _invIconEl.style.background = `radial-gradient(circle at 35% 30%, #fff, ${tint.color} 60%, #2a2f38 100%)`;
+  }
+  if (_invLabelEl) _invLabelEl.textContent = (def && def.label) || inv.active;
+  if (_invCountEl) _invCountEl.textContent = inv.count > 1 ? `×${inv.count}` : '';
+}
+
+// ── Phase E3 — HP / coin HUD ───────────────────────────────────
+const _hpBarEl   = typeof document !== 'undefined' ? document.getElementById('hpBar')   : null;
+const _hpFillEl  = typeof document !== 'undefined' ? document.getElementById('hpFill')  : null;
+const _hpValEl   = typeof document !== 'undefined' ? document.getElementById('hpVal')   : null;
+const _coinValEl = typeof document !== 'undefined' ? document.getElementById('coinVal') : null;
+let _lastHpRendered = -1, _lastCoinRendered = -1;
+let _eliminated = false;
+function renderHpHud() {
+  if (!_hpBarEl) return;
+  const hp = Math.max(0, Math.round(playerCombat.hp));
+  if (hp !== _lastHpRendered) {
+    if (_hpFillEl) _hpFillEl.style.width = `${Math.max(0, Math.min(100, hp))}%`;
+    if (_hpValEl)  _hpValEl.textContent  = String(hp);
+    _hpBarEl.classList.toggle('low',  hp > 0 && hp <= 30);
+    _hpBarEl.classList.toggle('zero', hp <= 0);
+    _lastHpRendered = hp;
+  }
+  if (playerCombat.coins !== _lastCoinRendered) {
+    if (_coinValEl) _coinValEl.textContent = String(playerCombat.coins);
+    _lastCoinRendered = playerCombat.coins;
+  }
+  // Auto-respawn on elimination — wipe inventory + buffs so the
+  // post-respawn state is clean.
+  if (playerCombat.hp <= 0 && !_eliminated) {
+    _eliminated = true;
+    pushTicker('ELIMINATED — respawning…');
+    setTimeout(() => {
+      playerCombat.hp = 100;
+      playerCombat.boostUntil = playerCombat.slowUntil = playerCombat.oilUntil = 0;
+      playerCombat.starUntil = playerCombat.bulletUntil = playerCombat.invulnUntil = 0;
+      playerCombat.inventory = { active: null, count: 0 };
+      playerCombat.weapon = null;
+      try { respawn(); } catch {}
+      _eliminated = false;
+    }, 800);
+  }
+}
+
+// ── Phase E1 — Item-box → ITEM_POOLS roll ─────────────────────
+// Centralizes weapon-grant so item_box rolls and direct pk_<weapon>
+// pickups share the same code path (replacement-not-stacking,
+// uses-aware count, label, SFX). Exposed on window.__play for tests.
+function _grantWeapon(weaponName) {
+  const def = WEAPONS[weaponName] || null;
+  playerCombat.weapon = weaponName;
+  playerCombat.inventory = playerCombat.inventory || { active: null, count: 0 };
+  playerCombat.inventory.active = weaponName;
+  playerCombat.inventory.count = (def && def.uses) ? def.uses : 1;
+  const niceName = (def && def.label) || weaponName.replace(/_/g, ' ');
+  pushTicker(`got ${niceName}  — press Q / E`);
+  playCombatSfx('pickup_get', { gain: 0.7 });
+}
+
+/** Roll a weapon out of an ITEM_POOLS pool. Supports both `uniform`
+ *  pools and `rank` pools. If the pool is `weights` (STK style), entries
+ *  are picked using their integer probability mass. */
+function _pickFromPool(poolKey) {
+  const pool = ITEM_POOLS[poolKey] || ITEM_POOLS.default;
+  let bag = null;
+  if (pool.uniform) bag = pool.uniform;
+  else if (pool.weights) {
+    // Weighted bag: { items:[...], weights:[...] } — picks proportional.
+    const items = pool.weights.items || [];
+    const w = pool.weights.weights || [];
+    let total = 0; for (let i = 0; i < w.length; i++) total += w[i];
+    if (total > 0) {
+      let r = Math.random() * total;
+      for (let i = 0; i < w.length; i++) { r -= w[i]; if (r <= 0) return items[i]; }
+      return items[items.length - 1];
+    }
+    bag = items;
+  } else if (pool.rank) {
+    const rank = (typeof window !== 'undefined' && window.__play && window.__play.playerRank) || 2;
+    bag = pool.rank[rank] || pool.rank[2] || pool.rank.last || [];
+  }
+  if (!bag || bag.length === 0) return 'mushroom';
+  return bag[(Math.random() * bag.length) | 0];
+}
+
+// ── Mario-Kart-style roulette ───────────────────────────────────
+// When an item box is collected we don't grant the weapon instantly —
+// we cycle a flashing slot for ~700 ms (8 ticks @ 90 ms) before settling
+// on the rolled choice. This is gameplay-safe: useActiveItem() bails out
+// while the roulette is mid-spin.
+let _rouletteTimer = null;
+let _rouletteUntil = 0;
+function _isRouletteSpinning() { return _rouletteTimer !== null; }
+
+function _grantWeaponFromPool(poolKey) {
+  // Cancel any in-flight spin so back-to-back boxes stack predictably:
+  // the most-recent pickup wins and resolves on schedule.
+  if (_rouletteTimer) { clearInterval(_rouletteTimer); _rouletteTimer = null; }
+  const choice = _pickFromPool(poolKey);
+  // Coin is a token grant, not a weapon — resolve immediately, no roulette.
+  if (choice === 'coin') {
+    playerCombat.coins += 1;
+    pushTicker(`+1 coin (${playerCombat.coins})`);
+    playCombatSfx('pickup_get', { gain: 0.5, rate: 1.4 });
+    return null;
+  }
+  // Build a flash bag from the pool so the roulette only shows items
+  // the box could actually deliver.
+  const pool = ITEM_POOLS[poolKey] || ITEM_POOLS.default;
+  let flashBag = pool.uniform
+    || (pool.weights && pool.weights.items)
+    || (pool.rank && (pool.rank[2] || pool.rank.last))
+    || ['mushroom'];
+  flashBag = flashBag.filter((k) => k !== 'coin' && WEAPONS[k]);
+  if (flashBag.length === 0) flashBag = ['mushroom'];
+
+  const STEPS = 8;
+  const STEP_MS = 85;
+  const totalMs = STEPS * STEP_MS;
+  _rouletteUntil = performance.now() + totalMs;
+  // Show the spinner immediately on the HUD by populating inventory
+  // with a placeholder. count=1 so the slot reads "has".
+  playerCombat.inventory = playerCombat.inventory || { active: null, count: 0 };
+  playerCombat.inventory.active = flashBag[0];
+  playerCombat.inventory.count = 1;
+  playerCombat.weapon = flashBag[0];
+  playCombatSfx('pickup_get', { gain: 0.55, rate: 1.5 });
+  let i = 0;
+  _rouletteTimer = setInterval(() => {
+    i++;
+    if (i >= STEPS) {
+      clearInterval(_rouletteTimer); _rouletteTimer = null;
+      _grantWeapon(choice);
+      return;
+    }
+    // Bias the flash so the final item appears more often near the end
+    // (gives the slot the classic "settling" cadence).
+    const useChoice = (i >= STEPS - 2) && Math.random() < 0.55;
+    const next = useChoice ? choice : flashBag[(Math.random() * flashBag.length) | 0];
+    playerCombat.inventory.active = next;
+    playerCombat.weapon = next;
+    // Quiet tick blip — same SFX, lower gain & higher pitch each tick.
+    playCombatSfx('pickup_get', { gain: 0.18, rate: 1.7 + (i * 0.04) });
+  }, STEP_MS);
+  return choice;
+}
+
+/** Phase B — fire the active inventory item. Handles the four self-buff
+ *  classes; projectile/homing classes are stubbed for Phase C/D. */
+function useActiveItem() {
+  // Block firing while the item-box roulette is still settling — the
+  // slot is showing flashing icons that aren't actually granted yet.
+  if (_isRouletteSpinning()) return;
+  const inv = playerCombat.inventory;
+  if (!inv || !inv.active || inv.count <= 0) return;
+  const name = inv.active;
+  const def  = WEAPONS[name];
+  if (!def) { inv.active = null; inv.count = 0; return; }
+  const now = performance.now();
+  let consumed = false;
+  switch (def.class) {
+    case 'self_buff':
+    case 'self_buff_repeat': {
+      // Mushroom + Golden Mushroom — short throttle boost. v8_repair
+      // and v8_double_dmg also flow through here via dedicated effects.
+      if (def.effect === 'repair') {
+        const heal = def.heal || 50;
+        playerCombat.hp = Math.min(100, (playerCombat.hp || 0) + heal);
+        pushTicker(`${def.label || name}!  +${heal} HP`);
+        playCombatSfx(def.sfx || 'use_buff', { gain: 0.85 });
+      } else if (def.effect === 'damage_boost') {
+        const dur = def.durationMs || 6000;
+        playerCombat.dmgBoostUntil    = now + dur;
+        playerCombat.dmgBoostStrength = def.strength || 1.0;
+        pushTicker(`${def.label || name}!  ×${(1 + (def.strength || 1)).toFixed(1)} DMG ${(dur / 1000).toFixed(1)}s`);
+        playCombatSfx(def.sfx || 'use_buff', { gain: 0.85 });
+      } else {
+        playerCombat.boostUntil    = now + (def.durationMs || 1500);
+        playerCombat.boostStrength = def.strength || 0.55;
+        pushTicker(`${def.label || name}!  BOOST ×${(1 + playerCombat.boostStrength).toFixed(2)}`);
+        playCombatSfx(def.sfx || 'use_buff', { gain: 0.85 });
+      }
+      consumed = true;
+      break;
+    }
+    case 'self_invuln': {
+      // Star — invuln + sustained boost. Slot empties immediately
+      // (Mario Kart parity); the buff continues to tick.
+      const dur = def.durationMs || 6000;
+      playerCombat.starUntil     = now + dur;
+      playerCombat.starStrength  = def.strength || 0.35;
+      playerCombat.invulnUntil   = now + dur;
+      pushTicker(`★ ${def.label || 'STAR'} ★  invuln ${(dur / 1000).toFixed(1)}s`);
+      playCombatSfx(def.sfx || 'star_active', { gain: 0.9 });
+      consumed = true;
+      break;
+    }
+    case 'self_autopilot': {
+      // Bullet Bill — heavy boost + invuln. Real Mario Kart also
+      // auto-steers along the rail spline; we don't have rail data
+      // exposed to the runtime yet, so Phase B ships the speed/invuln
+      // half. Auto-steer lands alongside the projectile sim in C/D.
+      const dur = def.durationMs || 5000;
+      playerCombat.bulletUntil    = now + dur;
+      playerCombat.bulletStrength = def.strength || 1.20;
+      playerCombat.invulnUntil    = Math.max(playerCombat.invulnUntil, now + dur);
+      pushTicker(`➤ ${def.label || 'BULLET BILL'} ➤  ${(dur / 1000).toFixed(1)}s`);
+      playCombatSfx(def.sfx || 'bullet_active', { gain: 0.9 });
+      consumed = true;
+      break;
+    }
+    // Phase C/D — projectile / homing / drop classes.
+    case 'projectile':
+    case 'projectile_arc':
+    case 'homing_nearest':
+    case 'homing_leader': {
+      const fwd = _kartForwardXZ();
+      const offset = M(1.6);  // spawn ahead of the kart so we don't self-hit
+      const origin = {
+        x: chassisBody.position.x + fwd.x * offset,
+        y: chassisBody.position.y + M(0.35),
+        z: chassisBody.position.z + fwd.z * offset,
+      };
+      // v8 double-damage temporarily multiplies outgoing dmg.
+      let firedDef = def;
+      if (def.dmg && now < (playerCombat.dmgBoostUntil || 0)) {
+        const mult = 1 + (playerCombat.dmgBoostStrength || 1);
+        firedDef = { ...def, dmg: Math.round(def.dmg * mult) };
+      }
+      projectileRuntime.spawnProjectile({
+        weapon: firedDef, name, origin,
+        forward: { x: fwd.x, y: 0, z: fwd.z },
+        ownerId: 'local',
+      });
+      // MP parity — broadcast the fire to peers so red shells, bombs,
+      // etc. all spawn deterministically on every client.
+      if (typeof window !== 'undefined' && window.__mp && typeof window.__mp.sendWeaponFire === 'function') {
+        try {
+          window.__mp.sendWeaponFire({
+            kind: 'projectile', name,
+            origin, forward: { x: fwd.x, y: 0, z: fwd.z },
+            dmgMul: (firedDef !== def) ? (firedDef.dmg / def.dmg) : 1,
+          });
+        } catch {}
+      }
+      pushTicker(`fired ${def.label || name}`);
+      playCombatSfx(def.sfx || 'shoot', { gain: 0.7 });
+      consumed = true;
+      break;
+    }
+    case 'drop_behind': {
+      const fwd = _kartForwardXZ();
+      const back = M(1.8);
+      const origin = {
+        x: chassisBody.position.x - fwd.x * back,
+        y: chassisBody.position.y + M(0.4),
+        z: chassisBody.position.z - fwd.z * back,
+      };
+      projectileRuntime.spawnHazard({
+        weapon: def, name, origin, ownerId: 'local',
+      });
+      if (typeof window !== 'undefined' && window.__mp && typeof window.__mp.sendWeaponFire === 'function') {
+        try {
+          window.__mp.sendWeaponFire({
+            kind: 'hazard', name, origin,
+          });
+        } catch {}
+      }
+      pushTicker(`dropped ${def.label || name}`);
+      playCombatSfx(def.sfx || 'use_buff', { gain: 0.6, rate: 0.85 });
+      consumed = true;
+      break;
+    }
+    default:
+      pushTicker(`${def.label || name}: unknown class ${def.class}`);
+      break;
+  }
+  if (consumed) {
+    _invFireFlashUntil = now + 220;
+    inv.count -= 1;
+    if (inv.count <= 0) { inv.active = null; inv.count = 0; }
+  }
+}
 /** @type {{boostUntil:number, slowUntil:number, oilUntil:number, repairUntil:number, coins:number, hp:number, weapon:string|null, lastTouchedById:Map<number,number>}} */
 const playerCombat = {
   boostUntil: 0, boostStrength: 0,
@@ -3011,7 +3410,31 @@ const playerCombat = {
   hp: 100,
   weapon: null,
   lastTouchedById: new Map(),  // debounce: don't re-fire same effect every frame
+  // Phase B — single inventory slot + self-buff timers.
+  // The combat scalars (resolveCombatScalars) stack starUntil + bulletUntil
+  // on top of boostUntil so all three boost paths feed the same throttle
+  // multiplier in the worker.
+  inventory: { active: null, count: 0 },
+  starUntil: 0, starStrength: 0,
+  bulletUntil: 0, bulletStrength: 0,
+  invulnUntil: 0,
+  // Phase F — surface-hazard self-debuffs. Each pairs (until, strength)
+  // so the steering / throttle / damage loops can cleanly merge the
+  // contribution alongside slowUntil / boostUntil.
+  iceUntil: 0,   iceStrength: 0,
+  waterUntil: 0, waterStrength: 0,
+  sandUntil: 0,  sandStrength: 0,
+  lavaUntil: 0,  // continuous DPS while standing on lava
+  // jump pad — short upward impulse already applied; this just tracks
+  // the most recent fire so the SFX/ticker debounces match.
+  jumpUntil: 0,
 };
+// Preload combat SFX in the background so the first "got item" plays
+// without a load hitch. Runs once at module evaluation.
+preloadCombatSfx();
+// Preload projectile/hazard DAEs so a green-shell fired in the first
+// 200 ms still has its real model rather than the sphere fallback.
+preloadItemModels(['green_shell', 'red_shell', 'blue_shell', 'banana', 'bobomb']);
 // E2E hook — exposes the live combat state so smoke tests can assert
 // against pickups without scraping the DOM. Read-only contract.
 if (typeof window !== 'undefined') {
@@ -3037,12 +3460,19 @@ function applyCombatEvents(events, now) {
         playerCombat.hp = Math.min(100, playerCombat.hp + (ev.amount || 25));
         pushTicker(`+${ev.amount || 25} HP (${playerCombat.hp})`);
       } else if (ev.payload === 'weapon_random' || ev.payload === 'weapon_heavy') {
-        const pool = ev.payload === 'weapon_heavy'
-          ? ['rocket', 'mine', 'mortar']
-          : ['rocket', 'mine', 'shield', 'banana', 'boost_token'];
-        const w = pool[(Math.random() * pool.length) | 0];
-        playerCombat.weapon = w;
-        pushTicker(`got ${w}`);
+        // Phase E1 — roll from the new MK ITEM_POOLS (defined in
+        // segments.js). The legacy item_box uses the 'default' pool;
+        // the heavier crate uses 'heavy'. _grantWeaponFromPool resolves
+        // the chosen weapon through the same WEAPONS-aware grant path
+        // that direct `weapon:<name>` pickups use, so the inventory
+        // slot, multi-use stacking, label and SFX all behave the same.
+        const poolKey = ev.payload === 'weapon_heavy' ? 'heavy' : 'default';
+        _grantWeaponFromPool(poolKey);
+      } else if (typeof ev.payload === 'string' && ev.payload.startsWith('weapon:')) {
+        // Phase A — direct named-weapon grant from MK-style item pickups.
+        // Routed through _grantWeapon so behaviour matches the
+        // ITEM_POOLS roll path (E1).
+        _grantWeapon(ev.payload.slice('weapon:'.length));
       }
     } else if (ev.type === 'effect') {
       const last = playerCombat.lastTouchedById.get(ev.id) || 0;
@@ -3059,14 +3489,182 @@ function applyCombatEvents(events, now) {
       } else if (ev.effect === 'oil') {
         playerCombat.oilUntil = now + (ev.durationMs || 800);
         pushTicker(`OIL!`);
+        playCombatSfx('skid', { gain: 0.7 });
       } else if (ev.effect === 'repair') {
         // Continuous trickle while standing on the strip.
         const dt = 1 / 60;
         const gain = (ev.amountPerSec || 5) * dt;
         playerCombat.hp = Math.min(100, playerCombat.hp + gain);
+      } else if (ev.effect === 'jump') {
+        // Single upward kick — bump the chassis vertical velocity.
+        // Using `velocity.y =` (not +=) so a chain of bounces doesn't
+        // stack uncontrollably; gives a consistent launch feel.
+        const launch = Math.max(8, (ev.strength || 0.6) * 18);
+        if (chassisBody) {
+          chassisBody.velocity.y = Math.max(chassisBody.velocity.y, launch);
+        }
+        playerCombat.jumpUntil = now + 350;
+        pushTicker(`JUMP!`);
+        playCombatSfx('boing', { gain: 0.85 });
+      } else if (ev.effect === 'ice') {
+        playerCombat.iceUntil    = now + (ev.durationMs || 1200);
+        playerCombat.iceStrength = ev.strength || 0.55;
+        // Reuse slow channel so existing throttle math also applies a
+        // small responsiveness drop — feels like the wheels lose bite.
+        playerCombat.slowUntil    = Math.max(playerCombat.slowUntil, playerCombat.iceUntil);
+        playerCombat.slowStrength = Math.max(playerCombat.slowStrength, playerCombat.iceStrength * 0.4);
+        pushTicker(`ICE!`);
+        playCombatSfx('swap', { gain: 0.55, rate: 0.6 });
+      } else if (ev.effect === 'water') {
+        playerCombat.waterUntil    = now + (ev.durationMs || 1500);
+        playerCombat.waterStrength = ev.strength || 0.6;
+        playerCombat.slowUntil     = Math.max(playerCombat.slowUntil, playerCombat.waterUntil);
+        playerCombat.slowStrength  = Math.max(playerCombat.slowStrength, playerCombat.waterStrength);
+        pushTicker(`WATER!  ×${(1 - playerCombat.waterStrength).toFixed(2)}`);
+        playCombatSfx('splash', { gain: 0.85 });
+      } else if (ev.effect === 'sand') {
+        playerCombat.sandUntil    = now + (ev.durationMs || 1100);
+        playerCombat.sandStrength = ev.strength || 0.55;
+        playerCombat.slowUntil    = Math.max(playerCombat.slowUntil, playerCombat.sandUntil);
+        playerCombat.slowStrength = Math.max(playerCombat.slowStrength, playerCombat.sandStrength);
+        pushTicker(`SAND!  ×${(1 - playerCombat.sandStrength).toFixed(2)}`);
+        playCombatSfx('goo', { gain: 0.65 });
+      } else if (ev.effect === 'lava') {
+        // Continuous DPS while standing in the pool, like repair-but-negative.
+        const dt = 1 / 60;
+        const dmg = (ev.amountPerSec || 12) * dt;
+        playerCombat.hp = Math.max(0, playerCombat.hp - dmg);
+        // Also apply a faint slow so escapes feel weighty.
+        playerCombat.slowUntil    = Math.max(playerCombat.slowUntil, now + 250);
+        playerCombat.slowStrength = Math.max(playerCombat.slowStrength, 0.25);
+        // Throttled feedback — only fire SFX/ticker once per ~700 ms while standing on it.
+        if (now - playerCombat.lavaUntil > 700) {
+          playerCombat.lavaUntil = now;
+          pushTicker(`LAVA! -${(ev.amountPerSec || 12)} HP/s`);
+          playCombatSfx('crash3', { gain: 0.6 });
+        }
       }
     }
   }
+}
+
+// ── Phase C/D — Projectile runtime + hit handlers ──────────────
+// Single shared instance owned by play-main. Multiplayer ghost karts
+// can be folded into getKartTargets() once mp-client exposes its
+// ghosts map; for now SP/local-only is the source of truth.
+let _lastProjTick = performance.now();
+const _SHELL_HIT_SLOW = { strength: 0.6, durationMs: 1500 };
+const _BANANA_SLOW    = { strength: 0.5, durationMs: 1100 };
+const _BLAST_SLOW     = { strength: 0.75, durationMs: 1800 };
+
+/** Apply a projectile/hazard hit to the local kart (called by the
+ *  projectile runtime). Honors invuln (Star/Bullet) and clamps so
+ *  back-to-back hits don't compound past full stop. */
+function applyProjectileHit(spec, hitPoint) {
+  const now = performance.now();
+  if (now < playerCombat.invulnUntil) return;  // Star / Bullet Bill
+  let preset = _SHELL_HIT_SLOW;
+  if (spec.name === 'banana') preset = _BANANA_SLOW;
+  else if (spec.name === 'bobomb' || spec.name === 'blue_shell') preset = _BLAST_SLOW;
+  playerCombat.slowUntil    = now + preset.durationMs;
+  playerCombat.slowStrength = Math.max(playerCombat.slowStrength || 0, preset.strength);
+  // Cancel any in-flight boost so the hit reads as a real punish.
+  playerCombat.boostUntil   = 0;
+  playerCombat.hp = Math.max(0, playerCombat.hp - (spec.dmg || 10));
+  pushTicker(`HIT! ${spec.name.replace(/_/g,' ')}`);
+}
+
+/** Provide the projectile runtime with the live target list. Local
+ *  kart only for now; remote ghosts can be appended here later. */
+function _getCombatTargets() {
+  const now = performance.now();
+  const out = [{
+    id: 'local',
+    isLocal: true,
+    invuln: now < playerCombat.invulnUntil,
+    position: {
+      x: chassisBody.interpolatedPosition.x,
+      y: chassisBody.interpolatedPosition.y,
+      z: chassisBody.interpolatedPosition.z,
+    },
+  }];
+  // Phase E2 — extra targets registered by mp-client (or tests).
+  // Each entry is {id, position:{x,y,z}, isLocal?, invuln?}.
+  if (Array.isArray(_extraCombatTargets) && _extraCombatTargets.length) {
+    for (const t of _extraCombatTargets) {
+      if (!t || !t.position) continue;
+      out.push({
+        id: t.id != null ? t.id : `peer-${out.length}`,
+        isLocal: !!t.isLocal,
+        invuln: !!t.invuln,
+        position: t.position,
+      });
+    }
+  }
+  return out;
+}
+let _extraCombatTargets = [];
+
+const projectileRuntime = createProjectileRuntime({
+  THREE,
+  scene,
+  drivableCells,
+  tile: TILE,
+  worldUnitsPerMeter: WORLD_UNITS_PER_M,
+  getKartTargets: _getCombatTargets,
+  applyHitToLocal: applyProjectileHit,
+  playSfx: (name, opts) => playCombatSfx(name, opts),
+  instanceModel: (name) => instanceItemModel(name),
+  // P2.5 \u2014 camera shake hook routed into the existing camera state.
+  // We attach a transient offset that decays each frame inside the
+  // camera follow block above (see `_shakeMag` / `_shakeUntil`).
+  onCameraShake: (mag, durationMs) => {
+    const _now = performance.now();
+    if (mag > _spShakeMag) _spShakeMag = mag;
+    const newUntil = _now + (durationMs || 220);
+    if (newUntil > _spShakeUntil) _spShakeUntil = newUntil;
+  },
+});
+// Expose camera so the projectile-runtime can billboard muzzle flashes.
+scene.userData.__camera = camera;
+let _spShakeMag = 0;
+let _spShakeUntil = 0;
+
+/** Compute the kart's current world-forward unit vector from its
+ *  yaw-only quaternion. Returns {x,z} — y is always 0 for a flat
+ *  shell launch. */
+function _kartForwardXZ() {
+  const q = chassisBody.interpolatedQuaternion;
+  // forward = q · (0,0,1)
+  const fx = 2 * (q.x * q.z + q.w * q.y);
+  const fz = 1 - 2 * (q.x * q.x + q.y * q.y);
+  const len = Math.hypot(fx, fz) || 1;
+  return { x: fx / len, z: fz / len };
+}
+
+/** Bullet Bill rail-follow — pushes the kart's lateral velocity
+ *  toward the nearest drivable cell's centerline so the player
+ *  doesn't ditch off-track at the buff's huge speed multiplier.
+ *  Does NOT override player steering — just adds a centering bias. */
+function _bulletBillRailFollow(now) {
+  if (!drivableCells || drivableCells.size === 0) return;
+  const px = chassisBody.position.x, pz = chassisBody.position.z;
+  const gx = Math.round(px / TILE), gz = Math.round(pz / TILE);
+  // Snap the centroid toward the cell center if we're near an edge.
+  let bestDx = 0, bestDz = 0, bestD2 = Infinity;
+  for (let dx = -1; dx <= 1; dx++) {
+    for (let dz = -1; dz <= 1; dz++) {
+      if (!drivableCells.has(`${gx + dx},${gz + dz}`)) continue;
+      const cx = (gx + dx) * TILE, cz = (gz + dz) * TILE;
+      const d2 = (cx - px) * (cx - px) + (cz - pz) * (cz - pz);
+      if (d2 < bestD2) { bestD2 = d2; bestDx = cx - px; bestDz = cz - pz; }
+    }
+  }
+  if (bestD2 === Infinity) return;
+  // Apply a gentle lateral nudge to chassis velocity (cap at 6 m/s).
+  const k = 1.4;  // attraction strength
+  chassisBody.velocity.x += bestDx * k * 0.016;
+  chassisBody.velocity.z += bestDz * k * 0.016;
 }
 
 function tickCombat(now) {
@@ -3079,7 +3677,22 @@ function tickCombat(now) {
     const grp = overlayMeshById.get(r.id);
     if (grp) grp.traverse(o => { if (o.isMesh && o.userData?.__pickupCube) o.visible = true; });
   }
+  // Phase C/D — kinematic projectile sim (green/red/blue shells, bobomb,
+  // banana drops). Decoupled from the physics worker; only feeds back
+  // through applyHitToLocal which sets the same slow/oil scalars used
+  // by the existing combat-runtime pickups.
+  if (projectileRuntime) {
+    projectileRuntime.tick(Math.min(0.05, (now - _lastProjTick) / 1000), now);
+  }
+  _lastProjTick = now;
+  // Phase B — Bullet Bill rail-follow nudge. While the buff is active
+  // we steer the player chassis yaw toward the nearest drivable cell's
+  // centerline so the kart stays on the track at high speed without
+  // the player having to fight for it.
+  if (now < playerCombat.bulletUntil) _bulletBillRailFollow(now);
   renderTicker(now);
+  renderInventoryHud(now);
+  renderHpHud();
 }
 
 function updateLapTracking() {
@@ -3130,6 +3743,12 @@ function tick() {
   const now = tickStart;
   const dt = Math.min(0.05, (now - lastTime) / 1000);
   lastTime = now;
+
+  // Slow rotation for pickup item visuals (playtest + multiplayer
+  // ghost client). Always runs, even while paused, so item boxes
+  // stay alive in the pause overlay.
+  tickPickupSpin(dt);
+  tickSurfaceScroll(dt);
 
   let tPhys = 0, tVisual = 0, tCam = 0, tHud = 0, tCombat = 0, tRender = 0;
   let _t0;
@@ -3496,3 +4115,15 @@ if (roomCode) {
 requestAnimationFrame(tick);
 
 window.__play = { vehicle, chassisBody, scene, camera, renderer, track, combatState, playerCombat, controlState: physicsBridge.controlState, keys, PERF, physicsBridge, gloSkidMesh, gloSkidMat, underglow };
+// Phase E — expose combat/test surface so playwright specs can drive
+// the same code paths the human player triggers, without needing
+// keyboard simulation through the real input handler.
+window.__play.useActiveItem = useActiveItem;
+window.__play.grantWeapon   = _grantWeapon;
+window.__play.grantFromPool = _grantWeaponFromPool;
+window.__play.projectileRuntime = projectileRuntime;
+window.__play.WEAPONS = WEAPONS;
+window.__play.ITEM_POOLS = ITEM_POOLS;
+// Phase E2 — let mp-client (or tests) register peer karts as projectile
+// targets. Each call replaces the entire peer list.
+window.__play.setCombatPeers = (peers) => { _extraCombatTargets = Array.isArray(peers) ? peers : []; };

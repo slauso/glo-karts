@@ -19,6 +19,9 @@ import {
   sideDelta,
 } from './segments.js';
 import { buildSegmentMesh } from './segment-builder.js';
+import { tickPickupSpin } from './pickup-spin.js';
+import { tickSurfaceScroll } from './surface-scroll.js';
+import { onItemModelLoaded, preloadItemModels, ITEM_MODEL_REGISTRY } from './pickup-models.js';
 import { Track, encodeTrack, decodeTrack } from './track-data.js';
 import { KARTS, resolveSelectedKartId } from './kart-catalog.js';
 import { preloadAllKarts, cloneKart } from './kart-loader.js';
@@ -26,9 +29,10 @@ import { renderKartThumbnail } from './kart-thumbnails.js';
 import {
   DECOR, DECOR_KEYS, DECOR_CATEGORY_ORDER, DECOR_CATEGORY_LABELS,
   isDecorKey, DecorStore, buildDecorMesh, syncDecorMesh, getDecorMaterial,
-  getParamSchema,
+  getParamSchema, DECOR_PLACEMENT_SCALE_MULTIPLIER,
 } from './decor.js';
 import { onGlbLoaded, instanceGLB } from './glb-cache.js';
+import { onFbxLoaded } from './fbx-cache.js';
 import { buildGroupMesh } from './csg.js';
 import { WORLD_UNITS_PER_M, m, mm } from './units.js';
 import { StudioAPI } from './studio-api.js';
@@ -361,7 +365,9 @@ function rebuildAll() {
 
 function addPlacementMesh(p) {
   const mesh = buildSegmentMesh(p.key);
-  mesh.position.set(p.gx * TILE, 0, p.gz * TILE);
+  const ox = Number.isFinite(p.ox) ? p.ox : 0;
+  const oz = Number.isFinite(p.oz) ? p.oz : 0;
+  mesh.position.set(p.gx * TILE + ox, 0, p.gz * TILE + oz);
   mesh.rotation.y = -p.rot * Math.PI / 2;
   mesh.userData.placementId = p.id;
   placementGroup.add(mesh);
@@ -489,9 +495,12 @@ function makeThumb(key) {
     let mesh;
     if (isDecorKey(key)) {
       const def = DECOR[key];
-      // GLB-backed kit prop: try to render the actual scene; if not loaded
-      // yet, return '' so the palette tile re-asks once preload completes.
-      if (def.glb) {
+      // Model-backed decor: render via the segment visual builder so the
+      // thumb uses the same metres→mm conversion (S=1000) and same
+      // async-resolved meshes as in-scene placements.
+      if (def.model) {
+        mesh = buildSegmentMesh(def.model);
+      } else if (def.glb) {
         const inst = instanceGLB(def.glb);
         if (!inst) { return ''; }
         const ds = def.defaultScale || [2, 2, 2];
@@ -524,7 +533,19 @@ function makeThumb(key) {
     s.remove(mesh);
     if (!isDecorKey(key)) {
       mesh.traverse(o => {
-        if (o.geometry) o.geometry.dispose();
+        if (!o.geometry) return;
+        // Skip geometries that belong to a shared cached template
+        // (pickup .dae models, GLB instances). Disposing those would
+        // corrupt the cache and break every subsequent thumbnail and
+        // placement that re-uses the same template.
+        let p = o;
+        let shared = false;
+        while (p) {
+          if (p.userData && (p.userData.__assetPickupModel || p.userData.__glbInstance)) { shared = true; break; }
+          p = p.parent;
+        }
+        if (shared) return;
+        o.geometry.dispose();
       });
     } else if (mesh.material && mesh.material.dispose) {
       mesh.material.dispose();
@@ -540,10 +561,19 @@ function makeThumb(key) {
 const paletteEl = document.getElementById('palette');
 const paletteSearchEl = document.getElementById('paletteSearch');
 let paletteFilter = '';
-const CATEGORY_ORDER = ['road', 'junction', 'height', 'special', 'walled', ...DECOR_CATEGORY_ORDER];
+const CATEGORY_ORDER = Array.from(new Set([
+  'road', 'junction', 'city', 'runway', 'prop', 'scenery', 'v8', 'stk',
+  'height', 'special', 'walled', ...DECOR_CATEGORY_ORDER,
+]));
 const CATEGORY_LABELS = {
   road: 'Road',
   junction: 'Junctions',
+  city: 'City Roads',
+  runway: 'Runway',
+  prop: 'Props',
+  scenery: 'Scenery',
+  v8: 'V8 Assets',
+  stk: 'STK Library Props',
   height: 'Vertical',
   special: 'Special',
   walled: 'High Walled Track',
@@ -557,14 +587,25 @@ function buildPalette() {
   // Group keys by category (preserving insertion order within a group).
   const groups = new Map();
   const addKey = (key, def) => {
-    if (catFilter && (def.category || 'special') !== catFilter && !(catFilter === 'road' && ['road','junction','height','special','walled'].includes(def.category))) return;
+    if (catFilter && (def.category || 'special') !== catFilter && !(catFilter === 'road' && ['road','junction','height','special','walled'].includes(def.category)) && !(catFilter === 'scenery_props' && ['prop','scenery','stk'].includes(def.category))) return;
     if (textFilter && !def.label.toLowerCase().includes(textFilter) && !key.toLowerCase().includes(textFilter)) return;
     const cat = def.category || 'special';
     if (!groups.has(cat)) groups.set(cat, []);
     groups.get(cat).push(key);
   };
-  for (const key of SEGMENT_KEYS) addKey(key, SEGMENTS[key]);
+  for (const key of SEGMENT_KEYS) {
+    // Skip segment keys that are shadowed by a model-backed DECOR entry
+    // (prop_/scenery_/v8_/stk_). The DECOR_KEYS loop below registers
+    // them so they get gizmo scale/rotate/move on placement.
+    if (DECOR[key]) continue;
+    addKey(key, SEGMENTS[key]);
+  }
   for (const key of DECOR_KEYS) addKey(key, DECOR[key]);
+  // Merge the three model-backed decor categories under one palette header.
+  // Underlying `def.category` values are preserved so downstream code and
+  // serialized tracks keep their original semantics.
+  const MERGED_SCENERY_PROPS = ['prop', 'scenery', 'stk'];
+  const MERGED_SCENERY_PROPS_LABEL = 'Scenery + Props';
   const renderGroup = (cat, keys) => {
     if (!keys?.length) return;
     const header = document.createElement('div');
@@ -575,7 +616,15 @@ function buildPalette() {
       const def = SEGMENTS[key] || DECOR[key];
       const btn = document.createElement('button');
       btn.dataset.key = key;
-      btn.innerHTML = '<div class="swatch"></div><div class="label">' + def.label + '</div>';
+      // Track Props and Scenery tiles render as image-only (no text label)
+      // so the textured DAE thumbnails read cleanly at the palette size.
+      const hideLabel = (cat === 'prop' || cat === 'scenery');
+      const labelHtml = hideLabel ? '' : ('<div class="label">' + def.label + '</div>');
+      btn.innerHTML = '<div class="swatch"></div>' + labelHtml;
+      if (hideLabel) {
+        btn.classList.add('no-label');
+        btn.title = def.label;
+      }
       const swatch = btn.querySelector('.swatch');
       const thumbUrl = makeThumb(key);
       if (swatch && thumbUrl) {
@@ -605,9 +654,60 @@ function buildPalette() {
       paletteEl.appendChild(btn);
     }
   };
-  for (const cat of CATEGORY_ORDER) renderGroup(cat, groups.get(cat));
+  for (const cat of CATEGORY_ORDER) {
+    if (cat === MERGED_SCENERY_PROPS[0]) {
+      const merged = [];
+      for (const c of MERGED_SCENERY_PROPS) {
+        const ks = groups.get(c);
+        if (ks?.length) merged.push(...ks);
+      }
+      if (merged.length) {
+        const header = document.createElement('div');
+        header.className = 'palette-group';
+        header.textContent = MERGED_SCENERY_PROPS_LABEL;
+        paletteEl.appendChild(header);
+        for (const key of merged) {
+          const def = SEGMENTS[key] || DECOR[key];
+          const cat2 = def.category || 'special';
+          const btn = document.createElement('button');
+          btn.dataset.key = key;
+          const hideLabel = (cat2 === 'prop' || cat2 === 'scenery' || cat2 === 'stk');
+          const labelHtml = hideLabel ? '' : ('<div class="label">' + def.label + '</div>');
+          btn.innerHTML = '<div class="swatch"></div>' + labelHtml;
+          if (hideLabel) {
+            btn.classList.add('no-label');
+            btn.title = def.label;
+          }
+          const swatch = btn.querySelector('.swatch');
+          const thumbUrl = makeThumb(key);
+          if (swatch && thumbUrl) {
+            swatch.style.background = `url("${thumbUrl}") center/contain no-repeat`;
+          }
+          if (key === activeKey) btn.classList.add('active');
+          btn.addEventListener('click', () => {
+            setActiveTool(activeKey === key ? null : key);
+          });
+          btn.draggable = true;
+          btn.addEventListener('dragstart', (ev) => {
+            try { ev.dataTransfer?.setData('text/plain', key); } catch {}
+            if (ev.dataTransfer) ev.dataTransfer.effectAllowed = 'copy';
+            _paletteDragKey = key;
+          });
+          btn.addEventListener('dragend', () => {
+            _paletteDragKey = null;
+            setActiveTool(null);
+          });
+          paletteEl.appendChild(btn);
+        }
+      }
+      continue;
+    }
+    if (MERGED_SCENERY_PROPS.includes(cat)) continue;
+    renderGroup(cat, groups.get(cat));
+  }
   for (const [cat, keys] of groups) {
     if (CATEGORY_ORDER.includes(cat)) continue;
+    if (MERGED_SCENERY_PROPS.includes(cat)) continue;
     renderGroup(cat, keys);
   }
   if (paletteEl.children.length === 0) {
@@ -627,6 +727,37 @@ if (paletteSearchEl) {
   });
 }
 
+// ── Pickup item model preload + thumbnail invalidation ────────
+// Pickup tiles render their thumbnail BEFORE the .dae streams in,
+// which would otherwise cache the placeholder sphere forever. Kick
+// off a background preload of every registered item model, and as
+// each one resolves, drop any cached thumbnails for pk_* keys that
+// reference that model and rebuild the palette so the new tile
+// renders against the real DAE geometry.
+preloadItemModels();
+onItemModelLoaded((modelName) => {
+  // Invalidate every cached pickup thumb (cheap — ~12 entries) and
+  // any decor thumb that might map to the same logical name. Then
+  // re-render the palette so visible tiles re-request a thumb that
+  // now uses the real model.
+  for (const k of Array.from(thumbCache.keys())) {
+    if (k.startsWith('pk_') || k === 'item_box') thumbCache.delete(k);
+  }
+  // Also re-render the live placement meshes already on the workplane
+  // so any pickup that fell back to its placeholder gets the new
+  // model. Rebuilding the mesh through buildSegmentMesh hooks the
+  // async swap path again — and since the model is now cached, the
+  // swap happens synchronously inside buildAssetPickup.
+  for (const p of track.all()) {
+    const def = SEGMENTS[p.key];
+    if (!def) continue;
+    if (!p.key.startsWith('pk_') && p.key !== 'item_box') continue;
+    removePlacementMesh(p.id);
+    addPlacementMesh(p);
+  }
+  buildPalette();
+});
+
 // ── Preview ghost ─────────────────────────────────────────────
 function updatePreview() {
   while (previewGroup.children.length) previewGroup.remove(previewGroup.children[0]);
@@ -634,15 +765,53 @@ function updatePreview() {
   if (isDecorKey(activeKey)) {
     const def = DECOR[activeKey];
     const dr = def.defaultRot || [0, 0, 0];
-    // Match the DecorStore.add() default: every fresh placement is 1000 mm.
-    const ds = [1000, 1000, 1000];
-    const matPreview = new THREE.MeshStandardMaterial({
-      color: def.color, roughness: 0.55, metalness: 0.05,
-      transparent: true, opacity: 0.45, depthWrite: false,
-    });
-    previewMesh = new THREE.Mesh(def.build(), matPreview);
-    previewMesh.rotation.set(dr[0], dr[1], dr[2]);
-    previewMesh.scale.set(ds[0], ds[1], ds[2]);
+    // Match DecorStore.add(): every fresh placement is sized with the same
+    // 4x placement multiplier used for actual drops on the workplane.
+    const ds = def.defaultScale
+      ? [
+        def.defaultScale[0] * 1000 * DECOR_PLACEMENT_SCALE_MULTIPLIER,
+        def.defaultScale[1] * 1000 * DECOR_PLACEMENT_SCALE_MULTIPLIER,
+        def.defaultScale[2] * 1000 * DECOR_PLACEMENT_SCALE_MULTIPLIER,
+      ]
+      : [5000 * DECOR_PLACEMENT_SCALE_MULTIPLIER, 5000 * DECOR_PLACEMENT_SCALE_MULTIPLIER, 5000 * DECOR_PLACEMENT_SCALE_MULTIPLIER];
+    if (def.model || def.glb) {
+      // Model-backed decor (scenery / props / STK / GLB kit): build the actual
+      // rendered Group via the shared buildDecorMesh path so the ghost mirrors
+      // the real placement 1:1, then translucent-tint every Mesh material so it
+      // reads as a preview instead of a committed object.
+      const transientInst = {
+        id: -1, type: activeKey,
+        x: 0, y: 0, z: 0,
+        rx: dr[0], ry: dr[1], rz: dr[2],
+        sx: ds[0], sy: ds[1], sz: ds[2],
+        color: def.color || 0xffffff,
+        isHole: false, transparent: false,
+      };
+      const built = buildDecorMesh(transientInst);
+      previewMesh = built || new THREE.Group();
+      previewMesh.traverse((c) => {
+        if (c.isMesh && c.material) {
+          c.material = Array.isArray(c.material)
+            ? c.material.map(m => m.clone())
+            : c.material.clone();
+          const apply = (m) => { m.transparent = true; m.opacity = 0.5; m.depthWrite = false; };
+          if (Array.isArray(c.material)) c.material.forEach(apply); else apply(c.material);
+          c.castShadow = false;
+          c.receiveShadow = false;
+        }
+      });
+      // buildDecorMesh tags userData.decorId — strip so picker never selects the ghost.
+      previewMesh.userData = { ...(previewMesh.userData || {}) };
+      delete previewMesh.userData.decorId;
+    } else {
+      const matPreview = new THREE.MeshStandardMaterial({
+        color: def.color, roughness: 0.55, metalness: 0.05,
+        transparent: true, opacity: 0.45, depthWrite: false,
+      });
+      previewMesh = new THREE.Mesh(def.build(), matPreview);
+      previewMesh.rotation.set(dr[0], dr[1], dr[2]);
+      previewMesh.scale.set(ds[0], ds[1], ds[2]);
+    }
     previewGroup.add(previewMesh);
     if (previewCell) {
       const y = def.centered ? ds[1] / 2 : 0;
@@ -709,6 +878,63 @@ function setHoverOutline(kind, id) {
   _hoverOutline.visible = true;
 }
 
+// ── Tinkercad-style face-snap helpers ─────────────────────────
+// When dragging a new shape over an existing one, the new shape's local +Y
+// (its "up" / base normal) is aligned to the picked face's world normal so
+// the new shape sits flush on that face. We also offset along the normal by
+// the shape's base distance (-localBox.min.y * scale.y) so its bottom plane
+// touches the hit point exactly, matching Tinkercad's behaviour.
+const _UP = new THREE.Vector3(0, 1, 0);
+const _faceSnapBox = new THREE.Box3();
+function applyFaceSnap(previewMeshArg, faceNormal, facePoint) {
+  if (!previewMeshArg || !faceNormal || !facePoint) return false;
+  // Reset rotation, then derive a base offset from the axis-aligned local
+  // bounding box (with current scale baked in) so primitives that author
+  // their origin at the centre vs. at the base both work.
+  previewMeshArg.quaternion.identity();
+  previewMeshArg.updateMatrixWorld(true);
+  _faceSnapBox.setFromObject(previewMeshArg);
+  if (!isFinite(_faceSnapBox.min.x)) return false;
+  // Local-Y distance from origin to bottom face (in world units, since the
+  // mesh sits at its own world origin during this measurement).
+  const meshWorldPos = new THREE.Vector3();
+  previewMeshArg.getWorldPosition(meshWorldPos);
+  const baseOffset = meshWorldPos.y - _faceSnapBox.min.y;
+  // Align local +Y to the picked face normal (degenerate when normal == +Y
+  // → identity quaternion, leaves yaw free).
+  const q = new THREE.Quaternion().setFromUnitVectors(_UP, faceNormal);
+  previewMeshArg.quaternion.copy(q);
+  // Push the mesh out along the face normal by the base offset so its
+  // bottom plane sits flush on the hit point.
+  previewMeshArg.position.copy(facePoint).addScaledVector(faceNormal, baseOffset);
+  return true;
+}
+
+// Tinkercad-style face highlight: a translucent cyan quad rendered on the
+// picked face for clear feedback. Sized to the smaller of the face's
+// triangle bounding extent or a fixed cap so it reads on any shape.
+const _faceHighlight = (() => {
+  const geo = new THREE.PlaneGeometry(1, 1);
+  const mat = new THREE.MeshBasicMaterial({
+    color: 0x1faaf2, transparent: true, opacity: 0.32,
+    side: THREE.DoubleSide, depthTest: false, depthWrite: false,
+  });
+  const m = new THREE.Mesh(geo, mat);
+  m.renderOrder = 998;
+  m.visible = false;
+  scene.add(m);
+  return m;
+})();
+function showFaceHighlight(faceNormal, facePoint, sizeHint = 12) {
+  if (!faceNormal || !facePoint) { _faceHighlight.visible = false; return; }
+  const s = Math.max(2, Math.min(40, sizeHint));
+  _faceHighlight.scale.set(s, s, 1);
+  _faceHighlight.position.copy(facePoint).addScaledVector(faceNormal, 0.05);
+  _faceHighlight.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), faceNormal);
+  _faceHighlight.visible = true;
+}
+function hideFaceHighlight() { _faceHighlight.visible = false; }
+
 function pickGroundCell(event) {
   const rect = canvas.getBoundingClientRect();
   ndc.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
@@ -734,18 +960,32 @@ function pickGroundCell(event) {
     decorGroup.children.concat(csgGroup.children), true
   );
   if (decorHits.length) {
-    let obj = decorHits[0].object;
+    const firstHit = decorHits[0];
+    let obj = firstHit.object;
     while (obj && obj.userData.decorId == null && obj.userData.csgGroupId == null) obj = obj.parent;
+    // Tinkercad-style face snap: capture the world-space face normal + hit
+    // point so the placement code can orient the new shape to sit flush on
+    // the picked face.
+    let faceNormal = null;
+    let facePoint = null;
+    if (firstHit.face && firstHit.object) {
+      faceNormal = firstHit.face.normal.clone();
+      // Convert face normal from local to world space (account for rotation
+      // & non-uniform scale via normalMatrix).
+      const nm = new THREE.Matrix3().getNormalMatrix(firstHit.object.matrixWorld);
+      faceNormal.applyMatrix3(nm).normalize();
+      facePoint = firstHit.point.clone();
+    }
     if (obj && obj.userData.csgGroupId != null) {
       // Resolve to the first member of the CSG group so existing
       // selection / inspector code paths just work.
       const gid = obj.userData.csgGroupId;
       const members = _membersOfGroup(gid);
       const first = members[0];
-      if (first) return { kind: 'decor', id: first.id, gx: cell?.gx, gz: cell?.gz, worldPoint, csgGroupId: gid };
+      if (first) return { kind: 'decor', id: first.id, gx: cell?.gx, gz: cell?.gz, worldPoint, csgGroupId: gid, faceNormal, facePoint };
     }
     if (obj && obj.userData.decorId != null) {
-      return { kind: 'decor', id: obj.userData.decorId, gx: cell?.gx, gz: cell?.gz, worldPoint };
+      return { kind: 'decor', id: obj.userData.decorId, gx: cell?.gx, gz: cell?.gz, worldPoint, faceNormal, facePoint };
     }
   }
   const placementHits = raycaster.intersectObjects(placementGroup.children, true);
@@ -785,18 +1025,27 @@ canvas.addEventListener('mousemove', (e) => {
   }
   // Decor placement: ghost follows the cursor freely on the workplane,
   // snapping to the grid step (Tinkercad-style tethered preview).
-  // If the cursor is over an existing decor mesh, stack on top of it (raise Y
-  // to that mesh's bbox max).
+  // If the cursor is over an existing decor mesh, snap to the picked face
+  // (orient base flush against face normal, sit at hit point).
   if (isDecorKey(activeKey)) {
-    let baseY = 0;
-    let wp = hit.worldPoint;
-    if (hit.kind === 'decor') {
-      const target = decorMeshById.get(hit.id);
-      if (target) {
-        const box = new THREE.Box3().setFromObject(target);
-        if (isFinite(box.max.y)) baseY = box.max.y;
+    if (hit.kind === 'decor' && hit.faceNormal && hit.facePoint) {
+      if (!previewMesh) updatePreview();
+      if (previewMesh && applyFaceSnap(previewMesh, hit.faceNormal, hit.facePoint)) {
+        previewMesh.visible = true;
+        // Snap horizontally to the grid step ONLY for the dominant up
+        // face so user can still place precisely on the workplane stack.
+        const upish = hit.faceNormal.y > 0.95;
+        if (upish && gizmoSnap && snapStep > 0) {
+          previewMesh.position.x = Math.round(previewMesh.position.x / snapStep) * snapStep;
+          previewMesh.position.z = Math.round(previewMesh.position.z / snapStep) * snapStep;
+        }
+        showFaceHighlight(hit.faceNormal, hit.facePoint);
+        return;
       }
     }
+    hideFaceHighlight();
+    let baseY = 0;
+    let wp = hit.worldPoint;
     if (!wp && hit.gx != null) wp = { x: hit.gx * TILE, z: hit.gz * TILE };
     if (!wp) { if (previewMesh) previewMesh.visible = false; return; }
     let { x, z } = wp;
@@ -809,6 +1058,7 @@ canvas.addEventListener('mousemove', (e) => {
       const def = DECOR[activeKey];
       const y = baseY + (def?.centered ? (previewMesh.scale.y / 2) : 0);
       previewMesh.visible = true;
+      previewMesh.quaternion.identity();
       previewMesh.position.set(x, y, z);
       previewMesh.userData._stackY = baseY;
     }
@@ -846,6 +1096,7 @@ canvas.addEventListener('mousemove', (e) => {
 canvas.addEventListener('mouseleave', () => {
   previewCell = null;
   if (previewMesh) previewMesh.visible = false;
+  hideFaceHighlight();
   setHoverOutline(null);
   canvas.style.cursor = 'default';
 });
@@ -866,9 +1117,19 @@ canvas.addEventListener('dragover', (e) => {
     updatePreview();
   }
   if (isDecorKey(_paletteDragKey)) {
+    if (previewMesh && hit.kind === 'decor' && hit.faceNormal && hit.facePoint) {
+      if (applyFaceSnap(previewMesh, hit.faceNormal, hit.facePoint)) {
+        previewMesh.visible = true;
+        previewCell = { gx: hit.gx, gz: hit.gz };
+        showFaceHighlight(hit.faceNormal, hit.facePoint);
+        return;
+      }
+    }
+    hideFaceHighlight();
     if (previewMesh && hit.worldPoint) {
       previewCell = { gx: hit.gx, gz: hit.gz };
       previewMesh.visible = true;
+      previewMesh.quaternion.identity();
       previewMesh.position.set(hit.worldPoint.x, 0, hit.worldPoint.z);
     }
   } else if (hit.gx != null) {
@@ -892,6 +1153,29 @@ canvas.addEventListener('drop', (e) => {
   const hit = pickGroundCell(e);
   if (!hit) return;
   if (isDecorKey(key)) {
+    // Tinkercad-style face snap: when dropped on an existing shape's face,
+    // orient the new shape so its base sits flush on that face.
+    if (hit.kind === 'decor' && hit.faceNormal && hit.facePoint && previewMesh && previewMesh.visible) {
+      // The preview was already positioned + oriented by applyFaceSnap; reuse
+      // its world transform so the placed instance lands exactly where the
+      // ghost was sitting.
+      const e = new THREE.Euler().setFromQuaternion(previewMesh.quaternion, 'XYZ');
+      const inst = decor.add({
+        type: key,
+        x: previewMesh.position.x, y: previewMesh.position.y, z: previewMesh.position.z,
+        rx: e.x, ry: e.y, rz: e.z,
+      });
+      hideFaceHighlight();
+      if (inst) {
+        addDecorMesh(inst);
+        selectDecor(inst.id, 'replace');
+        pushUndo();
+        refreshHud();
+      }
+      setActiveTool(null);
+      return;
+    }
+    hideFaceHighlight();
     const wp = hit.worldPoint || (hit.gx != null ? { x: hit.gx * TILE, y: 0, z: hit.gz * TILE } : null);
     if (!wp) return;
     let { x, z } = wp;
@@ -1041,14 +1325,14 @@ canvas.addEventListener('mousedown', (e) => {
     return;
   }
   // If clicking on a placement, prepare a potential drag of the whole selection.
-  // (Skip when an overlay key is active — the click should drop the overlay
-  // on top of whatever's there instead of dragging the underlying piece.
-  // Also skip when the topmost hit is an overlay piece but the user is placing
-  // a non-overlay segment — in that case the click should drop the road
-  // underneath the spawn rather than drag the spawn.)
+  // Skip ONLY when the user is actively placing a non-overlay road tool — in
+  // that case the click should drop the road underneath any existing overlay.
+  // With no tool active (or with another overlay/decor tool), overlays must
+  // remain draggable so they can be repositioned after placement.
   const _hitOverlay = hit && hit.kind === 'placement' && track.isOverlay(track.getById(hit.id)?.key);
   const _activeDecor = isDecorKey(activeKey);
-  if (hit && hit.kind === 'placement' && !track.isOverlay(activeKey) && !_hitOverlay && !_activeDecor) {
+  const _placingRoad = !!activeKey && !track.isOverlay(activeKey) && !_activeDecor;
+  if (hit && hit.kind === 'placement' && !track.isOverlay(activeKey) && !_activeDecor && !(_placingRoad && _hitOverlay)) {
     // If the clicked piece isn't already selected, switch selection to it now
     // so the drag operates on what the user actually clicked.
     if (!selectedIds.has(hit.id) && !e.shiftKey && !(e.ctrlKey || e.metaKey)) {
@@ -1057,7 +1341,7 @@ canvas.addEventListener('mousedown', (e) => {
     const list = [...selectedIds].map(id => track.getById(id)).filter(Boolean);
     const anchor = track.getById(hit.id) || list[0];
     if (anchor) {
-      mouseDownState.snapshot = list.map(p => ({ id: p.id, key: p.key, gx: p.gx, gz: p.gz, rot: p.rot }));
+      mouseDownState.snapshot = list.map(p => ({ id: p.id, key: p.key, gx: p.gx, gz: p.gz, rot: p.rot, ox: p.ox || 0, oz: p.oz || 0 }));
       mouseDownState.anchorId = anchor.id;
       // Use the cell actually under the cursor as the drag anchor — NOT the
       // segment's stored origin cell. For multi-cell pieces (1×2 tunnel,
@@ -1251,14 +1535,14 @@ function tryMoveSelectionTo(snap, dx, dz) {
   for (const p of snap) {
     if (!track.isClear(p.key, p.gx + dx, p.gz + dz, p.rot)) {
       // Roll back.
-      for (const q of snap) track.place(q.key, q.gx, q.gz, q.rot);
+      for (const q of snap) track.place(q.key, q.gx, q.gz, q.rot, { ox: q.ox, oz: q.oz });
       return false;
     }
   }
   const newIds = [];
   for (const p of snap) {
     removePlacementMesh(p.id);
-    const np = track.place(p.key, p.gx + dx, p.gz + dz, p.rot);
+    const np = track.place(p.key, p.gx + dx, p.gz + dz, p.rot, { ox: p.ox, oz: p.oz });
     if (np) {
       addPlacementMesh(np);
       newIds.push({ oldId: p.id, newId: np.id });
@@ -1279,28 +1563,55 @@ canvas.addEventListener('click', (e) => {
   if (mouseDownStateConsumedDrag()) return;
   const hit = pickGroundCell(e);
   if (!hit) return;
-  // Decor selection: clicking a decor mesh always selects it.
-  if (hit.kind === 'decor') {
+  // Decor selection: clicking a decor mesh selects it — UNLESS a decor
+  // placement tool is active and the cursor is over a snap-able face. In
+  // that case fall through so the face-snap commit below runs (Tinkercad
+  // parity: dragging/clicking a new shape onto an existing shape places it
+  // on the picked face instead of selecting the underlying shape).
+  const _decorToolActive = isDecorKey(activeKey);
+  if (hit.kind === 'decor' && !(_decorToolActive && hit.faceNormal && hit.facePoint)) {
     const mode = e.shiftKey ? 'add' : (e.ctrlKey || e.metaKey) ? 'toggle' : 'replace';
     selectDecor(hit.id, mode);
     return;
   }
-  // Overlay segments (spawn) place on top of any cell — including ones already
-  // occupied by a road piece — so route placement-hits to the placement path
-  // when the active key is an overlay and we have cell coordinates.
-  // Conversely, when the user is placing a road and the only thing under the
-  // cursor is an overlay (e.g. an existing spawn), treat the click as a cell
-  // placement so the road can be dropped underneath the spawn.
+  // Overlay segments (spawn, item boxes, strips…) place on top of any cell —
+  // including ones already occupied by a road piece — so when the user is
+  // *actively placing* a road, route overlay-hits to the placement path so
+  // the road can be dropped underneath the existing overlay. With NO tool
+  // active (or with another overlay/decor tool active), clicking an overlay
+  // should still select it normally.
   const overlayActive = track.isOverlay(activeKey);
   const decorActive = isDecorKey(activeKey);
   const hitOverlay = hit.kind === 'placement' && track.isOverlay(track.getById(hit.id)?.key);
-  if (hit.kind === 'placement' && !overlayActive && !hitOverlay && !decorActive) {
+  const placingRoad = !!activeKey && !overlayActive && !decorActive;
+  if (hit.kind === 'placement' && !overlayActive && !decorActive && !(placingRoad && hitOverlay)) {
     const mode = e.shiftKey ? 'add' : (e.ctrlKey || e.metaKey) ? 'toggle' : 'replace';
     selectPlacement(hit.id, mode);
     return;
   }
   // Decor placement: drop a free-positioned 3D shape at the cursor world point.
   if (decorActive) {
+    // Tinkercad-style face snap: clicking on an existing shape's face places
+    // the new shape flush on that face. The previewMesh was already
+    // oriented + positioned by mousemove, so reuse its transform.
+    if (hit.kind === 'decor' && hit.faceNormal && hit.facePoint && previewMesh && previewMesh.visible) {
+      const eul = new THREE.Euler().setFromQuaternion(previewMesh.quaternion, 'XYZ');
+      const inst = decor.add({
+        type: activeKey,
+        x: previewMesh.position.x, y: previewMesh.position.y, z: previewMesh.position.z,
+        rx: eul.x, ry: eul.y, rz: eul.z,
+      });
+      hideFaceHighlight();
+      if (inst) {
+        addDecorMesh(inst);
+        selectDecor(inst.id, 'replace');
+        pushUndo();
+        refreshHud();
+        setActiveTool(null);
+      }
+      return;
+    }
+    hideFaceHighlight();
     const wp = hit.worldPoint || (hit.gx != null ? { x: hit.gx * TILE, y: 0, z: hit.gz * TILE } : null);
     if (!wp) return;
     let { x, z } = wp;
@@ -1334,8 +1645,38 @@ canvas.addEventListener('click', (e) => {
   // Without an active tool there is nothing to place — bail silently so
   // we don't surface a misleading "Cell occupied" message after a clear.
   if (!activeKey || !SEGMENTS[activeKey]) return;
-  // Place
-  const placement = track.place(activeKey, hit.gx, hit.gz, activeRot);
+  // Place. For overlay pickups/modifiers, capture a sub-cell offset from the
+  // exact world point under the cursor so the user can drop multiple items
+  // (coins, item boxes, oil slicks…) inside a single grid square at distinct
+  // positions instead of stacking them invisibly at the cell centre.
+  //
+  // EXCEPTION: tile-sized surface overlays (modifiers like Repair Strip /
+  // Boost Pad / Slow Strip / Jump Panel, and hazards like Oil Slick / Ice
+  // Patch / Lava Pool) are authored to fill one grid cell — applying any
+  // sub-cell offset shifts them off the grid and they no longer line up
+  // with the road tile beneath. Force these to snap to cell centre so they
+  // read as drop-in floor tiles, matching the grid.
+  let placeOpts = null;
+  if (track.isOverlay(activeKey) && hit.worldPoint) {
+    const cat = SEGMENTS[activeKey]?.category;
+    const allowSubCell = cat === 'pickup';
+    if (allowSubCell) {
+      const cx = hit.gx * TILE, cz = hit.gz * TILE;
+      let ox = hit.worldPoint.x - cx;
+      let oz = hit.worldPoint.z - cz;
+      if (gizmoSnap && snapStep > 0) {
+        ox = Math.round((cx + ox) / snapStep) * snapStep - cx;
+        oz = Math.round((cz + oz) / snapStep) * snapStep - cz;
+      }
+      // Clamp to within the cell footprint so an overlay never visually
+      // escapes its anchor square.
+      const lim = TILE * 0.45;
+      ox = Math.max(-lim, Math.min(lim, ox));
+      oz = Math.max(-lim, Math.min(lim, oz));
+      placeOpts = { ox, oz };
+    }
+  }
+  const placement = track.place(activeKey, hit.gx, hit.gz, activeRot, placeOpts);
   if (placement) {
     addPlacementMesh(placement);
     pushUndo();
@@ -2407,25 +2748,36 @@ function showInspectorPopup() {
     if (!d) { pop.hidden = true; return; }
     const def = DECOR[d.type];
     titleEl.textContent = def.label || 'Shape';
-    buildColorSwatches(d.color);
-    // Sync solid/hole on both header + body buttons.
-    const mode = d.isHole ? 'hole' : 'solid';
-    document.querySelectorAll('#inspectorPopup [data-mode]').forEach(b => {
-      b.classList.toggle('active', b.dataset.mode === mode);
+    const texturedModel = !!def.model;
+    document.querySelectorAll('#inspectorPopup .ip-mat-row, #inspectorPopup .ip-color-block, #inspectorPopup .ip-extra').forEach((el) => {
+      el.hidden = texturedModel;
     });
-    // Sync color preview swatches in header / mat row / custom button.
-    const hex = '#' + (d.color & 0xffffff).toString(16).padStart(6, '0');
-    const setBg = (id) => { const el = document.getElementById(id); if (el) el.style.background = hex; };
-    setBg('ipMatSolidIcon');
-    setBg('ipHeaderSolidDot');
-    setBg('ipCustomSwatch');
-    const picker = document.getElementById('ipColorPicker');
-    if (picker) picker.value = hex;
-    // Transparent checkbox.
-    const t = document.getElementById('ipTransparent');
-    if (t) t.checked = !!d.transparent;
-    // Per-shape params: render schema-driven sliders into #ipParams.
-    renderShapeParams(d);
+    if (texturedModel) {
+      const popover = document.getElementById('ipColorPopover');
+      if (popover) popover.hidden = true;
+      const paramsHost = document.getElementById('ipParams');
+      if (paramsHost) paramsHost.innerHTML = '';
+    } else {
+      buildColorSwatches(d.color);
+      // Sync solid/hole on both header + body buttons.
+      const mode = d.isHole ? 'hole' : 'solid';
+      document.querySelectorAll('#inspectorPopup [data-mode]').forEach(b => {
+        b.classList.toggle('active', b.dataset.mode === mode);
+      });
+      // Sync color preview swatches in header / mat row / custom button.
+      const hex = '#' + (d.color & 0xffffff).toString(16).padStart(6, '0');
+      const setBg = (id) => { const el = document.getElementById(id); if (el) el.style.background = hex; };
+      setBg('ipMatSolidIcon');
+      setBg('ipHeaderSolidDot');
+      setBg('ipCustomSwatch');
+      const picker = document.getElementById('ipColorPicker');
+      if (picker) picker.value = hex;
+      // Transparent checkbox.
+      const t = document.getElementById('ipTransparent');
+      if (t) t.checked = !!d.transparent;
+      // Per-shape params: render schema-driven sliders into #ipParams.
+      renderShapeParams(d);
+    }
   }
   pop.hidden = false;
   positionInspectorPopup();
@@ -2562,6 +2914,11 @@ document.getElementById('playBtn').addEventListener('click', () => {
   }
   const code = encodeTrack(track);
   sessionStorage.setItem('gloKartsStudio.playtest', code);
+  // Persist sky / GLOSET selection so playtest reflects the chosen sky tone.
+  try {
+    const skyId = activeGlosetId != null ? String(activeGlosetId) : '';
+    sessionStorage.setItem('studioGloset', skyId);
+  } catch {}
   // Persist the full design (track + decor + name) under STORAGE_KEY so
   // the editor can reload exactly this draft when the player taps
   // "back to editor" from the playtest pause menu. Without this, the
@@ -2760,6 +3117,59 @@ onGlbLoaded((path) => {
   if (needsRebuild) rebuildAllDecor();
 });
 
+// STK .spm meshes load asynchronously; the first thumbnail render captures
+// the placeholder cube. When a real mesh becomes available, drop every
+// cached stk_* thumb and rebuild the palette so tiles re-render.
+let _stkPaletteRefreshScheduled = false;
+if (typeof window !== 'undefined') {
+  const _refreshStkThumbs = () => {
+    let invalidated = false;
+    for (const k of Array.from(thumbCache.keys())) {
+      if (k.startsWith('stk_')) { thumbCache.delete(k); invalidated = true; }
+    }
+    if (!invalidated || _stkPaletteRefreshScheduled) return;
+    _stkPaletteRefreshScheduled = true;
+    // Coalesce bursts of load events into a single rebuild.
+    setTimeout(() => { _stkPaletteRefreshScheduled = false; try { buildPalette(); } catch (_) {} }, 120);
+  };
+  window.addEventListener('stk-spm-loaded', _refreshStkThumbs);
+  // Textures load after meshes; re-render once images become available.
+  window.addEventListener('stk-spm-texture-loaded', _refreshStkThumbs);
+}
+
+// Same async-load → stale-thumbnail problem applies to DAE-backed prop_*
+// and scenery_* entries (pickup-models) and FBX-backed v8_* entries.
+// Invalidate prop_/scenery_ thumbs when any item model resolves, and
+// invalidate v8_ thumbs when any FBX resolves. Coalesce bursts into a
+// single palette rebuild.
+let _propPaletteRefreshScheduled = false;
+function _schedulePropPaletteRefresh(prefixes) {
+  let invalidated = false;
+  for (const k of Array.from(thumbCache.keys())) {
+    if (prefixes.some((p) => k.startsWith(p))) { thumbCache.delete(k); invalidated = true; }
+  }
+  if (!invalidated || _propPaletteRefreshScheduled) return;
+  _propPaletteRefreshScheduled = true;
+  setTimeout(() => { _propPaletteRefreshScheduled = false; try { buildPalette(); } catch (_) {} }, 80);
+}
+onItemModelLoaded(() => _schedulePropPaletteRefresh(['prop_', 'scenery_']));
+onFbxLoaded(() => _schedulePropPaletteRefresh(['v8_']));
+
+// Eagerly trigger loads for every async-model palette tile so the user
+// sees real 3D thumbnails as soon as possible (rather than only when they
+// first drop one onto the workplane). VISUAL_BUILDERS factories also
+// kick the underlying loader, so just instantiating each builder once is
+// enough — we throw the placeholder groups away immediately.
+import('./road-geometry.js').then((mod) => {
+  const VB = mod && mod.VISUAL_BUILDERS;
+  if (!VB) return;
+  for (const k of Object.keys(VB)) {
+    if (k.startsWith('prop_') || k.startsWith('scenery_') || k.startsWith('v8_') || k.startsWith('stk_')) {
+      try { VB[k](); } catch (_) { /* keep going */ }
+    }
+  }
+}).catch(() => { /* dynamic import unsupported — fine */ });
+
 // ── Terrain controls ──────────────────────────────────────────
 // v2 key: previous v1 stored sky/ground colours that produced a coloured
 // horizon band when the camera tilted. TC-parity defaults are flat off-white
@@ -2948,8 +3358,14 @@ function resize() {
 window.addEventListener('resize', resize);
 resize();
 
+let _editorLastSpinT = 0;
 renderer.setAnimationLoop(() => {
   controls.update();
+  // Slow rotation for pickup item visuals (editor preview).
+  const _now = (typeof performance !== 'undefined' ? performance.now() : Date.now()) / 1000;
+  const _dt = _editorLastSpinT ? Math.min(0.1, _now - _editorLastSpinT) : 0;
+  _editorLastSpinT = _now;
+  if (_dt > 0) { tickPickupSpin(_dt); tickSurfaceScroll(_dt); }
   renderer.render(scene, activeCamera);
   _updateOrbitCube();
   // Keep the floating action ring pinned over the selected piece even while
@@ -3391,6 +3807,33 @@ function _projectToScreen(world, rect) {
   };
 }
 
+// Local-space AABB for any decor mesh. Primitive shapes carry a
+// `geometry.boundingBox`, but model-backed decor (props / scenery / STK)
+// is a Three.Group with no geometry of its own. For those we build a
+// local-space box by transforming each world-AABB corner back through the
+// wrap's inverse matrix so the rest of the gizmo math (which expects a
+// local box that gets `localToWorld`'d) keeps working unchanged.
+const _localBoxCornerW = new THREE.Vector3();
+const _localBoxCornerL = new THREE.Vector3();
+function _meshLocalBox(mesh) {
+  const geomBox = mesh.geometry?.boundingBox;
+  if (geomBox) return geomBox;
+  const worldBox = new THREE.Box3().setFromObject(mesh);
+  if (!isFinite(worldBox.min.x) || !isFinite(worldBox.max.x)) return null;
+  const local = new THREE.Box3();
+  local.makeEmpty();
+  const wx = [worldBox.min.x, worldBox.max.x];
+  const wy = [worldBox.min.y, worldBox.max.y];
+  const wz = [worldBox.min.z, worldBox.max.z];
+  for (let i = 0; i < 2; i++) for (let j = 0; j < 2; j++) for (let k = 0; k < 2; k++) {
+    _localBoxCornerW.set(wx[i], wy[j], wz[k]);
+    _localBoxCornerL.copy(_localBoxCornerW);
+    mesh.worldToLocal(_localBoxCornerL);
+    local.expandByPoint(_localBoxCornerL);
+  }
+  return local;
+}
+
 function _selectedDecorMesh() {
   if (lastSelectedDecorId == null) return null;
   return decorMeshById.get(lastSelectedDecorId) || null;
@@ -3447,16 +3890,20 @@ function updateDecorManip() {
     return;
   }
   decorManipEl.hidden = false;
-  // World AABB
-  if (mesh.geometry) {
-    if (!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox();
-  }
+  // World AABB. Primitive shapes need a one-shot computeBoundingBox; model
+  // decor (Group wrap) has no geometry of its own — _meshLocalBox handles
+  // that case below.
+  if (mesh.geometry && !mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox();
   _dmBox.setFromObject(mesh);
   const rect = canvas.getBoundingClientRect();
-  // Local AABB corners → world (use bounding box of the geometry then apply mesh matrix).
-  const min = mesh.geometry?.boundingBox?.min;
-  const max = mesh.geometry?.boundingBox?.max;
-  if (!min || !max) { decorManipEl.hidden = true; return; }
+  // Local AABB. Primitive decor exposes geometry.boundingBox directly;
+  // model-backed decor (Group wrap) gets a derived local box.
+  const localBox = _meshLocalBox(mesh);
+  const min = localBox?.min;
+  const max = localBox?.max;
+  if (!min || !max || !isFinite(min.x) || !isFinite(max.x)) {
+    decorManipEl.hidden = true; return;
+  }
   _updateWorkplaneShadow(min, max, mesh);
   const screenCorners = [];
   for (let i = 0; i < 8; i++) {
@@ -3569,7 +4016,10 @@ function updateDecorManip() {
                      : (max.z - min.z);
       const scl = (axis === 'x') ? inst.sx : (axis === 'y') ? inst.sy : inst.sz;
       const len = baseSize * scl;
-      if (span) span.textContent = (Math.round(len * 10) / 10).toFixed(1);
+      // Show integers when the snap step is whole units (Tinkercad default),
+      // otherwise fall back to one decimal place.
+      const integerMode = gizmoSnap && snapStep >= 1;
+      if (span) span.textContent = integerMode ? Math.round(len).toString() : (Math.round(len * 10) / 10).toFixed(1);
     }
   }
   // Raise handle: float a black cone above the top-center of the mesh AABB.
@@ -3615,8 +4065,10 @@ function _attachManipDrag() {
       // Opposite corner index (XOR all 3 bits).
       const oppIdx = idx ^ 7;
       const rect = canvas.getBoundingClientRect();
-      const min = mesh.geometry.boundingBox.min;
-      const max = mesh.geometry.boundingBox.max;
+      const localBox = _meshLocalBox(mesh);
+      if (!localBox) { _dmDragging = false; controls.enabled = true; return; }
+      const min = localBox.min;
+      const max = localBox.max;
       const oppLocal = _dmCornersLocal[oppIdx];
       _dmCornerWorld.set(
         oppLocal[0] > 0 ? max.x : min.x,
@@ -3634,17 +4086,24 @@ function _attachManipDrag() {
         const dist = Math.hypot(mx - oppScreen.x, my - oppScreen.y);
         let f = startDist > 0 ? dist / startDist : 1;
         f = Math.max(0.05, f);
-        // Shift = uniform 3-axis scale; default = horizontal scale only (X+Z),
-        // matching Tinkercad's corner-handle behaviour for the workplane.
+        // Shift = uniform 3-axis scale (Tinkercad parity); default = horizontal
+        // scale only (X+Z). Ctrl = fine snap (length-space, quarter step).
         const uniform = !!e.shiftKey;
         let nx = startScale.x * f;
         let nz = startScale.z * f;
         let ny = uniform ? (startScale.y * f) : startScale.y;
         if (gizmoSnap) {
-          const step = 0.1;
-          nx = Math.max(step, Math.round(nx / step) * step);
-          nz = Math.max(step, Math.round(nz / step) * step);
-          if (uniform) ny = Math.max(step, Math.round(ny / step) * step);
+          const stepMm = (e.ctrlKey ? Math.max(0.1, snapStep / 4) : Math.max(0.1, snapStep)) || 1;
+          const baseX = Math.max(1e-3, max.x - min.x);
+          const baseZ = Math.max(1e-3, max.z - min.z);
+          const baseY = Math.max(1e-3, max.y - min.y);
+          const lx = Math.max(stepMm, Math.round((nx * baseX) / stepMm) * stepMm);
+          const lz = Math.max(stepMm, Math.round((nz * baseZ) / stepMm) * stepMm);
+          nx = lx / baseX; nz = lz / baseZ;
+          if (uniform) {
+            const ly = Math.max(stepMm, Math.round((ny * baseY) / stepMm) * stepMm);
+            ny = ly / baseY;
+          }
         }
         inst.sx = nx; inst.sy = ny; inst.sz = nz;
         mesh.scale.set(nx, ny, nz);
@@ -3693,7 +4152,8 @@ function _attachManipDrag() {
         if (axis === 'y') delta = -delta; // top-down view inverts.
         let next = startRot[axis] + delta;
         if (gizmoSnap) {
-          const step = Math.PI / 8; // 22.5°
+          // Default 22.5° steps (Tinkercad parity); Ctrl = fine 1° step.
+          const step = e.ctrlKey ? (Math.PI / 180) : (Math.PI / 8);
           next = Math.round(next / step) * step;
         }
         inst[`r${axis}`] = next;
@@ -3732,8 +4192,10 @@ function _attachManipDrag() {
       const key = el.dataset.edge;
       const axisLetter = key[1]; // 'x' | 'y' | 'z'
       const rect = canvas.getBoundingClientRect();
-      const min = mesh.geometry.boundingBox.min;
-      const max = mesh.geometry.boundingBox.max;
+      const localBox = _meshLocalBox(mesh);
+      if (!localBox) { _dmDragging = false; return; }
+      const min = localBox.min;
+      const max = localBox.max;
       // Opposite anchor in local space.
       const oppLocal = (() => {
         if (key === '+x') return [ min.x, min.y, (min.z + max.z) / 2 ];
@@ -3760,10 +4222,15 @@ function _attachManipDrag() {
         else if (axisLetter === 'y') ny = startScale.y * f;
         else if (axisLetter === 'z') nz = startScale.z * f;
         if (gizmoSnap) {
-          const step = 0.1;
-          if (axisLetter === 'x') nx = Math.max(step, Math.round(nx / step) * step);
-          if (axisLetter === 'y') ny = Math.max(step, Math.round(ny / step) * step);
-          if (axisLetter === 'z') nz = Math.max(step, Math.round(nz / step) * step);
+          // Snap the resulting length to the active grid step (Ctrl = quarter
+          // step for fine adjustment), then convert back to scale factor.
+          const stepMm = (e.ctrlKey ? Math.max(0.1, snapStep / 4) : Math.max(0.1, snapStep)) || 1;
+          const baseX = Math.max(1e-3, max.x - min.x);
+          const baseY = Math.max(1e-3, max.y - min.y);
+          const baseZ = Math.max(1e-3, max.z - min.z);
+          if (axisLetter === 'x') { const lx = Math.max(stepMm, Math.round((nx * baseX) / stepMm) * stepMm); nx = lx / baseX; }
+          if (axisLetter === 'y') { const ly = Math.max(stepMm, Math.round((ny * baseY) / stepMm) * stepMm); ny = ly / baseY; }
+          if (axisLetter === 'z') { const lz = Math.max(stepMm, Math.round((nz * baseZ) / stepMm) * stepMm); nz = lz / baseZ; }
         }
         inst.sx = nx; inst.sy = ny; inst.sz = nz;
         mesh.scale.set(nx, ny, nz);
@@ -3791,8 +4258,10 @@ function _attachManipDrag() {
       if (!mesh || !inst || lab._editing) return;
       ev.stopPropagation();
       const axis = lab.dataset.axis;
-      const min = mesh.geometry.boundingBox.min;
-      const max = mesh.geometry.boundingBox.max;
+      const localBox = _meshLocalBox(mesh);
+      if (!localBox) return;
+      const min = localBox.min;
+      const max = localBox.max;
       const baseSize = (axis === 'x') ? (max.x - min.x)
                      : (axis === 'y') ? (max.y - min.y)
                      : (max.z - min.z);
@@ -3857,8 +4326,13 @@ function _attachManipDrag() {
         // Screen-Y inverted vs. world-Y (drag up = lift).
         let nextY = startY - dy * worldPerPx;
         if (gizmoSnap && snapStep > 0) {
-          nextY = Math.round(nextY / snapStep) * snapStep;
+          // Ctrl = fine 1/4-step snap, parity with scale/rotate handles.
+          const stepMm = e.ctrlKey ? Math.max(0.1, snapStep / 4) : snapStep;
+          nextY = Math.round(nextY / stepMm) * stepMm;
         }
+        // Tinkercad parity: shapes rest on the workplane by default. Hold Alt
+        // to push the base below the workplane (e.g. for inset features).
+        if (!e.altKey) nextY = Math.max(0, nextY);
         inst.y = nextY;
         mesh.position.y = nextY;
         const span = raiseEl.querySelector('.raise-readout [data-val]');
@@ -4124,21 +4598,168 @@ document.getElementById('topTabBrick')?.addEventListener('click', (e) => {
   toast(_brickViewOn ? 'Wireframe ON' : 'Wireframe OFF');
 });
 
-// 3) Right-aside tabs — Shapes / Kart / Workplane.
+// ── GLOSET sky-tone picker ────────────────────────────────────────────────
+// 10 equirectangular sky panoramas from the 8K Skybox Pack Free.
+// Each GLOSET card gets a tiny WebGL sphere preview rendered into a
+// <canvas> so the user can see the actual sky before selecting it.
+const GLOSETS = [
+  { id: 1,  label: 'Clear Day',      meta: 'bright blue',   file: 'sky-1.png'  },
+  { id: 2,  label: 'Golden Hour',    meta: 'warm sunset',   file: 'sky-2.png'  },
+  { id: 3,  label: 'Overcast',       meta: 'soft grey',     file: 'sky-3.png'  },
+  { id: 4,  label: 'Dusk',           meta: 'deep orange',   file: 'sky-4.png'  },
+  { id: 5,  label: 'Stormy',         meta: 'dramatic',      file: 'sky-5.png'  },
+  { id: 6,  label: 'Midday',         meta: 'high sun',      file: 'sky-6.png'  },
+  { id: 7,  label: 'Haze',           meta: 'pastel mist',   file: 'sky-7.png'  },
+  { id: 8,  label: 'Twilight',       meta: 'blue hour',     file: 'sky-8.png'  },
+  { id: 9,  label: 'Sunrise',        meta: 'amber pink',    file: 'sky-9.png'  },
+  { id: 10, label: 'Night Edge',     meta: 'dark horizon',  file: 'sky-10.png' },
+];
+
+const SKY_BASE_PATH = '/kart%20assets/3D%20Kart/Assets/8K%20Skybox%20Pack%20Free/Skyboxes/Texture/';
+
+// Resolve initial GLOSET from track.sky → sessionStorage → default 2.
+const _storedGloset = (() => {
+  try { const v = parseInt(sessionStorage.getItem('studioGloset'), 10); return isNaN(v) ? null : v; } catch { return null; }
+})();
+let activeGlosetId = track.sky ?? _storedGloset ?? 2;
+
+// Apply the active GLOSET to the editor scene background immediately.
+function _applyGlosetToEditorScene(id) {
+  const entry = GLOSETS.find(g => g.id === id);
+  if (!entry) return;
+  new THREE.TextureLoader().load(SKY_BASE_PATH + entry.file, (tex) => {
+    tex.mapping = THREE.EquirectangularReflectionMapping;
+    tex.colorSpace = THREE.SRGBColorSpace;
+    scene.background = tex;
+  });
+}
+_applyGlosetToEditorScene(activeGlosetId);
+
+/** @type {Map<number, HTMLButtonElement>} */
+const _glosetCardById = new Map();
+/** Tiny 3D sphere preview using a dedicated off-screen renderer. */
+let _glosetPreviewRenderer = null;
+function _getGlosetRenderer() {
+  if (_glosetPreviewRenderer) return _glosetPreviewRenderer;
+  _glosetPreviewRenderer = new THREE.WebGLRenderer({ antialias: false, alpha: false });
+  _glosetPreviewRenderer.setSize(160, 90);
+  _glosetPreviewRenderer.outputColorSpace = THREE.SRGBColorSpace;
+  return _glosetPreviewRenderer;
+}
+
+function _renderGlosetPreview(id, canvas) {
+  const entry = GLOSETS.find(g => g.id === id);
+  if (!entry || !canvas) return;
+  new THREE.TextureLoader().load(
+    SKY_BASE_PATH + entry.file,
+    (tex) => {
+      tex.mapping = THREE.EquirectangularReflectionMapping;
+      tex.colorSpace = THREE.SRGBColorSpace;
+      // Build a tiny scene: equirect sky sphere + a simple shiny sphere prop.
+      const pvScene = new THREE.Scene();
+      pvScene.background = tex;
+      // Small metallic ball in centre to show lighting.
+      const ball = new THREE.Mesh(
+        new THREE.SphereGeometry(0.35, 24, 16),
+        new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.05, metalness: 0.95, envMap: tex }),
+      );
+      pvScene.add(ball);
+      pvScene.add(new THREE.AmbientLight(0xffffff, 0.4));
+      const sun = new THREE.DirectionalLight(0xffffff, 2.0);
+      sun.position.set(3, 5, 4);
+      pvScene.add(sun);
+      const pvCam = new THREE.PerspectiveCamera(60, 160 / 90, 0.1, 100);
+      pvCam.position.set(0, 0.15, 1.1);
+      pvCam.lookAt(0, 0, 0);
+      const rdr = _getGlosetRenderer();
+      rdr.render(pvScene, pvCam);
+      // Blit into the card's canvas.
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(rdr.domElement, 0, 0, canvas.width, canvas.height);
+      // Dispose tiny objects.
+      ball.geometry.dispose();
+      ball.material.dispose();
+      pvScene.clear();
+    },
+  );
+}
+
+function _buildGlosetCards() {
+  const grid = document.getElementById('glosetGrid');
+  if (!grid) return;
+  grid.innerHTML = '';
+  _glosetCardById.clear();
+  for (const g of GLOSETS) {
+    const card = document.createElement('button');
+    card.type = 'button';
+    card.className = 'gloset-card';
+    card.dataset.glosetId = String(g.id);
+    card.title = `${g.label} \u2014 ${g.meta}`;
+    // Canvas for the 3D sphere preview.
+    const canvas = document.createElement('canvas');
+    canvas.width = 160; canvas.height = 90;
+    card.innerHTML = `
+      <div class="gloset-thumb"></div>
+      <div class="gloset-label"></div>
+      <div class="gloset-meta"></div>
+    `;
+    card.querySelector('.gloset-thumb').appendChild(canvas);
+    card.querySelector('.gloset-label').textContent = g.label;
+    card.querySelector('.gloset-meta').textContent = g.meta;
+    card.addEventListener('click', () => _selectGloset(g.id));
+    grid.appendChild(card);
+    _glosetCardById.set(g.id, card);
+  }
+  _refreshGlosetSelection();
+}
+
+function _refreshGlosetSelection() {
+  for (const [id, card] of _glosetCardById) {
+    card.classList.toggle('active', id === activeGlosetId);
+  }
+}
+
+function _selectGloset(id) {
+  activeGlosetId = id;
+  track.sky = id;
+  try { sessionStorage.setItem('studioGloset', String(id)); } catch {}
+  _applyGlosetToEditorScene(id);
+  _refreshGlosetSelection();
+  pushUndo();
+}
+
+let _glosetPreviewsRendered = false;
+function _maybeRenderGlosetPreviews() {
+  if (_glosetPreviewsRendered) return;
+  _glosetPreviewsRendered = true;
+  for (const g of GLOSETS) {
+    const card = _glosetCardById.get(g.id);
+    if (!card) continue;
+    const canvas = card.querySelector('canvas');
+    if (canvas) _renderGlosetPreview(g.id, canvas);
+  }
+}
+
+_buildGlosetCards();
+
+// 3) Right-aside tabs — Shapes / Kart / GLOSET / Workplane.
 const _rightTabs = [
   document.getElementById('tabShapes'),
   document.getElementById('tabKart'),
+  document.getElementById('tabGloset'),
   document.getElementById('tabWorkplane'),
 ].filter(Boolean);
 const _shapesPanelEl = document.getElementById('shapesPanel');
 const _kartPanelEl = document.getElementById('kartPanel');
+const _glosetPanelEl = document.getElementById('glosetPanel');
 function _setRightTab(name) {
-  const map = { shapes: 'tabShapes', kart: 'tabKart', workplane: 'tabWorkplane' };
+  const map = { shapes: 'tabShapes', kart: 'tabKart', gloset: 'tabGloset', workplane: 'tabWorkplane' };
   for (const t of _rightTabs) t.classList.toggle('active', t.id === map[name]);
-  // Toggle the visible panel between Shapes (palette) and Kart (kart grid).
   if (_shapesPanelEl) _shapesPanelEl.hidden = name !== 'shapes';
   if (_kartPanelEl) _kartPanelEl.hidden = name !== 'kart';
+  if (_glosetPanelEl) _glosetPanelEl.hidden = name !== 'gloset';
   if (name === 'kart') _maybePrewarmKartThumbs();
+  if (name === 'gloset') _maybeRenderGlosetPreviews();
   if (name === 'workplane') {
     // Pop the existing terrain settings popup as the "workplane" panel.
     document.getElementById('settingsBtn')?.click();
@@ -4147,11 +4768,13 @@ function _setRightTab(name) {
       for (const t of _rightTabs) t.classList.toggle('active', t.id === 'tabShapes');
       if (_shapesPanelEl) _shapesPanelEl.hidden = false;
       if (_kartPanelEl) _kartPanelEl.hidden = true;
+      if (_glosetPanelEl) _glosetPanelEl.hidden = true;
     }, 1200);
   }
 }
 document.getElementById('tabShapes')?.addEventListener('click', () => _setRightTab('shapes'));
 document.getElementById('tabKart')?.addEventListener('click', () => _setRightTab('kart'));
+document.getElementById('tabGloset')?.addEventListener('click', () => _setRightTab('gloset'));
 document.getElementById('tabWorkplane')?.addEventListener('click', () => _setRightTab('workplane'));
 
 window.__studio = { track, decor, scene, camera, renderer, rebuildAll, rebuildAllDecor, refreshHud, refreshPlayButton, selectDecor, rebuildAllCSG, rebuildCSGForGroup, csgMeshByGid, decorMeshById, groupSelection, ungroupSelection, setActiveTool, selectedIds, selectedDecorIds, THREE, SEGMENTS, SEGMENT_KEYS, autoOrientRot };

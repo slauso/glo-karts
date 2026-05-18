@@ -63,6 +63,149 @@ const WALL_COLOR = 0x6b7280;
 const FINISH_COLOR = 0xfbbf24;
 const RAMP_COLOR = 0x4f5663;
 
+// ── Runway / apron surface colours & helpers ─────────────────────────
+const TARMAC  = 0x252830;   // very dark blue-grey asphalt
+const APRON_C = 0x2d3340;   // slightly warmer concrete apron
+const MARK_W  = 0xe8eae8;   // off-white runway markings
+const MARK_Y  = 0xffcc00;   // bright yellow taxiway / hold-short markings
+
+// Runway tiles are 1 × 1 grid cell (TILE × TILE = 36 m × 36 m).
+// Anchor = cell centre in X/Z.  All positions relative to (0, 0, 0).
+const RWY_MY = ROAD_THICK + 0.025;  // marking Y — just above deck top
+
+function rwDeck(color) {
+  return {
+    kind: 'box',
+    size: [TILE, ROAD_THICK, TILE],
+    pos:  [0, ROAD_THICK / 2, 0],
+    color: color !== undefined ? color : TARMAC,
+    drivable: true,
+  };
+}
+
+// Single centerline dash — centred on the tile, runs 65 % of tile length.
+function runwayCenterlineDash(markColor) {
+  return {
+    kind: 'box',
+    size: [0.75, 0.03, TILE * 0.65],
+    pos:  [0, RWY_MY, 0],
+    color: markColor !== undefined ? markColor : MARK_W,
+    solid: false,
+  };
+}
+
+function runwayBlankBlocks()     { return [rwDeck()]; }
+function runwayCenterBlocks()    { return [rwDeck(), runwayCenterlineDash()]; }
+
+function runwayThresholdBlocks() {
+  const out = [rwDeck()];
+  // Piano-key threshold bars: 8 white stripes near the -Z edge of the tile.
+  const NUM_BARS = 8;
+  const TOTAL_W  = TILE * 0.82;
+  const BAR_W    = TOTAL_W / (NUM_BARS * 2 - 1);
+  const BAR_L    = TILE * 0.32;
+  for (let i = 0; i < NUM_BARS; i++) {
+    const bx = -TOTAL_W / 2 + BAR_W * (2 * i) + BAR_W / 2;
+    out.push({ kind: 'box', size: [BAR_W, 0.03, BAR_L], pos: [bx, RWY_MY, -TILE * 0.25], color: MARK_W, solid: false });
+  }
+  // Full-width transverse line near the threshold edge.
+  out.push({ kind: 'box', size: [TILE * 0.90, 0.03, 0.35], pos: [0, RWY_MY, -TILE * 0.08], color: MARK_W, solid: false });
+  // Centerline dash in the remaining (exit) half.
+  out.push({ kind: 'box', size: [0.75, 0.03, TILE * 0.35], pos: [0, RWY_MY, TILE * 0.25], color: MARK_W, solid: false });
+  return out;
+}
+
+function runwayAimBlocks() {
+  const out = [rwDeck()];
+  // Two aiming-point rectangles flanking the centreline.
+  const AP_W = TILE * 0.12;
+  const AP_L = TILE * 0.22;
+  const AP_X = TILE * 0.22;
+  out.push({ kind: 'box', size: [AP_W, 0.03, AP_L], pos: [-AP_X, RWY_MY, 0], color: MARK_W, solid: false });
+  out.push({ kind: 'box', size: [AP_W, 0.03, AP_L], pos: [ AP_X, RWY_MY, 0], color: MARK_W, solid: false });
+  // Touchdown-zone bar pairs at ±¼ tile depth.
+  const TZ_W = TILE * 0.09;
+  const TZ_L = TILE * 0.10;
+  const TZ_X = TILE * 0.34;
+  for (const tz of [-TILE * 0.25, TILE * 0.25]) {
+    out.push({ kind: 'box', size: [TZ_W, 0.03, TZ_L], pos: [-TZ_X, RWY_MY, tz], color: MARK_W, solid: false });
+    out.push({ kind: 'box', size: [TZ_W, 0.03, TZ_L], pos: [ TZ_X, RWY_MY, tz], color: MARK_W, solid: false });
+  }
+  // Centreline dash.
+  out.push(runwayCenterlineDash());
+  return out;
+}
+
+function runwayTaxiBlocks() {
+  const out = [rwDeck(APRON_C)];
+  // Solid yellow centreline full tile length.
+  out.push({ kind: 'box', size: [0.90, 0.03, TILE], pos: [0, RWY_MY, 0], color: MARK_Y, solid: false });
+  // Double edge guides at ±38 % of tile width.
+  const EDGE = 0.40, SEP = 0.70, OFF = TILE * 0.38;
+  for (const s of [-1, 1]) {
+    out.push({ kind: 'box', size: [EDGE, 0.03, TILE], pos: [s * OFF,       RWY_MY, 0], color: MARK_Y, solid: false });
+    out.push({ kind: 'box', size: [EDGE, 0.03, TILE], pos: [s * (OFF+SEP), RWY_MY, 0], color: MARK_Y, solid: false });
+  }
+  return out;
+}
+
+function runwayApronBlocks() {
+  const out = [rwDeck(APRON_C)];
+  // Faint cross-hair at tile thirds.
+  for (const t of [-TILE / 3, TILE / 3]) {
+    out.push({ kind: 'box', size: [0.14, 0.03, TILE], pos: [t, RWY_MY, 0], color: 0x4a5060, solid: false });
+    out.push({ kind: 'box', size: [TILE, 0.03, 0.14], pos: [0, RWY_MY, t], color: 0x4a5060, solid: false });
+  }
+  // Yellow corner dots.
+  for (const [cx, cz] of [[-TILE*0.4, -TILE*0.4], [-TILE*0.4, TILE*0.4], [TILE*0.4, -TILE*0.4], [TILE*0.4, TILE*0.4]]) {
+    out.push({ kind: 'box', size: [1.5, 0.03, 1.5], pos: [cx, RWY_MY, cz], color: MARK_Y, solid: false });
+  }
+  return out;
+}
+
+// ── Floor / underlayment tile helpers ────────────────────────────────
+// Flat 1×1 blocks for each environment theme — no walls, no barriers.
+// Use these as a "ground layer" beneath the rest of a design.
+const F_MY = ROAD_THICK + 0.020;  // surface marking Y
+
+function flatDeck(color) {
+  return { kind: 'box', size: [TILE, ROAD_THICK, TILE], pos: [0, ROAD_THICK / 2, 0], color, drivable: true };
+}
+
+// Zebra-crossing stripes across full X width, 5 stripes per tile.
+function zebraStripes(stripeColor) {
+  const out = [];
+  const col  = stripeColor || 0xf0f0f0;
+  const STRW = TILE / 10;      // 5 white + 5 gap stripes across the tile
+  for (let i = 0; i < 5; i++) {
+    const z = -TILE / 2 + STRW + i * STRW * 2;
+    out.push({ kind: 'box', size: [TILE, 0.025, STRW * 0.85], pos: [0, F_MY, z], color: col, solid: false });
+  }
+  return out;
+}
+
+// Chevron hazard pattern (2 wide diagonal stripes).
+function chevronStripes(stripeColor) {
+  const col = stripeColor || 0xffcc00;
+  // Two broad diagonal rectangles, rotated ±30°.
+  return [
+    { kind: 'box', size: [TILE * 0.18, 0.025, TILE * 0.82], rotY:  0.52, pos: [-TILE * 0.18, F_MY, 0], color: col, solid: false },
+    { kind: 'box', size: [TILE * 0.18, 0.025, TILE * 0.82], rotY: -0.52, pos: [ TILE * 0.18, F_MY, 0], color: col, solid: false },
+  ];
+}
+
+// Alternating red / white kerb stripes (6 each along Z).
+function kerbStripes() {
+  const out = [];
+  const count = 12, strW = TILE / count;
+  for (let i = 0; i < count; i++) {
+    const z = -TILE / 2 + strW * 0.5 + i * strW;
+    const col = i % 2 === 0 ? 0xd0312d : 0xf2f2f2;
+    out.push({ kind: 'box', size: [TILE, ROAD_THICK * 0.5, strW * 0.98], pos: [0, ROAD_THICK * 0.75, z], color: col, solid: false });
+  }
+  return out;
+}
+
 function deck(extentZ = TILE) {
   return {
     kind: 'box',
@@ -244,10 +387,10 @@ export const SEGMENTS = {
     isSpawn: true,
   },
 
-  // ── Junctions & wide road ─────────────────────────────────────
+  // ── Junctions (legacy — replaced by Runway Surfaces in editor palette) ──
   wide: {
     label: 'Wide Plaza',
-    category: 'junction',
+    category: 'legacy',
     span: { x: 2, z: 2 },
     // 2x2 deck centered between the four cells. Anchor cell is the -X/-Z corner,
     // so the deck centre sits at (+TILE/2, _, +TILE/2).
@@ -256,19 +399,176 @@ export const SEGMENTS = {
 
   t_junction: {
     label: 'T-Junction',
-    category: 'junction',
+    category: 'legacy',
     span: { x: 1, z: 1 },
     blocks: tJunctionBlocks(),
   },
 
   crossroads: {
     label: 'Crossroads',
-    category: 'junction',
+    category: 'legacy',
     span: { x: 1, z: 1 },
     blocks: crossroadsBlocks(),
   },
 
-  // ── Banked turn ──────────────────────────────────────────────
+  // ── Runway Surfaces — 1 × 1 flat tarmac tiles (36 m × 36 m) ──────────
+  // Borderless, drivable slabs with embedded markings. Use as individual
+  // tiles or combine any number of them to form runways, taxiways, and
+  // open plazas. No walls — compatible with all other segment categories.
+
+  runway_blank: {
+    label: 'Runway – Plain',
+    category: 'runway',
+    span: { x: 1, z: 1 },
+    blocks: runwayBlankBlocks(),
+  },
+
+  runway_center: {
+    label: 'Runway – Centreline',
+    category: 'runway',
+    span: { x: 1, z: 1 },
+    blocks: runwayCenterBlocks(),
+  },
+
+  runway_threshold: {
+    label: 'Runway – Threshold',
+    category: 'runway',
+    span: { x: 1, z: 1 },
+    blocks: runwayThresholdBlocks(),
+  },
+
+  runway_aim: {
+    label: 'Runway – Aiming Point',
+    category: 'runway',
+    span: { x: 1, z: 1 },
+    blocks: runwayAimBlocks(),
+  },
+
+  runway_taxi: {
+    label: 'Taxiway',
+    category: 'runway',
+    span: { x: 1, z: 1 },
+    blocks: runwayTaxiBlocks(),
+  },
+
+  runway_apron: {
+    label: 'Apron / Stand',
+    category: 'runway',
+    span: { x: 1, z: 1 },
+    blocks: runwayApronBlocks(),
+  },
+
+  // ── Floor / Underlayment Tiles ────────────────────────────────────
+  // Simple 1×1 flat drivable slabs for every environment type.
+  // Place these as a ground layer beneath roads, props and other segments
+  // to fill gaps and set the visual theme of an area. No walls or raised
+  // edges — all tiles abut seamlessly in any direction.
+
+  // ·· Racetrack ·················································
+  floor_tarmac: {
+    label: 'Tarmac',
+    category: 'floor',
+    span: { x: 1, z: 1 },
+    blocks: [flatDeck(0x1e2025)],
+  },
+  floor_kerb: {
+    label: 'Kerb (Red/White)',
+    category: 'floor',
+    span: { x: 1, z: 1 },
+    blocks: [flatDeck(0xd0312d), ...kerbStripes()],
+  },
+  floor_gravel_trap: {
+    label: 'Gravel Trap',
+    category: 'floor',
+    span: { x: 1, z: 1 },
+    blocks: [flatDeck(0x9a8f85)],
+  },
+  floor_grass_track: {
+    label: 'Circuit Grass',
+    category: 'floor',
+    span: { x: 1, z: 1 },
+    blocks: [flatDeck(0x2d6b1a)],
+  },
+
+  // ·· City / Urban ··············································
+  floor_asphalt: {
+    label: 'City Asphalt',
+    category: 'floor',
+    span: { x: 1, z: 1 },
+    blocks: [flatDeck(0x2e2e35)],
+  },
+  floor_concrete: {
+    label: 'Concrete Slab',
+    category: 'floor',
+    span: { x: 1, z: 1 },
+    blocks: [flatDeck(0xb2afa6)],
+  },
+  floor_pavers: {
+    label: 'Brick / Pavers',
+    category: 'floor',
+    span: { x: 1, z: 1 },
+    blocks: [flatDeck(0x7a6a55)],
+  },
+  floor_crosswalk: {
+    label: 'Crosswalk',
+    category: 'floor',
+    span: { x: 1, z: 1 },
+    blocks: [flatDeck(0x2e2e35), ...zebraStripes(0xf0f0ec)],
+  },
+
+  // ·· Suburban / Nature ··········································
+  floor_lawn: {
+    label: 'Lawn',
+    category: 'floor',
+    span: { x: 1, z: 1 },
+    blocks: [flatDeck(0x4a8a2e)],
+  },
+  floor_dirt: {
+    label: 'Dirt',
+    category: 'floor',
+    span: { x: 1, z: 1 },
+    blocks: [flatDeck(0x6b4c2a)],
+  },
+  floor_mud: {
+    label: 'Mud',
+    category: 'floor',
+    span: { x: 1, z: 1 },
+    blocks: [flatDeck(0x4a3520)],
+  },
+
+  // ·· Beach / Desert ·············································
+  floor_sand: {
+    label: 'Sand',
+    category: 'floor',
+    span: { x: 1, z: 1 },
+    blocks: [flatDeck(0xe8d0a0)],
+  },
+  floor_wet_sand: {
+    label: 'Wet Sand',
+    category: 'floor',
+    span: { x: 1, z: 1 },
+    blocks: [flatDeck(0xc4a87a)],
+  },
+
+  // ·· Special surfaces ·············································
+  floor_ice: {
+    label: 'Ice / Snow',
+    category: 'floor',
+    span: { x: 1, z: 1 },
+    blocks: [flatDeck(0xd8e8f8)],
+  },
+  floor_metal: {
+    label: 'Metal Grating',
+    category: 'floor',
+    span: { x: 1, z: 1 },
+    blocks: [flatDeck(0x7a8090)],
+  },
+  floor_hazard: {
+    label: 'Hazard (Yellow)',
+    category: 'floor',
+    span: { x: 1, z: 1 },
+    blocks: [flatDeck(0x2e2e35), ...chevronStripes(0xffcc00)],
+  },
   // 90° banked corner spanning a 2×2 cell footprint (4 grid squares).
   // Cross-section is a SYMMETRIC concave bowl (low centerline, raised
   // inner AND outer edges) so karts settle into the curve and can carry
@@ -1081,7 +1381,7 @@ const CONNECTORS = {
     { x: 0, z: 0, side: 'E' },
     { x: 0, z: 0, side: 'W' },
   ],
-  // Banked left turn — 2×2 footprint, connectors at the midpoints of
+  // Banked left turn— 2×2 footprint, connectors at the midpoints of
   // the south edge of cell (1,0) and west edge of cell (0,1).
   banked_turn:     [{ x: 1, z: 0, side: 'S' }, { x: 0, z: 1, side: 'W' }],
   bump_up:         SN,

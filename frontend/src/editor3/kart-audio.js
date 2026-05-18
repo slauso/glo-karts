@@ -62,9 +62,22 @@ export const STD_KIT = {
   start:     'K_Std/AccelBeforeStart.q.32.ogg',
   skid:      'K_Std/StartDushAndSkidd.ry.32.ogg',
   horn:      'K_Std/pSE_HORN_K_STD.ogg',
+  // ── Slice 2: weapon / combat SFX ─────────────────────────────
+  shoot:         '../sfx/shoot.ogg',
+  explode_item:  '../sfx/explosion.ogg',
+  itemGet:       '../sfx/grab_collectable.ogg',
+  shellBounce:   '../sfx/boing.ogg',
+  starLoop:      '../sfx/tractor_beam.ogg',
+  billLoop:      '../sfx/wee.ogg',
+  warningBlue:   '../sfx/thunder.ogg',
+  hitTaken:      '../sfx/metal_clang.ogg',
+  spinout:       '../sfx/ugh.ogg',
+  startRaceHorn:    '../sfx/start_race.ogg',
+  raceFinish:       '../sfx/race_finish_victory.ogg',
+  raceFinishLoss:   '../sfx/gp_end.ogg',
+  preStart:         '../sfx/pre_start_race.ogg',
 };
-
-// V8 muscle-car kits sourced from the Vigilante 8: 2nd Offense Unity port
+// sourced from the Vigilante 8: 2nd Offense Unity port
 // (https://github.com/stefanvranjes/Vigilante2Unity, assets cleared for
 // reuse). The original PSX banks are short PCM loops (7–11 kHz, mono).
 // Index→role mapping inferred from sample-rate/length conventions:

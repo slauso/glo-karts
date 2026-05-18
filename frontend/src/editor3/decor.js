@@ -12,6 +12,10 @@
 
 import * as THREE from 'three';
 import { instanceGLB, loadGLB } from './glb-cache.js';
+import { VISUAL_BUILDERS } from './road-geometry.js';
+import { WORLD_UNITS_PER_M } from './units.js';
+
+export const DECOR_PLACEMENT_SCALE_MULTIPLIER = 4;
 
 // (Kenney CC0 racing-kit GLB props removed — the dedicated category is
 // gone from the palette. Generic shape/nature/urban props cover all
@@ -351,9 +355,8 @@ function _jerseyBarrier() {
 
 export const DECOR = {
   // ── Geometric primitives ────────────────────────────────────
-  // Geometry primitives are unit-1 (1 mm). The DecorStore.add() applies a
-  // 5 m default scale when no per-type defaultScale is provided, so primitives
-  // intentionally OMIT defaultScale to inherit that fallback.
+  // Geometry primitives are unit-1 (1 mm). The DecorStore.add converts that to mm
+  // world units and then applies the global 4x placement multiplier.
   box:        { label: 'Box',        category: 'shape', color: 0xe6453a, centered: true,
                 params: { bevel: { label: 'Bevel', min: 0, max: 50, step: 1, default: 0 } },
                 build: (p) => (p && p.bevel) ? _box(p) : geom('box', _box) },
@@ -464,12 +467,85 @@ export const DECOR = {
                     defaultScale: [6.0, 1.1, 0.6] },
 };
 
+// ── Model-backed decor (STK / DAE pickups / FBX v8 props) ────────
+// Each entry delegates rendering to a VISUAL_BUILDERS factory key. The
+// factory returns a Three.Group at metre scale; buildDecorMesh wraps it
+// in a parent Group so position/rotation/scale gizmo manipulation works
+// exactly like procedural decor.
+//
+// `model` = key in VISUAL_BUILDERS.
+// `defaultScale` is treated as a unitless multiplier of the asset's
+// authored metre size (1 = native). DecorStore.add converts that to mm
+// world units and then applies the global 4x placement multiplier.
+function modelDecor(label, category, model, defaultScale = [1, 1, 1]) {
+  return { label, category, model, defaultScale, isModel: true };
+}
+
+const MODEL_DECOR = {
+  // Props (DAE via pickup-models)
+  prop_traffic_cone: modelDecor('Traffic Cone',     'prop', 'prop_traffic_cone'),
+
+  // Scenery (DAE)
+  scenery_city_boat: modelDecor('City Boat',        'scenery', 'scenery_city_boat'),
+
+  // STK library (SPM)
+  stk_palm_tree:        modelDecor('Palm Tree',          'stk', 'stk_palm_tree'),
+  stk_low_palm_tree:    modelDecor('Low Palm Tree',      'stk', 'stk_low_palm_tree'),
+  stk_pine_tree_a:      modelDecor('Pine Tree A',        'stk', 'stk_pine_tree_a'),
+  stk_pine_tree_b:      modelDecor('Pine Tree B',        'stk', 'stk_pine_tree_b'),
+  stk_pine_tree_c:      modelDecor('Pine Tree C',        'stk', 'stk_pine_tree_c'),
+  stk_autumn_tree:      modelDecor('Autumn Tree',        'stk', 'stk_autumn_tree'),
+  stk_autumn_birch:     modelDecor('Autumn Birch',       'stk', 'stk_autumn_birch'),
+  stk_autumn_willow:    modelDecor('Autumn Willow',      'stk', 'stk_autumn_willow'),
+  stk_jungle_tree_a:    modelDecor('Jungle Tree A',      'stk', 'stk_jungle_tree_a'),
+  stk_jungle_tree_b:    modelDecor('Jungle Tree B',      'stk', 'stk_jungle_tree_b'),
+  stk_cocoa_tree:       modelDecor('Cocoa Tree',         'stk', 'stk_cocoa_tree'),
+  stk_cypress:          modelDecor('Cypress',            'stk', 'stk_cypress'),
+  stk_dead_tree:        modelDecor('Dead Tree',          'stk', 'stk_dead_tree'),
+  stk_red_flower_bush:  modelDecor('Red Flower Bush',    'stk', 'stk_red_flower_bush'),
+  stk_tropical_plant:   modelDecor('Tropical Plant',     'stk', 'stk_tropical_plant'),
+  stk_fern:             modelDecor('Fern',               'stk', 'stk_fern'),
+  stk_mushroom_a:       modelDecor('Mushroom A',         'stk', 'stk_mushroom_a'),
+  stk_mushroom_b:       modelDecor('Mushroom B',         'stk', 'stk_mushroom_b'),
+  stk_aztec_fountain:   modelDecor('Aztec Fountain',     'stk', 'stk_aztec_fountain'),
+  stk_aztec_house_a:    modelDecor('Aztec House A',      'stk', 'stk_aztec_house_a'),
+  stk_aztec_house_b:    modelDecor('Aztec House B',      'stk', 'stk_aztec_house_b'),
+  stk_aztec_hut:        modelDecor('Aztec Hut',          'stk', 'stk_aztec_hut'),
+  stk_silvian_house_a:  modelDecor('Silvian House A',    'stk', 'stk_silvian_house_a'),
+  stk_silvian_house_b:  modelDecor('Silvian House B',    'stk', 'stk_silvian_house_b'),
+  stk_silvian_tower:    modelDecor('Silvian Tower',      'stk', 'stk_silvian_tower'),
+  stk_wood_bridge:      modelDecor('Wood Bridge',        'stk', 'stk_wood_bridge'),
+  stk_igloo:            modelDecor('Igloo',              'stk', 'stk_igloo'),
+  stk_lamp_modern:      modelDecor('Modern Street Lamp', 'stk', 'stk_lamp_modern'),
+  stk_lamp_oldschool:   modelDecor('Oldschool Lamp',     'stk', 'stk_lamp_oldschool'),
+  stk_lamp_storm:       modelDecor('Storm Lantern',      'stk', 'stk_lamp_storm'),
+  stk_lamp_metal_post:  modelDecor('Metal Post Lamp',    'stk', 'stk_lamp_metal_post'),
+  stk_lamp_industrial:  modelDecor('Industrial Lamp',    'stk', 'stk_lamp_industrial'),
+  stk_lamp_wood_post:   modelDecor('Wood Post Lamp',     'stk', 'stk_lamp_wood_post'),
+  stk_lamp_bug:         modelDecor('Bug Lamp',           'stk', 'stk_lamp_bug'),
+  stk_bench:            modelDecor('Park Bench',         'stk', 'stk_bench'),
+  stk_hay_ball:         modelDecor('Hay Ball',           'stk', 'stk_hay_ball'),
+  stk_tires_barrier:    modelDecor('Tires Barrier',      'stk', 'stk_tires_barrier'),
+  stk_log_barrier:      modelDecor('Log Barrier',        'stk', 'stk_log_barrier'),
+  stk_inflatable_fence: modelDecor('Inflatable Fence',   'stk', 'stk_inflatable_fence'),
+  stk_party_flags:      modelDecor('Party Flags',        'stk', 'stk_party_flags'),
+  stk_prayer_flags:     modelDecor('Prayer Flags',       'stk', 'stk_prayer_flags'),
+};
+
+// Merge model decor into the main registry so existing code paths
+// (isDecorKey, DECOR_KEYS, buildDecorMesh, syncDecorMesh, palette) just
+// work without per-call branching.
+for (const [k, v] of Object.entries(MODEL_DECOR)) DECOR[k] = v;
+
 export const DECOR_KEYS = Object.keys(DECOR);
-export const DECOR_CATEGORY_ORDER = ['shape', 'nature', 'urban'];
+export const DECOR_CATEGORY_ORDER = ['shape', 'nature', 'urban', 'prop', 'scenery', 'stk'];
 export const DECOR_CATEGORY_LABELS = {
   shape: 'Shapes',
   nature: 'Nature',
   urban: 'Props',
+  prop: 'Track Props',
+  scenery: 'Scenery',
+  stk: 'STK Library Props',
 };
 
 export function isDecorKey(key) {
@@ -516,15 +592,23 @@ export class DecorStore {
     if (!DECOR[type]) return null;
     const def = DECOR[type];
     const dr = def.defaultRot || [0, 0, 0];
-    // Tinkercad parity (kart-scale): every freshly placed primitive starts
-    // at 5000×5000×5000 mm (5 m) — immediately visible and grabbable on
-    // the road-scale grid. Per-type registry defaultScale is treated as a
-    // small unitless ratio in mm where present (nature/urban presets), so
-    // we scale those by 1000 to get a comparable starting size.
+    // Tinkercad parity (kart-scale): every freshly placed object starts at
+    // a larger on-workplane size so it is immediately visible and grabbable.
+    // Per-type registry defaultScale is treated as a small unitless ratio in
+    // mm where present (nature/urban presets), so we convert that to world
+    // units and then apply the global placement multiplier.
     const presetDS = def.defaultScale;
     const ds = presetDS
-      ? [ presetDS[0] * 1000, presetDS[1] * 1000, presetDS[2] * 1000 ]
-      : [ 5000, 5000, 5000 ];
+      ? [
+        presetDS[0] * WORLD_UNITS_PER_M * DECOR_PLACEMENT_SCALE_MULTIPLIER,
+        presetDS[1] * WORLD_UNITS_PER_M * DECOR_PLACEMENT_SCALE_MULTIPLIER,
+        presetDS[2] * WORLD_UNITS_PER_M * DECOR_PLACEMENT_SCALE_MULTIPLIER,
+      ]
+      : [
+        5000 * DECOR_PLACEMENT_SCALE_MULTIPLIER,
+        5000 * DECOR_PLACEMENT_SCALE_MULTIPLIER,
+        5000 * DECOR_PLACEMENT_SCALE_MULTIPLIER,
+      ];
     const _sx = sx ?? ds[0], _sy = sy ?? ds[1], _sz = sz ?? ds[2];
     // Geometry-aware default Y: centered primitives lift so their base sits on the workplane.
     const _y = (y !== undefined) ? y : (def.centered ? _sy / 2 : 0);
@@ -611,6 +695,32 @@ function round3(v) { return Math.round(v * 1000) / 1000; }
 export function buildDecorMesh(inst) {
   const def = DECOR[inst.type];
   if (!def) return null;
+  // Model-backed decor (STK / DAE / FBX) — delegate to VISUAL_BUILDERS.
+  // The returned Group is authored in metres; we leave it as-is and let
+  // inst.sx/sy/sz (which start at 4,000mm for native 1m assets) convert to
+  // world units (mm). Async loaders swap meshes in place on the same
+  // Group reference so this stays live without rebuilds.
+  if (def.model) {
+    const vb = VISUAL_BUILDERS && VISUAL_BUILDERS[def.model];
+    const inner = vb ? vb() : null;
+    const wrap = new THREE.Group();
+    if (inner) {
+      // Builders bake a vertical lift (≈ROAD_THICK + 0.05) so the model sits
+      // on a track surface when used as a segment overlay. For free decor
+      // placement the wrap origin is the workplane point the user clicked,
+      // so we cancel that lift here and let inst.y control vertical position.
+      const baseY = inner.userData?.baseYOffset || 0;
+      inner.position.y = -baseY;
+      wrap.add(inner);
+    }
+    wrap.position.set(inst.x, inst.y, inst.z);
+    wrap.rotation.set(inst.rx, inst.ry, inst.rz);
+    wrap.scale.set(inst.sx, inst.sy, inst.sz);
+    wrap.userData.decorId = inst.id;
+    wrap.userData.modelDecor = def.model;
+    wrap.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+    return wrap;
+  }
   // GLB-backed prop: instance the cached scene; if not yet loaded, return
   // a small placeholder cube so the user still sees something at the
   // drop point. The editor swaps the placeholder for the real instance
@@ -663,6 +773,10 @@ export function syncDecorMesh(mesh, inst) {
   mesh.scale.set(inst.sx, inst.sy, inst.sz);
   mesh.visible = !inst.isHidden;
   const def = DECOR[inst.type];
+  // Model-backed decor uses the wrapped VISUAL_BUILDERS Group; no material
+  // or geometry rebuild needed when colour/params change (model decor
+  // ignores colour overrides).
+  if (def && def.model) return;
   // GLB-backed prop: nothing material-wise to update (uses GLB's own
   // textures). Param/colour edits don't apply to kit props.
   if (def && def.glb) return;
