@@ -42,13 +42,18 @@ function getBoxGeo(x, y, z) {
  */
 export function buildSegmentMesh(key) {
   const def = SEGMENTS[key];
-  if (!def) {
+  // Polished visual via road-geometry.js (preferred). Model-backed decor
+  // (props / scenery / STK library) lives ONLY in VISUAL_BUILDERS with no
+  // matching SEGMENTS entry, so resolve the builder before bailing on a
+  // missing segment def — otherwise every model prop renders as an empty
+  // Group ("Unknown segment" warning) in the palette and the scene.
+  const visualFn = VISUAL_BUILDERS[key];
+  if (!def && !visualFn) {
     console.warn(`[segment-builder] Unknown segment '${key}'`);
     return new THREE.Group();
   }
-  // Polished visual via road-geometry.js (preferred). Falls back to the
-  // raw block list (cuboids) for any segment without a custom builder.
-  const visualFn = VISUAL_BUILDERS[key];
+  // Falls back to the raw block list (cuboids) for any segment without a
+  // custom builder.
   if (visualFn) {
     const inner = visualFn();
     inner.scale.setScalar(S);

@@ -290,147 +290,6 @@
       100% { transform: scale(1.00); opacity: 1; }
     }
 
-    .match-hud {
-      position: fixed;
-      inset: 0;
-      z-index: 24;
-      pointer-events: none;
-      font-family: var(--font-ui, "Exo 2", sans-serif);
-      color: #fff;
-    }
-    .score-card, .match-timer, .item-panel, .minimap-panel {
-      position: absolute;
-      border-radius: 8px;
-      background: rgba(8, 10, 18, 0.72);
-      border: 1px solid rgba(255,255,255,0.16);
-      box-shadow: 0 12px 32px rgba(0,0,0,0.42);
-      backdrop-filter: blur(10px) saturate(130%);
-      -webkit-backdrop-filter: blur(10px) saturate(130%);
-    }
-    .score-card {
-      top: 16px;
-      width: min(210px, 38vw);
-      padding: 10px 12px;
-    }
-    .score-card.left { left: 16px; }
-    .score-card.right { right: 16px; text-align: right; }
-    .score-name {
-      font-size: 11px;
-      line-height: 1.2;
-      color: rgba(255,255,255,0.68);
-      text-transform: uppercase;
-      letter-spacing: 0.12em;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-    .score-value {
-      margin-top: 2px;
-      font-family: var(--font-display, "Bungee", sans-serif);
-      font-size: 42px;
-      line-height: 0.95;
-      letter-spacing: 0;
-    }
-    .match-timer {
-      top: 16px;
-      left: 50%;
-      min-width: 156px;
-      transform: translateX(-50%);
-      padding: 10px 18px;
-      text-align: center;
-    }
-    .timer-label {
-      font-size: 10px;
-      color: rgba(255,255,255,0.62);
-      text-transform: uppercase;
-      letter-spacing: 0.16em;
-    }
-    .timer-value {
-      font-family: var(--font-display, "Bungee", sans-serif);
-      font-size: 36px;
-      line-height: 1;
-      letter-spacing: 0;
-    }
-    .match-timer.danger .timer-value { color: #ff4d6d; text-shadow: 0 0 18px rgba(255,77,109,0.65); }
-    .item-panel {
-      right: 16px;
-      bottom: 16px;
-      padding: 10px;
-      display: flex;
-      gap: 10px;
-    }
-    .item-slot {
-      width: 76px;
-      height: 76px;
-      border-radius: 8px;
-      border: 1px solid rgba(255,255,255,0.18);
-      background: linear-gradient(180deg, rgba(255,255,255,0.08), rgba(0,0,0,0.18));
-      display: grid;
-      grid-template-rows: 1fr auto;
-      align-items: center;
-      justify-items: center;
-      overflow: hidden;
-    }
-    .item-slot.empty { opacity: 0.45; }
-    .item-icon {
-      width: 44px;
-      height: 44px;
-      border-radius: 50%;
-      display: grid;
-      place-items: center;
-      background: var(--item-color, #6aa8ff);
-      color: #061018;
-      font-weight: 900;
-      font-size: 14px;
-      box-shadow: 0 0 20px color-mix(in srgb, var(--item-color, #6aa8ff), transparent 35%);
-    }
-    .item-name {
-      width: 100%;
-      padding: 3px 4px 5px;
-      font-size: 10px;
-      line-height: 1;
-      color: rgba(255,255,255,0.78);
-      text-align: center;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-    .minimap-panel {
-      left: 16px;
-      bottom: 16px;
-      width: 180px;
-      height: 132px;
-      padding: 8px;
-    }
-    .minimap-title {
-      font-size: 10px;
-      color: rgba(255,255,255,0.62);
-      letter-spacing: 0.14em;
-      text-transform: uppercase;
-      margin-bottom: 5px;
-    }
-    .minimap {
-      position: relative;
-      width: 100%;
-      height: 106px;
-      border-radius: 6px;
-      background: rgba(255,255,255,0.055);
-      overflow: hidden;
-      border: 1px solid rgba(255,255,255,0.08);
-    }
-    .map-dot {
-      position: absolute;
-      width: 8px;
-      height: 8px;
-      margin-left: -4px;
-      margin-top: -4px;
-      border-radius: 50%;
-      background: #fff;
-      box-shadow: 0 0 12px currentColor;
-    }
-    .map-dot.me { width: 11px; height: 11px; margin-left: -5.5px; margin-top: -5.5px; background: #00e5ff; color: #00e5ff; }
-    .map-dot.opponent { background: #ff4d6d; color: #ff4d6d; }
-    .map-dot.pickup { width: 5px; height: 5px; margin-left: -2.5px; margin-top: -2.5px; background: #ffd166; color: #ffd166; opacity: 0.78; }
     .event-feed {
       position: fixed;
       left: 50%;
@@ -484,31 +343,11 @@
       font-weight: 800;
     }
     .end-score-row.winner { border-color: rgba(255,209,102,0.55); box-shadow: 0 0 24px rgba(255,209,102,0.14); }
-    @media (max-width: 720px) {
-      .score-card { width: 118px; }
-      .score-value { font-size: 30px; }
-      .match-timer { min-width: 112px; padding: 8px 12px; }
-      .timer-value { font-size: 28px; }
-      .minimap-panel { width: 132px; height: 104px; }
-      .minimap { height: 78px; }
-      .item-slot { width: 62px; height: 62px; }
-      .item-icon { width: 34px; height: 34px; font-size: 12px; }
-    }
   </style>
 </head>
 <body>
   <canvas id="canvas"></canvas>
 
-  <div id="match-hud" class="match-hud">
-    <div class="score-card left"><div class="score-name" id="score-left-name">Player 1</div><div class="score-value" id="score-left-value">0</div></div>
-    <div class="match-timer" id="match-timer"><div class="timer-label">Time</div><div class="timer-value" id="match-time-value">3:00</div></div>
-    <div class="score-card right"><div class="score-name" id="score-right-name">Player 2</div><div class="score-value" id="score-right-value">0</div></div>
-    <div class="minimap-panel"><div class="minimap-title">Mini Map</div><div class="minimap" id="minimap"></div></div>
-    <div class="item-panel" id="item-panel">
-      <div class="item-slot empty" id="item-slot-1"><div class="item-icon">-</div><div class="item-name">Empty</div></div>
-      <div class="item-slot empty" id="item-slot-2"><div class="item-icon">-</div><div class="item-name">Empty</div></div>
-    </div>
-  </div>
   <div class="event-feed" id="event-feed"></div>
   <div class="damage-flash" id="damage-flash"></div>
 
@@ -579,6 +418,99 @@
   <div class="controls">
     <b>WASD</b> / <b>Arrows</b> drive · <b>Space</b> brake · <b>E</b> fire · <b>Q</b> swap weapon
   </div>
+
+  <!-- ── Combat HUD layer (parity with SP playtest) ─────────────── -->
+  <style>
+    /* Item slot panel — mirrors play.html invslot design */
+    .itemdock {
+      position: fixed; right: 20px; bottom: 20px; z-index: 20;
+      display: flex; align-items: flex-end; gap: 12px;
+      pointer-events: none;
+    }
+    .itemslot {
+      position: relative; width: 110px; height: 110px;
+      border-radius: 22px; overflow: hidden;
+      background:
+        linear-gradient(180deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.02) 60%, rgba(0,0,0,0.22) 100%),
+        var(--lg-surface, rgba(255,255,255,0.05));
+      border: 1px solid var(--lg-border, rgba(255,255,255,0.14));
+      backdrop-filter: blur(12px) saturate(140%);
+      -webkit-backdrop-filter: blur(12px) saturate(140%);
+      box-shadow: 0 12px 36px rgba(0,0,0,0.5), 0 0 40px rgba(255,0,128,0.10);
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 4px;
+    }
+    .itemslot.reserve { width: 74px; height: 74px; border-radius: 16px; opacity: 0.82; }
+    .itemslot::before {
+      content: ''; position: absolute; inset: -40%;
+      background: conic-gradient(from 0deg, transparent 0deg, rgba(255,0,128,0.35) 40deg, transparent 90deg);
+      opacity: 0; pointer-events: none;
+    }
+    .itemslot.rolling::before { opacity: 1; animation: mpInvSweep 0.5s linear infinite; }
+    .itemslot.rolling .itemslot-icon { animation: mpInvSpin 0.16s linear infinite; }
+    @keyframes mpInvSweep { to { transform: rotate(360deg); } }
+    @keyframes mpInvSpin {
+      0% { transform: scale(1) rotate(-6deg); }
+      50% { transform: scale(1.14) rotate(6deg); }
+      100% { transform: scale(1) rotate(-6deg); }
+    }
+    .itemslot-icon { font-size: 44px; line-height: 1; filter: drop-shadow(0 0 10px rgba(255,0,128,0.5)); }
+    .itemslot.reserve .itemslot-icon { font-size: 28px; }
+    .itemslot-name {
+      font-family: var(--font-display, "Bungee", sans-serif);
+      font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase;
+      color: rgba(255,255,255,0.85); max-width: 100px;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .itemslot-charge {
+      position: absolute; top: 6px; right: 8px;
+      font-size: 12px; font-weight: 700; color: #ffc645;
+      text-shadow: 0 0 8px rgba(255,198,69,0.6);
+    }
+    .itemslot.empty .itemslot-icon { opacity: 0.25; filter: none; }
+    .itemslot.empty .itemslot-name { opacity: 0.4; }
+
+    /* Damage flash + floaters + minimap */
+    #hit-flash {
+      position: fixed; inset: 0; z-index: 30; pointer-events: none;
+      background: radial-gradient(ellipse at center, transparent 40%, rgba(255,40,70,0.45) 100%);
+      opacity: 0; transition: opacity 0.35s ease-out;
+    }
+    #hud-floaters {
+      position: fixed; left: 50%; top: 34%; transform: translateX(-50%);
+      z-index: 25; pointer-events: none;
+      display: flex; flex-direction: column; align-items: center; gap: 4px;
+    }
+    #hud-minimap {
+      position: fixed; right: 20px; top: 20px; z-index: 15;
+      width: 150px; height: 150px; border-radius: 18px;
+      background: rgba(5,5,12,0.55);
+      border: 1px solid var(--lg-border, rgba(255,255,255,0.12));
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      box-shadow: 0 8px 28px rgba(0,0,0,0.45);
+    }
+    @media (max-width: 820px) {
+      .itemslot { width: 84px; height: 84px; }
+      .itemslot-icon { font-size: 34px; }
+      #hud-minimap { width: 110px; height: 110px; }
+    }
+  </style>
+  <div id="hit-flash"></div>
+  <div id="hud-floaters"></div>
+  <canvas id="hud-minimap" width="150" height="150"></canvas>
+  <div class="itemdock">
+    <div class="itemslot reserve empty" id="hud-slot-reserve">
+      <div class="itemslot-icon" id="hud-slot-reserve-icon">—</div>
+      <div class="itemslot-name" id="hud-slot-reserve-name">Reserve</div>
+    </div>
+    <div class="itemslot empty" id="hud-slot-main">
+      <div class="itemslot-charge" id="hud-slot-main-charge"></div>
+      <div class="itemslot-icon" id="hud-slot-main-icon">—</div>
+      <div class="itemslot-name" id="hud-slot-main-name">No Weapon</div>
+    </div>
+  </div>
+
   <script type="module" src="/src/multiplayer-editor3-main.js"></script>
 </body>
 </html>

@@ -20,6 +20,7 @@ import {
 } from './segments.js';
 import { buildSegmentMesh } from './segment-builder.js';
 import { tickPickupSpin } from './pickup-spin.js';
+import { tickPickupAura } from './pickup-aura.js';
 import { tickSurfaceScroll } from './surface-scroll.js';
 import { onItemModelLoaded, preloadItemModels, ITEM_MODEL_REGISTRY } from './pickup-models.js';
 import { Track, encodeTrack, decodeTrack } from './track-data.js';
@@ -37,6 +38,7 @@ import { buildGroupMesh } from './csg.js';
 import { WORLD_UNITS_PER_M, m, mm } from './units.js';
 import { StudioAPI } from './studio-api.js';
 import { showStudioLanding } from './studio-landing.js';
+import { playCombatSfx, playPlacementBeep } from './combat-sfx.js';
 
 // Editor runs in world units where 1 unit = 1 mm. Segments are authored in
 // metres, so convert TILE here for placement math (TILE = 12 m → 12000 mm).
@@ -382,6 +384,30 @@ function removePlacementMesh(id) {
   }
 }
 
+// ── Placement micro-interaction ─────────────────────────────────
+// Tactile pop-in: freshly committed shapes spring from 82% → 100%
+// scale over ~180ms with a soft overshoot, paired with a clean beep cue.
+// Purely cosmetic — the stored placement/decor transform is never
+// touched; we only animate the mesh's visual scale multiplier.
+function placeFeedback(mesh, { snap = false } = {}) {
+  try { playPlacementBeep({ frequency: snap ? 620 : 520, duration: snap ? 0.12 : 0.15 }); } catch { /* audio optional */ }
+  if (!mesh) return;
+  const sx = mesh.scale.x, sy = mesh.scale.y, sz = mesh.scale.z;
+  const t0 = performance.now();
+  const DUR = 180;
+  const step = () => {
+    const t = Math.min(1, (performance.now() - t0) / DUR);
+    // easeOutBack — small overshoot for the Tinkercad "snap" feel.
+    const c1 = 1.70158, c3 = c1 + 1;
+    const e = 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
+    const k = 0.82 + 0.18 * e;
+    mesh.scale.set(sx * k, sy * k, sz * k);
+    if (t < 1) requestAnimationFrame(step);
+    else mesh.scale.set(sx, sy, sz);
+  };
+  step();
+}
+
 function addDecorMesh(d) {
   const mesh = buildDecorMesh(d);
   if (!mesh) return;
@@ -563,7 +589,8 @@ const paletteSearchEl = document.getElementById('paletteSearch');
 let paletteFilter = '';
 const CATEGORY_ORDER = Array.from(new Set([
   'road', 'junction', 'city', 'runway', 'prop', 'scenery', 'v8', 'stk',
-  'height', 'special', 'walled', ...DECOR_CATEGORY_ORDER,
+  'height', 'special', 'walled', 'pickup', 'modifier', 'hazard', 'floor',
+  ...DECOR_CATEGORY_ORDER,
 ]));
 const CATEGORY_LABELS = {
   road: 'Road',
@@ -577,6 +604,10 @@ const CATEGORY_LABELS = {
   height: 'Vertical',
   special: 'Special',
   walled: 'High Walled Track',
+  pickup: 'Pickups',
+  modifier: 'Modifiers',
+  hazard: 'Hazards',
+  floor: 'Floors',
   ...DECOR_CATEGORY_LABELS,
 };
 function buildPalette() {
@@ -1169,6 +1200,7 @@ canvas.addEventListener('drop', (e) => {
       if (inst) {
         addDecorMesh(inst);
         selectDecor(inst.id, 'replace');
+        placeFeedback(decorMeshById.get(inst.id), { snap: true });
         pushUndo();
         refreshHud();
       }
@@ -1196,6 +1228,7 @@ canvas.addEventListener('drop', (e) => {
     if (inst) {
       addDecorMesh(inst);
       selectDecor(inst.id, 'replace');
+      placeFeedback(decorMeshById.get(inst.id));
       pushUndo();
       refreshHud();
     }
@@ -1203,9 +1236,11 @@ canvas.addEventListener('drop', (e) => {
     const placement = track.place(key, hit.gx, hit.gz, activeRot);
     if (placement) {
       addPlacementMesh(placement);
+      placeFeedback(meshById.get(placement.id), { snap: true });
       pushUndo();
       refreshHud();
     } else {
+      try { playCombatSfx('place_error', { gain: 0.4, rate: 0.7 }); } catch { /* audio optional */ }
       toast('Cell occupied');
     }
   }
@@ -1605,6 +1640,7 @@ canvas.addEventListener('click', (e) => {
       if (inst) {
         addDecorMesh(inst);
         selectDecor(inst.id, 'replace');
+        placeFeedback(decorMeshById.get(inst.id), { snap: true });
         pushUndo();
         refreshHud();
         setActiveTool(null);
@@ -1632,6 +1668,7 @@ canvas.addEventListener('click', (e) => {
     if (inst) {
       addDecorMesh(inst);
       selectDecor(inst.id, 'replace');
+      placeFeedback(decorMeshById.get(inst.id));
       pushUndo();
       refreshHud();
       // Tinkercad parity: after dropping a shape, revert to pointer mode.
@@ -1679,10 +1716,12 @@ canvas.addEventListener('click', (e) => {
   const placement = track.place(activeKey, hit.gx, hit.gz, activeRot, placeOpts);
   if (placement) {
     addPlacementMesh(placement);
+    placeFeedback(meshById.get(placement.id), { snap: true });
     pushUndo();
     refreshHud();
     setActiveTool(null);
   } else {
+    try { playCombatSfx('place_error', { gain: 0.4, rate: 0.7 }); } catch { /* audio optional */ }
     toast('Cell occupied');
   }
 });
@@ -1934,6 +1973,7 @@ function duplicateDecorSelection() {
     if (copy) { addDecorMesh(copy); newIds.push(copy.id); }
   }
   if (newIds.length) {
+    placeFeedback(decorMeshById.get(newIds[newIds.length - 1]));
     // Snapshot the new anchor position so any subsequent move records the
     // smart-duplicate delta in the gizmo's objectChange listener.
     _dupAnchorBefore = (() => {
@@ -3125,7 +3165,9 @@ if (typeof window !== 'undefined') {
   const _refreshStkThumbs = () => {
     let invalidated = false;
     for (const k of Array.from(thumbCache.keys())) {
-      if (k.startsWith('stk_')) { thumbCache.delete(k); invalidated = true; }
+      // scenery_city_boat is STK .spm-backed (dispatches stk-spm-loaded)
+      // even though its key uses the scenery_ prefix.
+      if (k.startsWith('stk_') || k === 'scenery_city_boat') { thumbCache.delete(k); invalidated = true; }
     }
     if (!invalidated || _stkPaletteRefreshScheduled) return;
     _stkPaletteRefreshScheduled = true;
@@ -3365,7 +3407,7 @@ renderer.setAnimationLoop(() => {
   const _now = (typeof performance !== 'undefined' ? performance.now() : Date.now()) / 1000;
   const _dt = _editorLastSpinT ? Math.min(0.1, _now - _editorLastSpinT) : 0;
   _editorLastSpinT = _now;
-  if (_dt > 0) { tickPickupSpin(_dt); tickSurfaceScroll(_dt); }
+  if (_dt > 0) { tickPickupSpin(_dt); tickPickupAura(_dt); tickSurfaceScroll(_dt); }
   renderer.render(scene, activeCamera);
   _updateOrbitCube();
   // Keep the floating action ring pinned over the selected piece even while

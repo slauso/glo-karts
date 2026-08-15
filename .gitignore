@@ -7,6 +7,10 @@ realtime/node_modules/
 .env.local
 .env.development.local
 .env.test.local
+# Allow example env files
+!.env.example
+frontend/.env.example
+realtime/.env.example
 # Keep .env.production for deployment config
 # .env.production.local
 
@@ -36,7 +40,11 @@ backend/staticfiles/
 db.sqlite3
 
 # Generated frontend artifacts
+## Allow all required static assets in public
+!frontend/public/
+## Still ignore havok/ if not needed (remove this line if havok/ is required)
 frontend/public/havok/
+## Still ignore logs, screenshots, debug, and dev-snapshots
 frontend/builder-visual-smoke.png
 frontend/snap-verify.png
 frontend/.codex-logs/

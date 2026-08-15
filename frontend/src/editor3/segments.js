@@ -44,6 +44,91 @@ export const BRIDGE_DECK_HEIGHT = TILE * 1.2;
 // confirmed clean traversal at 6 cells.
 export const BRIDGE_RAMP_CELLS = 6;
 
+// ────────────────────────────────────────────────────────────────
+// Combat weapons + item-box loot pools
+//
+// Consumed by the playtest runtime (play-main.js) and the projectile
+// simulator (projectile-runtime.js). Every field is optional at the
+// consumer side — the runtimes supply sensible defaults — so these
+// entries only need to declare what makes each item feel distinct.
+//
+// `class` drives the use-item switch in play-main.js:
+//   self_buff        — instant/short throttle boost (mushroom)
+//   self_buff_repeat — multi-use boost (golden mushroom)
+//   self_invuln      — star / shield (invuln + light boost)
+//   self_autopilot   — bullet bill (heavy boost + invuln)
+//   projectile       — straight-line shot (green shell, cannon)
+//   projectile_arc   — gravity-affected lob (rocket, mortar)
+//   homing_nearest   — locks the closest kart (red shell, missile)
+//   homing_leader    — seeks the race leader (blue shell)
+//   drop_behind      — hazard dropped behind the kart (banana, mine)
+// ────────────────────────────────────────────────────────────────
+export const WEAPONS = {
+  // ── Self-buffs ─────────────────────────────────────────────
+  mushroom:        { class: 'self_buff',        label: 'Mushroom',        uses: 1, durationMs: 1500, strength: 0.55, sfx: 'use_buff' },
+  golden_mushroom: { class: 'self_buff_repeat', label: 'Golden Mushroom', uses: 3, durationMs: 1500, strength: 0.55, sfx: 'use_buff' },
+  star:            { class: 'self_invuln',      label: 'Star',            uses: 1, durationMs: 6000, strength: 0.35, sfx: 'star_active' },
+  bullet_bill:     { class: 'self_autopilot',   label: 'Bullet Bill',     uses: 1, durationMs: 5000, strength: 1.20, sfx: 'bullet_active' },
+
+  // ── Projectiles ────────────────────────────────────────────
+  green_shell:     { class: 'projectile',      label: 'Green Shell', uses: 1, speed: 70, dmg: 30, effect: 'spinout', bounces: 3, bounceRetention: 0.85, sfx: 'shoot' },
+  red_shell:       { class: 'homing_nearest',  label: 'Red Shell',   uses: 1, speed: 65, dmg: 30, effect: 'spinout', lockRange: 70, turnRateDeg: 100, lockMinDot: -0.15, leadSeconds: 0.22, sfx: 'shoot' },
+  blue_shell:      { class: 'homing_leader',   label: 'Blue Shell',  uses: 1, speed: 80, dmg: 45, effect: 'spinout', blastRadius: 6, lockRange: 400, turnRateDeg: 70, leadSeconds: 0.38, sfx: 'shoot' },
+
+  // ── Drops ──────────────────────────────────────────────────
+  banana:          { class: 'drop_behind', label: 'Banana', uses: 1, effect: 'spinout', sfx: 'use_buff' },
+  bobomb:          { class: 'drop_behind', label: 'Bob-omb', uses: 1, effect: 'knockback', dmg: 40, blastRadius: 7, fuseMs: 2000, sfx: 'use_buff' },
+
+  // ── V8 / Vigilante set ─────────────────────────────────────
+  v8_missile:      { class: 'homing_nearest', label: 'Missile',      uses: 1, speed: 75, dmg: 35, effect: 'knockback', lockRange: 80, turnRateDeg: 108, lockMinDot: -0.10, leadSeconds: 0.20, blastRadius: 4, sfx: 'shoot' },
+  v8_cannon:       { class: 'projectile',     label: 'Cannon',       uses: 1, speed: 90, dmg: 40, effect: 'knockback', sfx: 'shoot' },
+  v8_rocket:       { class: 'projectile_arc', label: 'Rocket',       uses: 1, speed: 55, dmg: 40, effect: 'knockback', blastRadius: 6, sfx: 'shoot' },
+  v8_mortar:       { class: 'projectile_arc', label: 'Mortar',       uses: 1, speed: 45, dmg: 45, effect: 'knockback', blastRadius: 8, fuseMs: 1500, sfx: 'shoot' },
+  v8_mine:         { class: 'drop_behind',    label: 'Mine',         uses: 1, effect: 'knockback', dmg: 35, blastRadius: 6, sfx: 'use_buff' },
+  v8_dynamite:     { class: 'drop_behind',    label: 'Dynamite',     uses: 1, effect: 'knockback', dmg: 50, blastRadius: 8, fuseMs: 1800, sfx: 'use_buff' },
+  v8_firethrower:  { class: 'projectile',     label: 'Firethrower',  uses: 3, speed: 40, dmg: 12, effect: 'burn', lifetimeMs: 600, sfx: 'shoot' },
+  v8_shield:       { class: 'self_invuln',    label: 'Shield',       uses: 1, durationMs: 5000, strength: 0.0, sfx: 'star_active' },
+  v8_repair:       { class: 'self_buff',      label: 'Repair',       uses: 1, effect: 'repair', heal: 50, sfx: 'use_buff' },
+  v8_double_dmg:   { class: 'self_buff',      label: 'Double Damage', uses: 1, effect: 'damage_boost', durationMs: 6000, strength: 1.0, sfx: 'use_buff' },
+
+  // ── Online mode parity set (shared inventory surface) ──────
+  bowling_ball:    { class: 'projectile',     label: 'Bowling Ball', uses: 1, speed: 52, dmg: 50, effect: 'knockback', bounces: 3, bounceRetention: 0.90, sfx: 'bowling_fire' },
+  cake:            { class: 'projectile_arc', label: 'Cake',         uses: 1, speed: 44, dmg: 30, effect: 'knockback', blastRadius: 5, sfx: 'cake_throw' },
+  plunger:         { class: 'homing_nearest', label: 'Plunger',      uses: 1, speed: 70, dmg: 15, effect: 'spinout', lockRange: 85, turnRateDeg: 120, lockMinDot: -0.05, leadSeconds: 0.18, homingDelayMs: 120, speedRampTo: 82, sfx: 'plunger_fire' },
+  nitro:           { class: 'projectile_arc', label: 'Nitro',        uses: 1, speed: 48, dmg: 25, effect: 'spinout', blastRadius: 4.5, bounces: 1, bounceRetention: 0.38, sfx: 'nitro' },
+  missile:         { class: 'homing_nearest', label: 'Missile',      uses: 1, speed: 78, dmg: 35, effect: 'spinout', lockRange: 95, turnRateDeg: 130, lockMinDot: -0.08, leadSeconds: 0.24, homingDelayMs: 90, speedRampTo: 92, sfx: 'shoot' },
+  bubblegum:       { class: 'drop_behind',    label: 'Bubblegum',    uses: 1, dmg: 8, effect: 'spinout', durationMs: 1400, sfx: 'gum_drop' },
+  swatter:         { class: 'projectile',     label: 'Swatter',      uses: 1, speed: 40, dmg: 28, effect: 'knockback', lifetimeMs: 900, sfx: 'swatter_hit' },
+  parachute:       { class: 'homing_nearest', label: 'Parachute',    uses: 1, speed: 56, dmg: 0, effect: 'slow', durationMs: 2200, lockRange: 90, turnRateDeg: 110, lockMinDot: -0.05, leadSeconds: 0.16, homingDelayMs: 80, speedRampTo: 68, sfx: 'parachute_deploy' },
+  anchor:          { class: 'homing_nearest', label: 'Anchor',       uses: 1, speed: 54, dmg: 10, effect: 'slow', durationMs: 3000, lockRange: 88, turnRateDeg: 105, lockMinDot: -0.08, leadSeconds: 0.16, homingDelayMs: 120, speedRampTo: 66, sfx: 'anchor_hit' },
+  ludicrous_mode:  { class: 'self_buff',      label: 'Ludicrous Mode', uses: 1, durationMs: 5000, strength: 1.00, sfx: 'ludicrous_on' },
+  shield:          { class: 'self_invuln',    label: 'Shield',       uses: 1, durationMs: 4200, strength: 0.0, sfx: 'star_active' },
+};
+
+// Item-box loot pools. Keyed by pool name; `_pickFromPool` in
+// play-main.js supports `uniform` (flat bag), `weights` ({items,weights})
+// and `rank` ({1:[...],2:[...]}) shapes. The `default` pool is the
+// fallback whenever an unknown key is requested.
+export const ITEM_POOLS = {
+  default: {
+    uniform: [
+      'mushroom', 'mushroom', 'banana', 'green_shell', 'red_shell',
+      'golden_mushroom', 'star', 'bobomb', 'coin', 'coin',
+      // Online parity set mixed into default spin.
+      'bowling_ball', 'cake', 'plunger', 'nitro', 'missile',
+      'bubblegum', 'swatter', 'parachute', 'anchor',
+      'ludicrous_mode', 'shield',
+    ],
+  },
+  heavy: {
+    uniform: [
+      'red_shell', 'blue_shell', 'bobomb', 'bullet_bill', 'star',
+      'golden_mushroom', 'green_shell',
+      'missile', 'nitro', 'plunger', 'anchor', 'ludicrous_mode',
+    ],
+  },
+};
+
 /**
  * @typedef {Object} Block
  * @property {'box'|'ramp'} kind

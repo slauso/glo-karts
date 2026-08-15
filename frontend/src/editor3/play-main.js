@@ -16,9 +16,12 @@ import { WORLD_UNITS_PER_M, m as M, mm as MM } from './units.js';
 import { buildCombatState, sweepKart, tickRespawns } from './combat-runtime.js';
 import { playCombatSfx, preloadCombatSfx } from './combat-sfx.js';
 import { instanceItemModel, preloadItemModels } from './pickup-models.js';
-import { tickPickupSpin } from './pickup-spin.js';
+import { getPickupVisual, stylePickupIconElement } from './pickup-visuals.js';
+import { tickPickupSpin, playPickupCollect, playPickupSpawn } from './pickup-spin.js';
+import { tickPickupAura } from './pickup-aura.js';
 import { tickSurfaceScroll } from './surface-scroll.js';
 import { createProjectileRuntime } from './projectile-runtime.js';
+import { createHeldItemRig } from './held-item.js';
 import { resolvePlaytestBudget } from './playtest-perf.js';
 import { mergeSegmentGroups } from './segment-merge.js';
 import { buildBatchedDecor } from './decor-batching.js';
@@ -3077,28 +3080,6 @@ const _invIconEl  = typeof document !== 'undefined' ? document.getElementById('i
 const _invLabelEl = typeof document !== 'undefined' ? document.getElementById('invLabel') : null;
 const _invCountEl = typeof document !== 'undefined' ? document.getElementById('invCount') : null;
 let _invFireFlashUntil = 0;
-const ITEM_TINTS = {
-  mushroom:        { color: '#ff5577', glyph: 'M' },
-  golden_mushroom: { color: '#ffd24a', glyph: 'G' },
-  star:            { color: '#fff066', glyph: '★' },
-  bullet_bill:     { color: '#444855', glyph: '➤' },
-  green_shell:     { color: '#55ff66', glyph: 'S' },
-  red_shell:       { color: '#ff5555', glyph: 'S' },
-  blue_shell:      { color: '#3a7bff', glyph: 'S' },
-  banana:          { color: '#ffe066', glyph: 'B' },
-  bobomb:          { color: '#222831', glyph: '✸' },
-  // v8 / Vigilante set — distinct glyphs so the HUD reads at a glance.
-  v8_missile:      { color: '#c25a14', glyph: '↗' },
-  v8_cannon:       { color: '#8a8f99', glyph: '◉' },
-  v8_rocket:       { color: '#ff7a00', glyph: '⇗' },
-  v8_mortar:       { color: '#4a4a55', glyph: '⌒' },
-  v8_mine:         { color: '#55202a', glyph: '◈' },
-  v8_dynamite:     { color: '#b04020', glyph: '※' },
-  v8_firethrower:  { color: '#ff4400', glyph: '🔥' },
-  v8_shield:       { color: '#66ccff', glyph: '◊' },
-  v8_repair:       { color: '#66ff99', glyph: '✚' },
-  v8_double_dmg:   { color: '#ff66cc', glyph: '×2' },
-};
 function renderInventoryHud(now) {
   if (!_invSlotEl) return;
   const inv = playerCombat.inventory || { active: null, count: 0 };
@@ -3106,20 +3087,26 @@ function renderInventoryHud(now) {
   _invSlotEl.classList.toggle('empty', !has);
   _invSlotEl.classList.toggle('has', has);
   _invSlotEl.classList.toggle('fire', has && now < _invFireFlashUntil);
+  _invSlotEl.classList.toggle('spinning', _isRouletteSpinning());
   if (!has) {
-    if (_invIconEl)  { _invIconEl.textContent = '·'; _invIconEl.style.color = '#3a4250'; }
+    if (_invIconEl)  {
+      _invIconEl.textContent = '·';
+      _invIconEl.style.color = '#3a4250';
+      _invIconEl.style.background = 'radial-gradient(circle at 35% 30%, #6a7486, #3a4250 65%, #252a31 100%)';
+      _invIconEl.style.textShadow = 'none';
+      _invIconEl.style.border = '1px solid #2f3744';
+      _invIconEl.style.boxShadow = 'none';
+      _invIconEl.style.borderRadius = '14px';
+    }
     if (_invLabelEl) _invLabelEl.textContent = 'empty';
     if (_invCountEl) _invCountEl.textContent = '';
     return;
   }
-  const tint = ITEM_TINTS[inv.active] || { color: '#cccccc', glyph: '?' };
+  const visual = getPickupVisual(inv.active);
   const def  = WEAPONS[inv.active];
-  if (_invIconEl) {
-    _invIconEl.textContent = tint.glyph;
-    _invIconEl.style.color = tint.color;
-    _invIconEl.style.background = `radial-gradient(circle at 35% 30%, #fff, ${tint.color} 60%, #2a2f38 100%)`;
-  }
+  if (_invIconEl) stylePickupIconElement(_invIconEl, inv.active);
   if (_invLabelEl) _invLabelEl.textContent = (def && def.label) || inv.active;
+  if (_invLabelEl) _invLabelEl.style.color = `#${(visual.accent >>> 0).toString(16).padStart(6, '0')}`;
   if (_invCountEl) _invCountEl.textContent = inv.count > 1 ? `×${inv.count}` : '';
 }
 
@@ -3172,7 +3159,7 @@ function _grantWeapon(weaponName) {
   playerCombat.inventory.active = weaponName;
   playerCombat.inventory.count = (def && def.uses) ? def.uses : 1;
   const niceName = (def && def.label) || weaponName.replace(/_/g, ' ');
-  pushTicker(`got ${niceName}  — press Q / E`);
+  pushTicker(`item ready: ${niceName}  ·  press Q / E`);
   playCombatSfx('pickup_get', { gain: 0.7 });
 }
 
@@ -3214,7 +3201,7 @@ function _isRouletteSpinning() { return _rouletteTimer !== null; }
 function _grantWeaponFromPool(poolKey) {
   // Cancel any in-flight spin so back-to-back boxes stack predictably:
   // the most-recent pickup wins and resolves on schedule.
-  if (_rouletteTimer) { clearInterval(_rouletteTimer); _rouletteTimer = null; }
+  if (_rouletteTimer) { clearTimeout(_rouletteTimer); _rouletteTimer = null; }
   const choice = _pickFromPool(poolKey);
   // Coin is a token grant, not a weapon — resolve immediately, no roulette.
   if (choice === 'coin') {
@@ -3233,9 +3220,11 @@ function _grantWeaponFromPool(poolKey) {
   flashBag = flashBag.filter((k) => k !== 'coin' && WEAPONS[k]);
   if (flashBag.length === 0) flashBag = ['mushroom'];
 
-  const STEPS = 8;
-  const STEP_MS = 85;
-  const totalMs = STEPS * STEP_MS;
+  // Decelerating cadence reads closer to MK8: quick chatter at the
+  // beginning, then a slower settle into the final reward.
+  const STEP_PATTERN_MS = [62, 66, 72, 80, 92, 108, 126, 146, 170];
+  const STEPS = STEP_PATTERN_MS.length;
+  const totalMs = STEP_PATTERN_MS.reduce((a, b) => a + b, 0);
   _rouletteUntil = performance.now() + totalMs;
   // Show the spinner immediately on the HUD by populating inventory
   // with a placeholder. count=1 so the slot reads "has".
@@ -3243,24 +3232,32 @@ function _grantWeaponFromPool(poolKey) {
   playerCombat.inventory.active = flashBag[0];
   playerCombat.inventory.count = 1;
   playerCombat.weapon = flashBag[0];
+  pushTicker('item roulette...');
   playCombatSfx('pickup_get', { gain: 0.55, rate: 1.5 });
   let i = 0;
-  _rouletteTimer = setInterval(() => {
+  const spinStep = () => {
     i++;
     if (i >= STEPS) {
-      clearInterval(_rouletteTimer); _rouletteTimer = null;
+      _rouletteTimer = null;
       _grantWeapon(choice);
+      _invFireFlashUntil = performance.now() + 260;
+      playCombatSfx('pickup_get', { gain: 0.60, rate: 1.08 });
       return;
     }
-    // Bias the flash so the final item appears more often near the end
-    // (gives the slot the classic "settling" cadence).
-    const useChoice = (i >= STEPS - 2) && Math.random() < 0.55;
+    // Increase settle bias through the last three frames so players can
+    // feel the result "locking in" before grant.
+    const settleBias = (i >= STEPS - 3) ? 0.45 + (i - (STEPS - 3)) * 0.22 : 0;
+    const useChoice = Math.random() < settleBias;
     const next = useChoice ? choice : flashBag[(Math.random() * flashBag.length) | 0];
     playerCombat.inventory.active = next;
     playerCombat.weapon = next;
-    // Quiet tick blip — same SFX, lower gain & higher pitch each tick.
-    playCombatSfx('pickup_get', { gain: 0.18, rate: 1.7 + (i * 0.04) });
-  }, STEP_MS);
+    playCombatSfx('pickup_get', {
+      gain: 0.14 + (i / STEPS) * 0.10,
+      rate: 1.55 + (i / STEPS) * 0.35,
+    });
+    _rouletteTimer = setTimeout(spinStep, STEP_PATTERN_MS[i]);
+  };
+  _rouletteTimer = setTimeout(spinStep, STEP_PATTERN_MS[0]);
   return choice;
 }
 
@@ -3295,7 +3292,7 @@ function useActiveItem() {
         playCombatSfx(def.sfx || 'use_buff', { gain: 0.85 });
       } else {
         playerCombat.boostUntil    = now + (def.durationMs || 1500);
-        playerCombat.boostStrength = def.strength || 0.55;
+        playerCombat.boostStrength = def.strength ?? 0.55;
         pushTicker(`${def.label || name}!  BOOST ×${(1 + playerCombat.boostStrength).toFixed(2)}`);
         playCombatSfx(def.sfx || 'use_buff', { gain: 0.85 });
       }
@@ -3307,7 +3304,7 @@ function useActiveItem() {
       // (Mario Kart parity); the buff continues to tick.
       const dur = def.durationMs || 6000;
       playerCombat.starUntil     = now + dur;
-      playerCombat.starStrength  = def.strength || 0.35;
+      playerCombat.starStrength  = def.strength ?? 0.35;
       playerCombat.invulnUntil   = now + dur;
       pushTicker(`★ ${def.label || 'STAR'} ★  invuln ${(dur / 1000).toFixed(1)}s`);
       playCombatSfx(def.sfx || 'star_active', { gain: 0.9 });
@@ -3321,7 +3318,7 @@ function useActiveItem() {
       // half. Auto-steer lands alongside the projectile sim in C/D.
       const dur = def.durationMs || 5000;
       playerCombat.bulletUntil    = now + dur;
-      playerCombat.bulletStrength = def.strength || 1.20;
+      playerCombat.bulletStrength = def.strength ?? 1.20;
       playerCombat.invulnUntil    = Math.max(playerCombat.invulnUntil, now + dur);
       pushTicker(`➤ ${def.label || 'BULLET BILL'} ➤  ${(dur / 1000).toFixed(1)}s`);
       playCombatSfx(def.sfx || 'bullet_active', { gain: 0.9 });
@@ -3448,10 +3445,15 @@ function applyCombatEvents(events, now) {
     if (ev.type === 'pickup') {
       const ent = combatState.get(ev.id);
       if (ent && overlayMeshById.has(ev.id)) {
-        // Hide the floating pickup cube (cosmetic — the road disc on the
-        // ground stays visible as a respawn marker).
+        // Play the collect VFX (shrink + rise + dissolve) on each pickup
+        // cube, then hide it. The road disc on the ground stays visible
+        // as a respawn marker.
         const grp = overlayMeshById.get(ev.id);
-        grp.traverse(o => { if (o.isMesh && o.userData?.__pickupCube) o.visible = false; });
+        grp.traverse(o => {
+          if (o.isMesh && o.userData?.__pickupCube && o.visible) {
+            playPickupCollect(o, () => { o.visible = false; });
+          }
+        });
       }
       if (ev.payload === 'coin') {
         playerCombat.coins += ev.amount || 1;
@@ -3556,6 +3558,17 @@ let _lastProjTick = performance.now();
 const _SHELL_HIT_SLOW = { strength: 0.6, durationMs: 1500 };
 const _BANANA_SLOW    = { strength: 0.5, durationMs: 1100 };
 const _BLAST_SLOW     = { strength: 0.75, durationMs: 1800 };
+const _HIT_PRESET_BY_NAME = {
+  banana: _BANANA_SLOW,
+  bubblegum: { strength: 0.58, durationMs: 1400 },
+  bobomb: _BLAST_SLOW,
+  blue_shell: _BLAST_SLOW,
+  nitro: { strength: 0.68, durationMs: 1450 },
+  missile: { strength: 0.66, durationMs: 1500 },
+  plunger: { strength: 0.62, durationMs: 1300 },
+  parachute: { strength: 0.64, durationMs: 2000 },
+  anchor: { strength: 0.72, durationMs: 2500 },
+};
 
 /** Apply a projectile/hazard hit to the local kart (called by the
  *  projectile runtime). Honors invuln (Star/Bullet) and clamps so
@@ -3563,14 +3576,22 @@ const _BLAST_SLOW     = { strength: 0.75, durationMs: 1800 };
 function applyProjectileHit(spec, hitPoint) {
   const now = performance.now();
   if (now < playerCombat.invulnUntil) return;  // Star / Bullet Bill
-  let preset = _SHELL_HIT_SLOW;
-  if (spec.name === 'banana') preset = _BANANA_SLOW;
-  else if (spec.name === 'bobomb' || spec.name === 'blue_shell') preset = _BLAST_SLOW;
+  let preset = _HIT_PRESET_BY_NAME[spec.name] || _SHELL_HIT_SLOW;
+  if (spec.effect === 'slow' && !_HIT_PRESET_BY_NAME[spec.name]) {
+    preset = { strength: 0.6, durationMs: spec.durationMs || 1800 };
+  } else if (spec.durationMs && !_HIT_PRESET_BY_NAME[spec.name]) {
+    preset = { ...preset, durationMs: spec.durationMs };
+  }
   playerCombat.slowUntil    = now + preset.durationMs;
   playerCombat.slowStrength = Math.max(playerCombat.slowStrength || 0, preset.strength);
   // Cancel any in-flight boost so the hit reads as a real punish.
   playerCombat.boostUntil   = 0;
   playerCombat.hp = Math.max(0, playerCombat.hp - (spec.dmg || 10));
+  // Visual spinout — bigger hits (blast) tumble harder/longer.
+  const spinDur = Math.min(1500, Math.max(600, preset.durationMs));
+  _hitSpinDur = spinDur;
+  _hitSpinUntil = now + spinDur;
+  _hitSpinTurns = (preset === _BLAST_SLOW) ? 3 : 2;
   pushTicker(`HIT! ${spec.name.replace(/_/g,' ')}`);
 }
 
@@ -3629,6 +3650,20 @@ const projectileRuntime = createProjectileRuntime({
 scene.userData.__camera = camera;
 let _spShakeMag = 0;
 let _spShakeUntil = 0;
+// Spinout reaction — when the kart takes a shell/blast hit it visually
+// tumbles (MK8-style): a few fast yaw revolutions plus a hop + roll
+// wobble that ease out over the hit's slow duration. Driven per-frame
+// from the render loop; applied additively to the kart model so it
+// doesn't fight the chassis heading from the physics worker.
+let _hitSpinUntil = 0;
+let _hitSpinDur = 0;
+let _hitSpinTurns = 2;
+
+// Held-item rig — shows the readied item trailing behind/above the kart
+// (MK-style) until it's fired. Shared module also used by the MP client.
+const heldItemRig = createHeldItemRig({
+  THREE, kartGroup, unitsPerM: WORLD_UNITS_PER_M,
+});
 
 /** Compute the kart's current world-forward unit vector from its
  *  yaw-only quaternion. Returns {x,z} — y is always 0 for a flat
@@ -3675,7 +3710,12 @@ function tickCombat(now) {
   const respawned = tickRespawns(combatState, now);
   for (const r of respawned) {
     const grp = overlayMeshById.get(r.id);
-    if (grp) grp.traverse(o => { if (o.isMesh && o.userData?.__pickupCube) o.visible = true; });
+    if (grp) grp.traverse(o => {
+      if (o.isMesh && o.userData?.__pickupCube) {
+        o.visible = true;
+        playPickupSpawn(o);  // pop-in overshoot on re-arm
+      }
+    });
   }
   // Phase C/D — kinematic projectile sim (green/red/blue shells, bobomb,
   // banana drops). Decoupled from the physics worker; only feeds back
@@ -3748,6 +3788,7 @@ function tick() {
   // ghost client). Always runs, even while paused, so item boxes
   // stay alive in the pause overlay.
   tickPickupSpin(dt);
+  tickPickupAura(dt);
   tickSurfaceScroll(dt);
 
   let tPhys = 0, tVisual = 0, tCam = 0, tHud = 0, tCombat = 0, tRender = 0;
@@ -3785,7 +3826,21 @@ function tick() {
   kartGroup.position.copy(chassisBody.interpolatedPosition);
   kartGroup.quaternion.copy(chassisBody.interpolatedQuaternion);
 
-  // Sync wheel visuals
+  // Spinout reaction — additive tumble on the kart model when hit.
+  if (kartModel) {
+    const rem = _hitSpinUntil - now;
+    if (rem > 0 && _hitSpinDur > 0) {
+      const u = rem / _hitSpinDur;            // 1 → 0 over the hit
+      const ease = u * u;                     // ease-out so it settles
+      kartModel.rotation.y = ease * Math.PI * 2 * _hitSpinTurns;
+      kartModel.rotation.z = Math.sin(u * Math.PI * 5) * 0.22 * u;
+      kartModel.position.y = -CHASSIS_HY + Math.sin(u * Math.PI) * M(0.18);
+    } else if (kartModel.rotation.y !== 0 || kartModel.rotation.z !== 0) {
+      kartModel.rotation.y = 0;
+      kartModel.rotation.z = 0;
+      kartModel.position.y = -CHASSIS_HY;
+    }
+  }
   for (let i = 0; i < vehicle.wheelInfos.length; i++) {
     vehicle.updateWheelTransform(i);
     const t = vehicle.wheelInfos[i].worldTransform;
@@ -3898,6 +3953,8 @@ function tick() {
   // for the menu/screenshot — purely visual so it's safe to advance time here.
   underglow.setIntensityBoost(_burnoutGloBoost);
   underglow.update(dt, kartGroup);
+  // Held-item visual (readied banana / shell / mushroom) trailing the kart.
+  heldItemRig.update(dt, playerCombat.inventory && playerCombat.inventory.active);
   // Pipe the live GLO colour into the smoke material so any tinted
   // puffs (burnout cloud) automatically pick up the player's selected
   // palette / hot-swap when the lobby fires gloChanged.
@@ -4124,6 +4181,8 @@ window.__play.grantFromPool = _grantWeaponFromPool;
 window.__play.projectileRuntime = projectileRuntime;
 window.__play.WEAPONS = WEAPONS;
 window.__play.ITEM_POOLS = ITEM_POOLS;
+window.__play.heldItemRig = heldItemRig;
+window.__play.applyProjectileHit = applyProjectileHit;
 // Phase E2 — let mp-client (or tests) register peer karts as projectile
 // targets. Each call replaces the entire peer list.
 window.__play.setCombatPeers = (peers) => { _extraCombatTargets = Array.isArray(peers) ? peers : []; };

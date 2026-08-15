@@ -24,6 +24,8 @@
  * `OWNER_GRACE_MS` after spawn, preventing instant self-impact.
  */
 
+import { buildPickupProxyModel } from './pickup-visuals.js';
+
 const OWNER_GRACE_MS = 400;
 const DEFAULT_LIFETIME_MS = 6000;
 const HIT_RADIUS_M = 1.6;      // generic kart-vs-projectile contact radius, authored in metres
@@ -46,6 +48,7 @@ const MAX_RING_POOL = 8;       // concurrent impact-flash rings
 const MAX_FLASH_POOL = 6;      // muzzle-flash sprite pool
 const MAX_SCORCH_POOL = 6;     // scorch decal pool
 const MAX_TRAIL_POOL = 16;     // trail ribbon pool
+const HOMING_REACQUIRE_MS = 180;
 
 let _nextId = 1;
 
@@ -285,6 +288,7 @@ export function createProjectileRuntime(deps) {
 
   const _v = new THREE.Vector3();
   const _v2 = new THREE.Vector3();
+  const _targetKinematics = new Map(); // id -> {x,z,t,vx,vz}
 
   function _cellOf(x, z) {
     return `${Math.round(x / tile)},${Math.round(z / tile)}`;
@@ -313,17 +317,11 @@ export function createProjectileRuntime(deps) {
       holder.scale.setScalar(worldUnitsPerMeter);
       holder.add(inner);
     } else {
-      const mesh = new THREE.Mesh(
-        new THREE.SphereGeometry(toWorld(0.4), 16, 12),
-        new THREE.MeshStandardMaterial({
-          color: fallbackColor,
-          emissive: fallbackColor,
-          emissiveIntensity: 0.45,
-          roughness: 0.4,
-        }),
-      );
-      mesh.castShadow = true;
-      holder.add(mesh);
+      const proxy = buildPickupProxyModel(THREE, modelName, {
+        scale: toWorld(0.78),
+        color: fallbackColor,
+      });
+      holder.add(proxy);
     }
     scene.add(holder);
     return holder;
@@ -383,6 +381,11 @@ export function createProjectileRuntime(deps) {
       homingDelayMs: weapon.homingDelayMs || 0,
       turnRateRad: THREE.MathUtils.degToRad(weapon.turnRateDeg || 85),
       targetSpeed: toWorld(weapon.speedRampTo || weapon.speed || 50),
+      lockMinDot: weapon.lockMinDot != null ? weapon.lockMinDot : -1,
+      leadSeconds: weapon.leadSeconds != null ? weapon.leadSeconds : (weapon.class === 'homing_leader' ? 0.35 : 0.18),
+      reacquireMs: weapon.reacquireMs || HOMING_REACQUIRE_MS,
+      targetId: null,
+      nextReacquireAt: 0,
       // arc
       useGravity: weapon.class === 'projectile_arc',
       fuseAt: weapon.fuseMs ? (now + weapon.fuseMs) : 0,
@@ -440,8 +443,27 @@ export function createProjectileRuntime(deps) {
     return ent;
   }
 
+  // Per-weapon impact personalities — distinct sound + feel on detonation
+  // so every pickup reads differently even peripherally. Falls back to the
+  // generic explosion for anything unlisted.
+  const IMPACT_FX = {
+    bowling_ball: { sfx: 'strike',      gain: 0.80, rate: 0.85 },
+    cake:         { sfx: 'cake_throw',  gain: 0.85, rate: 0.90 },
+    plunger:      { sfx: 'plunger_fire',gain: 0.70, rate: 1.15 },
+    nitro:        { sfx: 'explosion',   gain: 0.90, rate: 1.20 },
+    bubblegum:    { sfx: 'gum_drop',    gain: 0.80 },
+    swatter:      { sfx: 'swatter_hit', gain: 0.85 },
+    parachute:    { sfx: 'parachute_deploy', gain: 0.70, rate: 0.90 },
+    anchor:       { sfx: 'anchor_hit',  gain: 0.85, rate: 0.80 },
+    banana:       { sfx: 'boing',       gain: 0.60, rate: 0.90 },
+    green_shell:  { sfx: 'metal_clang', gain: 0.70, rate: 1.10 },
+    red_shell:    { sfx: 'metal_clang', gain: 0.75 },
+  };
+
   function _explode(ent, hitPoint, now) {
-    playSfx('explosion', { gain: 0.85 });
+    const fx = IMPACT_FX[ent.name];
+    if (fx) playSfx(fx.sfx, { gain: fx.gain, rate: fx.rate });
+    else playSfx('explosion', { gain: 0.85 });
     if (ent.blastRadius > 0) {
       const targets = getKartTargets() || [];
       for (const t of targets) {
@@ -519,6 +541,15 @@ export function createProjectileRuntime(deps) {
       case 'blue_shell':  return 0x3a7bff;
       case 'bobomb':      return 0x222831;
       case 'banana':      return 0xffe066;
+      case 'bowling_ball': return 0x6e7788;
+      case 'cake':         return 0xffc480;
+      case 'plunger':      return 0xe0568e;
+      case 'nitro':        return 0x66ccff;
+      case 'missile':      return 0xff8833;
+      case 'bubblegum':    return 0xff88d8;
+      case 'swatter':      return 0xff6666;
+      case 'parachute':    return 0x99ccff;
+      case 'anchor':       return 0x7a7f91;
       // V8 / Vigilante donor catalog (procedural fallback colors).
       // Used only when MP_WEAPON_TO_SP doesn't redirect to a polished
       // DAE mesh; matches the pickup pad halo color so the projectile
@@ -534,14 +565,39 @@ export function createProjectileRuntime(deps) {
     }
   }
 
+  function _updateTargetKinematics(targets, nowMs) {
+    for (const t of targets) {
+      if (!t || t.id == null || !t.position) continue;
+      const key = String(t.id);
+      const prev = _targetKinematics.get(key);
+      const next = { x: t.position.x, z: t.position.z, t: nowMs, vx: 0, vz: 0 };
+      if (prev && nowMs > prev.t) {
+        const dt = (nowMs - prev.t) / 1000;
+        if (dt > 0.001) {
+          next.vx = (next.x - prev.x) / dt;
+          next.vz = (next.z - prev.z) / dt;
+        }
+      }
+      _targetKinematics.set(key, next);
+    }
+  }
+
   function _findHomingTarget(ent, mode /* 'nearest'|'leader' */) {
     const targets = getKartTargets() || [];
     let best = null, bestScore = Infinity;
+    const speed = Math.hypot(ent.vx, ent.vz) || 1;
+    const fwdX = ent.vx / speed;
+    const fwdZ = ent.vz / speed;
     for (const t of targets) {
       if (now - ent.bornAt < OWNER_GRACE_MS && t.id === ent.ownerId) continue;
       const dx = t.position.x - ent.px, dz = t.position.z - ent.pz;
       const dist2 = dx * dx + dz * dz;
       if (dist2 > ent.lockRange * ent.lockRange) continue;
+      if (mode === 'nearest' && ent.lockMinDot > -1) {
+        const d = Math.sqrt(dist2) || 1;
+        const dot = (dx / d) * fwdX + (dz / d) * fwdZ;
+        if (dot < ent.lockMinDot) continue;
+      }
       // 'leader' is approximated as the target furthest from origin —
       // SP has only the local kart so this typically resolves to the
       // local kart and the shell loops back. That's the canonical
@@ -558,6 +614,7 @@ export function createProjectileRuntime(deps) {
     now = tNow;
     if (dt > STEP_CAP_MS / 1000) dt = STEP_CAP_MS / 1000;
     const targets = getKartTargets() || [];
+    _updateTargetKinematics(targets, now);
 
     // ── projectiles ───────────────────────────────────────────
     for (const ent of projectiles) {
@@ -567,10 +624,26 @@ export function createProjectileRuntime(deps) {
       // homing steer
       if ((ent.class === 'homing_nearest' || ent.class === 'homing_leader')
           && now - ent.bornAt >= ent.homingDelayMs) {
-        const target = _findHomingTarget(ent, ent.class === 'homing_leader' ? 'leader' : 'nearest');
+        const mode = ent.class === 'homing_leader' ? 'leader' : 'nearest';
+        if (!ent.targetId || now >= ent.nextReacquireAt) {
+          const reacquired = _findHomingTarget(ent, mode);
+          ent.targetId = reacquired ? reacquired.id : null;
+          ent.nextReacquireAt = now + ent.reacquireMs;
+        }
+        let target = null;
+        if (ent.targetId != null) {
+          target = targets.find((t) => t && t.id === ent.targetId) || null;
+        }
+        if (!target) {
+          target = _findHomingTarget(ent, mode);
+          ent.targetId = target ? target.id : null;
+        }
         if (target) {
-          const dx = target.position.x - ent.px;
-          const dz = target.position.z - ent.pz;
+          const kin = _targetKinematics.get(String(target.id));
+          const leadX = target.position.x + ((kin && kin.vx) ? kin.vx * ent.leadSeconds : 0);
+          const leadZ = target.position.z + ((kin && kin.vz) ? kin.vz * ent.leadSeconds : 0);
+          const dx = leadX - ent.px;
+          const dz = leadZ - ent.pz;
           const len = Math.hypot(dx, dz) || 1;
           if (ent.targetSpeed > ent.speed) {
             ent.speed = Math.min(ent.targetSpeed, ent.speed + toWorld(18) * dt);
@@ -578,7 +651,8 @@ export function createProjectileRuntime(deps) {
           const currentYaw = Math.atan2(ent.vx, ent.vz);
           const desiredYaw = Math.atan2(dx / len, dz / len);
           const deltaYaw = Math.atan2(Math.sin(desiredYaw - currentYaw), Math.cos(desiredYaw - currentYaw));
-          const maxYaw = ent.turnRateRad * dt;
+          const closeBoost = 1 + Math.max(0, Math.min(0.75, (toWorld(18) - len) / toWorld(18)));
+          const maxYaw = ent.turnRateRad * dt * closeBoost;
           const nextYaw = currentYaw + Math.max(-maxYaw, Math.min(maxYaw, deltaYaw));
           ent.vx = Math.sin(nextYaw) * ent.speed;
           ent.vz = Math.cos(nextYaw) * ent.speed;

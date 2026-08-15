@@ -46,6 +46,21 @@ const REGISTRY = {
   v8_shield_up:      '../forcefield.ogg',
   v8_repair_use:     '../energy_bar_full.ogg',
   v8_powerup:        '../appear.ogg',
+  // Online-parity pickup cues — distinct fire/impact identities per
+  // weapon, all mapped onto shipped /audio/sfx/* clips (zero new assets).
+  bowling_fire:      '../bowling_shoot.ogg',
+  bowling_roll:      '../bowling_roll.ogg',
+  cake_throw:        '../plopp.ogg',
+  plunger_fire:      '../boing.ogg',
+  gum_drop:          '../goo.ogg',
+  swatter_hit:       '../strike.ogg',
+  parachute_deploy:  '../swap.ogg',
+  anchor_hit:        '../metal_clang.ogg',
+  ludicrous_on:      '../spaceship.ogg',
+  // Editor micro-interaction cues (Track Studio placement feedback).
+  place_drop:        '../plopp.ogg',
+  place_snap:        '../swap.ogg',
+  place_error:       '../boing.ogg',
   // Phase F — surface hazard / modifier cues. All sourced from existing
   // /audio/sfx/* clips so no new audio assets are required.
   skid:              '../skid.ogg',
@@ -180,4 +195,37 @@ export function preloadCombatSfx(names) {
 export function setCombatSfxVolume(v) {
   _ensureContext();
   if (_master) _master.gain.value = Math.max(0, Math.min(1, v));
+}
+
+/**
+ * Generate a simple, clean placement beep — a short 400Hz sine wave
+ * that signals object placement in the Track Studio editor.
+ * Replaces the "plopp.ogg" silliness with professional audio feedback.
+ */
+export function playPlacementBeep(opts = {}) {
+  const ctx = _ensureContext();
+  if (!ctx) return;
+  if (ctx.state === 'suspended') { try { ctx.resume(); } catch {} }
+  
+  const duration = opts.duration ?? 0.15;      // 150ms beep
+  const frequency = opts.frequency ?? 520;      // 520 Hz — clean mid-range
+  const volume = opts.volume ?? 0.35;           // Moderate volume
+  
+  try {
+    const now = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    
+    osc.type = 'sine';
+    osc.frequency.value = frequency;
+    gain.gain.setValueAtTime(volume, now);
+    // Quick fade-out envelope for a clean "click" feel (no tail)
+    gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+    
+    osc.connect(gain).connect(_master);
+    osc.start(now);
+    osc.stop(now + duration);
+  } catch {
+    // Silent fail — audio optional
+  }
 }

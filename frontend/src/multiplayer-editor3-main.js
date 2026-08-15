@@ -20,6 +20,10 @@ import * as CANNON from 'cannon-es';
 import { Client } from 'colyseus.js';
 import { buildSegmentMesh, buildSegmentBody, getDrivableTopY } from './editor3/segment-builder.js';
 import { SEGMENTS, TILE } from './editor3/segments.js';
+import { tickPickupSpin, playPickupCollect, playPickupSpawn } from './editor3/pickup-spin.js';
+import { tickPickupAura } from './editor3/pickup-aura.js';
+import { createHeldItemRig } from './editor3/held-item.js';
+import { getPickupVisual, stylePickupIconElement, buildPickupIconSvg } from './editor3/pickup-visuals.js';
 import { WORLD_UNITS_PER_M } from './editor3/units.js';
 import { cloneKart, resolveKartWheels } from './editor3/kart-loader.js';
 import { DEFAULT_KART_ID, KART_BY_ID } from './editor3/kart-catalog.js';
@@ -326,6 +330,9 @@ function buildTrackVisuals(trackData) {
   for (const p of placements) {
     const def = SEGMENTS[p.k];
     if (!def) continue;
+    // Runtime pickups are rendered dynamically from server pickup state
+    // (with collect/respawn toggling), so skip the static copy here.
+    if (def.runtime?.kind === 'pickup') continue;
     const mesh = buildSegmentMesh(p.k);
     mesh.position.set((p.x || 0) * TILE * S, 0, (p.z || 0) * TILE * S);
     // Match SP playtest convention (frontend/src/editor3/play-main.js):
@@ -358,6 +365,7 @@ function buildTrackVisualsAsync(trackData) {
         const p = placements[i];
         const def = SEGMENTS[p.k];
         if (!def) continue;
+        if (def.runtime?.kind === 'pickup') continue;
         const mesh = buildSegmentMesh(p.k);
         mesh.position.set((p.x || 0) * TILE * S, 0, (p.z || 0) * TILE * S);
         mesh.rotation.y = -((p.r || 0) % 4) * (Math.PI / 2);
@@ -474,6 +482,9 @@ function ensureGhost(sid, idx, kartState) {
     target: { x: 0, y: 0, z: 0, qx: 0, qy: 0, qz: 0, qw: 1 },
     color: colorHex, kartId, fx, underglow,
     sid, // Phase B4: needed to identify the local kart in the FX loop.
+    // Held-item visual (readied banana/shell/etc.) trailing this kart.
+    heldRig: createHeldItemRig({ THREE, kartGroup: group, unitsPerM: S }),
+    _held: null,
     // Phase B3: rolling snapshot buffer for snapshot interpolation.
     // Each entry: { t, x, y, z, qx, qy, qz, qw, vx, vy, vz }.
     snapshots: [],
@@ -498,49 +509,62 @@ function removeGhost(sid) {
   if (!g) return;
   scene.remove(g.group);
   if (g.fx) g.fx.dispose();
+  if (g.heldRig) g.heldRig.dispose();
   ghosts.delete(sid);
 }
 
 // ── Pickups (item boxes) ────────────────────────────────────────────
-const pickupMeshes = new Map(); // id -> { mesh, active }
-const PICKUP_GEO = new THREE.IcosahedronGeometry(0.6 * S, 0);
-const PICKUP_MAT_ACTIVE = new THREE.MeshStandardMaterial({
-  color: 0xffd166, emissive: 0xff8c42, emissiveIntensity: 0.7, metalness: 0.3, roughness: 0.4,
-});
-const PICKUP_MAT_INACTIVE = new THREE.MeshStandardMaterial({
-  color: 0x444444, transparent: true, opacity: 0.25,
-});
-function ensurePickupMesh(id, x, y, z, active) {
+// Render the REAL studio pickup visual (buildSegmentMesh by kind) so a
+// shared track's item boxes look & feel identical online, in the studio
+// preview and in the single-player playtest. buildSegmentMesh registers
+// the host with pickup-spin, so tickPickupSpin() animates it for free.
+const pickupMeshes = new Map(); // id -> { mesh, active, kind }
+
+function _setPickupCubesVisible(root, visible) {
+  root.traverse((o) => {
+    if (o.isMesh && o.userData?.__pickupCube) o.visible = visible;
+  });
+}
+
+function ensurePickupMesh(id, x, y, z, active, kind) {
   let entry = pickupMeshes.get(id);
   if (!entry) {
-    const mesh = new THREE.Mesh(PICKUP_GEO, active ? PICKUP_MAT_ACTIVE : PICKUP_MAT_INACTIVE);
+    const key = kind && SEGMENTS[kind] ? kind : 'item_box';
+    const mesh = buildSegmentMesh(key);
     mesh.position.set(x, y, z);
-    mesh.castShadow = true;
+    _setPickupCubesVisible(mesh, active);
     scene.add(mesh);
-    entry = { mesh, active };
+    entry = { mesh, active, kind: key };
     pickupMeshes.set(id, entry);
   } else {
     entry.mesh.position.set(x, y, z);
     if (entry.active !== active) {
-      // Active→inactive transition = some kart just grabbed it. Fire a
-      // GLO-tinted sparkle burst at its location for visual feedback.
       if (entry.active && !active) {
+        // Grabbed — GLO sparkle burst + collect VFX on each cube.
         const upd = spawnPickupBurst({
           scene, position: entry.mesh.position.clone(),
           color: 0xffd166, lifeS: 0.6,
         });
         if (upd) pickupBursts.push(upd);
-      }
-      // Inactive→active transition = item box respawning. Show a cool
-      // cyan sparkle so it's obvious to both players that a new item is available.
-      if (!entry.active && active) {
+        entry.mesh.traverse((o) => {
+          if (o.isMesh && o.userData?.__pickupCube && o.visible) {
+            playPickupCollect(o, () => { o.visible = false; });
+          }
+        });
+      } else if (!entry.active && active) {
+        // Respawning — cyan sparkle so both players see the re-arm.
         const upd = spawnPickupBurst({
           scene, position: entry.mesh.position.clone(),
           color: 0x88ffdd, lifeS: 0.5,
         });
         if (upd) pickupBursts.push(upd);
+        _setPickupCubesVisible(entry.mesh, true);
+        entry.mesh.traverse((o) => {
+          if (o.isMesh && o.userData?.__pickupCube) playPickupSpawn(o);
+        });
+      } else {
+        _setPickupCubesVisible(entry.mesh, active);
       }
-      entry.mesh.material = active ? PICKUP_MAT_ACTIVE : PICKUP_MAT_INACTIVE;
       entry.active = active;
     }
   }
@@ -567,6 +591,9 @@ const projMeshes = new Map(); // projKey → { mesh, color }
 const PROJ_COLORS = {
   green_shell:  0x22ff44, red_shell:  0xff2233, blue_shell: 0x00aaff,
   bobomb:       0x222222, bullet_bill: 0x444444, banana: 0xffdd00,
+  bowling_ball: 0x6e7788, cake: 0xffc480, plunger: 0xe0568e,
+  nitro: 0x66ccff, bubblegum: 0xff88d8, swatter: 0xff6666,
+  parachute: 0x99ccff, anchor: 0x7a7f91,
   missile: 0xff6600, rocket: 0x00ccff, mortar: 0x886644,
   // V8 series
   v8_missile: 0xff8800, v8_cannon: 0xcc4400, v8_rocket: 0x00ddff,
@@ -577,24 +604,14 @@ const PROJ_COLORS = {
 const PROJ_RADII = {
   green_shell: 0.22, red_shell: 0.22, blue_shell: 0.28,
   bobomb: 0.30, bullet_bill: 0.60, banana: 0.18,
+  bowling_ball: 0.24, cake: 0.24, plunger: 0.23,
+  nitro: 0.24, bubblegum: 0.20, swatter: 0.26,
+  parachute: 0.24, anchor: 0.24,
   missile: 0.20, rocket: 0.22, mortar: 0.25,
   v8_missile: 0.22, v8_cannon: 0.28, v8_rocket: 0.22,
   v8_mortar: 0.28, v8_mine: 0.32, v8_dynamite: 0.30,
   v8_firethrower: 0.14,
   default: 0.20,
-};
-
-const WEAPON_ICONS = {
-  mushroom: '🍄', golden_mushroom: '🌟', star: '⭐', green_shell: '🐢',
-  red_shell: '🔴', blue_shell: '💙', banana: '🍌', bobomb: '💣',
-  bullet_bill: '🚀', missile: '🎯', rocket: '⚡', mortar: '💥',
-  mine: '🔲', dynamite: '🧨', firethrower: '🔥', shield: '🛡️',
-  repair: '🔧', double_dmg: '⚔️', health_orb: '❤️', coin: '🪙',
-  // V8 series
-  v8_missile: '🎯', v8_cannon: '💥', v8_rocket: '🚀', v8_mortar: '☄️',
-  v8_mine: '💀', v8_dynamite: '🧨', v8_firethrower: '🔥',
-  v8_shield: '🛡', v8_repair: '💊', v8_double_dmg: '✖2',
-  default: '❓',
 };
 
 function ensureProjMesh(key, subType) {
@@ -654,8 +671,79 @@ function showFloater(text, color = '#fff') {
   setTimeout(() => el.remove(), 1700);
 }
 
+// Item-grant floater — hand-authored SVG icon + label (replaces the old
+// WEAPON_ICONS emoji floater so the roulette settle reads consistently
+// with the rest of the non-emoji HUD).
+function showPickupFloater(name, color = '#ffc645') {
+  if (!hud.floaters) return;
+  const el = document.createElement('div');
+  el.style.cssText = `display:flex;align-items:center;gap:8px;font-family:var(--font-display,"Bungee",sans-serif);font-size:22px;font-weight:400;
+    letter-spacing:0.06em;color:${color};text-shadow:0 0 12px ${color}80;
+    pointer-events:none;animation:floaterUp 1.6s ease-out forwards;`;
+  el.innerHTML = buildPickupIconSvg(name, 30);
+  el.id = 'floater-' + (_floaterIdCounter++);
+  if (!document.getElementById('floater-keyframe')) {
+    const s = document.createElement('style');
+    s.id = 'floater-keyframe';
+    s.textContent = '@keyframes floaterUp{0%{transform:translateY(0) scale(1);opacity:1}' +
+                    '60%{transform:translateY(-40px) scale(1.1);opacity:1}' +
+                    '100%{transform:translateY(-90px) scale(0.8);opacity:0}}';
+    document.head.appendChild(s);
+  }
+  hud.floaters.appendChild(el);
+  setTimeout(() => el.remove(), 1700);
+}
+
+// ── MK8-style grant roulette (cosmetic; server grant is instant, we
+// just delay the reveal with a decelerating icon shuffle for parity
+// with the single-player playtest HUD).
+const _ROULETTE_POOL = ['bowling_ball', 'cake', 'plunger', 'nitro', 'missile', 'bubblegum', 'swatter', 'parachute', 'anchor', 'shield', 'ludicrous_mode'];
+const _ROULETTE_STEPS_MS = [62, 66, 72, 80, 92, 108, 126, 146, 170];
+let _rouletteActive = false;
+let _rouletteTimer = null;
+let _lastMainWeapon = null;
+
+function _startGrantRoulette(finalName, charge) {
+  if (_rouletteActive) { clearTimeout(_rouletteTimer); }
+  _rouletteActive = true;
+  const iconEl = hud.slotMainIcon;
+  const nameEl = hud.slotMainName;
+  if (hud.slotMain) hud.slotMain.classList.add('rolling');
+  let step = 0;
+  const total = _ROULETTE_STEPS_MS.length;
+  const tick = () => {
+    if (step >= total) {
+      _rouletteActive = false;
+      if (hud.slotMain) hud.slotMain.classList.remove('rolling');
+      _updateWeaponSlot('main', finalName, charge);
+      showPickupFloater(finalName, '#ffc645');
+      return;
+    }
+    // Bias late frames toward the real item, MK8-style tease.
+    const bias = step >= total - 3 ? 0.45 + (step - (total - 3)) * 0.22 : 0;
+    const pick = Math.random() < bias ? finalName
+      : _ROULETTE_POOL[(Math.random() * _ROULETTE_POOL.length) | 0];
+    if (iconEl) {
+      stylePickupIconElement(iconEl, pick);
+    }
+    if (nameEl) nameEl.textContent = '???';
+    _rouletteTimer = setTimeout(tick, _ROULETTE_STEPS_MS[step++]);
+  };
+  tick();
+}
+
 function _updateWeaponSlot(slot, name, charge) {
   const isEmpty = !name;
+  // Intercept fresh grants on the main slot with the roulette tease.
+  if (slot === 'main') {
+    if (!isEmpty && name !== _lastMainWeapon && _lastMainWeapon === null) {
+      _lastMainWeapon = name;
+      _startGrantRoulette(name, charge);
+      return;
+    }
+    _lastMainWeapon = isEmpty ? null : name;
+    if (_rouletteActive) return; // roulette owns the slot until settle
+  }
   const slotEl   = slot === 'main' ? hud.slotMain : hud.slotRes;
   const iconEl   = slot === 'main' ? hud.slotMainIcon : hud.slotResIcon;
   const nameEl   = slot === 'main' ? hud.slotMainName : hud.slotResName;
@@ -663,13 +751,25 @@ function _updateWeaponSlot(slot, name, charge) {
   if (!slotEl) return;
   if (isEmpty) {
     slotEl.classList.add('empty');
-    if (iconEl)   iconEl.textContent = '—';
+    if (iconEl) {
+      iconEl.textContent = '—';
+      iconEl.style.background = 'radial-gradient(circle at 35% 30%, #6a7486, #3a4250 65%, #252a31 100%)';
+      iconEl.style.textShadow = 'none';
+      iconEl.style.border = '1px solid #2f3744';
+      iconEl.style.boxShadow = 'none';
+    }
     if (nameEl)   nameEl.textContent = slot === 'main' ? 'No Weapon' : 'Reserve';
     if (chargeEl) chargeEl.textContent = '';
   } else {
     slotEl.classList.remove('empty');
-    if (iconEl)   iconEl.textContent = WEAPON_ICONS[name] ?? WEAPON_ICONS.default;
-    if (nameEl)   nameEl.textContent = name.replace('_', ' ').replace('pk ', '').replace('weapon:', '');
+    if (iconEl) {
+      stylePickupIconElement(iconEl, name);
+    }
+    if (nameEl) {
+      nameEl.textContent = name.replace(/_/g, ' ').replace('pk ', '').replace('weapon:', '');
+      const v = getPickupVisual(name);
+      nameEl.style.color = `#${(v.accent >>> 0).toString(16).padStart(6, '0')}`;
+    }
     if (chargeEl) chargeEl.textContent = (charge && charge > 1) ? '✕' + charge : '';
   }
 }
@@ -1299,7 +1399,34 @@ function tick(now) {
     }
     if (entry.underglow) entry.underglow.update(dt, g);
 
-    // Slice 4 — Star aura: pulsing rainbow torus spun around the kart.
+    // Held-item visual (readied banana/shell/etc.) trailing this kart.
+    if (entry.heldRig) entry.heldRig.update(dt, entry._held);
+
+    // Spinout tumble parity: when the server flags this peer as spun
+    // out (banana / shell hit -> kart.spinUntilMs), override the
+    // visual-physics rotation with a MK8-style tumble + hop so remote
+    // players visibly see the same spinout the victim feels locally.
+    if (entry.kartModel && entry._effectState) {
+      const nowSpin = Date.now();
+      const spinEnd = entry._effectState.spinUntilMs || 0;
+      if (spinEnd > nowSpin) {
+        if (!entry._spinDur) entry._spinDur = 1000;
+        const rem = spinEnd - nowSpin;
+        // Track the longest remaining window as the total duration so
+        // the ease is smooth even across snapshot refreshes.
+        if (rem > entry._spinDur) entry._spinDur = rem;
+        const u = Math.max(0, Math.min(1, rem / entry._spinDur)); // 1 -> 0
+        const ease = u * u;
+        entry.kartModel.rotation.y = ease * Math.PI * 2 * 2; // two full spins
+        entry.kartModel.rotation.z = Math.sin(u * Math.PI * 4) * 0.12;
+        entry.kartModel.position.y = entry.kartBaseY + Math.sin(u * Math.PI) * (0.18 * S);
+      } else if (entry._spinDur) {
+        entry._spinDur = 0;
+        entry.kartModel.rotation.y = 0;
+        entry.kartModel.rotation.z = 0;
+        entry.kartModel.position.y = entry.kartBaseY;
+      }
+    }
     const efx = entry._effectState;
     if (efx) {
       const nowMs4 = Date.now();
@@ -1332,10 +1459,10 @@ function tick(now) {
       }
     }
   }
-  // Spin pickup boxes.
-  for (const { mesh, active } of pickupMeshes.values()) {
-    if (active) mesh.rotation.y += dt * 1.6;
-  }
+  // Animate pickups (spin + bob + pulse) via the shared registry so
+  // online item boxes look & feel identical to the studio + SP playtest.
+  tickPickupSpin(dt);
+  tickPickupAura(dt);
   // Drive pickup-burst closures; they self-dispose by returning true.
   for (let i = pickupBursts.length - 1; i >= 0; i--) {
     if (pickupBursts[i](dt)) pickupBursts.splice(i, 1);
@@ -1604,10 +1731,13 @@ async function connect() {
       fs.brakeIn = +kart.brakeIn || 0;
       fs.steerIn = +kart.steerIn || 0;
       // Slice 4 — cache combat effect timestamps for star/boost VFX in tick().
-      if (!entry._effectState) entry._effectState = { starUntilMs: 0, bulletBillUntilMs: 0, boostUntilMs: 0 };
+      if (!entry._effectState) entry._effectState = { starUntilMs: 0, bulletBillUntilMs: 0, boostUntilMs: 0, spinUntilMs: 0 };
       entry._effectState.starUntilMs       = kart.starUntilMs       || 0;
       entry._effectState.bulletBillUntilMs = kart.bulletBillUntilMs || 0;
       entry._effectState.boostUntilMs      = kart.boostUntilMs      || 0;
+      entry._effectState.spinUntilMs       = kart.spinUntilMs       || 0;
+      // Held pickup (secondary slot) — drives the trailing item visual.
+      entry._held = (kart.ammo2 > 0 && kart.weapon2) ? kart.weapon2 : null;
     });
     // Remove ghosts whose karts left.
     for (const sid of [...ghosts.keys()]) {
@@ -1618,14 +1748,15 @@ async function connect() {
     // Refresh lobby roster while pre-race overlay is up.
     if (!raceStarted) renderLobbyPlayers(state);
     // Pickups.
-    state.pickups.forEach((p, id) => { ensurePickupMesh(id, p.x, p.y, p.z, !!p.active); });
+    state.pickups.forEach((p, id) => { ensurePickupMesh(id, p.x, p.y, p.z, !!p.active, p.kind); });
     // Slice 2 — projectile mesh sync.
     if (state.projectiles) {
       const liveKeys = new Set();
       state.projectiles.forEach((proj, key) => {
         liveKeys.add(key);
         const mesh = ensureProjMesh(key, proj.subType || 'default');
-        mesh.position.set(proj.px || 0, proj.py || 0, proj.pz || 0);
+        // Fixed: Schema defines x/y/z, not px/py/pz
+        mesh.position.set(proj.x || 0, proj.y || 0, proj.z || 0);
       });
       // Remove stale projectile meshes.
       for (const k of projMeshes.keys()) {

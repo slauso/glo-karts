@@ -17,6 +17,7 @@
 import * as THREE from 'three';
 import { ColladaLoader } from 'three/examples/jsm/loaders/ColladaLoader.js';
 import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js';
+import { loadStkSpm, instanceStkSpm } from './spm-cache.js';
 
 const ASSET_BASE = '/kart assets/3D Kart/Assets/Models/Items';
 const MAP_BASE = '/kart assets/3D Kart/Assets/Models';
@@ -54,9 +55,74 @@ export const ITEM_MODEL_REGISTRY = {
   mk8_cityboat:     { base: `${MAP_BASE}/Wii U - Mario Kart 8 - Toad Harbor/CityBoat`,                      dae: 'CityBoat.dae',   scale: 12.0, keepMaterials: true },
 };
 
-// Many of the MK8 / 3D Kart DAEs reference texture filenames with mixed
-// case (e.g. "PylonR_Alb.png") while the actual files on disk are stored
-// lowercase ("pylonr_alb.png"). Vite serves the public folder case-
+// STK powerup models (open-source, GPL/CC-BY-SA — safe to ship). These
+// are `.spm` meshes loaded through spm-cache.js rather than the DAE
+// ColladaLoader, and give the item pickups / held items / projectiles
+// real geometry instead of tinted proxies. Each entry names the target
+// authored size in metres (bounding-box max dimension) so the model
+// slots into the holder/scale convention used by held-item.js and
+// projectile-runtime.js (which then scale by worldUnitsPerMeter).
+const STK_POWERUP_BASE = '/stk assets/powerups';
+export const STK_ITEM_REGISTRY = {
+  green_shell:     { spm: 'bowling.spm',          size: 0.55, tint: 0x55ff66 },
+  red_shell:       { spm: 'bowling.spm',          size: 0.55, tint: 0xff5555 },
+  blue_shell:      { spm: 'rubber_ball.spm',      size: 0.72 },
+  banana:          { spm: 'bubblegum.spm',        size: 0.62 },
+  bobomb:          { spm: 'cake.spm',             size: 0.62 },
+  mushroom:        { spm: 'nitrotank-small.spm',  size: 0.70 },
+  golden_mushroom: { spm: 'nitrotank-small.spm',  size: 0.70, tint: 0xffd24a },
+  bowling_ball:    { spm: 'bowling.spm',          size: 0.58 },
+  cake:            { spm: 'cake.spm',             size: 0.62 },
+  plunger:         { spm: 'plunger.spm',          size: 0.72 },
+  nitro:           { spm: 'nitrotank-small.spm',  size: 0.72 },
+  missile:         { spm: 'rubber_ball.spm',      size: 0.68, tint: 0xff8833 },
+  bubblegum:       { spm: 'bubblegum.spm',        size: 0.62, tint: 0xff88d8 },
+  swatter:         { spm: 'swatter.spm',          size: 0.86 },
+  parachute:       { spm: 'parachute.spm',        size: 0.88 },
+  anchor:          { spm: 'anchor.spm',           size: 0.86 },
+  ludicrous_mode:  { spm: 'rubber_ball.spm',      size: 0.72, tint: 0xff66ff },
+  shield:          { spm: 'rubber_ball.spm',      size: 0.72, tint: 0x66ccff },
+};
+
+// One normalized template group per logical STK item name.
+const _stkTemplates = new Map(); // name -> THREE.Group (normalized)
+const _stkPending   = new Map(); // name -> Promise<THREE.Group>
+
+/**
+ * Wrap a raw STK spm clone in a group scaled + recentred so its
+ * bounding-box max dimension equals `sizeM` authored metres and it is
+ * centred on the origin (x/z centred, vertically centred). Optional
+ * `tint` multiplies the material colour so one mesh (e.g. bowling ball)
+ * can serve both the green and red shell.
+ */
+function _normalizeStk(raw, sizeM, tint) {
+  const wrap = new THREE.Group();
+  wrap.add(raw);
+  const box = new THREE.Box3().setFromObject(raw);
+  if (box.isEmpty()) return wrap;
+  const size = new THREE.Vector3(); box.getSize(size);
+  const center = new THREE.Vector3(); box.getCenter(center);
+  const maxDim = Math.max(size.x, size.y, size.z) || 1;
+  const s = sizeM / maxDim;
+  raw.scale.multiplyScalar(s);
+  raw.position.sub(center.multiplyScalar(s));
+  if (tint != null) {
+    raw.traverse((o) => {
+      if (!o.isMesh || !o.material) return;
+      const mats = Array.isArray(o.material) ? o.material : [o.material];
+      const tinted = mats.map((m) => {
+        if (!m || !m.color) return m;
+        const c = m.clone();
+        c.color = new THREE.Color(tint);
+        if (c.emissive) c.emissive = new THREE.Color(tint).multiplyScalar(0.25);
+        return c;
+      });
+      o.material = Array.isArray(o.material) ? tinted : tinted[0];
+    });
+  }
+  return wrap;
+}
+
 // sensitively (and falls back to the SPA index.html for unknown paths,
 // which the image element silently rejects). Install a URL modifier on
 // the loading manager that lowercases the basename of texture-like
@@ -183,6 +249,33 @@ function _normalizeTransform(root, entry) {
 /** Load a model by logical name. Resolves to a template Group (do NOT
  *  add directly to scene — clone via `instanceItemModel`). */
 export function loadItemModel(name) {
+  // STK powerup (.spm) path — real open-source geometry. Prefer this
+  // over the (absent) MK8 DAE so items render actual meshes.
+  const stk = STK_ITEM_REGISTRY[name];
+  if (stk) {
+    if (_stkTemplates.has(name)) return Promise.resolve(_stkTemplates.get(name));
+    if (_stkPending.has(name)) return _stkPending.get(name);
+    const path = `${STK_POWERUP_BASE}/${stk.spm}`;
+    const p = loadStkSpm(path).then(() => {
+      const raw = instanceStkSpm(path) || new THREE.Group();
+      const tpl = _normalizeStk(raw, stk.size, stk.tint);
+      _stkTemplates.set(name, tpl);
+      _stkPending.delete(name);
+      for (const fn of _listeners) {
+        try { fn(name, tpl); } catch (e) { console.warn('[pickup-model listener]', e); }
+      }
+      return tpl;
+    }).catch((err) => {
+      _stkPending.delete(name);
+      console.warn('[pickup-model] STK spm load failed', name, path, err);
+      const empty = new THREE.Group();
+      _stkTemplates.set(name, empty);
+      return empty;
+    });
+    _stkPending.set(name, p);
+    return p;
+  }
+
   const entry = ITEM_MODEL_REGISTRY[name];
   if (!entry) return Promise.reject(new Error(`unknown item model: ${name}`));
   if (_cache.has(name)) return Promise.resolve(_cache.get(name));
@@ -255,6 +348,11 @@ export function loadItemModel(name) {
  *  between clones, which makes every clone after the first render at
  *  the original template's location instead of where it was placed. */
 export function instanceItemModel(name) {
+  if (STK_ITEM_REGISTRY[name]) {
+    const tpl = _stkTemplates.get(name);
+    if (!tpl) return null;
+    return cloneSkinned(tpl);
+  }
   const tpl = _cache.get(name);
   if (!tpl) return null;
   return cloneSkinned(tpl);

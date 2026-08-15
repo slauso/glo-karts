@@ -8,6 +8,13 @@
  */
 import * as THREE from 'three';
 import { TILE, ROAD_WIDTH, ROAD_THICK, WALL_HEIGHT, WALL_THICK, PLATEAU_HEIGHT, BRIDGE_DECK_HEIGHT, BRIDGE_RAMP_CELLS, SEGMENTS } from './segments.js';
+import { instanceItemModel, loadItemModel } from './pickup-models.js';
+import { buildPickupProxyModel } from './pickup-visuals.js';
+import { instanceStkSpm, loadStkSpm } from './spm-cache.js';
+import { instanceFBX, loadFBX } from './fbx-cache.js';
+import { registerPickupSpin } from './pickup-spin.js';
+import { registerPickupAura, unregisterPickupAura } from './pickup-aura.js';
+import { registerSurfaceScroll, registerSurfaceTick } from './surface-scroll.js';
 
 // ── Materials (cached, shared) ────────────────────────────────────
 // Textures are generated lazily on first access (IIFE deferred behind a
@@ -2239,7 +2246,7 @@ function buildHealthOrb() {
   halo.position.set(0, ROAD_THICK + 0.06, 0);
   grp.add(halo);
 
-  registerPickupSpin(host);
+  registerPickupSpin(host, 'orb');
   return grp;
 }
 
@@ -2285,7 +2292,7 @@ function buildCoinPickup() {
   halo.position.set(0, ROAD_THICK + 0.06, 0);
   grp.add(halo);
 
-  registerPickupSpin(coin);
+  registerPickupSpin(coin, 'coin');
   return grp;
 }
 
@@ -2445,7 +2452,7 @@ function buildSpawn() {
 }
 
 // ── ASSET-BACKED PICKUPS (Phase A) ─────────────────────────────────────────
-// Creates a pickup pedestal + a procedural sphere placeholder, and
+// Creates a pickup pedestal + a detailed procedural placeholder, and
 // asynchronously swaps the placeholder for the real .dae model from
 // `frontend/public/kart assets/`. Both the placeholder and the loaded
 // model are tagged `__pickupCube` so play-main's consume/respawn show/
@@ -2461,20 +2468,31 @@ function buildAssetPickup(modelName, opts = {}) {
   const grp = new THREE.Group();
   pickupPedestal(grp, pedestalColor, glowColor, pedestalRad);
 
-  // Procedural placeholder — visible until the .dae streams in.
-  const ph = new THREE.Mesh(
-    new THREE.SphereGeometry(0.55, 16, 12),
-    new THREE.MeshStandardMaterial({
-      color: placeholderColor, emissive: placeholderColor, emissiveIntensity: 0.45,
-      roughness: 0.30, metalness: 0.10,
-    }),
-  );
+  // Detailed placeholder — still instant, but now visually reads as the
+  // target pickup instead of a generic orb while model assets stream in.
+  const ph = buildPickupProxyModel(THREE, modelName, { scale: 1.10, color: placeholderColor });
   ph.position.set(0, floatY, 0);
-  ph.castShadow = true;
   ph.userData.__pickupCube = true;
   ph.userData.__assetPickupPlaceholder = true;
+  ph.traverse((o) => {
+    if (!o.isMesh) return;
+    o.castShadow = true;
+    o.userData.__pickupCube = true;
+    o.userData.__assetPickupPlaceholder = true;
+  });
   grp.add(ph);
   registerPickupSpin(ph);
+  registerPickupAura(THREE, ph, modelName);
+
+  const disposeTree = (root) => {
+    if (!root) return;
+    root.traverse((o) => {
+      if (!o.isMesh) return;
+      o.geometry?.dispose?.();
+      if (Array.isArray(o.material)) o.material.forEach((m) => m?.dispose?.());
+      else o.material?.dispose?.();
+    });
+  };
 
   const swapIn = (inst) => {
     if (!inst) return;
@@ -2489,10 +2507,11 @@ function buildAssetPickup(modelName, opts = {}) {
     });
     // Remove placeholder, add real model.
     grp.remove(ph);
-    ph.geometry.dispose?.();
-    ph.material.dispose?.();
+    unregisterPickupAura(ph);
+    disposeTree(ph);
     grp.add(inst);
     registerPickupSpin(inst);
+    registerPickupAura(THREE, inst, modelName);
   };
 
   // Try cached first; otherwise kick off a load and listen. Both paths
@@ -2654,6 +2673,43 @@ function buildStkProp(path, opts = {}) {
       if (ph.parent === grp) swapIn(instanceStkSpm(path));
     }).catch(() => { /* keep placeholder */ });
   }
+  grp.userData.baseYOffset = y;
+  return grp;
+}
+
+// Procedural traffic cone. The original MK8 "Pylon" DAE donor asset is not
+// available in the repo (Unity donor tree absent, not on STK SVN), so we
+// synthesize a recognizable orange safety cone with reflective bands and a
+// dark base slab. Authored in metres; ~0.9 m tall.
+function buildTrafficCone(opts = {}) {
+  const { y = ROAD_THICK + 0.02 } = opts;
+  const grp = new THREE.Group();
+  const orange = new THREE.MeshStandardMaterial({ color: 0xff5a1e, roughness: 0.55, metalness: 0.05 });
+  const white  = new THREE.MeshStandardMaterial({ color: 0xf3f3f3, roughness: 0.45, metalness: 0.05 });
+  const dark   = new THREE.MeshStandardMaterial({ color: 0x1b1b1e, roughness: 0.8,  metalness: 0.12 });
+  const H = 0.9;    // cone height (m)
+  const R = 0.26;   // base radius (m)
+  const baseH = 0.06;
+  // Base slab
+  const base = new THREE.Mesh(new THREE.BoxGeometry(R * 2.5, baseH, R * 2.5), dark);
+  base.position.y = y + baseH * 0.5;
+  base.castShadow = true; base.receiveShadow = true;
+  grp.add(base);
+  // Cone body (open-ended; base slab hides the bottom)
+  const cone = new THREE.Mesh(new THREE.ConeGeometry(R, H, 28, 1, true), orange);
+  cone.position.y = y + baseH + H * 0.5;
+  cone.castShadow = true;
+  grp.add(cone);
+  // Radius of the cone at height fraction f (0 = base, 1 = tip).
+  const rAt = (f) => R * (1 - f) + 0.012;
+  const band = (frac, thick) => {
+    const geo = new THREE.CylinderGeometry(rAt(frac + thick), rAt(frac), thick * H, 28, 1, true);
+    const m = new THREE.Mesh(geo, white);
+    m.position.y = y + baseH + (frac + thick * 0.5) * H;
+    grp.add(m);
+  };
+  band(0.28, 0.13);
+  band(0.52, 0.10);
   grp.userData.baseYOffset = y;
   return grp;
 }
@@ -3513,9 +3569,11 @@ export const VISUAL_BUILDERS = {
   lava_pool:          () => buildLavaPool(),
   water_pool:         () => buildWaterPool(),
   sand_pit:           () => buildSandPit(),
-  // Phase E — 3D Kart reference props/scenery (DAE)
-  prop_traffic_cone:  () => buildReferenceDaeProp('mk8_pylon', { targetSize: 1.0, y: ROAD_THICK + 0.02 }),
-  scenery_city_boat:  () => buildReferenceDaeProp('mk8_cityboat', { targetSize: 12.0, y: ROAD_THICK + 0.02 }),
+  // Phase E — 3D Kart reference props/scenery
+  // Traffic Cone: procedural (MK8 "Pylon" DAE donor asset unavailable).
+  prop_traffic_cone:  () => buildTrafficCone({ y: ROAD_THICK + 0.02 }),
+  // City Boat: repointed to STK's ReedBoat (MK8 CityBoat DAE donor unavailable).
+  scenery_city_boat:  () => buildStkProp('/stk assets/library/stklib_ReedBoat_a/stklib_ReedBoat_a.spm', { targetSize: 6.0 }),
   // Phase F — SuperTuxKart library props (.spm)
   // Vegetation
   stk_palm_tree:        () => buildStkProp('/stk assets/library/stklib_palmTree_a/stklib_palmTree_a_LOD_a.spm',   { targetSize: 5.0 }),
@@ -3584,7 +3642,7 @@ const W2_INSET  = W2_FOOT_T / 2;
 const W2_CAP_H  = 0.18;
 
 MATS.wallConcrete = new THREE.MeshStandardMaterial({
-  color: 0x9aa0a8, map: TEX.concrete, roughness: 0.85, metalness: 0.04,
+  color: 0x9aa0a8, map: getTEX().concrete, roughness: 0.85, metalness: 0.04,
 });
 MATS.wallCap = new THREE.MeshStandardMaterial({
   color: 0x40464e, roughness: 0.7, metalness: 0.18,

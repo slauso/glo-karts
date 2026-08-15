@@ -5,33 +5,70 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>GLO KARTS — Playtest</title>
   <link rel="icon" href="data:," />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bungee&family=Exo+2:wght@400;600;700;800&display=swap" rel="stylesheet">
   <style>
-    html, body { margin: 0; height: 100%; background: #0a0d12; color: #e6edf3; font-family: 'Inter', system-ui, sans-serif; overflow: hidden; }
+    :root {
+      --ink: #f3f7ff;
+      --muted: #a9b7c8;
+      --glass: rgba(12, 17, 26, 0.82);
+      --line: rgba(255,255,255,0.14);
+      --neon-1: #ff4976;
+      --neon-2: #ffc645;
+      --neon-3: #4bd3ff;
+      --neon-glow: rgba(255, 73, 118, 0.45);
+      --radius: 12px;
+      --shadow: 0 12px 34px rgba(0,0,0,0.42), 0 0 0 1px rgba(255,255,255,0.06) inset;
+      --font-ui: 'Exo 2', system-ui, sans-serif;
+      --font-display: 'Bungee', 'Impact', sans-serif;
+    }
+    html, body {
+      margin: 0; height: 100%; overflow: hidden;
+      background:
+        radial-gradient(100% 70% at 70% -20%, rgba(255, 73, 118, 0.22), transparent 60%),
+        radial-gradient(80% 70% at 0% 100%, rgba(75, 211, 255, 0.16), transparent 56%),
+        #090d14;
+      color: var(--ink);
+      font-family: var(--font-ui);
+    }
     canvas { display: block; width: 100%; height: 100%; }
     .hud {
       position: fixed; left: 16px; top: 16px;
-      background: rgba(20,24,30,0.85); padding: 10px 14px; border-radius: 6px;
+      background: var(--glass); padding: 10px 14px; border-radius: var(--radius);
+      border: 1px solid var(--line);
+      box-shadow: var(--shadow);
       font-size: 13px;
+      backdrop-filter: blur(8px) saturate(1.2);
+      min-width: 220px;
     }
-    .hud b { color: #ff3aa1; }
+    .hud b { color: #ff6f95; font-weight: 800; }
+    .hud > div { letter-spacing: 0.02em; }
     .controls {
       position: fixed; left: 16px; bottom: 16px;
-      background: rgba(20,24,30,0.85); padding: 10px 14px; border-radius: 6px;
-      font-size: 12px; color: #8b96a3;
+      background: var(--glass); padding: 10px 14px; border-radius: var(--radius);
+      border: 1px solid var(--line);
+      box-shadow: var(--shadow);
+      font-size: 12px; color: var(--muted);
+      backdrop-filter: blur(8px) saturate(1.2);
     }
-    .controls b { color: #e6edf3; }
+    .controls b { color: var(--ink); }
     .toolbar {
       position: fixed; right: 16px; top: 16px; display: flex; gap: 8px;
     }
     .toolbar button {
-      background: #161b22; color: #e6edf3; border: 1px solid #2a3340;
-      padding: 8px 14px; border-radius: 4px; cursor: pointer; font-size: 13px;
+      background: linear-gradient(180deg, rgba(30,38,56,0.95), rgba(15,20,31,0.95));
+      color: var(--ink); border: 1px solid var(--line);
+      padding: 8px 14px; border-radius: 8px; cursor: pointer; font-size: 13px;
+      font-weight: 700; letter-spacing: 0.03em;
+      box-shadow: var(--shadow);
     }
-    .toolbar button:hover { border-color: #ff3aa1; }
+    .toolbar button:hover { border-color: var(--neon-1); box-shadow: 0 0 14px var(--neon-glow), var(--shadow); }
     .room-banner {
       position: fixed; left: 50%; top: 16px; transform: translateX(-50%);
-      background: rgba(20,24,30,0.92); padding: 6px 14px; border-radius: 999px;
-      font-size: 12px; color: #00e5ff; border: 1px solid #00e5ff33;
+      background: var(--glass); padding: 7px 14px; border-radius: 999px;
+      font-size: 12px; color: var(--neon-3); border: 1px solid rgba(75,211,255,0.36);
+      box-shadow: var(--shadow);
     }
     .pause-overlay {
       position: fixed; inset: 0;
@@ -48,8 +85,9 @@
       text-align: center;
     }
     .pause-card h2 {
-      margin: 0 0 6px; font-size: 20px; letter-spacing: 0.1em;
-      color: #ff3aa1; text-transform: uppercase;
+      margin: 0 0 6px; font-size: 20px; letter-spacing: 0.08em;
+      color: var(--neon-1); text-transform: uppercase;
+      font-family: var(--font-display);
     }
     .pause-card button {
       background: #1f2630; color: #e6edf3; border: 1px solid #2a3340;
@@ -61,17 +99,28 @@
     /* ── Inventory HUD slot (Phase B) ─────────────────────────── */
     .invslot {
       position: fixed; right: 16px; bottom: 16px;
-      width: 96px; height: 96px;
-      background: linear-gradient(160deg, rgba(30,38,52,0.92), rgba(14,18,26,0.92));
-      border: 2px solid #2a3340; border-radius: 12px;
-      box-shadow: 0 0 0 1px rgba(255,255,255,0.04) inset, 0 6px 18px rgba(0,0,0,0.45);
+      width: 110px; height: 110px;
+      background: linear-gradient(160deg, rgba(28,36,52,0.96), rgba(12,16,26,0.96));
+      border: 2px solid #2a3340; border-radius: 16px;
+      box-shadow: 0 0 0 1px rgba(255,255,255,0.06) inset, 0 10px 28px rgba(0,0,0,0.50);
       display: flex; flex-direction: column; align-items: center; justify-content: center;
-      font-family: 'Inter', system-ui, sans-serif;
-      transition: border-color 140ms ease, transform 140ms ease;
+      font-family: var(--font-ui);
+      transition: border-color 140ms ease, transform 140ms ease, box-shadow 140ms ease;
       user-select: none; pointer-events: none;
+      overflow: hidden;
     }
-    .invslot.has { border-color: #ffd24a; box-shadow: 0 0 0 1px rgba(255,210,74,0.35) inset, 0 6px 22px rgba(255,160,40,0.32); }
-    .invslot.fire { transform: scale(1.10); border-color: #ff3aa1; }
+    .invslot::before {
+      content: '';
+      position: absolute;
+      inset: -30% -20%;
+      background: conic-gradient(from 0deg, transparent, rgba(255,255,255,0.25), transparent 40%, transparent 100%);
+      opacity: 0;
+      transform: rotate(0deg);
+    }
+    .invslot.has { border-color: var(--neon-2); box-shadow: 0 0 0 1px rgba(255,198,69,0.35) inset, 0 10px 24px rgba(255,160,40,0.28); }
+    .invslot.fire { transform: scale(1.09); border-color: var(--neon-1); box-shadow: 0 0 18px var(--neon-glow), 0 0 0 1px rgba(255,255,255,0.08) inset; }
+    .invslot.spinning { border-color: var(--neon-3); }
+    .invslot.spinning::before { opacity: 1; animation: inv-sweep 0.55s linear infinite; }
     .invslot .icon {
       width: 56px; height: 56px; border-radius: 50%;
       background: radial-gradient(circle at 35% 30%, #fff, #888 60%, #444 100%);
@@ -79,8 +128,9 @@
       display: flex; align-items: center; justify-content: center;
       color: #fff; font-weight: 700; font-size: 22px; letter-spacing: 0.04em;
     }
+    .invslot.spinning .icon { animation: inv-spin 0.22s ease-in-out infinite; }
     .invslot .label {
-      margin-top: 4px; font-size: 10px; color: #cdd6df; letter-spacing: 0.10em;
+      margin-top: 5px; font-size: 10px; color: #d4deeb; letter-spacing: 0.10em;
       text-transform: uppercase; max-width: 92px; text-align: center;
       white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     }
@@ -90,27 +140,55 @@
     }
     .invslot .key {
       position: absolute; top: 4px; left: 6px;
-      font-size: 9px; color: #8b96a3; letter-spacing: 0.1em;
+      font-size: 9px; color: #93a4b7; letter-spacing: 0.1em;
     }
     .invslot.empty .icon { background: #1a1f27; box-shadow: none; color: #3a4250; }
     .invslot.empty .label { color: #4a5260; }
+    @keyframes inv-spin {
+      0% { transform: translateY(0px) scale(1) rotate(-2deg); }
+      50% { transform: translateY(-1px) scale(1.04) rotate(2deg); }
+      100% { transform: translateY(0px) scale(1) rotate(-2deg); }
+    }
+    @keyframes inv-sweep {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+
     /* ── HP / coin HUD (Phase E3) ─────────────────────────── */
     .hpbar {
-      position: fixed; right: 16px; bottom: 122px; width: 96px;
-      background: rgba(20,24,30,0.85); padding: 6px 8px; border-radius: 6px;
-      font-family: 'Inter', system-ui, sans-serif; font-size: 10px;
+      position: fixed; right: 16px; bottom: 136px; width: 110px;
+      background: var(--glass); padding: 7px 8px; border-radius: 9px;
+      border: 1px solid var(--line);
+      box-shadow: var(--shadow);
+      font-family: var(--font-ui); font-size: 10px;
       color: #cdd6df; letter-spacing: 0.08em; text-transform: uppercase;
       pointer-events: none; user-select: none;
+      backdrop-filter: blur(8px) saturate(1.2);
     }
     .hpbar .row { display: flex; justify-content: space-between; align-items: center; margin-top: 3px; }
     .hpbar .meter {
       height: 6px; border-radius: 3px; background: #1a1f27; overflow: hidden;
       margin-top: 2px;
     }
-    .hpbar .fill { height: 100%; background: linear-gradient(90deg, #ff3aa1, #ffd24a); transition: width 200ms ease; }
+    .hpbar .fill { height: 100%; background: linear-gradient(90deg, var(--neon-1), var(--neon-2)); transition: width 200ms ease; }
     .hpbar.low .fill  { background: linear-gradient(90deg, #ff3a3a, #ffaa33); }
     .hpbar.zero .fill { background: #ff3a3a; animation: hp-blink 220ms steps(2, end) infinite; }
     @keyframes hp-blink { to { opacity: 0.25; } }
+    #combatTicker {
+      margin-top: 6px;
+      color: var(--neon-2);
+      font-size: 12px;
+      min-height: 16px;
+      letter-spacing: 0.02em;
+      text-shadow: 0 0 12px rgba(255,198,69,0.28);
+    }
+
+    @media (max-width: 820px) {
+      .controls { max-width: calc(100vw - 32px); font-size: 11px; }
+      .hud { max-width: calc(100vw - 140px); }
+      .invslot { width: 98px; height: 98px; }
+      .hpbar { width: 98px; bottom: 122px; }
+    }
   </style>
 </head>
 <body>
@@ -120,7 +198,7 @@
     <div>Speed: <b id="speed">0</b> km/h</div>
     <div>Lap: <b id="lap">—</b></div>
     <div>Camera: <b id="cameraMode">Chase</b></div>
-    <div id="combatTicker" style="margin-top:6px;color:#ffd400;font-size:12px;min-height:14px;"></div>
+    <div id="combatTicker"></div>
   </div>
   <div class="controls">
     <div><b>W A S D</b> drive · <b>Space</b> brake · <b>Shift</b> drift hop · <b>Q</b> use item · <b>C</b> camera · <b>R</b> rewind 10s · <b>T</b> restart · <b>Esc</b> pause</div>
